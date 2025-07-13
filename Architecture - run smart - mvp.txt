@@ -1,0 +1,147 @@
+# Architecture Document – **Run‑Smart** MVP (v 1.0)
+
+> Prepared by: Architect Agent · 07 Jul 2025
+
+---
+
+## 1 · Context & Goals
+
+Run‑Smart’s MVP ships a **cross‑platform React Native app** backed by a **NestJS monorepo** on AWS. The system must:
+
+1. Serve <= 5 k MAU with p95 < 400 ms latencies.
+2. Recalculate training plans nightly ≤ 01:00 local.
+3. Cost < 400 USD/mo at launch; linear scale to 50 k MAU.
+4. Satisfy GDPR + US Consumer Health Data laws (WA, CA).
+
+---
+
+## 2 · High‑Level Component Diagram
+
+```mermaid
+graph TD
+    subgraph Mobile
+        RN[React Native App]
+        Expo[Expo OTA]
+    end
+    RN -- GraphQL HTTPS --> APIGW
+    subgraph AWS
+        APIGW[API Gateway  
+GraphQL]
+        Nest[NestJS Monorepo  
+(App Runner, 2 pods)]
+        Queue[BullMQ  
+(SQS+Redis)]
+        PlanJob[Nightly Plan Job]
+        ChatSvc[Chat Service  
+(driver‑openai → vLLM)]
+        Postgres[(RDS Postgres + PostGIS)]
+        VectorDB[Pinecone  
+(p‑1g)]
+        S3[(S3 Assets)]
+        Cognito[Cognito User Pools]
+        Metrics[Grafana  
++ Prom/Loki]
+    end
+    Nest <-- JWT --> Cognito
+    Nest --> Postgres
+    Nest --> VectorDB
+    PlanJob ~~> Nest
+    PlanJob --> Postgres
+    Nest --> S3
+    ChatSvc -->|LLM| OpenAI[(GPT‑4o API)]
+    Nest --> Metrics
+    RN -->|PostHog| PostHogSAAS[(PostHog Cloud)]
+```
+
+---
+
+## 3 · Service Breakdown
+
+| Service         | Runtime          | Purpose                                | SLA    | Notes                                       |
+| --------------- | ---------------- | -------------------------------------- | ------ | ------------------------------------------- |
+| **Auth Svc**    | NestJS           | Signup/OAuth, JWT                      | 99.9 % | Delegates to Cognito, stores profile prefs. |
+| **Runner Svc**  | NestJS           | CRUD profile, stats                    | 99.9 % | Joins run logs + plan tables.               |
+| **Plan Svc**    | NestJS + BullMQ  | Generate 14‑day plan & nightly recalcs | 99.9 % | Rule‑based engine; calls LLM later.         |
+| **Run Log Svc** | NestJS           | Ingest GPS stream, store runs          | 99.9 % | WebSocket reserved for v2.                  |
+| **Chat Svc**    | NestJS sidecar   | GPT‑4o Q\&A + vector memory            | 99.5 % | Env‑switchable driver.                      |
+| **Route Svc**   | NestJS + PostGIS | Search routes within bbox              | 99.9 % | K‑nearest w/ elevation filter.              |
+
+---
+
+## 4 · Data Model Essentials
+
+### Tables (Postgres)
+
+* `users` — id (UUID), email, locale, created\_at
+* `runs` — id, user\_id, ts\_start, duration\_s, distance\_m, geojson\_path, hr\_avg, rpe
+* `plans` — id, user\_id, day\_index, workout\_type, distance\_m, state (planned|done|missed)
+* `chat_messages` — id, user\_id, role, content, ts
+* `challenge_progress` — id, user\_id, day\_no, completed\_at
+
+### Vector Store (Pinecone)
+
+Namespace = `chat:{user_id}`; stores last 50 msg embeddings.
+
+---
+
+## 5 · Deployment Topology
+
+| Tier              | AWS Resource             | Config                       |
+| ----------------- | ------------------------ | ---------------------------- |
+| **API**           | App Runner               | 2× tD1.micro, auto‑scale 1→4 |
+| **Jobs**          | Fargate ECS              | `plan-cron` task, 512 MB     |
+| **DB**            | RDS Postgres 16          | `db.t3.medium`, 100 GB gp3   |
+| **Redis**         | Elasticache              | `cache.t4g.small`            |
+| **Object**        | S3 + CloudFront          | public assets, user uploads  |
+| **Observability** | Amazon Managed Prom/Loki | Grafana Cloud plug‑in        |
+
+Cost ≈ **390 USD/mo** @ 5 k MAU (incl. GPT usage).
+
+---
+
+## 6 · Scalability Plan
+
+1. **Stateless pods** — scale App Runner on CPU > 60 %.
+2. **Read replicas** — add RDS ro instance @ 50 k MAU.
+3. **VectorDB** — switch Pinecone to p‑2 scale or self‑host pgVector.
+4. **LLM cost** — at 20 k DAU, migrate to vLLM on EKS + spot GPUs.
+
+---
+
+## 7 · Security & Compliance
+
+* **JWT** scopes: `runner:read`, `runner:write`, `chat:ask`.
+* **Row‑level encryption** on `runs.geojson_path`, `rpe` via pgcrypto.
+* **GDPR**: `/deleteMe`, `/exportMe` Lambda; 30‑day S3 retention.
+* **CHD (WA/CA)** geofencing toggle off by default.
+
+---
+
+## 8 · Observability & SLOs
+
+* **Prometheus**: CPU, latency, error\_rate.
+* **Loki**: structured JSON logs; traceID from Nest.
+* **Grafana Dashboards**: API p95 latency, token spend, active runs.
+* **Alerts**: PagerDuty → error\_rate > 2 % 5 min; token spend > \$20/day.
+
+---
+
+## 9 · Risk Register
+
+| Risk                  | Likelihood | Impact | Mitigation                                |
+| --------------------- | ---------- | ------ | ----------------------------------------- |
+| GPS jitter on Android | High       | Med    | Kalman smoothing lib; ignore points <5 m. |
+| LLM cost spike        | Med        | High   | Token budgeting, switch to local.         |
+| PostGIS vacuum bloat  | Low        | Med    | Auto‑analyze + pgbouncer.                 |
+
+---
+
+## 10 · Open Decisions
+
+1. **GraphQL vs. REST façade** — default is GraphQL; confirm mobile preference.
+2. **PostHog self‑host** — may migrate if data‑sovereignty requires.
+3. **S3 vs. Cloudflare R2** — cost review at 50 k MAU.
+
+---
+
+*End of document*

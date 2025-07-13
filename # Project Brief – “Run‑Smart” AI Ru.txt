@@ -1,0 +1,162 @@
+# Project Brief – **“Run‑Smart” AI Running Coach** (v 0.3)
+
+> *Prepared by: Analyst Agent · Date: 2025‑07‑06*
+
+---
+
+## 1 · Background & Vision
+
+Recreational runners crave personal coaching but often lack the knowledge, time, or budget for a human coach. **Run‑Smart** will deliver **adaptive, AI‑driven training plans** that fit seamlessly into a user’s morning routine, promote injury‑free progress, and make the sport fun. The long‑term vision is to become the *daily operating system for running*, guiding workouts, recovery, and goal tracking on a single mobile platform.
+
+---
+
+## 2 · Goals & Success Metrics
+
+| Goal                                           | KPI / North‑Star                                           |
+| ---------------------------------------------- | ---------------------------------------------------------- |
+| Build a consistent running habit for beginners | **Weekly Plan‑Completion Rate ≥ 55 %** in cohort W1→W4     |
+| Showcase adaptive coaching value               | Day‑30 retention ≥ 40 %                                    |
+| Validate willingness to pay                    | 6 % conversion to paywall when Stripe is enabled (Stage 2) |
+
+---
+
+## 3 · Target Users & Personas
+
+| Persona                                             | Core Jobs‑to‑Be‑Done                                                                      |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Morning‑Routine Rookie** *(28 y/o office worker)* | • Start and stick to a pre‑work running habit • Understand progress without data overload |
+| **Self‑Improver Striver** *(35 y/o hobby racer)*    | • Break personal 5 K / 10 K PBs • Avoid injury and boredom • Explore fresh routes         |
+
+---
+
+## 4 · Scope (MVP – “Sprint 1 → 10”)
+
+### In‑Scope
+
+* **2‑Week Adaptive Plan** (nightly recalculation)
+* **Chat Coach** (OpenAI GPT‑4o driver)
+* **Solo Route Explorer** (phone GPS, PostGIS)
+* **Habit Builder Toolkit** (calendar sync, smart reminders)
+* **Metrics Dashboard** (distance, pace, fatigue)
+* Cross‑platform **bare React Native** app with dark‑first UI
+* AWS backend (NestJS monorepo) & managed LLM driver
+* Data privacy compliance (GDPR + US CHD) incl. delete/export
+
+### Out‑of‑Scope (Backlog)
+
+* BLE sensor pairing (HR strap) – flagged `ble_pairing`
+* Stripe paywall & checkout – flagged `payments_enabled`
+* Social feed / community features
+* WearOS / watchOS companions
+
+---
+
+## 5 · Functional Requirements
+
+| Epic                  | Key User Stories                                                                |
+| --------------------- | ------------------------------------------------------------------------------- |
+| **Account & Profile** | *As a user* I can sign up with email or OAuth so my data syncs across devices.  |
+| **Plan Generation**   | *As a rookie* I receive a 14‑day plan tailored to my goal and availability.     |
+| **Run Logging**       | *As a runner* I can start, pause, and save a workout with GPS path and metrics. |
+| **Adaptive Coaching** | *As I finish a run* the next workouts auto‑adjust based on performance.         |
+| **Chat Coach**        | *I can ask* “Should I rest tomorrow?” and get context‑aware advice.             |
+| **Route Explorer**    | *Before a tempo run* I can pick a 6 km flat route near me.                      |
+| **Habit Builder**     | *At 6 AM* I receive a push reminder aligned with my plan.                       |
+
+---
+
+## 6 · Non‑Functional Requirements
+
+* **Performance** : app cold‑start < 1.5 s; API p95 latency < 400 ms.
+* **Reliability** : 99.9 % uptime target; blue/green deploys via App Runner.
+* **Security & Privacy** : row‑level encryption for health data, Cognito JWT auth, “Delete My Data” in‑app.
+* **Scalability** : auto‑scaling App Runner; Pinecone starter tier; stateless chat driver.
+
+---
+
+## 7 · Technical Architecture (Snapshot)
+
+See **DevOps Scaffold** document for full CDK layout.
+
+* **Mobile** : bare React Native + Expo EAS, design tokens from JSON DS.
+* **Backend** : NestJS monorepo (GraphQL gateway + micro‑services), Postgres 16 + PostGIS, BullMQ jobs.
+* **AI Layer** : OpenAI GPT‑4o → common `ChatDriver` interface, future local Llama‑3 via vLLM.
+
+---
+
+## 8 · Design Guidelines
+
+* Adopt **Run‑Smart Mobile DS** JSON tokens (colors, spacing, radius).
+* Dark‑first UIs with vibrant category colours and rounded cards.
+* Bottom‑tab navigation, map overlay metrics, voice cue bubbles.
+
+---
+
+## 9 · Roadmap (10‑Week MVP)
+
+| Sprint | Milestone                                      |
+| ------ | ---------------------------------------------- |
+| 0      | Repo + CI/CD + preview stack                   |
+| 1‑2    | Auth service, Runner profile, mobile nav shell |
+| 3‑4    | Plan engine β, metrics dashboard               |
+| 5‑6    | Chat Coach (OpenAI) + vector memory            |
+| 7      | Route Explorer β                               |
+| 8      | GDPR flows, observability dashboards           |
+| 9      | Private beta (TestFlight + Android internal)   |
+| 10     | Load test, launch‑prep checklist               |
+
+---
+
+## 10 · Roles & Ownership
+
+| Area         | Owner                                    |
+| ------------ | ---------------------------------------- |
+| Product & UX | PO / Analyst Agent (handoff to human PM) |
+| Mobile Dev   | Frontend Agent + RN dev(s)               |
+| Backend & AI | API‑Dev Agent, Chat Svc engineer         |
+| Infra & CI   | DevOps Agent                             |
+| QA & Release | QA Agent                                 |
+
+---
+
+## 11 · Risks & Mitigations
+
+| Risk                              | Probability | Impact   | Mitigation                                          |
+| --------------------------------- | ----------- | -------- | --------------------------------------------------- |
+| LLM costs spike                   | Medium      | Med‑High | Token budgeting, swap to local model Stage 3        |
+| GPS accuracy variance             | High        | Medium   | Post‑processing smoothing, min distance filters     |
+| App‑store rejection (health data) | Low         | High     | Privacy nutrition labels & explicit consent screens |
+
+---
+
+## 12 · Open Questions
+
+1. Should onboarding quiz ask for perceived effort (RPE) to refine fatigue model?
+2. Will the beta cohort include non‑English speakers (affects prompts & copy)?
+3. Preferred colour‑blind palette adjustments?
+
+---
+
+## Appendix A · Feature Flags (ConfigCat)
+
+| Flag               | Default | Sprint | Notes                                 |
+| ------------------ | ------- | ------ | ------------------------------------- |
+| `payments_enabled` | false   | 10     | Stripe checkout UI off until post‑MVP |
+| `ble_pairing`      | false   | 11     | Enable HR strap pairing screen        |
+| `local_llm`        | false   | 12     | Route chat to vLLM on EKS             |
+
+---
+
+*This brief will evolve; update version & date on each revision.*
+
+## 13 · MVP Screen Set (5 Pages)
+
+*The following **five screens** are the **entire public‑MVP** scope. Everything else is deferred.*
+
+| #     | Screen / Route                     | Primary Purpose                                   | Key UI Elements                                                                                                                                         | Data Requirements                                                      | Core Interactions                                                                                                  |
+| ----- | ---------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **1** | **Today Dashboard** (`/today`)     | Snapshot of today’s plan + quick actions.         | Calendar strip • Weather chip • Workout / Rest / "Add Activity" card • Progress ring • **Record** & **Add Activity** floating buttons • Bottom tab bar. | Today's workout, rest‑day flag, weather API, last activity summary.    | Tap workout to open details • **Record** begins Page 3 • **Add Activity** opens import modal (HealthKit / Strava). |
+| **2** | **Plan Overview** (`/plan`)        | Provide full plan status, progress metrics, tips. | Status rings (distance, sessions) • Week accordions • Coach tip banner • Goal badge.                                                                    | Full plan JSON, completed vs. scheduled counts, coach insights string. | Expand/collapse weeks • Tap day to drill down (future sprint).                                                     |
+| **3** | **Record Run** (`/record`)         | Live GPS tracking of a run session.               | Map view • Lap metrics row • Timer • Voice‑cue bubble • Pause / Resume / Stop bar.                                                                      | GPS stream, accelerometer, settings (units, cues).                     | Start, pause, resume, stop • Swipe for next lap • Auto‑pause toggle.                                               |
+| **4** | **AI Coach Chat** (`/chat`)        | Quick Q\&A with GPT‑powered running coach.        | Chat thread • Suggested prompts chips • Input box • Rate‑response icons.                                                                                | Chat history, user profile context.                                    | Send message • Tap suggestion • Thumbs‑up/down feedback.                                                           |
+| **5** | **Runner Onboarding** (`/onboard`) | Registration + 21‑Day Rookie Challenge setup.     | Multi‑step wizard: Account → Basic stats (age, weight) → Running goal → 21‑Day preview card → Consent checkboxes.                                       | Auth token, profile fields, challenge start date.                      | Next/Back through steps • Finish > returns to Today Dashboard.                                                     |

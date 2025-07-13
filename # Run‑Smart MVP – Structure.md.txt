@@ -1,0 +1,144 @@
+# Run‑Smart MVP – **Structure.md**
+
+> Single‑file reference of everything required to build & ship the public MVP (Sprints 0‑10).
+
+---
+
+## 1. Objective
+
+Deliver a 5‑screen mobile MVP that helps rookies form a running habit, showcases adaptive AI coaching, and hits **≥40 % D30 retention** & **≥55 % weekly plan‑completion**.
+
+## 2. Success Metrics
+
+| Metric                       | Target |
+| ---------------------------- | ------ |
+| Weekly Plan‑Completion       | 55 %   |
+| Day‑30 Retention             | 40 %   |
+| Paywall Conversion (flagged) | ≥6 %   |
+
+## 3. MVP Scope (In vs. Out)
+
+### In‑Scope
+
+* 14‑Day Adaptive Plan (nightly recalculation)
+* AI Chat Coach (OpenAI GPT‑4o driver)
+* Route Explorer (GPS/PostGIS)
+* Habit Builder Toolkit (calendar sync, reminders)
+* Metrics Dashboard (distance, pace, fatigue)
+* 5 core screens (see §4)
+* AWS backend (NestJS) + bare React Native app
+* GDPR & US‑CHD compliance (delete/export flows)
+
+### Out‑of‑Scope / Flags
+
+| Feature        | Flag               | Default  |
+| -------------- | ------------------ | -------- |
+| Stripe Paywall | `payments_enabled` | false    |
+| BLE HR Strap   | `ble_pairing`      | false    |
+| Local LLM      | `local_llm`        | false    |
+| Social Feed    | —                  | deferred |
+
+## 4. Screen Blueprint
+
+| # | Route      | Purpose           | Key Elements                                                                        |
+| - | ---------- | ----------------- | ----------------------------------------------------------------------------------- |
+| 1 | `/today`   | Today Dashboard   | Calendar strip, weather chip, workout/rest card, **Record** & **Add Activity** FABs |
+| 2 | `/plan`    | Plan Overview     | Status rings, week accordions, coach‑tip banner                                     |
+| 3 | `/record`  | Record Run        | Map, lap metrics, timer, voice cues, pause/stop bar                                 |
+| 4 | `/chat`    | AI Coach Chat     | Thread UI, prompt chips, feedback icons                                             |
+| 5 | `/onboard` | Runner Onboarding | 5‑step wizard incl. 21‑Day Rookie Challenge                                         |
+
+## 5. Core Epics → Stories
+
+```
+E-ACC  Account & Profile
+  ACC‑001  Email sign‑up w/ Cognito (3 pts)
+  ACC‑002  OAuth (Apple, Google) (5 pts)
+E-PGN  Plan Generation
+  PGN‑001  Seed 14‑day plan (5)
+  PGN‑002  Nightly recalculation (8)
+E-RUN  Run Logging
+  RUN‑001  Start/Stop GPS session (8)
+  RUN‑002  Auto‑pause & lap split (5)
+E-ADA  Adaptive Coaching
+  ADA‑001  Post‑run adjust (8)
+E-CHAT  Chat Coach
+  CHAT‑001  GPT chat (5)
+  CHAT‑002  Suggested chips (3)
+E-ROUTE  Route Explorer
+  ROUTE‑001  Flat 5 km search (8)
+E-HABIT  Habit Builder
+  HAB‑001  Calendar reminders (3)
+INFRA  CDK & CI
+  INF‑001  Preview stack (5)
+  INF‑002  Expo EAS pipeline (3)
+```
+
+*Total initial backlog ≈ 70 pts.*
+
+## 6. Tech Stack Snapshot
+
+| Layer     | Tech                                           |
+| --------- | ---------------------------------------------- |
+| Mobile    | Bare React Native + Expo EAS                   |
+| Backend   | NestJS monorepo, GraphQL gateway               |
+| DB        | Postgres 16 + PostGIS + PGVector               |
+| AI        | OpenAI GPT‑4o via common `ChatDriver`          |
+| Infra     | AWS CDK → App Runner, Cognito, S3, BullMQ jobs |
+| Analytics | **PostHog** cloud (EU cluster)                 |
+
+## 7. Non‑Functional Targets
+
+* Cold start < 1.5 s, API p95 < 400 ms
+* Uptime 99.9 % (blue/green deploys)
+* Row‑level encryption for health data, OAuth + JWT auth
+
+## 8. Timeline (10 Sprints)
+
+| Sprint | Highlight                             |
+| ------ | ------------------------------------- |
+| 0      | Repo, CI/CD, preview stack            |
+| 1      | Onboarding wizard + Auth svc          |
+| 2      | Today Dashboard + Plan seed API       |
+| 3      | Record Run + Run logging svc          |
+| 4      | Plan recalculation & dashboard wiring |
+| 5      | Chat Coach live                       |
+| 6      | Plan Overview & metrics agg           |
+| 7      | Route Explorer beta                   |
+| 8      | GDPR flows, a11y polish               |
+| 9      | Private beta, release checklist       |
+| 10     | Public launch 🚀                      |
+
+## 9. Risks & Mitigations
+
+| Risk            | Mitigation                             |
+| --------------- | -------------------------------------- |
+| LLM cost spikes | Token budgeting, local Llama‑3 Stage 3 |
+| GPS variance    | Path smoothing + min‑distance filter   |
+| Store rejection | Clear consent & privacy labels         |
+
+## 10. Team & Cadence
+
+| Role           | Capacity / Sprint |
+| -------------- | ----------------- |
+| Frontend ×2    | 12 pts            |
+| Backend ×2     | 10 pts            |
+| DevOps         | 2 pts             |
+| QA (part‑time) | 2 pts             |
+
+* **Stand‑up:** 09:30 Asia/Jerusalem (daily)
+* **Grooming:** Wed 45 min
+* **Review/Retro:** Fri end‑of‑sprint
+
+## 11. PostHog Event Schema (abbr.)
+
+| Event                  | Props                                    |
+| ---------------------- | ---------------------------------------- |
+| `run_started`          | `planId`, `workoutType`                  |
+| `run_completed`        | `distance`, `duration`, `avgPace`, `rpe` |
+| `chat_question`        | `tokensIn`, `topic`                      |
+| `plan_completion_rate` | weekly cron, `%complete`                 |
+
+---
+
+*This **Structure.md** is the authoritative bird’s‑eye view for all contributors.*
