@@ -5,13 +5,14 @@ export interface GeneratePlanOptions {
   startDate?: Date;
   planType?: 'beginner' | 'intermediate' | 'advanced';
   targetDistance?: '5k' | '10k' | 'half-marathon' | 'marathon';
+  rookie_challenge?: boolean; // If true, generate rookie challenge plan
 }
 
 /**
  * Generate a personalized training plan using OpenAI via API route
  */
 export async function generatePlan(options: GeneratePlanOptions): Promise<{ plan: Plan; workouts: Workout[] }> {
-  const { user, startDate = new Date(), planType, targetDistance } = options;
+  const { user, startDate = new Date(), planType, targetDistance, rookie_challenge } = options;
   
   try {
     // Call the API route to generate the plan
@@ -23,16 +24,29 @@ export async function generatePlan(options: GeneratePlanOptions): Promise<{ plan
       body: JSON.stringify({
         user,
         planType,
-        targetDistance
+        targetDistance,
+        rookie_challenge
       })
     });
 
+    // Handle different types of API errors more gracefully
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to generate plan');
+      const errorData = await response.json().catch(() => ({ error: 'Unknown API error' }));
+      
+      // Check if this is a configuration issue that should trigger fallback
+      if (errorData.fallbackRequired || response.status === 422) {
+        console.warn('API requires fallback:', errorData.message || errorData.error);
+        throw new Error(`FALLBACK_REQUIRED: ${errorData.message || errorData.error}`);
+      }
+      
+      // For other errors, provide detailed error information
+      const errorMessage = errorData.error || `API request failed with status ${response.status}`;
+      console.error('API plan generation failed:', errorMessage, errorData.details);
+      throw new Error(`API_ERROR: ${errorMessage}`);
     }
 
-    const { plan: generatedPlan } = await response.json();
+    const { plan: generatedPlan, source } = await response.json();
+    console.log(`Plan generated successfully using ${source || 'unknown'} source`);
 
     // Create the plan in the database
     const endDate = new Date(startDate);
@@ -48,16 +62,10 @@ export async function generatePlan(options: GeneratePlanOptions): Promise<{ plan
       isActive: true
     });
 
-    // Create workouts and calculate scheduled dates
+    // Create workouts
     const workouts: Workout[] = [];
-    const plan = await db.plans.get(planId);
-    
-    if (!plan) {
-      throw new Error('Failed to create plan');
-    }
-
     for (const workoutData of generatedPlan.workouts) {
-      const scheduledDate = calculateWorkoutDate(startDate, workoutData.week, workoutData.day);
+      const workoutDate = calculateWorkoutDate(startDate, workoutData.week, workoutData.day);
       
       const workoutId = await dbUtils.createWorkout({
         planId,
@@ -68,19 +76,42 @@ export async function generatePlan(options: GeneratePlanOptions): Promise<{ plan
         duration: workoutData.duration,
         notes: workoutData.notes,
         completed: false,
-        scheduledDate
+        scheduledDate: workoutDate
       });
 
-      const workout = await db.workouts.get(workoutId);
-      if (workout) {
-        workouts.push(workout);
-      }
+      workouts.push({
+        id: workoutId,
+        planId,
+        week: workoutData.week,
+        day: workoutData.day,
+        type: workoutData.type,
+        distance: workoutData.distance,
+        duration: workoutData.duration,
+        notes: workoutData.notes,
+        completed: false,
+        scheduledDate: workoutDate,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+    }
+
+    const plan = await db.plans.get(planId);
+    if (!plan) {
+      throw new Error('Failed to retrieve created plan');
     }
 
     return { plan, workouts };
   } catch (error) {
-    console.error('Failed to generate plan:', error);
-    throw new Error('Failed to generate training plan. Please try again.');
+    // Re-throw the error with better context for the caller
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('generatePlan failed:', errorMessage);
+    
+    // Preserve special error types for proper handling upstream
+    if (errorMessage.startsWith('FALLBACK_REQUIRED:')) {
+      throw new Error(errorMessage);
+    }
+    
+    throw new Error(`Plan generation failed: ${errorMessage}`);
   }
 }
 

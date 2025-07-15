@@ -16,6 +16,12 @@ export interface User {
   onboardingComplete: boolean;
   createdAt: Date;
   updatedAt: Date;
+  rpe?: number; // Optional Rate of Perceived Exertion
+  // Streak tracking fields
+  currentStreak?: number; // Current consecutive days of activity
+  longestStreak?: number; // All-time best streak
+  lastActivityDate?: Date; // Last day with recorded activity
+  streakLastUpdated?: Date; // Timestamp of last streak calculation
 }
 
 // Training plan structure
@@ -83,6 +89,17 @@ export interface Shoe {
   updatedAt: Date;
 }
 
+// Chat messages for AI coach conversations
+export interface ChatMessage {
+  id?: number;
+  userId: number;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  tokenCount?: number;
+  conversationId?: string;
+}
+
 // Database class
 export class RunSmartDB extends Dexie {
   users!: EntityTable<User, 'id'>;
@@ -90,16 +107,37 @@ export class RunSmartDB extends Dexie {
   workouts!: EntityTable<Workout, 'id'>;
   runs!: EntityTable<Run, 'id'>;
   shoes!: EntityTable<Shoe, 'id'>;
+  chatMessages!: EntityTable<ChatMessage, 'id'>;
 
   constructor() {
     super('RunSmartDB');
     
+    // Version 1: Initial schema
     this.version(1).stores({
       users: '++id, goal, experience, onboardingComplete, createdAt',
       plans: '++id, userId, isActive, startDate, endDate, createdAt',
-      workouts: '++id, planId, week, day, type, completed, scheduledDate, createdAt',
-      runs: '++id, workoutId, userId, type, distance, duration, completedAt, createdAt',
-      shoes: '++id, userId, isActive, createdAt'
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+    });
+
+    // Version 2: Add streak tracking fields and indexes
+    this.version(2).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+    }).upgrade(async tx => {
+      // Migrate existing users to have streak fields with default values
+      await tx.table('users').toCollection().modify(user => {
+        user.currentStreak = 0;
+        user.longestStreak = 0;
+        user.lastActivityDate = null;
+        user.streakLastUpdated = new Date();
+      });
     });
   }
 }
@@ -178,20 +216,46 @@ export const dbUtils = {
       .first();
   },
 
+  // Get workouts for a date range
+  async getWorkoutsForDateRange(userId: number, startDate: Date, endDate: Date): Promise<Workout[]> {
+    const activePlan = await this.getActivePlan(userId);
+    if (!activePlan) return [];
+    
+    return await db.workouts
+      .where('planId')
+      .equals(activePlan.id!)
+      .filter(workout => workout.scheduledDate >= startDate && workout.scheduledDate <= endDate)
+      .toArray();
+  },
+
   async updateWorkout(id: number, updates: Partial<Workout>): Promise<void> {
     await db.workouts.update(id, { ...updates, updatedAt: new Date() });
   },
 
   async markWorkoutCompleted(workoutId: number): Promise<void> {
     await this.updateWorkout(workoutId, { completed: true });
+    
+    // Update streak for the user after completing workout
+    const workout = await db.workouts.get(workoutId);
+    if (workout) {
+      const plan = await db.plans.get(workout.planId);
+      if (plan) {
+        await this.updateUserStreak(plan.userId);
+      }
+    }
   },
 
   // Run operations
   async createRun(runData: Omit<Run, 'id' | 'createdAt'>): Promise<number> {
-    return await db.runs.add({
+    const runId = await db.runs.add({
       ...runData,
       createdAt: new Date()
     });
+
+    // Update user streak after recording activity
+    await this.updateUserStreak(runData.userId);
+
+    return runId;
   },
 
   async getRunsByUser(userId: number): Promise<Run[]> {
@@ -258,10 +322,171 @@ export const dbUtils = {
   },
 
   async addMileageToShoe(shoeId: number, distance: number): Promise<void> {
-    const shoe = await db.shoes.get(shoeId);
-    if (shoe) {
-      await this.updateShoe(shoeId, { currentKm: shoe.currentKm + distance });
+    await db.shoes.update(shoeId, {
+      currentKm: (await db.shoes.get(shoeId))!.currentKm + distance,
+      updatedAt: new Date(),
+    });
+  },
+
+  // Chat message operations
+  async createChatMessage(messageData: Omit<ChatMessage, 'id' | 'timestamp'>): Promise<number> {
+    return await db.chatMessages.add({
+      ...messageData,
+      timestamp: new Date(),
+    });
+  },
+
+  async getChatMessages(userId: number, conversationId?: string): Promise<ChatMessage[]> {
+    let collection = db.chatMessages.where('userId').equals(userId);
+    if (conversationId) {
+      collection = collection.and(msg => msg.conversationId === conversationId);
     }
+    return await collection.orderBy('timestamp').toArray();
+  },
+
+  async getRecentChatMessages(userId: number, limit: number = 50): Promise<ChatMessage[]> {
+    return await db.chatMessages
+      .where('userId')
+      .equals(userId)
+      .orderBy('timestamp')
+      .reverse()
+      .limit(limit)
+      .toArray();
+  },
+
+  async deleteChatHistory(userId: number, conversationId?: string): Promise<void> {
+    let collection = db.chatMessages.where('userId').equals(userId);
+    if (conversationId) {
+      collection = collection.and(msg => msg.conversationId === conversationId);
+    }
+    await collection.delete();
+  },
+
+  // Streak calculation utilities
+  async calculateCurrentStreak(userId: number): Promise<number> {
+    const runs = await db.runs
+      .where('userId')
+      .equals(userId)
+      .reverse()
+      .sortBy('completedAt');
+
+    if (!runs.length) return 0;
+
+    let streak = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Start from today and work backwards
+    let checkDate = new Date(today);
+    
+    for (let dayOffset = 0; dayOffset < 365; dayOffset++) { // Limit to 1 year lookback
+      const dayStart = new Date(checkDate);
+      const dayEnd = new Date(checkDate);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      // Check if there's a run on this day
+      const runOnDay = runs.find(run => {
+        const runDate = new Date(run.completedAt);
+        return runDate >= dayStart && runDate <= dayEnd;
+      });
+
+      if (runOnDay) {
+        streak++;
+      } else {
+        // No run on this day
+        if (dayOffset === 0) {
+          // Today - check if within grace period (24 hours from yesterday)
+          const yesterday = new Date(today);
+          yesterday.setDate(yesterday.getDate() - 1);
+          yesterday.setHours(0, 0, 0, 0);
+          
+          const lastRun = runs[0];
+          const lastRunDate = new Date(lastRun.completedAt);
+          
+          if (lastRunDate >= yesterday) {
+            // Within grace period, continue checking
+            checkDate.setDate(checkDate.getDate() - 1);
+            continue;
+          }
+        }
+        // Streak broken
+        break;
+      }
+      
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
+    return streak;
+  },
+
+  async updateUserStreak(userId: number): Promise<void> {
+    try {
+      const user = await db.users.get(userId);
+      if (!user) return;
+
+      const currentStreak = await this.calculateCurrentStreak(userId);
+      const longestStreak = Math.max(currentStreak, user.longestStreak || 0);
+      
+      // Get last activity date
+      const lastRun = await db.runs
+        .where('userId')
+        .equals(userId)
+        .reverse()
+        .sortBy('completedAt')
+        .then(runs => runs[0]);
+
+      const lastActivityDate = lastRun ? new Date(lastRun.completedAt) : undefined;
+
+      await this.updateUser(userId, {
+        currentStreak,
+        longestStreak,
+        lastActivityDate,
+        streakLastUpdated: new Date()
+      });
+    } catch (error) {
+      console.error('Error updating user streak:', error);
+    }
+  },
+
+  async getStreakStats(userId: number): Promise<{
+    currentStreak: number;
+    longestStreak: number;
+    lastActivityDate: Date | null;
+    streakLastUpdated: Date | null;
+  }> {
+    const user = await db.users.get(userId);
+    if (!user) {
+      return {
+        currentStreak: 0,
+        longestStreak: 0,
+        lastActivityDate: null,
+        streakLastUpdated: null
+      };
+    }
+
+    return {
+      currentStreak: user.currentStreak || 0,
+      longestStreak: user.longestStreak || 0,
+      lastActivityDate: user.lastActivityDate || null,
+      streakLastUpdated: user.streakLastUpdated || null
+    };
+  },
+
+  // Timezone-aware date utilities
+  normalizeDate(date: Date): Date {
+    const normalized = new Date(date);
+    normalized.setHours(0, 0, 0, 0);
+    return normalized;
+  },
+
+  isSameDay(date1: Date, date2: Date): boolean {
+    return this.normalizeDate(date1).getTime() === this.normalizeDate(date2).getTime();
+  },
+
+  getDaysDifference(date1: Date, date2: Date): number {
+    const normalizedDate1 = this.normalizeDate(date1);
+    const normalizedDate2 = this.normalizeDate(date2);
+    return Math.floor((normalizedDate1.getTime() - normalizedDate2.getTime()) / (1000 * 60 * 60 * 24));
   },
 
   // Migration utilities

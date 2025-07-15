@@ -22,17 +22,21 @@ const PlanSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const { user, planType, targetDistance } = await req.json();
+    const { user, planType, targetDistance, rookie_challenge } = await req.json();
 
-    // Check for OpenAI API key
-    if (!process.env.OPENAI_API_KEY) {
+    // Check for OpenAI API key with structured error response
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your_openai_api_key_here') {
+      console.warn('OpenAI API key not configured - returning structured error for fallback');
       return NextResponse.json({ 
-        error: 'OpenAI API key is not configured' 
-      }, { status: 500 });
+        error: 'OpenAI API key is not configured',
+        errorType: 'API_KEY_MISSING',
+        fallbackRequired: true,
+        message: 'AI plan generation is not available. The app will use a fallback plan instead.'
+      }, { status: 422 }); // 422 instead of 500 for configuration issues
     }
 
     // Build the prompt based on user preferences
-    const prompt = buildPlanPrompt(user, planType, targetDistance);
+    const prompt = buildPlanPrompt(user, planType, targetDistance, rookie_challenge);
 
     const { object: generatedPlan } = await generateObject({
       model: openai('gpt-4o'),
@@ -41,11 +45,22 @@ export async function POST(req: NextRequest) {
       temperature: 0.7,
     });
 
-    return NextResponse.json({ plan: generatedPlan });
+    return NextResponse.json({ 
+      plan: generatedPlan,
+      source: 'ai'
+    });
   } catch (error) {
     console.error('Failed to generate plan:', error);
+    
+    // Provide structured error information for better frontend handling
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    
     return NextResponse.json({ 
-      error: 'Failed to generate training plan' 
+      error: 'Failed to generate training plan',
+      errorType: 'GENERATION_ERROR',
+      fallbackRequired: true,
+      message: 'AI plan generation failed. The app will use a fallback plan instead.',
+      details: errorMessage
     }, { status: 500 });
   }
 }
@@ -53,7 +68,7 @@ export async function POST(req: NextRequest) {
 /**
  * Build a detailed prompt for plan generation
  */
-function buildPlanPrompt(user: any, planType?: string, targetDistance?: string): string {
+function buildPlanPrompt(user: any, planType?: string, targetDistance?: string, rookie_challenge?: boolean): string {
   const basePrompt = `Create a personalized running training plan for a runner with the following profile:
 
 **Runner Profile:**
@@ -63,6 +78,7 @@ function buildPlanPrompt(user: any, planType?: string, targetDistance?: string):
 - Preferred Times: ${user.preferredTimes.join(', ')}
 ${planType ? `- Plan Type: ${planType}` : ''}
 ${targetDistance ? `- Target Distance: ${targetDistance}` : ''}
+${rookie_challenge ? '\n- This user is a rookie and should receive a 14-day rookie challenge plan focused on habit-building and gradual progression.' : ''}
 
 **Requirements:**
 - Create a ${user.experience === 'beginner' ? '4-week' : user.experience === 'intermediate' ? '6-week' : '8-week'} progressive training plan

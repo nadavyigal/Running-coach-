@@ -19,6 +19,7 @@ import {
   StretchHorizontal,
   Link,
   Loader2,
+  Flame,
 } from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
 import { AddActivityModal } from "@/components/add-activity-modal"
@@ -27,6 +28,7 @@ import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
 import { dbUtils, type Workout } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
+import { StreakIndicator } from "@/components/streak-indicator"
 
 export function TodayScreen() {
   const [dailyTip, setDailyTip] = useState(
@@ -36,6 +38,7 @@ export function TodayScreen() {
   const [showWorkoutBreakdown, setShowWorkoutBreakdown] = useState(false)
   const [todaysWorkout, setTodaysWorkout] = useState<Workout | null>(null)
   const [isLoadingWorkout, setIsLoadingWorkout] = useState(true)
+  const [weeklyWorkouts, setWeeklyWorkouts] = useState<Workout[]>([])
   const { toast } = useToast()
 
   const tips = [
@@ -51,28 +54,40 @@ export function TodayScreen() {
     setDailyTip(tips[nextIndex])
   }
 
-  // Load today's workout
+  // Load today's workout and weekly workouts
   useEffect(() => {
-    const loadTodaysWorkout = async () => {
+    const loadWorkouts = async () => {
       try {
         const user = await dbUtils.getCurrentUser()
         if (user) {
-          const workout = await dbUtils.getTodaysWorkout(user.id!)
-          setTodaysWorkout(workout || null)
+          const today = new Date()
+          const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay())) // Sunday
+          const endOfWeek = new Date(today.setDate(today.getDate() - today.getDay() + 6)) // Saturday
+
+          const allWorkouts = await dbUtils.getWorkoutsForDateRange(user.id!, startOfWeek, endOfWeek)
+          setWeeklyWorkouts(allWorkouts)
+
+          const todays = allWorkouts.find(
+            (w) =>
+              w.scheduledDate.getDate() === new Date().getDate() &&
+              w.scheduledDate.getMonth() === new Date().getMonth() &&
+              w.scheduledDate.getFullYear() === new Date().getFullYear(),
+          )
+          setTodaysWorkout(todays || null)
         }
       } catch (error) {
-        console.error('Failed to load today\'s workout:', error)
+        console.error('Failed to load workouts:', error)
         toast({
           title: "Error",
-          description: "Failed to load today's workout.",
-          variant: "destructive"
+          description: "Failed to load workouts.",
+          variant: "destructive",
         })
       } finally {
         setIsLoadingWorkout(false)
       }
     }
 
-    loadTodaysWorkout()
+    loadWorkouts()
   }, [toast])
 
   const today = new Date()
@@ -90,27 +105,35 @@ export function TodayScreen() {
   const [selectedDateWorkout, setSelectedDateWorkout] = useState<any>(null)
   const [showDateWorkoutModal, setShowDateWorkoutModal] = useState(false)
 
-  // Add workout data for different dates
-  const workoutData = {
-    [today.getDate() - 2]: { type: "easy", color: "bg-green-500" },
-    [today.getDate() - 1]: { type: "tempo", color: "bg-orange-500" },
-    [today.getDate()]: { type: "tempo", color: "bg-orange-500" },
-    [today.getDate() + 1]: { type: "long", color: "bg-blue-500" },
-    [today.getDate() + 2]: { type: "intervals", color: "bg-pink-500" },
+  // Workout color mapping
+  const workoutColorMap: { [key: string]: string } = {
+    easy: "bg-green-500",
+    tempo: "bg-orange-500",
+    intervals: "bg-pink-500",
+    long: "bg-blue-500",
+    rest: "bg-gray-400",
+    "time-trial": "bg-red-500",
+    hill: "bg-purple-500",
   }
 
   // Update calendar days generation
   for (let i = -3; i <= 3; i++) {
     const date = new Date(today)
     date.setDate(today.getDate() + i)
-    const workout = workoutData[date.getDate()]
+    const workoutForDate = weeklyWorkouts.find(
+      (w: Workout) =>
+        w.scheduledDate.getDate() === date.getDate() &&
+        w.scheduledDate.getMonth() === date.getMonth() &&
+        w.scheduledDate.getFullYear() === date.getFullYear(),
+    )
+
     calendarDays.push({
       day: weekDays[date.getDay()],
       date: date.getDate(),
       isToday: i === 0,
-      hasWorkout: !!workout,
-      workoutType: workout?.type,
-      workoutColor: workout?.color,
+      hasWorkout: !!workoutForDate,
+      workoutType: workoutForDate?.type,
+      workoutColor: workoutForDate ? workoutColorMap[workoutForDate.type] : undefined,
       fullDate: new Date(date),
     })
   }
@@ -118,15 +141,25 @@ export function TodayScreen() {
   // Update handleDateClick function:
   const handleDateClick = (day: any) => {
     if (day.hasWorkout && !day.isToday) {
-      setSelectedDateWorkout({
-        type: day.workoutType,
-        distance: "5km", // You can make this dynamic based on workout type
-        completed: Math.random() > 0.5, // Random for demo
-        color: day.workoutColor,
-        date: day.fullDate,
-        dateString: day.fullDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
-      })
-      setShowDateWorkoutModal(true)
+      const workout = weeklyWorkouts.find(
+        (w) =>
+          w.scheduledDate.getDate() === day.fullDate.getDate() &&
+          w.scheduledDate.getMonth() === day.fullDate.getMonth() &&
+          w.scheduledDate.getFullYear() === day.fullDate.getFullYear(),
+      )
+      if (workout) {
+        setSelectedDateWorkout({
+          type: workout.type,
+          distance: workout.distance ? `${workout.distance}km` : undefined,
+          duration: workout.duration ? `${workout.duration}min` : undefined,
+          completed: workout.completed,
+          color: workoutColorMap[workout.type],
+          date: workout.scheduledDate,
+          dateString: workout.scheduledDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
+          notes: workout.notes,
+        })
+        setShowDateWorkoutModal(true)
+      }
     }
   }
 
@@ -153,6 +186,13 @@ export function TodayScreen() {
         // Navigate to record screen
         if (typeof window !== "undefined") {
           const event = new CustomEvent("navigate-to-record")
+          window.dispatchEvent(event)
+        }
+        break
+      case "chat":
+        // Navigate to chat screen
+        if (typeof window !== "undefined") {
+          const event = new CustomEvent("navigate-to-chat")
           window.dispatchEvent(event)
         }
         break
@@ -228,6 +268,9 @@ export function TodayScreen() {
         </div>
       </div>
 
+      {/* Streak Indicator */}
+      <StreakIndicator />
+
       {/* Calendar Strip */}
       <div className="flex gap-2 overflow-x-auto pb-2 animate-in slide-in-from-left duration-500">
         {calendarDays.map((day, index) => (
@@ -254,9 +297,15 @@ export function TodayScreen() {
       <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
         <div className="flex items-center gap-2">
           <Play className="h-4 w-4" />
-          <span className="font-medium">RUN</span>
+          <span className="font-medium">WEEKLY PROGRESS</span>
         </div>
-        <div className="text-lg font-bold">0/4</div>
+        {isLoadingWorkout ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <div className="text-lg font-bold">
+            {weeklyWorkouts.filter((w) => w.completed).length}/{weeklyWorkouts.length}
+          </div>
+        )}
       </div>
 
       {/* Today's Workout */}
@@ -268,18 +317,28 @@ export function TodayScreen() {
                 <Badge className="bg-blue-100 text-blue-800 text-xs">SCHEDULE</Badge>
                 <span className="text-sm text-gray-600">9 JUL 2025</span>
               </div>
-              <CardTitle className="text-xl mb-1">Repeating Progressive Run</CardTitle>
-              <div className="flex items-center gap-4 text-sm text-gray-600">
-                <span className="flex items-center gap-1">
-                  <Zap className="h-4 w-4" />
-                  Tempo • 10km
-                </span>
-                <Badge className="bg-blue-100 text-blue-800 text-xs">Best for: Balanced</Badge>
-              </div>
-              <div className="flex items-center gap-1 mt-2">
-                <Clock className="h-4 w-4 text-gray-500" />
-                <span className="text-lg font-semibold">50m - 55m</span>
-              </div>
+              {isLoadingWorkout ? (
+                <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
+              ) : todaysWorkout ? (
+                <>
+                  <CardTitle className="text-xl mb-1">{todaysWorkout.type.charAt(0).toUpperCase() + todaysWorkout.type.slice(1)} Run</CardTitle>
+                  <div className="flex items-center gap-4 text-sm text-gray-600">
+                    <span className="flex items-center gap-1">
+                      <Zap className="h-4 w-4" />
+                      {todaysWorkout.distance ? `${todaysWorkout.distance}km` : todaysWorkout.duration ? `${todaysWorkout.duration}min` : 'N/A'}
+                    </span>
+                    <Badge className="bg-blue-100 text-blue-800 text-xs">Best for: Balanced</Badge>
+                  </div>
+                  <div className="flex items-center gap-1 mt-2">
+                    <Clock className="h-4 w-4 text-gray-500" />
+                    <span className="text-lg font-semibold">
+                      {todaysWorkout.duration ? `${todaysWorkout.duration}m` : `${todaysWorkout.distance}km`}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <CardTitle className="text-xl mb-1">Rest Day</CardTitle>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -366,7 +425,7 @@ export function TodayScreen() {
                           </div>
                           <div className="flex-1">
                             <p className="font-medium">{step.description}</p>
-                            {step.detail && <p className="text-sm text-gray-600 mt-1">{step.detail}</p>}
+                            {('detail' in step) && step.detail && <p className="text-sm text-gray-600 mt-1">{step.detail}</p>}
                           </div>
                           <Badge variant="outline" className="text-xs">
                             <Play className="h-3 w-3 mr-1" />
@@ -431,7 +490,8 @@ export function TodayScreen() {
               <h4 className="font-medium text-blue-900 mb-1">Let's keep your progress going</h4>
               <p className="text-sm text-blue-800">Missed workouts? Skip or add them to this week.</p>
             </div>
-            <Button variant="ghost" size="sm" className="text-blue-600">
+            <Button variant="ghost" size="sm" className="text-blue-600"
+              onClick={() => handleActionClick("chat")}>
               <ChevronUp className="h-4 w-4" />
             </Button>
           </div>
@@ -444,20 +504,30 @@ export function TodayScreen() {
           <CardTitle className="text-lg">Your Progress</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div className="hover:scale-105 transition-transform cursor-pointer">
-              <div className="text-2xl font-bold text-green-500 animate-pulse">5</div>
-              <div className="text-xs text-gray-600">Day Streak</div>
+          {isLoadingWorkout ? (
+            <div className="flex justify-center items-center h-24">
+              <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
             </div>
-            <div className="hover:scale-105 transition-transform cursor-pointer">
-              <div className="text-2xl font-bold text-blue-500 animate-pulse">12</div>
-              <div className="text-xs text-gray-600">Total Runs</div>
+          ) : (
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="hover:scale-105 transition-transform cursor-pointer">
+                <div className="text-2xl font-bold text-green-500 animate-pulse">{weeklyWorkouts.filter(w => w.completed).length}</div>
+                <div className="text-xs text-gray-600">Completed This Week</div>
+              </div>
+              <div className="hover:scale-105 transition-transform cursor-pointer">
+                <div className="text-2xl font-bold text-blue-500 animate-pulse">{weeklyWorkouts.length}</div>
+                <div className="text-xs text-gray-600">Scheduled This Week</div>
+              </div>
+              <div className="hover:scale-105 transition-transform cursor-pointer">
+                <div className="text-2xl font-bold text-purple-500 animate-pulse">
+                  {weeklyWorkouts.length > 0
+                    ? `${Math.round((weeklyWorkouts.filter(w => w.completed).length / weeklyWorkouts.length) * 100)}%`
+                    : '0%'}
+                </div>
+                <div className="text-xs text-gray-600">Week Complete</div>
+              </div>
             </div>
-            <div className="hover:scale-105 transition-transform cursor-pointer">
-              <div className="text-2xl font-bold text-purple-500 animate-pulse">78%</div>
-              <div className="text-xs text-gray-600">Week Complete</div>
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
