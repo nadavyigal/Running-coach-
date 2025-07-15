@@ -100,6 +100,16 @@ export interface ChatMessage {
   conversationId?: string;
 }
 
+// Badge interface
+export interface Badge {
+  id?: number;
+  userId: number;
+  type: 'bronze' | 'silver' | 'gold';
+  milestone: number; // 3, 7, 30
+  unlockedAt: Date;
+  streakValueAchieved: number;
+}
+
 // Database class
 export class RunSmartDB extends Dexie {
   users!: EntityTable<User, 'id'>;
@@ -108,6 +118,7 @@ export class RunSmartDB extends Dexie {
   runs!: EntityTable<Run, 'id'>;
   shoes!: EntityTable<Shoe, 'id'>;
   chatMessages!: EntityTable<ChatMessage, 'id'>;
+  badges!: EntityTable<Badge, 'id'>;
 
   constructor() {
     super('RunSmartDB');
@@ -139,6 +150,19 @@ export class RunSmartDB extends Dexie {
         user.streakLastUpdated = new Date();
       });
     });
+
+    // Version 3: Add badges table
+    this.version(3).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+    }).upgrade(async tx => {
+      // No migration needed for badges (new table)
+    });
   }
 }
 
@@ -146,6 +170,13 @@ export class RunSmartDB extends Dexie {
 export const db = new RunSmartDB();
 
 // Database utilities
+export const badgeMilestones = [3, 7, 30];
+export const badgeTypes: { [key: number]: 'bronze' | 'silver' | 'gold' } = {
+  3: 'bronze',
+  7: 'silver',
+  30: 'gold',
+};
+
 export const dbUtils = {
   // User operations
   async createUser(userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
@@ -446,6 +477,9 @@ export const dbUtils = {
     } catch (error) {
       console.error('Error updating user streak:', error);
     }
+    // After updating streak, check for badge unlocks
+    const unlocked = await dbUtils.checkAndUnlockBadges(userId);
+    // Optionally: trigger notification callback here (handled in UI)
   },
 
   async getStreakStats(userId: number): Promise<{
@@ -540,7 +574,51 @@ export const dbUtils = {
     } catch (error) {
       console.error('Migration failed:', error);
     }
-  }
+  },
+
+  // Badge utility functions
+  async checkAndUnlockBadges(userId: number): Promise<Badge[]> {
+    const user = await db.users.get(userId);
+    if (!user || !user.currentStreak) return [];
+    const unlocked: Badge[] = [];
+    for (const milestone of badgeMilestones) {
+      if (user.currentStreak >= milestone) {
+        const type = badgeTypes[milestone];
+        const existing = await db.badges.where({ userId, milestone }).first();
+        if (!existing) {
+          const badge: Badge = {
+            userId,
+            type,
+            milestone,
+            unlockedAt: new Date(),
+            streakValueAchieved: user.currentStreak,
+          };
+          const id = await db.badges.add(badge);
+          unlocked.push({ ...badge, id });
+        }
+      }
+    }
+    return unlocked;
+  },
+  async getUserBadges(userId: number): Promise<Badge[]> {
+    return await db.badges.where({ userId }).sortBy('milestone');
+  },
+  async unlockBadge(userId: number, milestone: number): Promise<Badge | undefined> {
+    const user = await db.users.get(userId);
+    if (!user) return undefined;
+    const type = badgeTypes[milestone];
+    const existing = await db.badges.where({ userId, milestone }).first();
+    if (existing) return existing;
+    const badge: Badge = {
+      userId,
+      type,
+      milestone,
+      unlockedAt: new Date(),
+      streakValueAchieved: user.currentStreak || milestone,
+    };
+    const id = await db.badges.add(badge);
+    return { ...badge, id };
+  },
 };
 
 // Helper functions

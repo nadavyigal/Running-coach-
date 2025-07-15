@@ -361,3 +361,73 @@ describe('Streak Calculation Engine', () => {
     });
   });
 }); 
+
+describe('Badge System', () => {
+  let testUserId: number;
+  beforeEach(async () => {
+    testUserId = await dbUtils.createUser({
+      name: 'Badge User',
+      goal: 'habit',
+      experience: 'beginner',
+      preferredTimes: ['morning'],
+      daysPerWeek: 5,
+      consents: { data: true, gdpr: true, push: false },
+      onboardingComplete: true
+    });
+  });
+  afterEach(async () => {
+    await db.users.clear();
+    await db.badges.clear();
+    await db.runs.clear();
+  });
+  it('should unlock bronze badge at 3-day streak', async () => {
+    const today = new Date();
+    for (let i = 0; i < 3; i++) {
+      const runDate = new Date(today);
+      runDate.setDate(runDate.getDate() - i);
+      await dbUtils.createRun({ userId: testUserId, type: 'easy', distance: 5, duration: 1800, completedAt: runDate });
+    }
+    await dbUtils.updateUserStreak(testUserId);
+    const badges = await dbUtils.getUserBadges(testUserId);
+    expect(badges.some(b => b.milestone === 3 && b.type === 'bronze')).toBe(true);
+  });
+  it('should unlock silver badge at 7-day streak', async () => {
+    const today = new Date();
+    for (let i = 0; i < 7; i++) {
+      const runDate = new Date(today);
+      runDate.setDate(runDate.getDate() - i);
+      await dbUtils.createRun({ userId: testUserId, type: 'easy', distance: 5, duration: 1800, completedAt: runDate });
+    }
+    await dbUtils.updateUserStreak(testUserId);
+    const badges = await dbUtils.getUserBadges(testUserId);
+    expect(badges.some(b => b.milestone === 7 && b.type === 'silver')).toBe(true);
+  });
+  it('should unlock gold badge at 30-day streak', async () => {
+    const today = new Date();
+    for (let i = 0; i < 30; i++) {
+      const runDate = new Date(today);
+      runDate.setDate(runDate.getDate() - i);
+      await dbUtils.createRun({ userId: testUserId, type: 'easy', distance: 5, duration: 1800, completedAt: runDate });
+    }
+    await dbUtils.updateUserStreak(testUserId);
+    const badges = await dbUtils.getUserBadges(testUserId);
+    expect(badges.some(b => b.milestone === 30 && b.type === 'gold')).toBe(true);
+  });
+  it('should not award duplicate badges', async () => {
+    const today = new Date();
+    for (let i = 0; i < 7; i++) {
+      const runDate = new Date(today);
+      runDate.setDate(runDate.getDate() - i);
+      await dbUtils.createRun({ userId: testUserId, type: 'easy', distance: 5, duration: 1800, completedAt: runDate });
+    }
+    await dbUtils.updateUserStreak(testUserId);
+    await dbUtils.updateUserStreak(testUserId); // Call again
+    const badges = await dbUtils.getUserBadges(testUserId);
+    const silverBadges = badges.filter(b => b.milestone === 7 && b.type === 'silver');
+    expect(silverBadges.length).toBe(1);
+  });
+  it('should return empty for new users', async () => {
+    const badges = await dbUtils.getUserBadges(testUserId);
+    expect(badges.length).toBe(0);
+  });
+}); 

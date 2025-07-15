@@ -21,11 +21,16 @@ import {
 } from "lucide-react"
 import { AddShoesModal } from "@/components/add-shoes-modal"
 import { useState, useEffect } from "react"
+import { BadgeCabinet } from "@/components/badge-cabinet";
+import { dbUtils } from "@/lib/db";
+import { useToast } from "@/components/ui/use-toast";
 
 export function ProfileScreen() {
   // Add state for the shoes modal at the top of the component
   const [showAddShoesModal, setShowAddShoesModal] = useState(false)
   const [runningShoes, setRunningShoes] = useState<any[]>([])
+  const [userId, setUserId] = useState<number | null>(null);
+  const { toast } = useToast();
 
   // Add useEffect to load shoes data
   useEffect(() => {
@@ -33,12 +38,23 @@ export function ProfileScreen() {
     setRunningShoes(shoes)
   }, [])
 
-  const achievements = [
-    { icon: "🏅", name: "First Run", unlocked: true },
-    { icon: "🔥", name: "Week Streak", unlocked: true },
-    { icon: "🏆", name: "5K Complete", unlocked: false },
-    { icon: "⭐", name: "Plan Complete", unlocked: false },
-  ]
+  useEffect(() => {
+    dbUtils.getCurrentUser().then(async user => {
+      if (user) {
+        setUserId(user.id!);
+        // Check for new badge unlocks after streak update
+        const unlocked = await dbUtils.checkAndUnlockBadges(user.id!);
+        if (unlocked && unlocked.length > 0) {
+          unlocked.forEach(badge => {
+            toast({
+              title: `🏅 Badge Unlocked!`,
+              description: `You earned the ${badge.type} badge for a ${badge.milestone}-day streak!`,
+            });
+          });
+        }
+      }
+    });
+  }, []);
 
   const connections = [
     { icon: Footprints, name: "Add Shoes", desc: "Track your running shoes mileage" },
@@ -111,26 +127,7 @@ export function ProfileScreen() {
       </div>
 
       {/* Achievements */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Achievements</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-4 gap-4">
-            {achievements.map((achievement, index) => (
-              <div
-                key={index}
-                className={`text-center p-3 rounded-lg ${
-                  achievement.unlocked ? "bg-yellow-50 border border-yellow-200" : "bg-gray-50 grayscale"
-                }`}
-              >
-                <div className="text-2xl mb-1">{achievement.icon}</div>
-                <div className="text-xs font-medium">{achievement.name}</div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {userId && <BadgeCabinet userId={userId} />}
 
       {runningShoes.length > 0 && (
         <Card>
