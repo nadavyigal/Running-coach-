@@ -118,8 +118,8 @@ export function PlanScreen() {
   const renderBiweeklyView = () => {
     if (isLoading) {
       return (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-green-500" />
+        <div className="flex items-center justify-center py-12" role="status" aria-label="Loading">
+          <Loader2 className="h-8 w-8 animate-spin text-green-500" aria-hidden="true" />
           <span className="ml-2 text-gray-600">Loading your training plan...</span>
         </div>
       )
@@ -140,11 +140,11 @@ export function PlanScreen() {
       <div className="space-y-6 animate-in fade-in-50 duration-300">
         <div className="flex items-center justify-between">
           <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform">
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-4 w-4" role="img" aria-label="Previous" />
           </Button>
           <h2 className="font-semibold">{plan.title}</h2>
           <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform">
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-4 w-4" role="img" aria-label="Next" />
           </Button>
         </div>
 

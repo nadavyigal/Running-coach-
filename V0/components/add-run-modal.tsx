@@ -349,7 +349,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
                 className="text-gray-600"
               >
                 {showCollapsed ? "COLLAPSE" : "EXPAND"}
-                <ChevronDown className={`h-4 w-4 ml-1 transition-transform ${showCollapsed ? "" : "rotate-180"}`} />
+                <ChevronDown className={`h-4 w-4 ml-1 transition-transform ${showCollapsed ? "" : "rotate-180"}`} role="img" aria-label="Toggle" />
               </Button>
             )}
             {(step === "configure" || step === "approve") && (
@@ -373,7 +373,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
                     <div
                       className={`w-full h-16 bg-gradient-to-r ${workout.color} rounded-lg flex items-center justify-center mb-2 relative overflow-hidden`}
                     >
-                      <workout.icon className="h-6 w-6 text-white z-10" />
+                      <workout.icon className="h-6 w-6 text-white z-10" role="img" aria-label={workout.name} />
                       <div className="absolute inset-0 opacity-20">
                         <div className="absolute top-0 right-0 w-8 h-8 bg-white rounded-full translate-x-2 -translate-y-2" />
                         <div className="absolute bottom-0 left-0 w-6 h-6 bg-white rounded-full -translate-x-1 translate-y-1" />
@@ -395,7 +395,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
                         <div
                           className={`w-full h-16 bg-gradient-to-r ${workout.color} rounded-lg flex items-center justify-center mb-2`}
                         >
-                          <workout.icon className="h-6 w-6 text-white" />
+                          <workout.icon className="h-6 w-6 text-white" role="img" aria-label={workout.name} />
                         </div>
                         <h4 className="font-medium text-sm text-center">{workout.name}</h4>
                       </CardContent>
@@ -568,7 +568,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
             >
               {isGenerating ? (
                 <>
-                  <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
+                  <RefreshCw className="h-5 w-5 mr-2 animate-spin" role="status" aria-label="Loading" />
                   Generating Workout...
                 </>
               ) : (
