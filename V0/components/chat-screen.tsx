@@ -276,9 +276,9 @@ export function ChatScreen() {
             <MessageBubble key={message.id} message={message} />
           ))}
           {isLoading && (
-            <div className="flex justify-start">
+            <div className="flex justify-start" role="status" aria-label="Loading">
               <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 <span className="text-sm text-muted-foreground">Coach is thinking...</span>
               </div>
             </div>

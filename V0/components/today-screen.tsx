@@ -300,7 +300,7 @@ export function TodayScreen() {
           <span className="font-medium">WEEKLY PROGRESS</span>
         </div>
         {isLoadingWorkout ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="h-4 w-4 animate-spin" role="status" aria-label="Loading" />
         ) : (
           <div className="text-lg font-bold">
             {weeklyWorkouts.filter((w) => w.completed).length}/{weeklyWorkouts.length}
@@ -318,7 +318,7 @@ export function TodayScreen() {
                 <span className="text-sm text-gray-600">9 JUL 2025</span>
               </div>
               {isLoadingWorkout ? (
-                <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
+                <Loader2 className="h-6 w-6 animate-spin text-gray-500" role="status" aria-label="Loading" />
               ) : todaysWorkout ? (
                 <>
                   <CardTitle className="text-xl mb-1">{todaysWorkout.type.charAt(0).toUpperCase() + todaysWorkout.type.slice(1)} Run</CardTitle>
@@ -505,8 +505,8 @@ export function TodayScreen() {
         </CardHeader>
         <CardContent>
           {isLoadingWorkout ? (
-            <div className="flex justify-center items-center h-24">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+            <div className="flex justify-center items-center h-24" role="status" aria-label="Loading">
+              <Loader2 className="h-8 w-8 animate-spin text-gray-500" aria-hidden="true" />
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-4 text-center">

@@ -365,7 +365,14 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               </CardContent>
             </Card>
             <Button onClick={handleComplete} disabled={!canProceed() || isGeneratingPlan} className="w-full bg-green-500 hover:bg-green-600" aria-label="Start My Journey">
-              {isGeneratingPlan ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating Your Plan...</>) : 'Start My Journey'}
+              {isGeneratingPlan ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" role="status" aria-label="Loading" />
+                  Creating Your Plan...
+                </>
+              ) : (
+                'Start My Journey'
+              )}
             </Button>
           </div>
         )
