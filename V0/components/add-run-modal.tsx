@@ -31,6 +31,7 @@ import {
 } from "lucide-react"
 import { generateText } from "ai"
 import { openai } from "@ai-sdk/openai"
+import { useToast } from "@/hooks/use-toast"
 
 interface AddRunModalProps {
   isOpen: boolean
@@ -179,6 +180,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
   const [selectedDifficulty, setSelectedDifficulty] = useState("open")
   const [generatedWorkout, setGeneratedWorkout] = useState<any>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const { toast } = useToast()
 
   const presetDistances = [
     { label: "5k", value: "5.0" },
@@ -309,7 +311,10 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
     }
 
     console.log("Saving workout:", workout)
-    alert("Workout added to your plan!")
+    toast({
+      title: "Workout Scheduled! \ud83c\udf89",
+      description: `${selectedWorkout?.name || 'Workout'} added to your plan`,
+    })
 
     // Reset and close
     setStep("select")
