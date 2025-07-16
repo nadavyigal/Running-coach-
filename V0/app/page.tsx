@@ -9,6 +9,7 @@ import { ChatScreen } from "@/components/chat-screen"
 import { ProfileScreen } from "@/components/profile-screen"
 import { BottomNavigation } from "@/components/bottom-navigation"
 import { dbUtils } from "@/lib/db"
+import { planAdjustmentService } from "@/lib/planAdjustmentService"
 
 export default function RunSmartApp() {
   const [currentScreen, setCurrentScreen] = useState<string>("onboarding")
@@ -22,12 +23,17 @@ export default function RunSmartApp() {
         if (user && user.onboardingComplete) {
           setIsOnboardingComplete(true)
           setCurrentScreen("today")
+          planAdjustmentService.init(user.id!)
         } else {
           // Check localStorage for backward compatibility
           const onboardingComplete = localStorage.getItem("onboarding-complete")
           if (onboardingComplete) {
             // Migrate from localStorage
             await dbUtils.migrateFromLocalStorage()
+            const migratedUser = await dbUtils.getCurrentUser()
+            if (migratedUser) {
+              planAdjustmentService.init(migratedUser.id!)
+            }
             setIsOnboardingComplete(true)
             setCurrentScreen("today")
           }
@@ -56,6 +62,9 @@ export default function RunSmartApp() {
     localStorage.setItem("onboarding-complete", "true")
     setIsOnboardingComplete(true)
     setCurrentScreen("today")
+    dbUtils.getCurrentUser().then(u => {
+      if (u?.id) planAdjustmentService.init(u.id)
+    })
   }
 
   const renderScreen = () => {
