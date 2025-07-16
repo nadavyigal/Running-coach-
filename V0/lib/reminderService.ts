@@ -72,7 +72,7 @@ class ReminderService {
     const until = new Date(Date.now() + minutes * 60000)
     this.clear()
     await dbUtils.updateReminderSettings(user.id!, { reminderSnoozedUntil: until })
-    posthog.capture('reminder_snoozed', { minutes })
+    trackReminderEvent('reminder_snoozed', { minutes })
     this.timeout = setTimeout(() => this.trigger(user.id!), minutes * 60000)
   }
 }

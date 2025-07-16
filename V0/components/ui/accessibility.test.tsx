@@ -1,12 +1,18 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
-import { DialogContent } from './dialog'
+import { Dialog, DialogContent, DialogTrigger } from './dialog'
 import { Loader2 } from 'lucide-react'
 
 
 describe('accessibility primitives', () => {
   it('DialogContent exposes ARIA role', () => {
-    render(<DialogContent>Content</DialogContent>)
+    render(
+      <Dialog>
+        <DialogTrigger>Open</DialogTrigger>
+        <DialogContent>Content</DialogContent>
+      </Dialog>
+    )
+    fireEvent.click(screen.getByText('Open'))
     const dialog = screen.getByRole('dialog')
     expect(dialog).toBeInTheDocument()
   })

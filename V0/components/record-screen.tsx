@@ -498,11 +498,11 @@ export function RecordScreen() {
                 <Pause className="h-6 w-6" />
               </Button>
             ) : (
-              <Button onClick={resumeRun} className="bg-green-500 hover:bg-green-600 h-16 w-16 rounded-full">
+              <Button onClick={resumeRun} className="bg-green-500 hover:bg-green-600 h-16 w-16 rounded-full" aria-label="Resume Run">
                 <Play className="h-6 w-6" />
               </Button>
             )}
-            <Button onClick={stopRun} variant="destructive" className="h-16 w-16 rounded-full">
+            <Button onClick={stopRun} variant="destructive" className="h-16 w-16 rounded-full" aria-label="Stop Run">
               <Square className="h-6 w-6" />
             </Button>
           </>

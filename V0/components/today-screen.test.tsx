@@ -13,9 +13,13 @@ const mockDbUtils = {
   getRunStats: vi.fn(),
 };
 
-vi.mock('../lib/db', () => ({
-  dbUtils: mockDbUtils,
-}));
+vi.mock('../lib/db', async () => {
+  const actual = await vi.importActual('../lib/db');
+  return {
+    ...actual,
+    dbUtils: mockDbUtils,
+  };
+});
 
 vi.mock('../hooks/use-toast', () => ({
   useToast: () => ({

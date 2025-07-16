@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ChatScreen } from './chat-screen'
+import { dbUtils } from '@/lib/db'
 
 // Mock the database utilities
 vi.mock('@/lib/db', () => ({
@@ -183,8 +184,6 @@ describe('ChatScreen', () => {
   })
 
   it('builds user context from profile and runs', async () => {
-    const { dbUtils } = await import('@/lib/db')
-    
     render(<ChatScreen />)
     
     const input = screen.getByPlaceholderText('Ask your running coach anything...')
