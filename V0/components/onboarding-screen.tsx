@@ -9,7 +9,7 @@ import { MonitorIcon as Running, Calendar, Route, Gauge, Sun, CloudSun, Moon, Lo
 import { dbUtils } from "@/lib/db"
 import { generatePlan, generateFallbackPlan } from "@/lib/planGenerator"
 import { useToast } from "@/hooks/use-toast"
-import posthog from 'posthog-js'
+import { trackEngagementEvent } from '@/lib/analytics'
 
 interface OnboardingScreenProps {
   onComplete: () => void
@@ -140,6 +140,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       }
 
       console.log('Plan created successfully:', planResult.plan.title, `with ${planResult.workouts.length} workouts`)
+      trackEngagementEvent('onboard_complete', { rookieChallenge: true });
       setIsGeneratingPlan(false)
       onComplete()
     } catch (error) {

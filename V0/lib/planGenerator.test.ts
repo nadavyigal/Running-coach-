@@ -5,14 +5,19 @@ import { generateFallbackPlan } from './planGenerator'
 import posthog from 'posthog-js'
 import { toast } from '@/hooks/use-toast'
 
-vi.mock('posthog-js', () => ({
-  default: { capture: vi.fn() }
-}))
+vi.mock('posthog-js', () => {
+  const mockPosthog = {
+    capture: vi.fn(),
+  };
+  return {
+    default: mockPosthog,
+  };
+});
 vi.mock('@/hooks/use-toast', () => ({
   toast: vi.fn()
 }))
 
-const capture = (posthog as any).default.capture as ReturnType<typeof vi.fn>
+const capture = posthog.default.capture as ReturnType<typeof vi.fn>
 const mockedToast = toast as unknown as ReturnType<typeof vi.fn>
 
 describe('planAdjustmentService', () => {
@@ -69,7 +74,7 @@ describe('planAdjustmentService', () => {
     const plansAfter = await db.plans.count()
 
     expect(plansAfter).toBe(plansBefore + 1)
-    expect(capture).toHaveBeenCalledWith('plan_adjusted', { reason: 'nightly' })
+    expect(trackPlanAdjustmentEventMock).toHaveBeenCalledWith('plan_adjusted', { reason: 'nightly' })
     expect(mockedToast).toHaveBeenCalled()
   })
 })

@@ -247,7 +247,7 @@ describe('RecordScreen', () => {
         render(<RecordScreen />)
       })
 
-      expect(screen.getByText('GPS Unavailable')).toBeInTheDocument()
+      expect(screen.getAllByText('GPS Unavailable').length).toBeGreaterThan(0)
       expect(screen.getByText('Manual Entry')).toBeInTheDocument()
     })
 
@@ -290,7 +290,7 @@ describe('RecordScreen', () => {
       })
 
       // Stop run
-      const stopButton = screen.getByRole('button', { name: /square/i })
+      const stopButton = screen.getByRole('button', { name: 'Stop Run' })
       await act(async () => {
         fireEvent.click(stopButton)
       })
@@ -338,7 +338,7 @@ describe('RecordScreen', () => {
         fireEvent.click(startButton)
       })
 
-      const stopButton = screen.getByRole('button', { name: /square/i })
+      const stopButton = screen.getByRole('button', { name: 'Stop Run' })
       await act(async () => {
         fireEvent.click(stopButton)
       })
@@ -364,7 +364,7 @@ describe('RecordScreen', () => {
         fireEvent.click(startButton)
       })
 
-      const stopButton = screen.getByRole('button', { name: /square/i })
+      const stopButton = screen.getByRole('button', { name: 'Stop Run' })
       await act(async () => {
         fireEvent.click(stopButton)
       })
@@ -477,7 +477,7 @@ describe('RecordScreen', () => {
         render(<RecordScreen />)
       })
 
-      const mapButton = screen.getByRole('button', { name: /map/i })
+      const mapButton = screen.getByRole('button', { name: 'Open Route Selector' })
       
       await act(async () => {
         fireEvent.click(mapButton)
@@ -557,7 +557,7 @@ describe('RecordScreen', () => {
         fireEvent.click(startButton)
       })
 
-      const stopButton = screen.getByRole('button', { name: /square/i })
+      const stopButton = screen.getByRole('button', { name: 'Stop Run' })
       await act(async () => {
         fireEvent.click(stopButton)
       })

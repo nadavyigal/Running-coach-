@@ -4,15 +4,20 @@ import { db, dbUtils } from './db'
 import posthog from 'posthog-js'
 import { toast } from '@/hooks/use-toast'
 
-vi.mock('posthog-js', () => ({
-  default: { capture: vi.fn() }
-}))
+vi.mock('posthog-js', () => {
+  const mockPosthog = {
+    capture: vi.fn(),
+  };
+  return {
+    default: mockPosthog,
+  };
+});
 vi.mock('@/hooks/use-toast', () => ({
   toast: vi.fn()
 }))
 
 const mockedToast = toast as unknown as ReturnType<typeof vi.fn>
-const capture = (posthog as any).default.capture as ReturnType<typeof vi.fn>
+const capture = posthog.default.capture as ReturnType<typeof vi.fn>
 
 describe('reminderService', () => {
   let userId: number
@@ -69,7 +74,7 @@ describe('reminderService', () => {
     capture.mockClear()
     mockedToast.mockClear()
     await reminderService.disableReminder()
-    expect(capture).toHaveBeenCalledWith('reminder_disabled')
+    expect(trackReminderEventMock).toHaveBeenCalledWith('reminder_disabled')
     vi.advanceTimersByTime(24 * 60 * 60000)
     await vi.runAllTimers()
     expect(mockedToast).not.toHaveBeenCalled()

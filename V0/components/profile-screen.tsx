@@ -20,6 +20,7 @@ import {
   ChevronRight,
 } from "lucide-react"
 import { AddShoesModal } from "@/components/add-shoes-modal"
+import { ReminderSettings } from "@/components/reminder-settings"
 import { useState, useEffect } from "react"
 import { BadgeCabinet } from "@/components/badge-cabinet";
 import { dbUtils } from "@/lib/db";
@@ -231,6 +232,8 @@ export function ProfileScreen() {
           ))}
         </CardContent>
       </Card>
+
+      <ReminderSettings />
 
       {/* App Info */}
       <div className="text-center text-sm text-gray-500 space-y-1">

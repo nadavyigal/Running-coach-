@@ -2,11 +2,16 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { OnboardingScreen } from './onboarding-screen';
 import posthog from 'posthog-js';
+import { trackEngagementEvent } from '@/lib/analytics';
 
 vi.mock('posthog-js', () => ({
   default: {
     capture: vi.fn(),
   },
+}));
+
+vi.mock('@/lib/analytics', () => ({
+  trackEngagementEvent: vi.fn(),
 }));
 
 vi.mock('@/lib/db', () => ({
@@ -89,7 +94,7 @@ describe('OnboardingScreen', () => {
     fireEvent.click(screen.getByText(/Continue/i));
     fireEvent.click(screen.getByLabelText(/Start My Journey/i));
     await waitFor(() => {
-      expect(posthog.capture).toHaveBeenCalledWith('onboard_complete', expect.objectContaining({ rookieChallenge: true }));
+      expect(trackEngagementEvent).toHaveBeenCalledWith('onboard_complete', expect.objectContaining({ rookieChallenge: true }));
     });
   });
 }); 

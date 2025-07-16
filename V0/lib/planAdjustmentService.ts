@@ -22,7 +22,7 @@ class PlanAdjustmentService {
       title: 'Plan Updated',
       description: 'Your training plan has been adjusted based on your recent activity.'
     })
-    posthog.capture('plan_adjusted', { reason })
+    trackPlanAdjustmentEvent('plan_adjusted', { reason })
   }
 
   private scheduleNextNightly() {

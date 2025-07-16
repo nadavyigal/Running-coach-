@@ -1,13 +1,11 @@
+import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom';
 
-// IndexedDB polyfill for testing
-require('fake-indexeddb/auto');
+// Mock ResizeObserver
+global.ResizeObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn(),
+}));
 
-// Mock ResizeObserver for Radix UI and other libraries
-if (typeof window !== 'undefined' && !window.ResizeObserver) {
-  window.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  };
-} 
+window.HTMLElement.prototype.scrollIntoView = vi.fn();

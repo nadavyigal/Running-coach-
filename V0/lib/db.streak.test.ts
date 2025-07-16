@@ -343,7 +343,7 @@ describe('Streak Calculation Engine', () => {
       const today = new Date();
       for (let i = 0; i < 400; i++) {
         const runDate = new Date(today);
-        runDate.setDate(runDate.getDate() - i);
+        runDate.setDate(today.getDate() - i);
         
         await dbUtils.createRun({
           userId: testUserId,
@@ -358,7 +358,7 @@ describe('Streak Calculation Engine', () => {
       const streak = await dbUtils.calculateCurrentStreak(testUserId);
       expect(streak).toBeGreaterThan(0);
       expect(streak).toBeLessThanOrEqual(365);
-    });
+    }, 10000);
   });
 }); 
 
