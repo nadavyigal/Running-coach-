@@ -1,4 +1,4 @@
-"use client"
+'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -25,6 +25,8 @@ import { useState, useEffect } from "react"
 import { BadgeCabinet } from "@/components/badge-cabinet";
 import { dbUtils } from "@/lib/db";
 import { useToast } from "@/components/ui/use-toast";
+import { ShareBadgeModal } from "@/components/share-badge-modal";
+import { Share2 } from "lucide-react";
 
 export function ProfileScreen() {
   // Add state for the shoes modal at the top of the component
@@ -32,6 +34,18 @@ export function ProfileScreen() {
   const [runningShoes, setRunningShoes] = useState<any[]>([])
   const [userId, setUserId] = useState<number | null>(null);
   const { toast } = useToast();
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [selectedBadge, setSelectedBadge] = useState<{ id: string; name: string } | null>(null);
+
+  const handleShareClick = (badgeId: string, badgeName: string) => {
+    setSelectedBadge({ id: badgeId, name: badgeName });
+    setIsShareModalOpen(true);
+  };
+
+  const handleCloseShareModal = () => {
+    setIsShareModalOpen(false);
+    setSelectedBadge(null);
+  };
 
   // Add useEffect to load shoes data
   useEffect(() => {
@@ -129,6 +143,29 @@ export function ProfileScreen() {
 
       {/* Achievements */}
       {userId && <BadgeCabinet userId={userId} />}
+
+      {userId && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-2xl font-bold">Share All Badges</CardTitle>
+            <Button variant="outline" size="sm" onClick={() => handleShareClick("all-badges", "All Badges")}>
+              <Share2 className="mr-2 h-4 w-4" /> Share All
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-500">Share your entire badge collection with friends and on social media.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {selectedBadge && (
+        <ShareBadgeModal
+          badgeId={selectedBadge.id}
+          badgeName={selectedBadge.name}
+          isOpen={isShareModalOpen}
+          onClose={handleCloseShareModal}
+        />
+      )}
 
       {runningShoes.length > 0 && (
         <Card>

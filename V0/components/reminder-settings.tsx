@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useEffect } from 'react'
 import { reminderService } from '@/lib/reminderService'
 import { dbUtils } from '@/lib/db'
