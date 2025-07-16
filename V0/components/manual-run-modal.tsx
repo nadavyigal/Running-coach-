@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Clock, Activity, Save } from "lucide-react"
 import { dbUtils, type Run } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
+import { planAdjustmentService } from "@/lib/planAdjustmentService"
 
 interface ManualRunModalProps {
   isOpen: boolean
@@ -86,6 +87,8 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
       if (workoutId) {
         await dbUtils.markWorkoutCompleted(workoutId)
       }
+
+      await planAdjustmentService.afterRun(user.id)
 
       toast({
         title: "Run Saved! 🎉",

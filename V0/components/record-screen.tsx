@@ -8,6 +8,7 @@ import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { ManualRunModal } from "@/components/manual-run-modal"
 import { dbUtils, type Run, type Workout } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
+import { planAdjustmentService } from "@/lib/planAdjustmentService"
 import { useRouter } from "next/navigation"
 
 interface GPSCoordinate {
@@ -327,11 +328,13 @@ export function RecordScreen() {
       }
 
       const runId = await dbUtils.createRun(runData)
-      
+
       // Mark workout as completed if linked
       if (currentWorkout?.id) {
         await dbUtils.markWorkoutCompleted(currentWorkout.id)
       }
+
+      await planAdjustmentService.afterRun(user.id)
 
       toast({
         title: "Run Saved! 🎉",
