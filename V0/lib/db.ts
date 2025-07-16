@@ -22,6 +22,10 @@ export interface User {
   longestStreak?: number; // All-time best streak
   lastActivityDate?: Date; // Last day with recorded activity
   streakLastUpdated?: Date; // Timestamp of last streak calculation
+  // Habit reminder fields
+  reminderTime?: string; // HH:mm format
+  reminderEnabled?: boolean;
+  reminderSnoozedUntil?: Date | null;
 }
 
 // Training plan structure
@@ -163,6 +167,23 @@ export class RunSmartDB extends Dexie {
     }).upgrade(async tx => {
       // No migration needed for badges (new table)
     });
+
+    // Version 4: Habit reminder fields
+    this.version(4).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+    }).upgrade(async tx => {
+      await tx.table('users').toCollection().modify(user => {
+        if (user.reminderEnabled === undefined) user.reminderEnabled = false;
+        if (user.reminderTime === undefined) user.reminderTime = null;
+        user.reminderSnoozedUntil = null;
+      });
+    });
   }
 }
 
@@ -194,6 +215,19 @@ export const dbUtils = {
 
   async updateUser(id: number, updates: Partial<User>): Promise<void> {
     await db.users.update(id, { ...updates, updatedAt: new Date() });
+  },
+
+  async getReminderSettings(userId: number): Promise<{ time?: string; enabled: boolean; snoozedUntil?: Date | null }> {
+    const user = await db.users.get(userId);
+    return {
+      time: user?.reminderTime || undefined,
+      enabled: user?.reminderEnabled ?? false,
+      snoozedUntil: user?.reminderSnoozedUntil ?? null,
+    };
+  },
+
+  async updateReminderSettings(userId: number, settings: Partial<User>): Promise<void> {
+    await dbUtils.updateUser(userId, settings);
   },
 
   // Plan operations
