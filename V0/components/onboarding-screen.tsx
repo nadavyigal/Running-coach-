@@ -75,7 +75,11 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       console.log('Creating user record...')
       const userData = {
         goal: selectedGoal as 'habit' | 'distance' | 'speed',
-        experience: selectedExperience === 'occasional' ? 'intermediate' : selectedExperience as 'beginner' | 'intermediate' | 'advanced',
+        experience: selectedExperience === 'occasional' 
+          ? 'intermediate' 
+          : selectedExperience === 'regular'
+          ? 'advanced'
+          : selectedExperience as 'beginner' | 'intermediate' | 'advanced',
         preferredTimes: selectedTimes.length > 0 ? selectedTimes : ['morning'],
         daysPerWeek: daysPerWeek[0],
         consents,

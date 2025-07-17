@@ -20,13 +20,13 @@ export interface User {
   // Streak tracking fields
   currentStreak?: number; // Current consecutive days of activity
   longestStreak?: number; // All-time best streak
-  lastActivityDate?: Date; // Last day with recorded activity
-  streakLastUpdated?: Date; // Timestamp of last streak calculation
+  lastActivityDate?: Date | null; // Last day with recorded activity
+  streakLastUpdated?: Date | null; // Timestamp of last streak calculation
   // Habit reminder fields
-  reminderTime?: string; // HH:mm format
+  reminderTime?: string | null; // HH:mm format
   reminderEnabled?: boolean;
   reminderSnoozedUntil?: Date | null;
-  cohortId?: number; // New field for cohort association
+  cohortId?: number | null; // New field for cohort association
 }
 
 // Cohort interface
@@ -304,7 +304,15 @@ export const dbUtils = {
     return await db.users.add({
       ...userData,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      currentStreak: 0,
+      longestStreak: 0,
+      lastActivityDate: null,
+      streakLastUpdated: null,
+      reminderTime: null,
+      reminderEnabled: false,
+      reminderSnoozedUntil: null,
+      cohortId: null,
     });
   },
 
