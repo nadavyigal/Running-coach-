@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { dbUtils } from '@/lib/db';
 
 const AnalyticsQuerySchema = z.object({
-  timeRange: z.enum(['7d', '30d', '90d', '1y', 'all-time']).optional().default('30d'),
+  timeRange: z.enum(['7d', '30d', '90d', '1y', 'all-time']).nullable().optional().default('30d'),
   userId: z.string().transform(Number).optional(),
-  metrics: z.array(z.enum(['pace', 'distance', 'consistency', 'performance', 'records'])).optional(),
+  metrics: z.array(z.enum(['pace', 'distance', 'consistency', 'performance', 'records'])).nullable().optional(),
 });
 
 export async function GET(request: NextRequest) {

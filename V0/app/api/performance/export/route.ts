@@ -4,11 +4,11 @@ import { dbUtils } from '@/lib/db';
 
 const ExportQuerySchema = z.object({
   userId: z.string().transform(Number).optional(),
-  format: z.enum(['csv', 'json']).optional().default('json'),
-  timeRange: z.enum(['7d', '30d', '90d', '1y', 'all-time']).optional().default('all-time'),
-  includeRuns: z.string().transform(val => val === 'true').optional().default(true),
-  includeMetrics: z.string().transform(val => val === 'true').optional().default(true),
-  includeRecords: z.string().transform(val => val === 'true').optional().default(true),
+  format: z.enum(['csv', 'json']).nullable().optional().default('json'),
+  timeRange: z.enum(['7d', '30d', '90d', '1y', 'all-time']).nullable().optional().default('all-time'),
+  includeRuns: z.string().transform(val => val === 'true').nullable().optional().default(true),
+  includeMetrics: z.string().transform(val => val === 'true').nullable().optional().default(true),
+  includeRecords: z.string().transform(val => val === 'true').nullable().optional().default(true),
 });
 
 function formatRunsAsCSV(runs: any[]): string {
