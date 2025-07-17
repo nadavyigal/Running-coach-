@@ -17,7 +17,7 @@ vi.mock('@/hooks/use-toast', () => ({
   toast: vi.fn()
 }))
 
-const capture = posthog.default.capture as ReturnType<typeof vi.fn>
+const capture = vi.fn()
 const mockedToast = toast as unknown as ReturnType<typeof vi.fn>
 
 describe('planAdjustmentService', () => {
