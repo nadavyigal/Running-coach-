@@ -29,6 +29,14 @@ vi.mock('@/lib/planGenerator', () => ({
   }),
 }));
 
+vi.mock('@/lib/planAdjustmentService', () => ({
+  planAdjustmentService: {
+    init: vi.fn(),
+    afterRun: vi.fn(),
+    clear: vi.fn(),
+  },
+}));
+
 const mockOnComplete = vi.fn();
 
 describe('OnboardingScreen', () => {
@@ -56,18 +64,23 @@ describe('OnboardingScreen', () => {
     expect(screen.getByText(/Fitness Assessment/i)).toBeInTheDocument();
     fireEvent.click(screen.getByText(/Continue/i));
 
-    // Step 5: Availability
+    // Step 5: Age
+    expect(screen.getByText(/How old are you/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Your age/i), { target: { value: '30' } });
+    fireEvent.click(screen.getByText(/Continue/i));
+
+    // Step 6: Availability
     expect(screen.getByText(/When can you run/i)).toBeInTheDocument();
     fireEvent.click(screen.getByText(/Morning/i));
     fireEvent.click(screen.getByText(/Continue/i));
 
-    // Step 6: Consent
+    // Step 7: Consent
     expect(screen.getByLabelText(/I agree to the processing of my health data/i)).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText(/I agree to the processing of my health data/i));
     fireEvent.click(screen.getByLabelText(/I accept the Terms of Service/i));
     fireEvent.click(screen.getByText(/Continue/i));
 
-    // Step 7: Summary
+    // Step 8: Summary
     expect(screen.getByText(/Summary & Confirmation/i)).toBeInTheDocument();
   });
 
@@ -87,6 +100,8 @@ describe('OnboardingScreen', () => {
     fireEvent.click(screen.getByText(/Beginner/i));
     fireEvent.click(screen.getByText(/Continue/i));
     fireEvent.click(screen.getByText(/Continue/i)); // RPE
+    fireEvent.change(screen.getByLabelText(/Your age/i), { target: { value: '30' } });
+    fireEvent.click(screen.getByText(/Continue/i)); // Age
     fireEvent.click(screen.getByText(/Morning/i));
     fireEvent.click(screen.getByText(/Continue/i));
     fireEvent.click(screen.getByLabelText(/I agree to the processing of my health data/i));
@@ -94,7 +109,7 @@ describe('OnboardingScreen', () => {
     fireEvent.click(screen.getByText(/Continue/i));
     fireEvent.click(screen.getByLabelText(/Start My Journey/i));
     await waitFor(() => {
-      expect(trackEngagementEvent).toHaveBeenCalledWith('onboard_complete', expect.objectContaining({ rookieChallenge: true }));
+      expect(trackEngagementEvent).toHaveBeenCalledWith('onboard_complete', expect.objectContaining({ rookieChallenge: true, age: 30, goalDist: 0 }));
     });
   });
 }); 

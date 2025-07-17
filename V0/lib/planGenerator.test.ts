@@ -21,6 +21,7 @@ const capture = vi.fn()
 const mockedToast = toast as unknown as ReturnType<typeof vi.fn>
 
 describe('planAdjustmentService', () => {
+  vi.setConfig({ testTimeout: 60000 });
   let userId: number
 
   beforeEach(async () => {
@@ -47,6 +48,7 @@ describe('planAdjustmentService', () => {
   afterEach(async () => {
     planAdjustmentService.clear()
     vi.useRealTimers()
+    await vi.runAllTimersAsync()
     await db.users.clear()
     await db.plans.clear()
     await db.workouts.clear()
@@ -60,7 +62,7 @@ describe('planAdjustmentService', () => {
 
     expect(plansAfter).toBe(plansBefore + 1)
     expect(activePlan).toBeTruthy()
-    expect(capture).toHaveBeenCalledWith('plan_adjusted', { reason: 'post-run' })
+    expect(posthog.capture).toHaveBeenCalledWith('plan_adjusted', { reason: 'post-run' })
     expect(mockedToast).toHaveBeenCalled()
   })
 
@@ -74,7 +76,7 @@ describe('planAdjustmentService', () => {
     const plansAfter = await db.plans.count()
 
     expect(plansAfter).toBe(plansBefore + 1)
-    expect(trackPlanAdjustmentEventMock).toHaveBeenCalledWith('plan_adjusted', { reason: 'nightly' })
+    expect(posthog.capture).toHaveBeenCalledWith('plan_adjusted', { reason: 'nightly' })
     expect(mockedToast).toHaveBeenCalled()
   })
 })

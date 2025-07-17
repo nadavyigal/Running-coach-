@@ -25,30 +25,41 @@ export async function POST(req: NextRequest) {
     const { user, planType, targetDistance, rookie_challenge } = await req.json();
 
     // Check for OpenAI API key with structured error response
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your_openai_api_key_here') {
-      console.warn('OpenAI API key not configured - returning structured error for fallback');
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your_openai_api_key_here' || !process.env.OPENAI_API_KEY.startsWith('sk-')) {
+      console.warn('OpenAI API key not configured or invalid - returning structured error for fallback');
       return NextResponse.json({ 
-        error: 'OpenAI API key is not configured',
-        errorType: 'API_KEY_MISSING',
+        error: 'OpenAI API key is not configured or is invalid',
+        errorType: 'API_KEY_INVALID',
         fallbackRequired: true,
-        message: 'AI plan generation is not available. The app will use a fallback plan instead.'
-      }, { status: 422 }); // 422 instead of 500 for configuration issues
+        message: 'AI plan generation is not available due to an invalid API key. The app will use a fallback plan instead.'
+      }, { status: 422 });
     }
 
     // Build the prompt based on user preferences
     const prompt = buildPlanPrompt(user, planType, targetDistance, rookie_challenge);
 
-    const { object: generatedPlan } = await generateObject({
-      model: openai('gpt-4o'),
-      schema: PlanSchema,
-      prompt,
-      temperature: 0.7,
-    });
+    try {
+      const { object: generatedPlan } = await generateObject({
+        model: openai('gpt-4o'),
+        schema: PlanSchema,
+        prompt,
+        temperature: 0.7,
+      });
 
-    return NextResponse.json({ 
-      plan: generatedPlan,
-      source: 'ai'
-    });
+      return NextResponse.json({ 
+        plan: generatedPlan,
+        source: 'ai'
+      });
+    } catch (error) {
+      console.error('Error generating plan with OpenAI:', error);
+      return NextResponse.json({ 
+        error: 'Failed to generate plan with OpenAI',
+        errorType: 'GENERATION_ERROR',
+        fallbackRequired: true,
+        message: 'There was an issue creating the plan using AI. A fallback plan will be used instead.',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }, { status: 500 });
+    }
   } catch (error) {
     console.error('Failed to generate plan:', error);
     
@@ -69,6 +80,10 @@ export async function POST(req: NextRequest) {
  * Build a detailed prompt for plan generation
  */
 function buildPlanPrompt(user: any, planType?: string, targetDistance?: string, rookie_challenge?: boolean): string {
+  if (!user || !user.experience || !user.goal || !user.daysPerWeek || !user.preferredTimes) {
+    throw new Error('Invalid user data provided for plan generation');
+  }
+
   const basePrompt = `Create a personalized running training plan for a runner with the following profile:
 
 **Runner Profile:**

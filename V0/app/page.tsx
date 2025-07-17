@@ -69,20 +69,9 @@ export default function RunSmartApp() {
     }
   }, [])
 
-  const handleOnboardingComplete = async () => {
-    try {
-      localStorage.setItem("onboarding-complete", "true")
-      setIsOnboardingComplete(true)
-      setCurrentScreen("today")
-      
-      // Initialize plan adjustment service
-      const user = await dbUtils.getCurrentUser()
-      if (user?.id) {
-        planAdjustmentService.init(user.id)
-      }
-    } catch (error) {
-      console.error('Failed to complete onboarding setup:', error)
-    }
+  const handleOnboardingComplete = () => {
+    setIsOnboardingComplete(true)
+    setCurrentScreen("today")
   }
 
   const renderScreen = () => {

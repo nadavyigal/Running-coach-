@@ -10,6 +10,7 @@ import { dbUtils } from "@/lib/db"
 import { generatePlan, generateFallbackPlan } from "@/lib/planGenerator"
 import { useToast } from "@/hooks/use-toast"
 import { trackEngagementEvent } from '@/lib/analytics'
+import { planAdjustmentService } from "@/lib/planAdjustmentService"
 
 interface OnboardingScreenProps {
   onComplete: () => void
@@ -22,6 +23,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [selectedTimes, setSelectedTimes] = useState<string[]>([])
   const [daysPerWeek, setDaysPerWeek] = useState([3])
   const [rpe, setRpe] = useState<number | null>(null)
+  const [age, setAge] = useState<number | null>(null)
   const [consents, setConsents] = useState({
     data: false,
     gdpr: false,
@@ -30,7 +32,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
   const { toast } = useToast()
 
-  const totalSteps = 7
+  const totalSteps = 8
 
   const nextStep = () => {
     if (currentStep < totalSteps) {
@@ -47,10 +49,12 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       case 4:
         return true // RPE is optional
       case 5:
-        return selectedTimes.length > 0 && daysPerWeek[0] >= 2
+        return age !== null && age >= 10 && age <= 100
       case 6:
-        return consents.data && consents.gdpr
+        return selectedTimes.length > 0 && daysPerWeek[0] >= 2
       case 7:
+        return consents.data && consents.gdpr
+      case 8:
         return consents.data && consents.gdpr // Final step also requires consents
       default:
         return true
@@ -75,12 +79,17 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       console.log('Creating user record...')
       const userData = {
         goal: selectedGoal as 'habit' | 'distance' | 'speed',
-        experience: selectedExperience === 'occasional' ? 'intermediate' : selectedExperience as 'beginner' | 'intermediate' | 'advanced',
+        experience: selectedExperience === 'occasional' 
+          ? 'intermediate' 
+          : selectedExperience === 'regular'
+          ? 'advanced'
+          : selectedExperience as 'beginner' | 'intermediate' | 'advanced',
         preferredTimes: selectedTimes.length > 0 ? selectedTimes : ['morning'],
         daysPerWeek: daysPerWeek[0],
         consents,
         onboardingComplete: true,
         rpe: rpe ?? undefined,
+        age: age ?? undefined,
       }
       
       await dbUtils.createUser(userData)
@@ -89,10 +98,14 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       // Step 3: Get the created user
       console.log('Fetching created user...')
       const user = await dbUtils.getCurrentUser()
-      if (!user) {
+      if (!user || !user.id) {
         throw new Error('Failed to retrieve created user - user not found in database')
       }
       console.log('User retrieved successfully:', user.id)
+
+      // Initialize plan adjustment service
+      planAdjustmentService.init(user.id)
+      console.log('Plan adjustment service initialized')
 
       // Step 4: Generate training plan with improved error handling
       console.log('Generating training plan...')
@@ -158,7 +171,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       
       // Step 6: Track completion event
       console.log('Tracking completion event...')
-      trackEngagementEvent('onboard_complete', { rookieChallenge: true });
+      const goalDist = selectedGoal === 'distance' ? 5 : 0; // Default to 5k for distance goal, 0 for others
+      trackEngagementEvent('onboard_complete', { rookieChallenge: true, age: age ?? 0, goalDist });
       
       // Step 7: Complete onboarding
       console.log('Completing onboarding...')
@@ -287,6 +301,27 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       case 5:
         return (
           <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-center">How old are you?</h2>
+            <div className="space-y-3">
+              <input
+                type="number"
+                placeholder="Enter your age"
+                value={age !== null ? age : ''}
+                onChange={(e) => setAge(parseInt(e.target.value) || null)}
+                className="w-full p-3 border border-gray-300 rounded-md text-center text-lg"
+                min="10"
+                max="100"
+                aria-label="Your age"
+              />
+              <p className="text-xs text-gray-500 text-center">This helps us personalize your plan.</p>
+            </div>
+            <Button onClick={nextStep} disabled={!canProceed()} className="w-full bg-green-500 hover:bg-green-600">Continue</Button>
+          </div>
+        )
+
+      case 6:
+        return (
+          <div className="space-y-6">
             <h2 className="text-2xl font-bold text-center">When can you run?</h2>
             <div className="space-y-3">
               {[
@@ -326,7 +361,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           </div>
         )
 
-      case 6:
+      case 7:
         return (
           <div className="space-y-6">
             <h2 className="text-2xl font-bold text-center">Privacy & Consent</h2>
@@ -374,7 +409,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             </Button>
           </div>
         )
-      case 7:
+      case 8:
         return (
           <div className="space-y-6" role="region" aria-label="Summary and Confirmation">
             <h2 className="text-2xl font-bold text-center" id="summary-heading">Summary & Confirmation</h2>
@@ -383,6 +418,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 <ul className="text-sm text-gray-700 space-y-2" aria-labelledby="summary-heading">
                   <li><strong>Goal:</strong> {selectedGoal}</li>
                   <li><strong>Experience:</strong> {selectedExperience}</li>
+                  <li><strong>Age:</strong> {age !== null ? age : 'Not provided'}</li>
                   <li><strong>Preferred Times:</strong> {selectedTimes.join(', ')}</li>
                   <li><strong>Days/Week:</strong> {daysPerWeek[0]}</li>
                   <li><strong>RPE:</strong> {rpe !== null ? rpe : 'Not provided'}</li>
