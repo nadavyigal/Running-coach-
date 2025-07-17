@@ -10,6 +10,7 @@ import { dbUtils, type Run, type Workout } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 import { planAdjustmentService } from "@/lib/planAdjustmentService"
 import { useRouter } from "next/navigation"
+import { trackPlanSessionCompleted } from "@/lib/analytics"
 
 interface GPSCoordinate {
   latitude: number
@@ -335,6 +336,17 @@ export function RecordScreen() {
       }
 
       await planAdjustmentService.afterRun(user.id)
+
+      // Track plan session completion
+      await trackPlanSessionCompleted({
+        session_type: currentWorkout?.type || 'other',
+        distance_km: metrics.distance,
+        duration_seconds: metrics.duration,
+        pace_seconds_per_km: metrics.pace,
+        calories_burned: metrics.calories,
+        had_gps_tracking: gpsPath.length > 0,
+        workout_id: currentWorkout?.id
+      })
 
       toast({
         title: "Run Saved! 🎉",

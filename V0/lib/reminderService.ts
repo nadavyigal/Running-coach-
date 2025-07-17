@@ -1,6 +1,7 @@
 import { dbUtils } from './db'
 import { toast } from '@/hooks/use-toast'
 import posthog from 'posthog-js'
+import { trackReminderEvent, trackReminderClicked } from './analytics'
 
 export interface ReminderSettings {
   time: string
@@ -43,8 +44,11 @@ class ReminderService {
   }
 
   private async trigger(userId: number) {
-    toast({ title: 'Time to run!', description: "Let's keep the habit going." })
-    posthog.capture('reminder_triggered')
+    toast({ 
+      title: 'Time to run!', 
+      description: "Let's keep the habit going.",
+    })
+    trackReminderEvent('reminder_triggered')
     await dbUtils.updateReminderSettings(userId, { reminderSnoozedUntil: null })
     const settings = await dbUtils.getReminderSettings(userId)
     if (settings.enabled && settings.time) this.scheduleNext(userId, settings.time)
@@ -54,7 +58,7 @@ class ReminderService {
     const user = await dbUtils.getCurrentUser()
     if (!user) return
     await dbUtils.updateReminderSettings(user.id!, { reminderTime: time, reminderEnabled: true, reminderSnoozedUntil: null })
-    posthog.capture('reminder_set', { time })
+    trackReminderEvent('reminder_set', { time })
     this.scheduleNext(user.id!, time)
   }
 
@@ -63,7 +67,7 @@ class ReminderService {
     if (!user) return
     this.clear()
     await dbUtils.updateReminderSettings(user.id!, { reminderEnabled: false, reminderSnoozedUntil: null })
-    posthog.capture('reminder_disabled')
+    trackReminderEvent('reminder_disabled')
   }
 
   async snooze(minutes: number) {
