@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Home, Calendar, Play, MessageCircle, User } from "lucide-react"
+import { Home, Calendar, Play, MessageCircle, User, BarChart3 } from "lucide-react"
 
 interface BottomNavigationProps {
   currentScreen: string
@@ -13,6 +13,7 @@ export function BottomNavigation({ currentScreen, onScreenChange }: BottomNaviga
     { id: "today", icon: Home, label: "Today" },
     { id: "plan", icon: Calendar, label: "Plan" },
     { id: "record", icon: Play, label: "Record", isSpecial: true },
+    { id: "analytics", icon: BarChart3, label: "Analytics" },
     { id: "chat", icon: MessageCircle, label: "Coach" },
     { id: "profile", icon: User, label: "Profile" },
   ]

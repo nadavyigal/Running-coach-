@@ -46,6 +46,47 @@ export interface CohortMember {
   joinDate: Date;
 }
 
+// Performance Analytics interfaces
+export interface PerformanceMetrics {
+  id?: number;
+  userId: number;
+  date: Date;
+  averagePace: number; // seconds per km
+  totalDistance: number; // km
+  totalDuration: number; // seconds
+  consistencyScore: number; // 0-100
+  performanceScore: number; // 0-100
+  trainingLoad: number; // calculated load
+  recoveryScore: number; // 0-100
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PersonalRecord {
+  id?: number;
+  userId: number;
+  recordType: 'fastest_1k' | 'fastest_5k' | 'fastest_10k' | 'longest_run' | 'best_pace' | 'most_consistent_week';
+  value: number; // time in seconds or distance in km
+  achievedAt: Date;
+  runId?: number; // reference to the run that achieved this record
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PerformanceInsight {
+  id?: number;
+  userId: number;
+  type: 'improvement' | 'trend' | 'warning' | 'achievement' | 'recommendation';
+  title: string;
+  description: string;
+  priority: 'low' | 'medium' | 'high';
+  actionable: boolean;
+  data?: any; // JSON data for charts/visualizations
+  validUntil?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Training plan structure
 export interface Plan {
   id?: number;
@@ -143,6 +184,9 @@ export class RunSmartDB extends Dexie {
   badges!: EntityTable<Badge, 'id'>;
   cohorts!: EntityTable<Cohort, 'id'>;
   cohortMembers!: EntityTable<CohortMember, 'id'>;
+  performanceMetrics!: EntityTable<PerformanceMetrics, 'id'>;
+  personalRecords!: EntityTable<PersonalRecord, 'id'>;
+  performanceInsights!: EntityTable<PerformanceInsight, 'id'>;
 
   constructor() {
     super('RunSmartDB');
@@ -220,6 +264,24 @@ export class RunSmartDB extends Dexie {
       await tx.table('users').toCollection().modify(user => {
         user.cohortId = null;
       });
+    });
+
+    // Version 6: Add Performance Analytics tables
+    this.version(6).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+      cohorts: '++id, inviteCode, name',
+      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+      performanceMetrics: '++id, userId, date, createdAt',
+      personalRecords: '++id, userId, recordType, achievedAt, createdAt',
+      performanceInsights: '++id, userId, type, priority, createdAt, validUntil',
+    }).upgrade(async tx => {
+      // No migration needed for new tables
     });
   }
 }
@@ -744,6 +806,597 @@ export const dbUtils = {
       weeklyDistance,
       cohortName: cohort.name,
     };
+  },
+
+  // Performance Analytics operations
+  async calculatePerformanceMetrics(userId: number, date: Date): Promise<PerformanceMetrics> {
+    const runs = await db.runs.where('userId').equals(userId).toArray();
+    const dateString = date.toISOString().split('T')[0];
+    const dayRuns = runs.filter(run => 
+      new Date(run.completedAt).toISOString().split('T')[0] === dateString
+    );
+
+    if (dayRuns.length === 0) {
+      return {
+        userId,
+        date,
+        averagePace: 0,
+        totalDistance: 0,
+        totalDuration: 0,
+        consistencyScore: 0,
+        performanceScore: 0,
+        trainingLoad: 0,
+        recoveryScore: 100,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    }
+
+    const totalDistance = dayRuns.reduce((sum, run) => sum + run.distance, 0);
+    const totalDuration = dayRuns.reduce((sum, run) => sum + run.duration, 0);
+    const averagePace = totalDistance > 0 ? totalDuration / totalDistance : 0;
+
+    // Calculate consistency score (0-100) based on pace variation
+    const paces = dayRuns.map(run => run.pace).filter(pace => pace > 0);
+    const avgPace = paces.length > 0 ? paces.reduce((sum, pace) => sum + pace, 0) / paces.length : 0;
+    const paceVariance = paces.length > 1 ? 
+      paces.reduce((sum, pace) => sum + Math.pow(pace - avgPace, 2), 0) / paces.length : 0;
+    const consistencyScore = Math.max(0, 100 - (paceVariance / avgPace * 100));
+
+    // Calculate performance score based on improvement trends
+    const last7Days = new Date(date);
+    last7Days.setDate(last7Days.getDate() - 7);
+    const recentRuns = runs.filter(run => new Date(run.completedAt) >= last7Days);
+    const recentAvgPace = recentRuns.length > 0 ? 
+      recentRuns.reduce((sum, run) => sum + run.pace, 0) / recentRuns.length : averagePace;
+    const performanceScore = Math.min(100, Math.max(0, 100 - (averagePace - recentAvgPace) * 10));
+
+    // Calculate training load (simple formula based on distance and duration)
+    const trainingLoad = totalDistance * 10 + totalDuration / 60;
+
+    // Calculate recovery score (decreases with higher training load)
+    const recoveryScore = Math.max(0, 100 - trainingLoad * 0.5);
+
+    return {
+      userId,
+      date,
+      averagePace,
+      totalDistance,
+      totalDuration,
+      consistencyScore,
+      performanceScore,
+      trainingLoad,
+      recoveryScore,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+  },
+
+  async savePerformanceMetrics(metrics: Omit<PerformanceMetrics, 'id'>): Promise<number> {
+    return await db.performanceMetrics.add(metrics);
+  },
+
+  async getPerformanceMetrics(userId: number, startDate: Date, endDate: Date): Promise<PerformanceMetrics[]> {
+    return await db.performanceMetrics
+      .where('userId').equals(userId)
+      .and(metrics => metrics.date >= startDate && metrics.date <= endDate)
+      .toArray();
+  },
+
+  async checkAndUpdatePersonalRecordsFromRun(userId: number, runId: number): Promise<PersonalRecord[]> {
+    const run = await db.runs.get(runId);
+    if (!run) return [];
+
+    const newRecords: PersonalRecord[] = [];
+    const now = new Date();
+
+    // Check fastest times for different distances
+    const distanceRecords = [
+      { distance: 1, type: 'fastest_1k' as const },
+      { distance: 5, type: 'fastest_5k' as const },
+      { distance: 10, type: 'fastest_10k' as const },
+    ];
+
+    for (const record of distanceRecords) {
+      if (run.distance >= record.distance) {
+        const timeForDistance = (run.duration / run.distance) * record.distance;
+        const existingRecord = await db.personalRecords
+          .where({ userId, recordType: record.type })
+          .first();
+
+        if (!existingRecord || timeForDistance < existingRecord.value) {
+          const personalRecord: PersonalRecord = {
+            userId,
+            recordType: record.type,
+            value: timeForDistance,
+            achievedAt: new Date(run.completedAt),
+            runId: run.id,
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          if (existingRecord) {
+            await db.personalRecords.update(existingRecord.id!, personalRecord);
+          } else {
+            await db.personalRecords.add(personalRecord);
+          }
+          newRecords.push(personalRecord);
+        }
+      }
+    }
+
+    // Check longest run
+    const longestRecord = await db.personalRecords
+      .where({ userId, recordType: 'longest_run' })
+      .first();
+
+    if (!longestRecord || run.distance > longestRecord.value) {
+      const personalRecord: PersonalRecord = {
+        userId,
+        recordType: 'longest_run',
+        value: run.distance,
+        achievedAt: new Date(run.completedAt),
+        runId: run.id,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      if (longestRecord) {
+        await db.personalRecords.update(longestRecord.id!, personalRecord);
+      } else {
+        await db.personalRecords.add(personalRecord);
+      }
+      newRecords.push(personalRecord);
+    }
+
+    // Check best pace
+    const bestPaceRecord = await db.personalRecords
+      .where({ userId, recordType: 'best_pace' })
+      .first();
+
+    if (run.pace > 0 && (!bestPaceRecord || run.pace < bestPaceRecord.value)) {
+      const personalRecord: PersonalRecord = {
+        userId,
+        recordType: 'best_pace',
+        value: run.pace,
+        achievedAt: new Date(run.completedAt),
+        runId: run.id,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      if (bestPaceRecord) {
+        await db.personalRecords.update(bestPaceRecord.id!, personalRecord);
+      } else {
+        await db.personalRecords.add(personalRecord);
+      }
+      newRecords.push(personalRecord);
+    }
+
+    return newRecords;
+  },
+
+  async getPersonalRecords(userId: number): Promise<PersonalRecord[]> {
+    return await db.personalRecords.where('userId').equals(userId).toArray();
+  },
+
+  async generatePerformanceInsights(userId: number): Promise<PerformanceInsight[]> {
+    const insights: PerformanceInsight[] = [];
+    const now = new Date();
+    const last30Days = new Date();
+    last30Days.setDate(last30Days.getDate() - 30);
+
+    const recentRuns = await db.runs
+      .where('userId').equals(userId)
+      .and(run => new Date(run.completedAt) >= last30Days)
+      .toArray();
+
+    if (recentRuns.length === 0) {
+      return insights;
+    }
+
+    // Trend analysis
+    const firstHalf = recentRuns.slice(0, Math.floor(recentRuns.length / 2));
+    const secondHalf = recentRuns.slice(Math.floor(recentRuns.length / 2));
+    
+    const firstHalfAvgPace = firstHalf.reduce((sum, run) => sum + run.pace, 0) / firstHalf.length;
+    const secondHalfAvgPace = secondHalf.reduce((sum, run) => sum + run.pace, 0) / secondHalf.length;
+
+    if (secondHalfAvgPace < firstHalfAvgPace) {
+      insights.push({
+        userId,
+        type: 'improvement',
+        title: 'Pace Improvement Detected',
+        description: `Your average pace has improved by ${Math.abs(firstHalfAvgPace - secondHalfAvgPace).toFixed(0)} seconds per km over the last 30 days!`,
+        priority: 'high',
+        actionable: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    // Volume analysis
+    const avgDistance = recentRuns.reduce((sum, run) => sum + run.distance, 0) / recentRuns.length;
+    const lastWeekRuns = recentRuns.filter(run => {
+      const runDate = new Date(run.completedAt);
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      return runDate >= weekAgo;
+    });
+
+    const lastWeekAvgDistance = lastWeekRuns.length > 0 ? 
+      lastWeekRuns.reduce((sum, run) => sum + run.distance, 0) / lastWeekRuns.length : 0;
+
+    if (lastWeekAvgDistance < avgDistance * 0.7) {
+      insights.push({
+        userId,
+        type: 'warning',
+        title: 'Reduced Training Volume',
+        description: 'Your training volume has decreased significantly this week. Consider gradually increasing your mileage.',
+        priority: 'medium',
+        actionable: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    // Consistency analysis
+    const runDates = recentRuns.map(run => new Date(run.completedAt).toDateString());
+    const uniqueDates = new Set(runDates);
+    const consistencyScore = (uniqueDates.size / 30) * 100;
+
+    if (consistencyScore > 80) {
+      insights.push({
+        userId,
+        type: 'achievement',
+        title: 'Excellent Consistency',
+        description: `You've maintained ${consistencyScore.toFixed(0)}% consistency this month. Keep it up!`,
+        priority: 'high',
+        actionable: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    return insights;
+  },
+
+  async savePerformanceInsights(insights: Omit<PerformanceInsight, 'id'>[]): Promise<void> {
+    for (const insight of insights) {
+      await db.performanceInsights.add(insight);
+    }
+  },
+
+  async getAllPerformanceInsights(userId: number): Promise<PerformanceInsight[]> {
+    const now = new Date();
+    return await db.performanceInsights
+      .where('userId').equals(userId)
+      .and(insight => !insight.validUntil || insight.validUntil > now)
+      .reverse()
+      .sortBy('createdAt');
+  },
+
+  async getCohortPerformanceComparison(cohortId: number, userId: number, timeRange: string = '30d'): Promise<{
+    userRank: number;
+    totalMembers: number;
+    userAvgPace: number;
+    cohortAvgPace: number;
+    userTotalDistance: number;
+    cohortAvgDistance: number;
+    percentile: number;
+  }> {
+    const members = await db.cohortMembers.where('cohortId').equals(cohortId).toArray();
+    const memberIds = members.map(m => m.userId);
+
+    // Calculate date range
+    const endDate = new Date();
+    const startDate = new Date();
+    
+    switch (timeRange) {
+      case '7d':
+        startDate.setDate(endDate.getDate() - 7);
+        break;
+      case '30d':
+        startDate.setDate(endDate.getDate() - 30);
+        break;
+      case '90d':
+        startDate.setDate(endDate.getDate() - 90);
+        break;
+      case '1y':
+        startDate.setFullYear(endDate.getFullYear() - 1);
+        break;
+      default:
+        startDate.setDate(endDate.getDate() - 30);
+    }
+
+    const allRuns = await db.runs
+      .where('userId').anyOf(memberIds)
+      .and(run => new Date(run.completedAt) >= startDate)
+      .toArray();
+
+    // Group runs by user
+    const userRuns = new Map<number, typeof allRuns>();
+    allRuns.forEach(run => {
+      if (!userRuns.has(run.userId)) {
+        userRuns.set(run.userId, []);
+      }
+      userRuns.get(run.userId)!.push(run);
+    });
+
+    // Calculate stats for each user
+    const userStats = Array.from(userRuns.entries()).map(([uid, runs]) => {
+      const totalDistance = runs.reduce((sum, run) => sum + run.distance, 0);
+      const avgPace = runs.length > 0 ? runs.reduce((sum, run) => sum + run.pace, 0) / runs.length : 0;
+      return { userId: uid, totalDistance, avgPace };
+    });
+
+    // Sort by total distance for ranking
+    userStats.sort((a, b) => b.totalDistance - a.totalDistance);
+    const userRank = userStats.findIndex(stat => stat.userId === userId) + 1;
+
+    // Calculate cohort averages
+    const cohortAvgDistance = userStats.length > 0 ? 
+      userStats.reduce((sum, stat) => sum + stat.totalDistance, 0) / userStats.length : 0;
+    const cohortAvgPace = userStats.length > 0 ? 
+      userStats.reduce((sum, stat) => sum + stat.avgPace, 0) / userStats.length : 0;
+
+    // Get user's stats
+    const userStat = userStats.find(stat => stat.userId === userId);
+    const userTotalDistance = userStat?.totalDistance || 0;
+    const userAvgPace = userStat?.avgPace || 0;
+
+    // Calculate percentile
+    const percentile = userStats.length > 0 ? 
+      ((userStats.length - userRank + 1) / userStats.length) * 100 : 0;
+
+    return {
+      userRank,
+      totalMembers: userStats.length,
+      userAvgPace,
+      cohortAvgPace,
+      userTotalDistance,
+      cohortAvgDistance,
+      percentile,
+    };
+  },
+
+  // Additional helper functions for the API endpoints
+  async getRunsInTimeRange(userId: number, startDate: Date, endDate: Date): Promise<Run[]> {
+    return await db.runs
+      .where('userId').equals(userId)
+      .and(run => new Date(run.completedAt) >= startDate && new Date(run.completedAt) <= endDate)
+      .toArray();
+  },
+
+  async calculatePerformanceTrends(runs: Run[]): Promise<{
+    averagePace: number;
+    consistencyScore: number;
+    performanceScore: number;
+    paceProgression: Array<{ date: Date; pace: number }>;
+    distanceProgression: Array<{ date: Date; distance: number }>;
+    consistencyProgression: Array<{ date: Date; consistency: number }>;
+    performanceProgression: Array<{ date: Date; performance: number }>;
+  }> {
+    if (runs.length === 0) {
+      return {
+        averagePace: 0,
+        consistencyScore: 0,
+        performanceScore: 0,
+        paceProgression: [],
+        distanceProgression: [],
+        consistencyProgression: [],
+        performanceProgression: [],
+      };
+    }
+
+    const averagePace = runs.reduce((sum, run) => sum + run.pace, 0) / runs.length;
+    
+    // Calculate consistency score
+    const paceVariance = runs.reduce((sum, run) => sum + Math.pow(run.pace - averagePace, 2), 0) / runs.length;
+    const consistencyScore = Math.max(0, 100 - (paceVariance / averagePace * 100));
+    
+    // Calculate performance score (improvement over time)
+    const firstHalf = runs.slice(0, Math.floor(runs.length / 2));
+    const secondHalf = runs.slice(Math.floor(runs.length / 2));
+    
+    const firstHalfAvgPace = firstHalf.reduce((sum, run) => sum + run.pace, 0) / firstHalf.length;
+    const secondHalfAvgPace = secondHalf.reduce((sum, run) => sum + run.pace, 0) / secondHalf.length;
+    
+    const paceImprovement = firstHalfAvgPace - secondHalfAvgPace;
+    const performanceScore = Math.min(100, Math.max(0, 50 + paceImprovement * 10));
+
+    // Create progression arrays
+    const paceProgression = runs.map(run => ({
+      date: new Date(run.completedAt),
+      pace: run.pace,
+    }));
+
+    const distanceProgression = runs.map(run => ({
+      date: new Date(run.completedAt),
+      distance: run.distance,
+    }));
+
+    const consistencyProgression = runs.map((run, index) => {
+      const windowSize = Math.min(5, index + 1);
+      const window = runs.slice(Math.max(0, index - windowSize + 1), index + 1);
+      const windowAvgPace = window.reduce((sum, r) => sum + r.pace, 0) / window.length;
+      const windowVariance = window.reduce((sum, r) => sum + Math.pow(r.pace - windowAvgPace, 2), 0) / window.length;
+      const consistency = Math.max(0, 100 - (windowVariance / windowAvgPace * 100));
+      
+      return {
+        date: new Date(run.completedAt),
+        consistency,
+      };
+    });
+
+    const performanceProgression = runs.map((run, index) => {
+      const windowSize = Math.min(10, index + 1);
+      const window = runs.slice(Math.max(0, index - windowSize + 1), index + 1);
+      const windowFirstHalf = window.slice(0, Math.floor(window.length / 2));
+      const windowSecondHalf = window.slice(Math.floor(window.length / 2));
+      
+      if (windowFirstHalf.length === 0 || windowSecondHalf.length === 0) {
+        return {
+          date: new Date(run.completedAt),
+          performance: 50,
+        };
+      }
+      
+      const firstHalfPace = windowFirstHalf.reduce((sum, r) => sum + r.pace, 0) / windowFirstHalf.length;
+      const secondHalfPace = windowSecondHalf.reduce((sum, r) => sum + r.pace, 0) / windowSecondHalf.length;
+      const improvement = firstHalfPace - secondHalfPace;
+      const performance = Math.min(100, Math.max(0, 50 + improvement * 10));
+      
+      return {
+        date: new Date(run.completedAt),
+        performance,
+      };
+    });
+
+    return {
+      averagePace,
+      consistencyScore,
+      performanceScore,
+      paceProgression,
+      distanceProgression,
+      consistencyProgression,
+      performanceProgression,
+    };
+  },
+
+  async getPerformanceInsights(userId: number, startDate: Date, endDate: Date): Promise<PerformanceInsight[]> {
+    return await db.performanceInsights
+      .where('userId').equals(userId)
+      .and(insight => new Date(insight.createdAt) >= startDate && new Date(insight.createdAt) <= endDate)
+      .and(insight => !insight.validUntil || insight.validUntil > new Date())
+      .toArray();
+  },
+
+  async getPersonalRecordProgression(userId: number, distance: number): Promise<Array<{
+    date: Date;
+    time: number;
+    pace: number;
+  }>> {
+    const runs = await db.runs
+      .where('userId').equals(userId)
+      .and(run => run.distance >= distance * 0.95 && run.distance <= distance * 1.05)
+      .toArray();
+
+    return runs
+      .sort((a, b) => new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime())
+      .map(run => ({
+        date: new Date(run.completedAt),
+        time: run.duration,
+        pace: run.pace,
+      }));
+  },
+
+  async deletePersonalRecord(userId: number, recordId: number): Promise<void> {
+    await db.personalRecords.where({ id: recordId, userId }).delete();
+  },
+
+  async checkAndUpdatePersonalRecords(userId: number, runId: number, distance: number, duration: number, pace: number, date: Date): Promise<PersonalRecord[]> {
+    const newRecords: PersonalRecord[] = [];
+    const now = new Date();
+
+    // Check fastest times for different distances
+    const distanceRecords = [
+      { distance: 1, type: 'fastest_1k' as const },
+      { distance: 5, type: 'fastest_5k' as const },
+      { distance: 10, type: 'fastest_10k' as const },
+      { distance: 21.1, type: 'fastest_half_marathon' as const },
+      { distance: 42.2, type: 'fastest_marathon' as const },
+    ];
+
+    for (const record of distanceRecords) {
+      if (distance >= record.distance) {
+        const timeForDistance = (duration / distance) * record.distance;
+        const existingRecord = await db.personalRecords
+          .where({ userId, recordType: record.type })
+          .first();
+
+        if (!existingRecord || timeForDistance < existingRecord.value) {
+          const personalRecord: PersonalRecord = {
+            userId,
+            recordType: record.type,
+            distance: record.distance,
+            timeForDistance,
+            bestPace: pace,
+            dateAchieved: date,
+            runId,
+            value: timeForDistance,
+            achievedAt: date,
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          if (existingRecord) {
+            await db.personalRecords.update(existingRecord.id!, personalRecord);
+          } else {
+            await db.personalRecords.add(personalRecord);
+          }
+          newRecords.push(personalRecord);
+        }
+      }
+    }
+
+    // Check longest run
+    const longestRecord = await db.personalRecords
+      .where({ userId, recordType: 'longest_run' })
+      .first();
+
+    if (!longestRecord || distance > longestRecord.value) {
+      const personalRecord: PersonalRecord = {
+        userId,
+        recordType: 'longest_run',
+        distance,
+        timeForDistance: duration,
+        bestPace: pace,
+        dateAchieved: date,
+        runId,
+        value: distance,
+        achievedAt: date,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      if (longestRecord) {
+        await db.personalRecords.update(longestRecord.id!, personalRecord);
+      } else {
+        await db.personalRecords.add(personalRecord);
+      }
+      newRecords.push(personalRecord);
+    }
+
+    // Check best pace
+    const bestPaceRecord = await db.personalRecords
+      .where({ userId, recordType: 'best_pace' })
+      .first();
+
+    if (pace > 0 && (!bestPaceRecord || pace < bestPaceRecord.value)) {
+      const personalRecord: PersonalRecord = {
+        userId,
+        recordType: 'best_pace',
+        distance,
+        timeForDistance: duration,
+        bestPace: pace,
+        dateAchieved: date,
+        runId,
+        value: pace,
+        achievedAt: date,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      if (bestPaceRecord) {
+        await db.personalRecords.update(bestPaceRecord.id!, personalRecord);
+      } else {
+        await db.personalRecords.add(personalRecord);
+      }
+      newRecords.push(personalRecord);
+    }
+
+    return newRecords;
   },
 };
 

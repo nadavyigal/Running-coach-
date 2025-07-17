@@ -20,6 +20,7 @@ import {
   Link,
   Loader2,
   Flame,
+  BarChart3,
 } from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
 import { AddActivityModal } from "@/components/add-activity-modal"
@@ -196,6 +197,13 @@ export function TodayScreen() {
         // Navigate to chat screen
         if (typeof window !== "undefined") {
           const event = new CustomEvent("navigate-to-chat")
+          window.dispatchEvent(event)
+        }
+        break
+      case "analytics":
+        // Navigate to analytics screen
+        if (typeof window !== "undefined") {
+          const event = new CustomEvent("navigate-to-analytics")
           window.dispatchEvent(event)
         }
         break
@@ -504,7 +512,18 @@ export function TodayScreen() {
       {/* Progress Stats */}
       <Card className="hover:shadow-lg transition-all duration-300 animate-in fade-in-50 duration-800">
         <CardHeader>
-          <CardTitle className="text-lg">Your Progress</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">Your Progress</CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleActionClick("analytics")}
+              className="text-blue-600 hover:text-blue-700 flex items-center gap-1"
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span className="text-sm">Analytics</span>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoadingWorkout ? (

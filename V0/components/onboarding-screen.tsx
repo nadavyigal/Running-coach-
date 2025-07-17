@@ -50,6 +50,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         return selectedTimes.length > 0 && daysPerWeek[0] >= 2
       case 6:
         return consents.data && consents.gdpr
+      case 7:
+        return consents.data && consents.gdpr // Final step also requires consents
       default:
         return true
     }
@@ -63,11 +65,15 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     setIsGeneratingPlan(true)
     
     try {
-      // Migrate existing localStorage data first
+      console.log('Starting onboarding completion...')
+      
+      // Step 1: Migrate existing localStorage data first
+      console.log('Migrating localStorage data...')
       await dbUtils.migrateFromLocalStorage()
       
-      // Create user record
-      const userId = await dbUtils.createUser({
+      // Step 2: Create user record
+      console.log('Creating user record...')
+      const userData = {
         goal: selectedGoal as 'habit' | 'distance' | 'speed',
         experience: selectedExperience === 'occasional' ? 'intermediate' : selectedExperience as 'beginner' | 'intermediate' | 'advanced',
         preferredTimes: selectedTimes.length > 0 ? selectedTimes : ['morning'],
@@ -75,18 +81,25 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         consents,
         onboardingComplete: true,
         rpe: rpe ?? undefined,
-      })
+      }
+      
+      await dbUtils.createUser(userData)
+      console.log('User record created successfully')
 
-      // Get the created user
+      // Step 3: Get the created user
+      console.log('Fetching created user...')
       const user = await dbUtils.getCurrentUser()
       if (!user) {
-        throw new Error('Failed to create user')
+        throw new Error('Failed to retrieve created user - user not found in database')
       }
+      console.log('User retrieved successfully:', user.id)
 
-      // Generate training plan with improved error handling
+      // Step 4: Generate training plan with improved error handling
+      console.log('Generating training plan...')
       let planResult
       try {
         planResult = await generatePlan({ user, rookie_challenge: true })
+        console.log('AI plan generated successfully')
         
         // Check if this was an AI-generated plan or fallback
         const hasAIFeatures = planResult.plan.description?.includes('AI') || 
@@ -101,21 +114,29 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         })
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        console.log('AI plan generation failed, attempting fallback:', errorMessage)
         
         // Check if this is a fallback-required error
         if (errorMessage.includes('FALLBACK_REQUIRED')) {
           console.log('API key not configured, using fallback plan generation')
-          planResult = await generateFallbackPlan(user)
-          toast({
-            title: "Plan Created",
-            description: "Your training plan has been created. AI features are currently unavailable, but your plan is fully functional.",
-            variant: "default"
-          })
+          try {
+            planResult = await generateFallbackPlan(user)
+            console.log('Fallback plan generated successfully')
+            toast({
+              title: "Plan Created",
+              description: "Your training plan has been created. AI features are currently unavailable, but your plan is fully functional.",
+              variant: "default"
+            })
+          } catch (fallbackError) {
+            console.error('Fallback plan generation failed:', fallbackError)
+            throw new Error(`Failed to create training plan: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`)
+          }
         } else {
           // For any other error, still try fallback
           console.warn('AI plan generation failed, attempting fallback:', errorMessage)
           try {
             planResult = await generateFallbackPlan(user)
+            console.log('Fallback plan generated successfully')
             toast({
               title: "Plan Created",
               description: "Your training plan has been created using fallback generation. Some AI features may be limited.",
@@ -123,31 +144,37 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             })
           } catch (fallbackError) {
             console.error('Both AI and fallback plan generation failed:', fallbackError)
-            toast({
-              title: "Error",
-              description: "Failed to create your training plan. Please try again.",
-              variant: "destructive"
-            })
-            setIsGeneratingPlan(false)
-            return
+            throw new Error(`Failed to create training plan: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`)
           }
         }
       }
 
-      // Verify plan was created successfully
+      // Step 5: Verify plan was created successfully
       if (!planResult || !planResult.plan) {
         throw new Error('Plan generation completed but no plan was returned')
       }
 
       console.log('Plan created successfully:', planResult.plan.title, `with ${planResult.workouts.length} workouts`)
+      
+      // Step 6: Track completion event
+      console.log('Tracking completion event...')
       trackEngagementEvent('onboard_complete', { rookieChallenge: true });
+      
+      // Step 7: Complete onboarding
+      console.log('Completing onboarding...')
       setIsGeneratingPlan(false)
       onComplete()
+      
+      console.log('Onboarding completed successfully!')
     } catch (error) {
       console.error('Onboarding completion failed:', error)
+      
+      // Provide more specific error message
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      
       toast({
-        title: "Error",
-        description: "Failed to complete onboarding. Please try again.",
+        title: "Onboarding Failed",
+        description: `Failed to complete onboarding: ${errorMessage}. Please try again.`,
         variant: "destructive"
       })
       setIsGeneratingPlan(false)
@@ -375,6 +402,21 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 'Start My Journey'
               )}
             </Button>
+            
+            {/* Emergency fallback button in case of persistent errors */}
+            {isGeneratingPlan && (
+              <Button 
+                onClick={() => {
+                  setIsGeneratingPlan(false);
+                  localStorage.setItem("onboarding-complete", "true");
+                  onComplete();
+                }} 
+                variant="outline" 
+                className="w-full mt-2 text-sm"
+              >
+                Skip Plan Generation & Continue
+              </Button>
+            )}
           </div>
         )
       default:
@@ -394,7 +436,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
       <div className="flex justify-center mb-8">
         <div className="flex space-x-2">
-          {[1, 2, 3, 4, 5].map((step) => (
+          {[1, 2, 3, 4, 5, 6, 7].map((step) => (
             <div
               key={step}
               className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${

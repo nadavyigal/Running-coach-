@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { dbUtils, type User as UserType } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
+import { trackChatMessageSent } from "@/lib/analytics"
 
 interface ChatMessage {
   id: string
@@ -89,6 +90,13 @@ export function ChatScreen() {
     setMessages(prev => [...prev, userMessage])
     setInputValue("")
     setIsLoading(true)
+
+    // Track chat message sent
+    await trackChatMessageSent({
+      message_length: content.trim().length,
+      conversation_length: messages.length + 1,
+      is_first_message: messages.length === 1
+    })
 
     try {
       // Prepare context from user profile and recent runs

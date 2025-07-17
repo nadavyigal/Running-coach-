@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { MapPin, TrendingUp, Star, Clock, RouteIcon } from "lucide-react"
+import { trackRouteSelected } from "@/lib/analytics"
 
 interface RouteSelectorModalProps {
   isOpen: boolean
@@ -74,8 +75,20 @@ const sampleRoutes: RouteData[] = [
 export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps) {
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null)
 
-  const handleRouteSelect = (routeId: string) => {
+  const handleRouteSelect = async (routeId: string) => {
     setSelectedRoute(routeId)
+    
+    // Track route selection
+    const selectedRouteData = sampleRoutes.find(route => route.id === routeId)
+    await trackRouteSelected({
+      route_id: routeId,
+      route_name: selectedRouteData?.name,
+      distance_km: selectedRouteData?.distance,
+      difficulty: selectedRouteData?.difficulty,
+      elevation_m: selectedRouteData?.elevation,
+      estimated_time_minutes: selectedRouteData?.estimatedTime
+    })
+    
     // Here you would integrate with the workout
     console.log("Selected route:", routeId)
     alert("Route added to your workout!")
