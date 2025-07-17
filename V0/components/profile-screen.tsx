@@ -26,7 +26,9 @@ import { BadgeCabinet } from "@/components/badge-cabinet";
 import { dbUtils } from "@/lib/db";
 import { useToast } from "@/components/ui/use-toast";
 import { ShareBadgeModal } from "@/components/share-badge-modal";
-import { Share2 } from "lucide-react";
+import { Share2, Users } from "lucide-react";
+import { JoinCohortModal } from "@/components/join-cohort-modal";
+import { CommunityStatsWidget } from "@/components/community-stats-widget";
 
 export function ProfileScreen() {
   // Add state for the shoes modal at the top of the component
@@ -36,6 +38,7 @@ export function ProfileScreen() {
   const { toast } = useToast();
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [selectedBadge, setSelectedBadge] = useState<{ id: string; name: string } | null>(null);
+  const [showJoinCohortModal, setShowJoinCohortModal] = useState(false);
 
   const handleShareClick = (badgeId: string, badgeName: string) => {
     setSelectedBadge({ id: badgeId, name: badgeName });
@@ -73,6 +76,7 @@ export function ProfileScreen() {
 
   const connections = [
     { icon: Footprints, name: "Add Shoes", desc: "Track your running shoes mileage" },
+    { icon: Users, name: "Join a Cohort", desc: "Join a community group with an invite code" },
     { icon: Watch, name: "Connect to Watch", desc: "Sync with Apple Watch, Garmin, etc." },
     { icon: Music, name: "Connect to Spotify", desc: "Sync your running playlists" },
     { icon: Heart, name: "Connect to Fitness Apps", desc: "Sync with Strava, Nike Run Club, etc." },
@@ -143,6 +147,9 @@ export function ProfileScreen() {
 
       {/* Achievements */}
       {userId && <BadgeCabinet userId={userId} />}
+      
+      {/* Community Stats Widget */}
+      {userId && <CommunityStatsWidget userId={userId} />}
 
       {userId && (
         <Card>
@@ -209,28 +216,20 @@ export function ProfileScreen() {
         </CardHeader>
         <CardContent className="space-y-3">
           {connections.map((connection, index) => {
-            if (connection.name === "Add Shoes") {
-              return (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
-                  onClick={() => setShowAddShoesModal(true)}
-                >
-                  <div className="flex items-center gap-3">
-                    <Footprints className="h-5 w-5 text-gray-600" />
-                    <div>
-                      <div className="font-medium">Add Shoes</div>
-                      <div className="text-sm text-gray-600">Track your running shoes mileage</div>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-gray-400" />
-                </div>
-              )
-            }
+            const handleClick = () => {
+              if (connection.name === "Add Shoes") {
+                setShowAddShoesModal(true);
+              } else if (connection.name === "Join a Cohort") {
+                setShowJoinCohortModal(true);
+              }
+              // Add other connection handlers here
+            };
+
             return (
               <div
                 key={index}
                 className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
+                onClick={handleClick}
               >
                 <div className="flex items-center gap-3">
                   <connection.icon className="h-5 w-5 text-gray-600" />
@@ -241,7 +240,7 @@ export function ProfileScreen() {
                 </div>
                 <ChevronRight className="h-4 w-4 text-gray-400" />
               </div>
-            )
+            );
           })}
         </CardContent>
       </Card>
@@ -286,6 +285,14 @@ export function ProfileScreen() {
             const shoes = JSON.parse(localStorage.getItem("running-shoes") || "[]")
             setRunningShoes(shoes)
           }}
+        />
+      )}
+
+      {userId && (
+        <JoinCohortModal
+          isOpen={showJoinCohortModal}
+          onClose={() => setShowJoinCohortModal(false)}
+          userId={userId}
         />
       )}
     </div>

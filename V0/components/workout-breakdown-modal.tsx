@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
+import { ShareRunModal } from "@/components/share-run-modal";
 
 interface WorkoutBreakdownModalProps {
   isOpen: boolean
@@ -14,6 +15,7 @@ export function WorkoutBreakdownModal({ isOpen, onClose }: WorkoutBreakdownModal
   const [selectedGoal, setSelectedGoal] = useState<"distance" | "duration">("distance")
   const [targetDistance, setTargetDistance] = useState("0.0")
   const [selectedDifficulty, setSelectedDifficulty] = useState("open")
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   const presetDistances = [
     { label: "5k", value: "5.0" },
@@ -132,7 +134,20 @@ export function WorkoutBreakdownModal({ isOpen, onClose }: WorkoutBreakdownModal
           <Button onClick={handleStart} className="w-full h-12 bg-gray-800 hover:bg-black text-white">
             Continue
           </Button>
+          {/* Share Button */}
+          <Button onClick={() => setIsShareModalOpen(true)} className="w-full h-12 mt-2 bg-blue-600 hover:bg-blue-700 text-white">
+            Share Run
+          </Button>
         </div>
+        {/* ShareRunModal Integration */}
+        {isShareModalOpen && (
+          <ShareRunModal
+            runId={"placeholder_run_id"}
+            runDate={new Date().toLocaleDateString()}
+            isOpen={isShareModalOpen}
+            onClose={() => setIsShareModalOpen(false)}
+          />
+        )}
       </DialogContent>
     </Dialog>
   )

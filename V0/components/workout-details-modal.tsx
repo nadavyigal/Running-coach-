@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Calendar, Heart, Zap, Target, TrendingUp, MapPin, Music, Share2, Edit, Trash2 } from "lucide-react"
+import { ShareRunModal } from "@/components/share-run-modal"
 
 interface WorkoutDetailsModalProps {
   isOpen: boolean
@@ -28,6 +29,7 @@ interface WorkoutDetailsModalProps {
 
 export function WorkoutDetailsModal({ isOpen, onClose, workout }: WorkoutDetailsModalProps) {
   const [activeTab, setActiveTab] = useState("overview")
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   const workoutTypeColors = {
     easy: "bg-green-100 text-green-800",
@@ -51,9 +53,12 @@ export function WorkoutDetailsModal({ isOpen, onClose, workout }: WorkoutDetails
   }
 
   const handleShare = () => {
-    console.log("Share workout:", workout.id)
-    alert("Share functionality coming soon!")
-  }
+    setIsShareModalOpen(true);
+  };
+
+  const handleCloseShareModal = () => {
+    setIsShareModalOpen(false);
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -232,6 +237,14 @@ export function WorkoutDetailsModal({ isOpen, onClose, workout }: WorkoutDetails
             </Button>
           </div>
         </div>
+        {isShareModalOpen && (
+          <ShareRunModal
+            runId={workout.id}
+            runDate={workout.date}
+            isOpen={isShareModalOpen}
+            onClose={handleCloseShareModal}
+          />
+        )}
       </DialogContent>
     </Dialog>
   )

@@ -3,23 +3,18 @@ import { vi, MockedFunction } from 'vitest';
 import React from 'react';
 import { TodayScreen } from './today-screen';
 import { StreakIndicator } from "./streak-indicator"
+import { dbUtils } from '../lib/db';
 
 // Mock dbUtils and hooks
-const mockDbUtils = {
-  getCurrentUser: vi.fn(),
-  getTodaysWorkout: vi.fn(),
-  getActivePlan: vi.fn(),
-  getWorkoutsByPlan: vi.fn(),
-  getRunStats: vi.fn(),
-};
-
-vi.mock('../lib/db', async () => {
-  const actual = await vi.importActual('../lib/db');
-  return {
-    ...actual,
-    dbUtils: mockDbUtils,
-  };
-});
+vi.mock('../lib/db', () => ({
+  dbUtils: {
+    getCurrentUser: vi.fn(),
+    getTodaysWorkout: vi.fn(),
+    getActivePlan: vi.fn(),
+    getWorkoutsByPlan: vi.fn(),
+    getRunStats: vi.fn(),
+  },
+}));
 
 vi.mock('../hooks/use-toast', () => ({
   useToast: () => ({
@@ -109,11 +104,11 @@ describe('TodayScreen', () => {
   });
 
   it('renders dashboard with today workout and actions', async () => {
-    mockDbUtils.getCurrentUser.mockResolvedValue(mockUser);
-    mockDbUtils.getTodaysWorkout.mockResolvedValue(mockWorkout);
-    mockDbUtils.getActivePlan.mockResolvedValue(mockPlan);
-    mockDbUtils.getWorkoutsByPlan.mockResolvedValue([mockWorkout]);
-    mockDbUtils.getRunStats.mockResolvedValue({ totalRuns: 5, totalDistance: 15, totalDuration: 150 });
+    dbUtils.getCurrentUser.mockResolvedValue(mockUser);
+    dbUtils.getTodaysWorkout.mockResolvedValue(mockWorkout);
+    dbUtils.getActivePlan.mockResolvedValue(mockPlan);
+    dbUtils.getWorkoutsByPlan.mockResolvedValue([mockWorkout]);
+    dbUtils.getRunStats.mockResolvedValue({ totalRuns: 5, totalDistance: 15, totalDuration: 150 });
 
     render(<TodayScreen />);
 
@@ -126,9 +121,9 @@ describe('TodayScreen', () => {
   });
 
   it('handles empty state (no plan)', async () => {
-    mockDbUtils.getCurrentUser.mockResolvedValue(mockUser);
-    mockDbUtils.getActivePlan.mockResolvedValue(undefined);
-    mockDbUtils.getTodaysWorkout.mockResolvedValue(null);
+    dbUtils.getCurrentUser.mockResolvedValue(mockUser);
+    dbUtils.getActivePlan.mockResolvedValue(undefined);
+    dbUtils.getTodaysWorkout.mockResolvedValue(null);
 
     render(<TodayScreen />);
 
@@ -138,7 +133,7 @@ describe('TodayScreen', () => {
   });
 
   it('handles error state', async () => {
-    mockDbUtils.getCurrentUser.mockRejectedValue(new Error('DB error'));
+    dbUtils.getCurrentUser.mockRejectedValue(new Error('DB error'));
     render(<TodayScreen />);
 
     await waitFor(() => {
@@ -147,11 +142,11 @@ describe('TodayScreen', () => {
   });
 
   it('navigates to Record Run when Start Workout is clicked', async () => {
-    mockDbUtils.getCurrentUser.mockResolvedValue(mockUser);
-    mockDbUtils.getTodaysWorkout.mockResolvedValue(mockWorkout);
-    mockDbUtils.getActivePlan.mockResolvedValue(mockPlan);
-    mockDbUtils.getWorkoutsByPlan.mockResolvedValue([mockWorkout]);
-    mockDbUtils.getRunStats.mockResolvedValue({ totalRuns: 5, totalDistance: 15, totalDuration: 150 });
+    dbUtils.getCurrentUser.mockResolvedValue(mockUser);
+    dbUtils.getTodaysWorkout.mockResolvedValue(mockWorkout);
+    dbUtils.getActivePlan.mockResolvedValue(mockPlan);
+    dbUtils.getWorkoutsByPlan.mockResolvedValue([mockWorkout]);
+    dbUtils.getRunStats.mockResolvedValue({ totalRuns: 5, totalDistance: 15, totalDuration: 150 });
 
     render(<TodayScreen />);
 
@@ -163,11 +158,11 @@ describe('TodayScreen', () => {
   });
 
   it('shows and closes Add Run modal', async () => {
-    mockDbUtils.getCurrentUser.mockResolvedValue(mockUser);
-    mockDbUtils.getTodaysWorkout.mockResolvedValue(mockWorkout);
-    mockDbUtils.getActivePlan.mockResolvedValue(mockPlan);
-    mockDbUtils.getWorkoutsByPlan.mockResolvedValue([mockWorkout]);
-    mockDbUtils.getRunStats.mockResolvedValue({ totalRuns: 5, totalDistance: 15, totalDuration: 150 });
+    dbUtils.getCurrentUser.mockResolvedValue(mockUser);
+    dbUtils.getTodaysWorkout.mockResolvedValue(mockWorkout);
+    dbUtils.getActivePlan.mockResolvedValue(mockPlan);
+    dbUtils.getWorkoutsByPlan.mockResolvedValue([mockWorkout]);
+    dbUtils.getRunStats.mockResolvedValue({ totalRuns: 5, totalDistance: 15, totalDuration: 150 });
 
     render(<TodayScreen />);
 
@@ -179,7 +174,7 @@ describe('TodayScreen', () => {
   });
 
   it('renders StreakIndicator with zero state', async () => {
-    mockDbUtils.getCurrentUser.mockResolvedValue({ ...mockUser, currentStreak: 0, longestStreak: 0 });
+    dbUtils.getCurrentUser.mockResolvedValue({ ...mockUser, currentStreak: 0, longestStreak: 0 });
     render(<TodayScreen />);
     await waitFor(() => {
       expect(screen.getByText('Start your streak!')).toBeInTheDocument();
@@ -187,7 +182,7 @@ describe('TodayScreen', () => {
   });
 
   it('renders StreakIndicator with normal streak', async () => {
-    mockDbUtils.getCurrentUser.mockResolvedValue({ ...mockUser, currentStreak: 5, longestStreak: 10 });
+    dbUtils.getCurrentUser.mockResolvedValue({ ...mockUser, currentStreak: 5, longestStreak: 10 });
     render(<TodayScreen />);
     await waitFor(() => {
       expect(screen.getByText('5')).toBeInTheDocument();
@@ -197,7 +192,7 @@ describe('TodayScreen', () => {
   });
 
   it('renders StreakIndicator error state', async () => {
-    mockDbUtils.getCurrentUser.mockRejectedValue(new Error('DB error'));
+    dbUtils.getCurrentUser.mockRejectedValue(new Error('DB error'));
     render(<TodayScreen />);
     await waitFor(() => {
       expect(screen.getByText('DB error')).toBeInTheDocument();
@@ -205,7 +200,7 @@ describe('TodayScreen', () => {
   });
 
   it('toggles streak animation', async () => {
-    mockDbUtils.getCurrentUser.mockResolvedValue({ ...mockUser, currentStreak: 3, longestStreak: 7 });
+    dbUtils.getCurrentUser.mockResolvedValue({ ...mockUser, currentStreak: 3, longestStreak: 7 });
     render(<TodayScreen />);
     await waitFor(() => {
       const toggle = screen.getByRole('switch');
@@ -215,7 +210,7 @@ describe('TodayScreen', () => {
   });
 
   it('updates streak in real-time', async () => {
-    mockDbUtils.getCurrentUser.mockResolvedValue({ ...mockUser, currentStreak: 2, longestStreak: 5 });
+    dbUtils.getCurrentUser.mockResolvedValue({ ...mockUser, currentStreak: 2, longestStreak: 5 });
     render(<TodayScreen />);
     await waitFor(() => {
       expect(screen.getByText('2')).toBeInTheDocument();
@@ -228,11 +223,11 @@ describe('TodayScreen', () => {
   });
 
   it('is accessible (has ARIA labels and keyboard navigation)', async () => {
-    mockDbUtils.getCurrentUser.mockResolvedValue(mockUser);
-    mockDbUtils.getTodaysWorkout.mockResolvedValue(mockWorkout);
-    mockDbUtils.getActivePlan.mockResolvedValue(mockPlan);
-    mockDbUtils.getWorkoutsByPlan.mockResolvedValue([mockWorkout]);
-    mockDbUtils.getRunStats.mockResolvedValue({ totalRuns: 5, totalDistance: 15, totalDuration: 150 });
+    dbUtils.getCurrentUser.mockResolvedValue(mockUser);
+    dbUtils.getTodaysWorkout.mockResolvedValue(mockWorkout);
+    dbUtils.getActivePlan.mockResolvedValue(mockPlan);
+    dbUtils.getWorkoutsByPlan.mockResolvedValue([mockWorkout]);
+    dbUtils.getRunStats.mockResolvedValue({ totalRuns: 5, totalDistance: 15, totalDuration: 150 });
 
     render(<TodayScreen />);
 

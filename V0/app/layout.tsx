@@ -1,10 +1,7 @@
-'use client';
-
 import type { Metadata } from 'next'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
-import { reminderService } from '@/lib/reminderService'
-import { useEffect } from 'react'
+import { ReminderInit } from '@/components/reminder-init'
 
 export const metadata: Metadata = {
   title: 'v0 App',
@@ -17,14 +14,10 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-
-  useEffect(() => {
-    reminderService.init()
-  }, [])
-
   return (
     <html lang="en">
       <body>
+        <ReminderInit />
         {children}
         <Toaster />
       </body>

@@ -110,7 +110,7 @@ describe('RecordScreen', () => {
         render(<RecordScreen />)
       })
 
-      expect(screen.getByText('GPS Unavailable')).toBeInTheDocument()
+      expect(screen.getAllByText('GPS Unavailable').length).toBeGreaterThan(0)
       expect(screen.getByText('You can still track your run manually')).toBeInTheDocument()
     })
 
@@ -130,7 +130,7 @@ describe('RecordScreen', () => {
         render(<RecordScreen />)
       })
 
-      const enableButton = screen.getByText('Enable')
+      const enableButton = screen.getByRole('button', { name: 'Enable' })
       
       await act(async () => {
         fireEvent.click(enableButton)
@@ -172,7 +172,7 @@ describe('RecordScreen', () => {
         render(<RecordScreen />)
       })
 
-      const startButton = screen.getByRole('button', { name: /play/i })
+      const startButton = screen.getByRole('button', { name: 'Start Run' })
       
       await act(async () => {
         fireEvent.click(startButton)
@@ -191,7 +191,7 @@ describe('RecordScreen', () => {
       })
 
       // Start run
-      const startButton = screen.getByRole('button', { name: /play/i })
+      const startButton = screen.getByRole('button', { name: 'Start Run' })
       await act(async () => {
         fireEvent.click(startButton)
       })
@@ -209,13 +209,13 @@ describe('RecordScreen', () => {
       })
 
       // Start run
-      const startButton = screen.getByRole('button', { name: /play/i })
+      const startButton = screen.getByRole('button', { name: 'Start Run' })
       await act(async () => {
         fireEvent.click(startButton)
       })
 
       // Pause run
-      const pauseButton = screen.getByRole('button', { name: /pause/i })
+      const pauseButton = screen.getByRole('button', { name: 'Pause Run' })
       await act(async () => {
         fireEvent.click(pauseButton)
       })
@@ -227,7 +227,7 @@ describe('RecordScreen', () => {
       })
 
       // Resume run
-      const resumeButton = screen.getByRole('button', { name: /play/i })
+      const resumeButton = screen.getByRole('button', { name: 'Resume Run' })
       await act(async () => {
         fireEvent.click(resumeButton)
       })
@@ -279,7 +279,7 @@ describe('RecordScreen', () => {
       })
 
       // Start run
-      const startButton = screen.getByRole('button', { name: /play/i })
+      const startButton = screen.getByRole('button', { name: 'Start Run' })
       await act(async () => {
         fireEvent.click(startButton)
       })
@@ -333,7 +333,7 @@ describe('RecordScreen', () => {
       })
 
       // Start and stop run
-      const startButton = screen.getByRole('button', { name: /play/i })
+      const startButton = screen.getByRole('button', { name: 'Start Run' })
       await act(async () => {
         fireEvent.click(startButton)
       })
@@ -359,7 +359,7 @@ describe('RecordScreen', () => {
         render(<RecordScreen />)
       })
 
-      const startButton = screen.getByRole('button', { name: /play/i })
+      const startButton = screen.getByRole('button', { name: 'Start Run' })
       await act(async () => {
         fireEvent.click(startButton)
       })
@@ -395,7 +395,7 @@ describe('RecordScreen', () => {
       })
 
       // Start run
-      const startButton = screen.getByRole('button', { name: /play/i })
+      const startButton = screen.getByRole('button', { name: 'Start Run' })
       await act(async () => {
         fireEvent.click(startButton)
       })
@@ -439,7 +439,7 @@ describe('RecordScreen', () => {
         render(<RecordScreen />)
       })
 
-      const startButton = screen.getByRole('button', { name: /play/i })
+      const startButton = screen.getByRole('button', { name: 'Start Run' })
       await act(async () => {
         fireEvent.click(startButton)
       })
@@ -463,7 +463,7 @@ describe('RecordScreen', () => {
         render(<RecordScreen />)
       })
 
-      const backButton = screen.getByRole('button', { name: /arrow/i })
+      const backButton = screen.getByRole('button', { name: 'Back to Today Screen' })
       
       await act(async () => {
         fireEvent.click(backButton)
@@ -508,7 +508,7 @@ describe('RecordScreen', () => {
         render(<RecordScreen />)
       })
 
-      const enableButton = screen.getByText('Enable')
+      const enableButton = screen.getByRole('button', { name: 'Enable' })
       
       await act(async () => {
         fireEvent.click(enableButton)
@@ -532,7 +532,7 @@ describe('RecordScreen', () => {
         render(<RecordScreen />)
       })
 
-      const startButton = screen.getByRole('button', { name: /play/i })
+      const startButton = screen.getByRole('button', { name: 'Start Run' })
       
       await act(async () => {
         fireEvent.click(startButton)
@@ -552,7 +552,7 @@ describe('RecordScreen', () => {
         render(<RecordScreen />)
       })
 
-      const startButton = screen.getByRole('button', { name: /play/i })
+      const startButton = screen.getByRole('button', { name: 'Start Run' })
       await act(async () => {
         fireEvent.click(startButton)
       })

@@ -380,11 +380,11 @@ export function RecordScreen() {
     <div className="p-4 space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <Button variant="ghost" size="sm" onClick={() => router.push('/')}>
+        <Button variant="ghost" size="sm" onClick={() => router.push('/')} aria-label="Back to Today Screen">
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-xl font-bold">Record Run</h1>
-        <Button variant="ghost" size="sm" onClick={() => setShowRoutesModal(true)}>
+        <Button variant="ghost" size="sm" onClick={() => setShowRoutesModal(true)} aria-label="Open Route Selector">
           <Map className="h-4 w-4" />
         </Button>
       </div>
@@ -488,13 +488,13 @@ export function RecordScreen() {
       {/* Controls */}
       <div className="flex justify-center gap-4">
         {!isRunning ? (
-          <Button onClick={startRun} className="bg-green-500 hover:bg-green-600 h-16 w-16 rounded-full">
+          <Button onClick={startRun} className="bg-green-500 hover:bg-green-600 h-16 w-16 rounded-full" aria-label="Start Run">
             <Play className="h-6 w-6" />
           </Button>
         ) : (
           <>
             {!isPaused ? (
-              <Button onClick={pauseRun} variant="outline" className="h-16 w-16 rounded-full bg-transparent">
+              <Button onClick={pauseRun} variant="outline" className="h-16 w-16 rounded-full" aria-label="Pause Run">
                 <Pause className="h-6 w-6" />
               </Button>
             ) : (

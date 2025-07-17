@@ -26,6 +26,24 @@ export interface User {
   reminderTime?: string; // HH:mm format
   reminderEnabled?: boolean;
   reminderSnoozedUntil?: Date | null;
+  cohortId?: number; // New field for cohort association
+}
+
+// Cohort interface
+export interface Cohort {
+  id?: number;
+  name: string;
+  inviteCode: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Cohort Member interface (for many-to-many if needed, or direct user-cohort link)
+export interface CohortMember {
+  id?: number;
+  userId: number;
+  cohortId: number;
+  joinDate: Date;
 }
 
 // Training plan structure
@@ -123,6 +141,8 @@ export class RunSmartDB extends Dexie {
   shoes!: EntityTable<Shoe, 'id'>;
   chatMessages!: EntityTable<ChatMessage, 'id'>;
   badges!: EntityTable<Badge, 'id'>;
+  cohorts!: EntityTable<Cohort, 'id'>;
+  cohortMembers!: EntityTable<CohortMember, 'id'>;
 
   constructor() {
     super('RunSmartDB');
@@ -182,6 +202,23 @@ export class RunSmartDB extends Dexie {
         if (user.reminderEnabled === undefined) user.reminderEnabled = false;
         if (user.reminderTime === undefined) user.reminderTime = null;
         user.reminderSnoozedUntil = null;
+      });
+    });
+
+    // Version 5: Add Cohort and CohortMember tables
+    this.version(5).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+      cohorts: '++id, inviteCode, name',
+      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+    }).upgrade(async tx => {
+      await tx.table('users').toCollection().modify(user => {
+        user.cohortId = null;
       });
     });
   }
@@ -652,6 +689,61 @@ export const dbUtils = {
     };
     const id = await db.badges.add(badge);
     return { ...badge, id };
+  },
+
+  // Cohort operations
+  async getUserById(userId: number): Promise<User | undefined> {
+    return await db.users.get(userId);
+  },
+
+  async getCohortStats(cohortId: number): Promise<{
+    totalMembers: number;
+    activeMembers: number;
+    totalRuns: number;
+    totalDistance: number;
+    avgDistance: number;
+    weeklyRuns: number;
+    weeklyDistance: number;
+    cohortName: string;
+  }> {
+    // Get cohort information
+    const cohort = await db.cohorts.get(cohortId);
+    if (!cohort) {
+      throw new Error('Cohort not found');
+    }
+
+    // Get all cohort members
+    const members = await db.cohortMembers.where('cohortId').equals(cohortId).toArray();
+    const memberIds = members.map(m => m.userId);
+
+    // Get all runs from cohort members
+    const allRuns = await db.runs.where('userId').anyOf(memberIds).toArray();
+    
+    // Calculate active members (members who have run in the last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const recentRuns = allRuns.filter(run => new Date(run.completedAt) >= sevenDaysAgo);
+    const activeMemberIds = new Set(recentRuns.map(run => run.userId));
+
+    // Calculate weekly stats
+    const weeklyRuns = recentRuns.length;
+    const weeklyDistance = recentRuns.reduce((total, run) => total + run.distance, 0);
+
+    // Calculate total stats
+    const totalRuns = allRuns.length;
+    const totalDistance = allRuns.reduce((total, run) => total + run.distance, 0);
+    const avgDistance = totalRuns > 0 ? totalDistance / totalRuns : 0;
+
+    return {
+      totalMembers: members.length,
+      activeMembers: activeMemberIds.size,
+      totalRuns,
+      totalDistance,
+      avgDistance,
+      weeklyRuns,
+      weeklyDistance,
+      cohortName: cohort.name,
+    };
   },
 };
 

@@ -29,6 +29,7 @@ import { DateWorkoutModal } from "@/components/date-workout-modal"
 import { dbUtils, type Workout } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 import { StreakIndicator } from "@/components/streak-indicator"
+import { CommunityStatsWidget } from "@/components/community-stats-widget"
 
 export function TodayScreen() {
   const [dailyTip, setDailyTip] = useState(
@@ -39,6 +40,7 @@ export function TodayScreen() {
   const [todaysWorkout, setTodaysWorkout] = useState<Workout | null>(null)
   const [isLoadingWorkout, setIsLoadingWorkout] = useState(true)
   const [weeklyWorkouts, setWeeklyWorkouts] = useState<Workout[]>([])
+  const [userId, setUserId] = useState<number | null>(null)
   const { toast } = useToast()
 
   const tips = [
@@ -60,6 +62,7 @@ export function TodayScreen() {
       try {
         const user = await dbUtils.getCurrentUser()
         if (user) {
+          setUserId(user.id || null)
           const today = new Date()
           const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay())) // Sunday
           const endOfWeek = new Date(today.setDate(today.getDate() - today.getDay() + 6)) // Saturday
@@ -530,6 +533,9 @@ export function TodayScreen() {
           )}
         </CardContent>
       </Card>
+
+      {/* Community Stats Widget */}
+      {userId && <CommunityStatsWidget userId={userId} />}
 
       {/* Modals */}
       {showAddRunModal && <AddRunModal isOpen={showAddRunModal} onClose={() => setShowAddRunModal(false)} />}
