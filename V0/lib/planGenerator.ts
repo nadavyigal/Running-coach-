@@ -143,8 +143,8 @@ function calculateWorkoutDate(startDate: Date, week: number, day: string): Date 
 /**
  * Generate a simple fallback plan if OpenAI fails
  */
-export async function generateFallbackPlan(user: User, startDate: Date = new Date()): Promise<{ plan: Plan; workouts: Workout[] }> {
-  const totalWeeks = user.experience === 'beginner' ? 4 : user.experience === 'intermediate' ? 6 : 8;
+export async function generateFallbackPlan(user: User, startDate: Date = new Date(), rookie_challenge?: boolean): Promise<{ plan: Plan; workouts: Workout[] }> {
+  const totalWeeks = rookie_challenge ? 2 : (user.experience === 'beginner' ? 4 : user.experience === 'intermediate' ? 6 : 8);
   const endDate = new Date(startDate);
   endDate.setDate(endDate.getDate() + (totalWeeks * 7));
 

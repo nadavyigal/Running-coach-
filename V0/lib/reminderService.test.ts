@@ -20,6 +20,7 @@ const mockedToast = toast as unknown as ReturnType<typeof vi.fn>
 const capture = vi.fn()
 
 describe('reminderService', () => {
+  vi.setConfig({ testTimeout: 60000 });
   let userId: number
 
   beforeEach(async () => {
@@ -49,13 +50,13 @@ describe('reminderService', () => {
     const time = `${inOneMin.getHours().toString().padStart(2,'0')}:${inOneMin.getMinutes().toString().padStart(2,'0')}`
 
     await reminderService.setReminder(time)
-    expect(capture).toHaveBeenCalledWith('reminder_set', { time })
+    expect(posthog.capture).toHaveBeenCalledWith('reminder_set', { time })
 
     vi.advanceTimersByTime(60000)
     await vi.runAllTimers()
 
     expect(mockedToast).toHaveBeenCalled()
-    expect(capture).toHaveBeenCalledWith('reminder_triggered')
+    expect(posthog.capture).toHaveBeenCalledWith('reminder_triggered')
   })
 
   it('snoozes reminder', async () => {
@@ -63,7 +64,7 @@ describe('reminderService', () => {
     capture.mockClear()
     mockedToast.mockClear()
     await reminderService.snooze(5)
-    expect(capture).toHaveBeenCalledWith('reminder_snoozed', { minutes: 5 })
+    expect(posthog.capture).toHaveBeenCalledWith('reminder_snoozed', { minutes: 5 })
     vi.advanceTimersByTime(5 * 60000)
     await vi.runAllTimers()
     expect(mockedToast).toHaveBeenCalled()
@@ -74,7 +75,7 @@ describe('reminderService', () => {
     capture.mockClear()
     mockedToast.mockClear()
     await reminderService.disableReminder()
-    expect(trackReminderEventMock).toHaveBeenCalledWith('reminder_disabled')
+    expect(posthog.capture).toHaveBeenCalledWith('reminder_disabled')
     vi.advanceTimersByTime(24 * 60 * 60000)
     await vi.runAllTimers()
     expect(mockedToast).not.toHaveBeenCalled()

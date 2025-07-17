@@ -50,43 +50,43 @@ const trackEvent = async (eventName: string, properties?: Record<string, any>) =
 }
 
 // Reminder analytics
-export const trackReminderEvent = (eventName: string, properties?: Record<string, any>) => {
-  trackEvent(eventName, properties)
+export const trackReminderEvent = async (eventName: string, properties?: Record<string, any>) => {
+  await trackEvent(eventName, properties)
 }
 
 // Plan adjustment analytics
-export const trackPlanAdjustmentEvent = (eventName: string, properties?: Record<string, any>) => {
-  trackEvent(eventName, properties)
+export const trackPlanAdjustmentEvent = async (eventName: string, properties?: Record<string, any>) => {
+  await trackEvent(eventName, properties)
 }
 
 // Feedback analytics
-export const trackFeedbackEvent = (eventName: string, properties?: Record<string, any>) => {
-  trackEvent(eventName, properties)
+export const trackFeedbackEvent = async (eventName: string, properties?: Record<string, any>) => {
+  await trackEvent(eventName, properties)
 }
 
 // Engagement analytics
-export const trackEngagementEvent = (eventName: string, properties?: Record<string, any>) => {
-  trackEvent(eventName, properties)
+export const trackEngagementEvent = async (eventName: string, properties?: Record<string, any>) => {
+  await trackEvent(eventName, properties)
 }
 
 // New analytics functions for missing events
-export const trackPlanSessionCompleted = (properties?: Record<string, any>) => {
-  trackEvent('plan_session_completed', properties)
+export const trackPlanSessionCompleted = async (properties?: Record<string, any>) => {
+  await trackEvent('plan_session_completed', properties)
 }
 
-export const trackChatMessageSent = (properties?: Record<string, any>) => {
-  trackEvent('chat_message_sent', properties)
+export const trackChatMessageSent = async (properties?: Record<string, any>) => {
+  await trackEvent('chat_message_sent', properties)
 }
 
-export const trackRouteSelected = (properties?: Record<string, any>) => {
-  trackEvent('route_selected', properties)
+export const trackRouteSelected = async (properties?: Record<string, any>) => {
+  await trackEvent('route_selected', properties)
 }
 
-export const trackReminderClicked = (properties?: Record<string, any>) => {
-  trackEvent('reminder_clicked', properties)
+export const trackReminderClicked = async (properties?: Record<string, any>) => {
+  await trackEvent('reminder_clicked', properties)
 }
 
 // General analytics function
-export const trackAnalyticsEvent = (eventName: string, properties?: Record<string, any>) => {
-  trackEvent(eventName, properties)
+export const trackAnalyticsEvent = async (eventName: string, properties?: Record<string, any>) => {
+  await trackEvent(eventName, properties)
 }

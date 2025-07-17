@@ -300,6 +300,7 @@ export const badgeTypes: { [key: number]: 'bronze' | 'silver' | 'gold' } = {
 export const dbUtils = {
   // User operations
   async createUser(userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+    console.log("Creating user with data:", userData); // Added for debugging
     const now = new Date();
     return await db.users.add({
       ...userData,
@@ -317,7 +318,8 @@ export const dbUtils = {
   },
 
   async getCurrentUser(): Promise<User | undefined> {
-    return await db.users.where('onboardingComplete').equals(true).first();
+    // Return the most recently created user
+    return await db.users.orderBy('createdAt').last();
   },
 
   async updateUser(id: number, updates: Partial<User>): Promise<void> {

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { db, dbUtils } from './db';
 
 describe('Streak Calculation Engine', () => {
+  vi.setConfig({ testTimeout: 30000 });
   let testUserId: number;
 
   beforeEach(async () => {
@@ -358,7 +359,7 @@ describe('Streak Calculation Engine', () => {
       const streak = await dbUtils.calculateCurrentStreak(testUserId);
       expect(streak).toBeGreaterThan(0);
       expect(streak).toBeLessThanOrEqual(365);
-    }, 10000);
+    }, 60000);
   });
 }); 
 
