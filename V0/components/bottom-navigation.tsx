@@ -19,7 +19,7 @@ export function BottomNavigation({ currentScreen, onScreenChange }: BottomNaviga
   ]
 
   return (
-    <nav className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white/95 backdrop-blur-sm border-t border-gray-200 px-4 py-2 animate-in slide-in-from-bottom duration-300">
+    <nav className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white/95 backdrop-blur-sm border-t border-gray-200 px-4 py-2 animate-in slide-in-from-bottom duration-300" aria-label="Main navigation">
       <div className="flex justify-around items-center">
         {navItems.map((item, index) => (
           <Button
@@ -32,11 +32,13 @@ export function BottomNavigation({ currentScreen, onScreenChange }: BottomNaviga
                 ? "bg-green-500 hover:bg-green-600 text-white rounded-full w-12 h-12 hover:scale-110 shadow-lg"
                 : currentScreen === item.id
                   ? "text-green-500 scale-110"
-                  : "text-gray-600 hover:text-green-500 hover:scale-105"
+                  : "text-gray-700 hover:text-green-500 hover:scale-105"
             }`}
             style={{ animationDelay: `${index * 50}ms` }}
+            aria-label={`Navigate to ${item.label}`}
+            aria-current={currentScreen === item.id ? "page" : undefined}
           >
-            <item.icon className={`h-5 w-5 ${item.isSpecial ? "h-6 w-6" : ""}`} />
+            <item.icon className={`h-5 w-5 ${item.isSpecial ? "h-6 w-6" : ""}`} aria-hidden="true" />
             {!item.isSpecial && <span className="text-xs font-medium">{item.label}</span>}
           </Button>
         ))}

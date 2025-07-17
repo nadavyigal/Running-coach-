@@ -4,8 +4,8 @@ import { dbUtils } from '@/lib/db';
 
 const RecordsQuerySchema = z.object({
   userId: z.string().transform(Number).optional(),
-  type: z.enum(['distance', 'time', 'pace', 'all']).optional().default('all'),
-  limit: z.string().transform(Number).optional().default(50),
+  type: z.enum(['distance', 'time', 'pace', 'all']).nullable().optional().default('all'),
+  limit: z.string().transform(Number).nullable().optional().default(50),
 });
 
 const UpdateRecordSchema = z.object({

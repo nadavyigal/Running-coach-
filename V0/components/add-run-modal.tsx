@@ -312,6 +312,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
 
     console.log("Saving workout:", workout)
     toast({
+      variant: "success",
       title: "Workout Scheduled! \ud83c\udf89",
       description: `${selectedWorkout?.name || 'Workout'} added to your plan`,
     })
@@ -347,14 +348,21 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
                 size="sm"
                 onClick={() => setShowCollapsed(!showCollapsed)}
                 className="text-gray-600"
+                aria-label={showCollapsed ? "Collapse workout options" : "Expand workout options"}
+                aria-expanded={!showCollapsed}
               >
                 {showCollapsed ? "COLLAPSE" : "EXPAND"}
-                <ChevronDown className={`h-4 w-4 ml-1 transition-transform ${showCollapsed ? "" : "rotate-180"}`} role="img" aria-label="Toggle" />
+                <ChevronDown className={`h-4 w-4 ml-1 transition-transform ${showCollapsed ? "" : "rotate-180"}`} aria-hidden="true" />
               </Button>
             )}
             {(step === "configure" || step === "approve") && (
-              <Button variant="ghost" size="sm" onClick={() => setStep(step === "configure" ? "select" : "configure")}>
-                <ArrowLeft className="h-4 w-4" />
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setStep(step === "configure" ? "select" : "configure")}
+                aria-label="Go back to previous step"
+              >
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               </Button>
             )}
           </div>
@@ -368,12 +376,21 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
                   key={workout.id}
                   className="cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-105"
                   onClick={() => handleWorkoutSelect(workout)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Select ${workout.name} workout - ${workout.description}`}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleWorkoutSelect(workout);
+                    }
+                  }}
                 >
                   <CardContent className="p-3">
                     <div
                       className={`w-full h-16 bg-gradient-to-r ${workout.color} rounded-lg flex items-center justify-center mb-2 relative overflow-hidden`}
                     >
-                      <workout.icon className="h-6 w-6 text-white z-10" role="img" aria-label={workout.name} />
+                      <workout.icon className="h-6 w-6 text-white z-10" aria-hidden="true" />
                       <div className="absolute inset-0 opacity-20">
                         <div className="absolute top-0 right-0 w-8 h-8 bg-white rounded-full translate-x-2 -translate-y-2" />
                         <div className="absolute bottom-0 left-0 w-6 h-6 bg-white rounded-full -translate-x-1 translate-y-1" />
@@ -426,7 +443,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
 
             {/* Record Workout Button */}
             <Button className="w-full bg-black hover:bg-gray-800 text-white h-12 text-lg font-medium">
-              <Clock className="h-5 w-5 mr-2" />
+              <Clock className="h-5 w-5 mr-2" aria-hidden="true" />
               Record workout
             </Button>
           </div>
@@ -565,19 +582,25 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
               onClick={generateWorkoutDescription}
               disabled={isGenerating}
               className="w-full bg-green-500 hover:bg-green-600 h-12"
+              aria-describedby={isGenerating ? "generating-status" : undefined}
             >
               {isGenerating ? (
                 <>
-                  <RefreshCw className="h-5 w-5 mr-2 animate-spin" role="status" aria-label="Loading" />
+                  <RefreshCw className="h-5 w-5 mr-2 animate-spin" aria-hidden="true" />
                   Generating Workout...
                 </>
               ) : (
                 <>
-                  <Bot className="h-5 w-5 mr-2" />
+                  <Bot className="h-5 w-5 mr-2" aria-hidden="true" />
                   Generate Workout Plan
                 </>
               )}
             </Button>
+            {isGenerating && (
+              <div id="generating-status" aria-live="polite" className="sr-only">
+                Generating workout plan, please wait...
+              </div>
+            )}
           </div>
         )}
 

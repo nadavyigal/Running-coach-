@@ -16,6 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run test -- --run` - Run tests once without watch mode
 - `npm run test -- --coverage` - Run tests with coverage report
 - `npm run test -- ComponentName` - Run specific test file
+- `npm run test:e2e` - Run end-to-end tests with Playwright
 
 ## Architecture Overview
 
@@ -73,6 +74,7 @@ export interface EntityName {
 - `fake-indexeddb` for mocking database operations
 - Test files use `.test.tsx` extension
 - Global test setup in `vitest.setup.ts`
+- Vitest configuration in `vitest.config.ts` with jsdom environment
 
 ### Important Technical Details
 
@@ -121,3 +123,4 @@ export interface EntityName {
 - Use `beforeEach` to reset database state
 - Test both success and error cases
 - Verify data persistence and retrieval
+- ResizeObserver and scrollIntoView are mocked in setup

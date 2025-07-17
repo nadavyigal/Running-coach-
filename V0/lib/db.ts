@@ -87,7 +87,53 @@ export interface PerformanceInsight {
   updatedAt: Date;
 }
 
-// Training plan structure
+// Race goal interface for advanced plan customization
+export interface RaceGoal {
+  id?: number;
+  userId: number;
+  raceName: string;
+  raceDate: Date;
+  distance: number; // in kilometers
+  targetTime?: number; // in seconds
+  priority: 'A' | 'B' | 'C'; // A = primary, B = secondary, C = tune-up
+  location?: string;
+  raceType: 'road' | 'trail' | 'track' | 'virtual';
+  elevationGain?: number; // meters
+  courseDifficulty?: 'easy' | 'moderate' | 'hard';
+  registrationStatus?: 'registered' | 'planned' | 'completed';
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Workout template for specialized training
+export interface WorkoutTemplate {
+  id?: number;
+  name: string;
+  workoutType: 'easy' | 'tempo' | 'intervals' | 'long' | 'race-pace' | 'recovery' | 'time-trial' | 'hill' | 'fartlek';
+  trainingPhase: 'base' | 'build' | 'peak' | 'taper';
+  intensityZone: 'easy' | 'moderate' | 'threshold' | 'vo2max' | 'anaerobic';
+  structure: any; // JSON structure for workout details
+  description: string;
+  coachingNotes?: string;
+  createdAt: Date;
+}
+
+// Periodization phase structure
+export interface PeriodizationPhase {
+  phase: 'base' | 'build' | 'peak' | 'taper';
+  duration: number; // weeks
+  weeklyVolumePercentage: number; // percentage of peak volume
+  intensityDistribution: {
+    easy: number; // percentage
+    moderate: number; // percentage
+    hard: number; // percentage
+  };
+  keyWorkouts: string[]; // workout types for this phase
+  focus: string; // phase description
+}
+
+// Enhanced training plan structure with periodization
 export interface Plan {
   id?: number;
   userId: number;
@@ -97,6 +143,14 @@ export interface Plan {
   endDate: Date;
   totalWeeks: number;
   isActive: boolean;
+  planType: 'basic' | 'advanced' | 'periodized';
+  raceGoalId?: number; // Link to race goal
+  periodization?: PeriodizationPhase[]; // Periodization phases
+  targetDistance?: number; // kilometers
+  targetTime?: number; // seconds
+  fitnessLevel?: 'beginner' | 'intermediate' | 'advanced';
+  trainingDaysPerWeek?: number;
+  peakWeeklyVolume?: number; // kilometers
   createdAt: Date;
   updatedAt: Date;
 }
@@ -107,9 +161,13 @@ export interface Workout {
   planId: number;
   week: number;
   day: string; // 'Mon', 'Tue', etc.
-  type: 'easy' | 'tempo' | 'intervals' | 'long' | 'time-trial' | 'hill' | 'rest';
+  type: 'easy' | 'tempo' | 'intervals' | 'long' | 'time-trial' | 'hill' | 'rest' | 'race-pace' | 'recovery' | 'fartlek';
   distance: number; // in km
   duration?: number; // in minutes
+  pace?: number; // target pace in seconds per km
+  intensity?: 'easy' | 'moderate' | 'threshold' | 'vo2max' | 'anaerobic';
+  trainingPhase?: 'base' | 'build' | 'peak' | 'taper';
+  workoutStructure?: any; // JSON structure for complex workouts
   notes?: string;
   completed: boolean;
   scheduledDate: Date;
@@ -187,6 +245,8 @@ export class RunSmartDB extends Dexie {
   performanceMetrics!: EntityTable<PerformanceMetrics, 'id'>;
   personalRecords!: EntityTable<PersonalRecord, 'id'>;
   performanceInsights!: EntityTable<PerformanceInsight, 'id'>;
+  raceGoals!: EntityTable<RaceGoal, 'id'>;
+  workoutTemplates!: EntityTable<WorkoutTemplate, 'id'>;
 
   constructor() {
     super('RunSmartDB');
@@ -282,6 +342,29 @@ export class RunSmartDB extends Dexie {
       performanceInsights: '++id, userId, type, priority, createdAt, validUntil',
     }).upgrade(async tx => {
       // No migration needed for new tables
+    });
+
+    // Version 7: Add RaceGoal and WorkoutTemplate tables for advanced plan customization
+    this.version(7).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt, planType, raceGoalId',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt, type, trainingPhase',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+      cohorts: '++id, inviteCode, name',
+      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+      performanceMetrics: '++id, userId, date, createdAt',
+      personalRecords: '++id, userId, recordType, achievedAt, createdAt',
+      performanceInsights: '++id, userId, type, priority, createdAt, validUntil',
+      raceGoals: '++id, userId, raceDate, priority, createdAt',
+      workoutTemplates: '++id, workoutType, trainingPhase, intensityZone, createdAt',
+    }).upgrade(async tx => {
+      // Migrate existing plans to add planType
+      await tx.table('plans').toCollection().modify(plan => {
+        plan.planType = 'basic';
+      });
     });
   }
 }
@@ -1303,6 +1386,123 @@ export const dbUtils = {
 
   async deletePersonalRecord(userId: number, recordId: number): Promise<void> {
     await db.personalRecords.where({ id: recordId, userId }).delete();
+  },
+
+  // Race Goal operations
+  async createRaceGoal(raceGoalData: Omit<RaceGoal, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+    const now = new Date();
+    return await db.raceGoals.add({
+      ...raceGoalData,
+      createdAt: now,
+      updatedAt: now
+    });
+  },
+
+  async getRaceGoalsByUser(userId: number): Promise<RaceGoal[]> {
+    return await db.raceGoals.where('userId').equals(userId).toArray();
+  },
+
+  async getRaceGoalById(id: number): Promise<RaceGoal | undefined> {
+    return await db.raceGoals.get(id);
+  },
+
+  async updateRaceGoal(id: number, updates: Partial<RaceGoal>): Promise<void> {
+    await db.raceGoals.update(id, { ...updates, updatedAt: new Date() });
+  },
+
+  async deleteRaceGoal(id: number): Promise<void> {
+    await db.raceGoals.delete(id);
+  },
+
+  async getPrimaryRaceGoal(userId: number): Promise<RaceGoal | undefined> {
+    return await db.raceGoals
+      .where('userId').equals(userId)
+      .and(goal => goal.priority === 'A')
+      .first();
+  },
+
+  // Workout Template operations
+  async createWorkoutTemplate(templateData: Omit<WorkoutTemplate, 'id' | 'createdAt'>): Promise<number> {
+    return await db.workoutTemplates.add({
+      ...templateData,
+      createdAt: new Date()
+    });
+  },
+
+  async getWorkoutTemplatesByPhase(trainingPhase: 'base' | 'build' | 'peak' | 'taper'): Promise<WorkoutTemplate[]> {
+    return await db.workoutTemplates.where('trainingPhase').equals(trainingPhase).toArray();
+  },
+
+  async getWorkoutTemplatesByType(workoutType: string): Promise<WorkoutTemplate[]> {
+    return await db.workoutTemplates.where('workoutType').equals(workoutType).toArray();
+  },
+
+  // Advanced plan operations
+  async createAdvancedPlan(planData: Omit<Plan, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+    const now = new Date();
+    return await db.plans.add({
+      ...planData,
+      createdAt: now,
+      updatedAt: now
+    });
+  },
+
+  async getPlansByRaceGoal(raceGoalId: number): Promise<Plan[]> {
+    return await db.plans.where('raceGoalId').equals(raceGoalId).toArray();
+  },
+
+  // Fitness assessment based on recent runs
+  async assessFitnessLevel(userId: number): Promise<'beginner' | 'intermediate' | 'advanced'> {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const recentRuns = await db.runs
+      .where('userId').equals(userId)
+      .and(run => new Date(run.completedAt) >= thirtyDaysAgo)
+      .toArray();
+
+    if (recentRuns.length === 0) return 'beginner';
+
+    const avgDistance = recentRuns.reduce((sum, run) => sum + run.distance, 0) / recentRuns.length;
+    const avgPace = recentRuns.reduce((sum, run) => sum + (run.pace || 0), 0) / recentRuns.length;
+    const weeklyVolume = recentRuns.reduce((sum, run) => sum + run.distance, 0) / 4; // 4 weeks
+
+    // Advanced: >40km/week, sub-5:00/km average, >10km average distance
+    if (weeklyVolume > 40 && avgPace < 300 && avgDistance > 10) {
+      return 'advanced';
+    }
+    
+    // Intermediate: 20-40km/week, 5:00-6:00/km average, 5-10km average distance
+    if (weeklyVolume >= 20 && avgPace < 360 && avgDistance >= 5) {
+      return 'intermediate';
+    }
+    
+    return 'beginner';
+  },
+
+  // Calculate target pace based on race goal and current fitness
+  async calculateTargetPaces(userId: number, raceGoalId: number): Promise<{
+    easyPace: number;
+    tempoPace: number;
+    thresholdPace: number;
+    intervalPace: number;
+    racePace: number;
+  }> {
+    const raceGoal = await this.getRaceGoalById(raceGoalId);
+    if (!raceGoal || !raceGoal.targetTime) {
+      throw new Error('Race goal not found or target time not set');
+    }
+
+    const racePace = raceGoal.targetTime / raceGoal.distance; // seconds per km
+    
+    // Calculate training paces based on race pace
+    return {
+      easyPace: racePace * 1.2, // 20% slower than race pace
+      tempoPace: racePace * 1.05, // 5% slower than race pace
+      thresholdPace: racePace * 1.03, // 3% slower than race pace
+      intervalPace: racePace * 0.95, // 5% faster than race pace
+      racePace: racePace
+    };
   },
 
   async checkAndUpdatePersonalRecords(userId: number, runId: number, distance: number, duration: number, pace: number, date: Date): Promise<PersonalRecord[]> {

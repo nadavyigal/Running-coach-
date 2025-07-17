@@ -268,7 +268,7 @@ export function TodayScreen() {
       <div className="flex justify-between items-center animate-in fade-in-50 duration-300">
         <div>
           <h1 className="text-2xl font-bold">Today</h1>
-          <div className="text-sm text-gray-600 flex items-center gap-2">
+          <div className="text-sm text-gray-700 flex items-center gap-2">
             <span className="font-medium">Week 2/9</span>
             <ChevronDown className="h-3 w-3" />
           </div>
@@ -326,14 +326,14 @@ export function TodayScreen() {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Badge className="bg-blue-100 text-blue-800 text-xs">SCHEDULE</Badge>
-                <span className="text-sm text-gray-600">9 JUL 2025</span>
+                <span className="text-sm text-gray-700">9 JUL 2025</span>
               </div>
               {isLoadingWorkout ? (
-                <Loader2 className="h-6 w-6 animate-spin text-gray-500" role="status" aria-label="Loading" />
+                <Loader2 className="h-6 w-6 animate-spin text-gray-700" role="status" aria-label="Loading" />
               ) : todaysWorkout ? (
                 <>
                   <CardTitle className="text-xl mb-1">{todaysWorkout.type.charAt(0).toUpperCase() + todaysWorkout.type.slice(1)} Run</CardTitle>
-                  <div className="flex items-center gap-4 text-sm text-gray-600">
+                  <div className="flex items-center gap-4 text-sm text-gray-700">
                     <span className="flex items-center gap-1">
                       <Zap className="h-4 w-4" />
                       {todaysWorkout.distance ? `${todaysWorkout.distance}km` : todaysWorkout.duration ? `${todaysWorkout.duration}min` : 'N/A'}
@@ -341,7 +341,7 @@ export function TodayScreen() {
                     <Badge className="bg-blue-100 text-blue-800 text-xs">Best for: Balanced</Badge>
                   </div>
                   <div className="flex items-center gap-1 mt-2">
-                    <Clock className="h-4 w-4 text-gray-500" />
+                    <Clock className="h-4 w-4 text-gray-700" />
                     <span className="text-lg font-semibold">
                       {todaysWorkout.duration ? `${todaysWorkout.duration}m` : `${todaysWorkout.distance}km`}
                     </span>
@@ -399,7 +399,7 @@ export function TodayScreen() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowWorkoutBreakdown(!showWorkoutBreakdown)}
-                className="text-gray-600 hover:text-black"
+                className="text-gray-700 hover:text-black"
               >
                 {showWorkoutBreakdown ? "COLLAPSE" : "EXPAND"}
                 {showWorkoutBreakdown ? (
@@ -436,7 +436,7 @@ export function TodayScreen() {
                           </div>
                           <div className="flex-1">
                             <p className="font-medium">{step.description}</p>
-                            {('detail' in step) && step.detail && <p className="text-sm text-gray-600 mt-1">{step.detail}</p>}
+                            {('detail' in step) && step.detail && <p className="text-sm text-gray-700 mt-1">{step.detail}</p>}
                           </div>
                           <Badge variant="outline" className="text-xs">
                             <Play className="h-3 w-3 mr-1" />
@@ -528,17 +528,17 @@ export function TodayScreen() {
         <CardContent>
           {isLoadingWorkout ? (
             <div className="flex justify-center items-center h-24" role="status" aria-label="Loading">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-500" aria-hidden="true" />
+              <Loader2 className="h-8 w-8 animate-spin text-gray-700" aria-hidden="true" />
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-4 text-center">
               <div className="hover:scale-105 transition-transform cursor-pointer">
                 <div className="text-2xl font-bold text-green-500 animate-pulse">{weeklyWorkouts.filter(w => w.completed).length}</div>
-                <div className="text-xs text-gray-600">Completed This Week</div>
+                <div className="text-xs text-gray-700">Completed This Week</div>
               </div>
               <div className="hover:scale-105 transition-transform cursor-pointer">
                 <div className="text-2xl font-bold text-blue-500 animate-pulse">{weeklyWorkouts.length}</div>
-                <div className="text-xs text-gray-600">Scheduled This Week</div>
+                <div className="text-xs text-gray-700">Scheduled This Week</div>
               </div>
               <div className="hover:scale-105 transition-transform cursor-pointer">
                 <div className="text-2xl font-bold text-purple-500 animate-pulse">
@@ -546,7 +546,7 @@ export function TodayScreen() {
                     ? `${Math.round((weeklyWorkouts.filter(w => w.completed).length / weeklyWorkouts.length) * 100)}%`
                     : '0%'}
                 </div>
-                <div className="text-xs text-gray-600">Week Complete</div>
+                <div className="text-xs text-gray-700">Week Complete</div>
               </div>
             </div>
           )}
