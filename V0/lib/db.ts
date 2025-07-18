@@ -546,6 +546,36 @@ export class RunSmartDB extends Dexie {
         }
       }
     });
+    
+    // Version 9: Add Goals tables
+    this.version(9).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt, planType, raceGoalId',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt, type, trainingPhase',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+      cohorts: '++id, inviteCode, name',
+      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+      performanceMetrics: '++id, userId, date, createdAt',
+      personalRecords: '++id, userId, recordType, achievedAt, createdAt',
+      performanceInsights: '++id, userId, type, priority, createdAt, validUntil',
+      raceGoals: '++id, userId, raceDate, priority, createdAt',
+      workoutTemplates: '++id, workoutType, trainingPhase, intensityZone, createdAt',
+      coachingProfiles: '++id, userId, coachingEffectivenessScore, lastAdaptationDate, createdAt',
+      coachingFeedback: '++id, userId, interactionType, feedbackType, rating, createdAt',
+      coachingInteractions: '++id, userId, interactionId, interactionType, createdAt',
+      userBehaviorPatterns: '++id, userId, patternType, confidenceScore, lastObserved, createdAt',
+      goals: '++id, userId, goalType, status, priority, createdAt, updatedAt',
+      goalMilestones: '++id, goalId, milestoneOrder, status, targetDate, createdAt',
+      goalProgressHistory: '++id, goalId, measurementDate, autoRecorded',
+      goalRecommendations: '++id, userId, recommendationType, status, createdAt, expiresAt',
+    }).upgrade(async tx => {
+      console.log('Running migration for version 9 - Adding goals tables')
+      // Goals tables will be automatically created due to schema definition
+      // No additional data migration needed for new tables
+    });
   }
 }
 
@@ -2065,6 +2095,335 @@ export const dbUtils = {
         }
       });
     }
+  },
+
+  // Goal management operations
+  async createGoal(goalData: Omit<Goal, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+    const now = new Date();
+    return await db.goals.add({
+      ...goalData,
+      createdAt: now,
+      updatedAt: now
+    });
+  },
+
+  async getGoalsByUser(userId: number, status?: Goal['status']): Promise<Goal[]> {
+    let query = db.goals.where({ userId });
+    if (status) {
+      query = query.and(goal => goal.status === status);
+    }
+    return await query.reverse().sortBy('priority');
+  },
+
+  async getGoal(goalId: number): Promise<Goal | undefined> {
+    return await db.goals.get(goalId);
+  },
+
+  async updateGoal(goalId: number, updates: Partial<Goal>): Promise<void> {
+    await db.goals.update(goalId, { ...updates, updatedAt: new Date() });
+  },
+
+  async deleteGoal(goalId: number): Promise<void> {
+    // Delete related data first
+    await db.goalMilestones.where({ goalId }).delete();
+    await db.goalProgressHistory.where({ goalId }).delete();
+    await db.goalRecommendations.where({ goalId }).delete();
+    await db.goals.delete(goalId);
+  },
+
+  // Goal milestone operations
+  async createGoalMilestone(milestoneData: Omit<GoalMilestone, 'id' | 'createdAt'>): Promise<number> {
+    return await db.goalMilestones.add({
+      ...milestoneData,
+      createdAt: new Date()
+    });
+  },
+
+  async getGoalMilestones(goalId: number): Promise<GoalMilestone[]> {
+    return await db.goalMilestones.where({ goalId }).sortBy('milestoneOrder');
+  },
+
+  async updateGoalMilestone(milestoneId: number, updates: Partial<GoalMilestone>): Promise<void> {
+    await db.goalMilestones.update(milestoneId, updates);
+  },
+
+  async markMilestoneAchieved(milestoneId: number, achievedValue: number): Promise<void> {
+    await db.goalMilestones.update(milestoneId, {
+      status: 'achieved',
+      achievedValue,
+      achievedDate: new Date()
+    });
+  },
+
+  // Goal progress tracking
+  async recordGoalProgress(progressData: Omit<GoalProgressHistory, 'id'>): Promise<number> {
+    const progressId = await db.goalProgressHistory.add(progressData);
+    
+    // Update the goal's current progress
+    await this.updateGoalCurrentProgress(progressData.goalId);
+    
+    return progressId;
+  },
+
+  async getGoalProgressHistory(goalId: number, limit?: number): Promise<GoalProgressHistory[]> {
+    let query = db.goalProgressHistory.where({ goalId }).reverse().sortBy('measurementDate');
+    if (limit) {
+      const results = await query;
+      return results.slice(0, limit);
+    }
+    return await query;
+  },
+
+  async updateGoalCurrentProgress(goalId: number): Promise<void> {
+    const goal = await this.getGoal(goalId);
+    if (!goal) return;
+
+    // Get the latest progress measurement
+    const latestProgress = await db.goalProgressHistory
+      .where({ goalId })
+      .reverse()
+      .sortBy('measurementDate');
+    
+    if (latestProgress.length > 0) {
+      const currentValue = latestProgress[0].measuredValue;
+      const progressPercentage = this.calculateGoalProgressPercentage(
+        goal.baselineValue,
+        currentValue,
+        goal.targetValue,
+        goal.goalType
+      );
+      
+      await this.updateGoal(goalId, {
+        currentValue,
+        progressPercentage
+      });
+    }
+  },
+
+  calculateGoalProgressPercentage(
+    baseline: number,
+    current: number,
+    target: number,
+    goalType: Goal['goalType']
+  ): number {
+    if (baseline === target) return 100;
+    
+    // For time improvement goals, lower is better
+    if (goalType === 'time_improvement') {
+      if (baseline <= target) return 100; // Already at or better than target
+      const totalImprovement = baseline - target;
+      const currentImprovement = baseline - current;
+      return Math.max(0, Math.min(100, (currentImprovement / totalImprovement) * 100));
+    }
+    
+    // For distance, frequency, and other goals, higher is better
+    const totalImprovement = Math.abs(target - baseline);
+    const currentImprovement = Math.abs(current - baseline);
+    return Math.min(100, (currentImprovement / totalImprovement) * 100);
+  },
+
+  // Goal recommendations
+  async createGoalRecommendation(recommendationData: Omit<GoalRecommendation, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+    const now = new Date();
+    return await db.goalRecommendations.add({
+      ...recommendationData,
+      createdAt: now,
+      updatedAt: now
+    });
+  },
+
+  async getGoalRecommendations(userId: number, status?: GoalRecommendation['status']): Promise<GoalRecommendation[]> {
+    let query = db.goalRecommendations.where({ userId });
+    if (status) {
+      query = query.and(rec => rec.status === status);
+    }
+    return await query.reverse().sortBy('confidenceScore');
+  },
+
+  async updateGoalRecommendation(recommendationId: number, updates: Partial<GoalRecommendation>): Promise<void> {
+    await db.goalRecommendations.update(recommendationId, { ...updates, updatedAt: new Date() });
+  },
+
+  // SMART goal validation
+  validateSMARTGoal(goalData: Partial<Goal>): { isValid: boolean; errors: string[]; suggestions: string[] } {
+    const errors: string[] = [];
+    const suggestions: string[] = [];
+    
+    // Specific validation
+    if (!goalData.title || goalData.title.length < 5) {
+      errors.push('Goal title must be specific and descriptive (at least 5 characters)');
+    }
+    
+    if (!goalData.specificTarget || !goalData.specificTarget.value) {
+      errors.push('Goal must have a specific, quantifiable target');
+    }
+    
+    // Measurable validation
+    if (!goalData.measurableMetrics || goalData.measurableMetrics.length === 0) {
+      errors.push('Goal must have measurable metrics for tracking progress');
+    }
+    
+    // Achievable validation
+    if (goalData.achievableAssessment && goalData.achievableAssessment.feasibilityScore < 30) {
+      errors.push('Goal appears to be unrealistic based on current fitness level');
+      suggestions.push('Consider extending the timeline or reducing the target value');
+    }
+    
+    // Time-bound validation
+    if (!goalData.timeBound || !goalData.timeBound.deadline) {
+      errors.push('Goal must have a specific deadline');
+    } else {
+      const deadline = new Date(goalData.timeBound.deadline);
+      const now = new Date();
+      const daysUntilDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (daysUntilDeadline < 7) {
+        errors.push('Goal deadline should be at least one week in the future');
+      } else if (daysUntilDeadline > 365) {
+        suggestions.push('Consider breaking this long-term goal into smaller intermediate goals');
+      }
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors,
+      suggestions
+    };
+  },
+
+  // Auto-update goal progress from runs
+  async updateGoalProgressFromRun(run: Run): Promise<void> {
+    if (!run.userId) return;
+    
+    const activeGoals = await this.getGoalsByUser(run.userId, 'active');
+    
+    for (const goal of activeGoals) {
+      let relevantValue: number | null = null;
+      
+      // Determine if this run contributes to the goal
+      switch (goal.goalType) {
+        case 'time_improvement':
+          if (goal.specificTarget.metric.includes('5k') && run.distance >= 4.8 && run.distance <= 5.2) {
+            relevantValue = run.duration; // seconds
+          } else if (goal.specificTarget.metric.includes('10k') && run.distance >= 9.8 && run.distance <= 10.2) {
+            relevantValue = run.duration;
+          } else if (goal.specificTarget.metric.includes('half_marathon') && run.distance >= 21) {
+            relevantValue = run.duration;
+          } else if (goal.specificTarget.metric.includes('marathon') && run.distance >= 42) {
+            relevantValue = run.duration;
+          }
+          break;
+          
+        case 'distance_achievement':
+          if (goal.specificTarget.metric === 'longest_run') {
+            relevantValue = run.distance;
+          }
+          break;
+          
+        case 'frequency':
+          if (goal.specificTarget.metric === 'weekly_runs') {
+            // Count runs this week
+            const weekStart = new Date(run.completedAt);
+            weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+            weekStart.setHours(0, 0, 0, 0);
+            
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekEnd.getDate() + 6);
+            weekEnd.setHours(23, 59, 59, 999);
+            
+            const weekRuns = await db.runs
+              .where('userId')
+              .equals(run.userId)
+              .and(r => r.completedAt >= weekStart && r.completedAt <= weekEnd)
+              .count();
+              
+            relevantValue = weekRuns;
+          }
+          break;
+      }
+      
+      if (relevantValue !== null) {
+        await this.recordGoalProgress({
+          goalId: goal.id!,
+          measurementDate: run.completedAt,
+          measuredValue: relevantValue,
+          progressPercentage: this.calculateGoalProgressPercentage(
+            goal.baselineValue,
+            relevantValue,
+            goal.targetValue,
+            goal.goalType
+          ),
+          contributingActivityId: run.id,
+          contributingActivityType: 'run',
+          autoRecorded: true,
+          context: {
+            weather: 'unknown',
+            mood: 'neutral'
+          }
+        });
+      }
+    }
+  },
+
+  // Generate goal milestones
+  async generateGoalMilestones(goalId: number): Promise<GoalMilestone[]> {
+    const goal = await this.getGoal(goalId);
+    if (!goal) return [];
+    
+    const milestones: Omit<GoalMilestone, 'id' | 'createdAt'>[] = [];
+    const totalDuration = goal.timeBound.deadline.getTime() - goal.timeBound.startDate.getTime();
+    const totalImprovement = goal.targetValue - goal.baselineValue;
+    
+    // Generate milestones at specified percentages
+    goal.timeBound.milestoneSchedule.forEach((percentage, index) => {
+      const targetDate = new Date(goal.timeBound.startDate.getTime() + (totalDuration * (percentage / 100)));
+      const targetValue = goal.baselineValue + (totalImprovement * (percentage / 100));
+      
+      milestones.push({
+        goalId: goal.id!,
+        milestoneOrder: index + 1,
+        title: `${percentage}% Progress Milestone`,
+        description: `Reach ${this.formatGoalValue(targetValue, goal.specificTarget.unit)} by this date`,
+        targetValue,
+        targetDate,
+        status: 'pending',
+        celebrationShown: false
+      });
+    });
+    
+    // Create the milestones in the database
+    for (const milestone of milestones) {
+      await this.createGoalMilestone(milestone);
+    }
+    
+    return await this.getGoalMilestones(goalId);
+  },
+
+  formatGoalValue(value: number, unit: string): string {
+    switch (unit) {
+      case 'seconds':
+        return formatDuration(value);
+      case 'minutes':
+        return `${Math.round(value * 10) / 10} min`;
+      case 'kilometers':
+        return `${Math.round(value * 10) / 10} km`;
+      case 'runs':
+        return `${Math.round(value)} runs`;
+      default:
+        return `${Math.round(value * 10) / 10} ${unit}`;
+    }
+  },
+
+  // Testing utility - clear all data
+  async clearDatabase(): Promise<void> {
+    await db.transaction('rw', db.tables, async () => {
+      await Promise.all(db.tables.map(table => table.clear()));
+    });
+  },
+
+  // Testing utility - delete a milestone
+  async deleteGoalMilestone(milestoneId: number): Promise<void> {
+    await db.goalMilestones.delete(milestoneId);
   },
 };
 

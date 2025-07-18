@@ -34,6 +34,7 @@ import { CommunityStatsWidget } from "@/components/community-stats-widget"
 import { CoachingInsightsWidget } from "@/components/coaching-insights-widget"
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
 import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
+import { GoalRecommendations } from "@/components/goal-recommendations"
 
 export function TodayScreen() {
   const [dailyTip, setDailyTip] = useState(
@@ -589,6 +590,14 @@ export function TodayScreen() {
           userId={userId}
           showDetails={true}
           onSettingsClick={() => setShowCoachingPreferences(true)}
+          className="hover:shadow-lg transition-all duration-300"
+        />
+      )}
+
+      {/* Goal Recommendations */}
+      {userId && (
+        <GoalRecommendations
+          userId={userId}
           className="hover:shadow-lg transition-all duration-300"
         />
       )}

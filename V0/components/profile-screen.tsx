@@ -31,7 +31,8 @@ import { JoinCohortModal } from "@/components/join-cohort-modal";
 import { CommunityStatsWidget } from "@/components/community-stats-widget";
 import { CoachingInsightsWidget } from "@/components/coaching-insights-widget";
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
-import { Brain } from "lucide-react";
+import { GoalProgressDashboard } from "@/components/goal-progress-dashboard";
+import { Brain, Target } from "lucide-react";
 
 export function ProfileScreen() {
   // Add state for the shoes modal at the top of the component
@@ -89,6 +90,7 @@ export function ProfileScreen() {
 
   const settings = [
     { icon: UserEdit, name: "Edit Profile", desc: "Name, goals, and preferences" },
+    { icon: Target, name: "Goal Settings", desc: "Manage your running goals and targets", action: "goal-settings" },
     { icon: Brain, name: "Coaching Preferences", desc: "Customize your AI coach behavior", action: "coaching-preferences" },
     { icon: Bell, name: "Notifications", desc: "Reminders and updates" },
     { icon: Shield, name: "Privacy & Data", desc: "Manage your data" },
@@ -162,6 +164,16 @@ export function ProfileScreen() {
 
       {/* Achievements */}
       {userId && <BadgeCabinet userId={userId} />}
+
+      {/* Goal Progress */}
+      {userId && (
+        <div data-section="goal-progress">
+          <GoalProgressDashboard
+            userId={userId}
+            className="hover:shadow-lg transition-all duration-300"
+          />
+        </div>
+      )}
       
       {/* Community Stats Widget */}
       {userId && <CommunityStatsWidget userId={userId} />}
@@ -270,6 +282,12 @@ export function ProfileScreen() {
             const handleSettingClick = () => {
               if (setting.action === "coaching-preferences") {
                 setShowCoachingPreferences(true);
+              } else if (setting.action === "goal-settings") {
+                // Navigate to goal settings - could scroll to goal dashboard
+                const goalSection = document.querySelector('[data-section="goal-progress"]');
+                if (goalSection) {
+                  goalSection.scrollIntoView({ behavior: 'smooth' });
+                }
               }
               // Add other setting handlers here
             };
