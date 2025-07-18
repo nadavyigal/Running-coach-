@@ -54,10 +54,15 @@ export default function RunSmartApp() {
     const handleNavigateToAnalytics = () => {
       setCurrentScreen("analytics")
     }
+    
+    const handleNavigateToChat = () => {
+      setCurrentScreen("chat")
+    }
 
     if (typeof window !== "undefined") {
       window.addEventListener("navigate-to-record", handleNavigateToRecord)
       window.addEventListener("navigate-to-analytics", handleNavigateToAnalytics)
+      window.addEventListener("navigate-to-chat", handleNavigateToChat)
     }
 
     // Cleanup function
@@ -65,6 +70,7 @@ export default function RunSmartApp() {
       if (typeof window !== "undefined") {
         window.removeEventListener("navigate-to-record", handleNavigateToRecord)
         window.removeEventListener("navigate-to-analytics", handleNavigateToAnalytics)
+        window.removeEventListener("navigate-to-chat", handleNavigateToChat)
       }
     }
   }, [])

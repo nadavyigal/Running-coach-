@@ -31,6 +31,9 @@ import { dbUtils, type Workout } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 import { StreakIndicator } from "@/components/streak-indicator"
 import { CommunityStatsWidget } from "@/components/community-stats-widget"
+import { CoachingInsightsWidget } from "@/components/coaching-insights-widget"
+import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
+import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
 
 export function TodayScreen() {
   const [dailyTip, setDailyTip] = useState(
@@ -108,6 +111,9 @@ export function TodayScreen() {
   // Add state for date workout modal
   const [selectedDateWorkout, setSelectedDateWorkout] = useState<any>(null)
   const [showDateWorkoutModal, setShowDateWorkoutModal] = useState(false)
+  const [showCoachingPreferences, setShowCoachingPreferences] = useState(false)
+  const [showCoachingFeedback, setShowCoachingFeedback] = useState(false)
+  const [lastCoachingInteraction, setLastCoachingInteraction] = useState<string | null>(null)
 
   // Workout color mapping
   const workoutColorMap: { [key: string]: string } = {
@@ -206,6 +212,12 @@ export function TodayScreen() {
           const event = new CustomEvent("navigate-to-analytics")
           window.dispatchEvent(event)
         }
+        break
+      case "coaching-preferences":
+        setShowCoachingPreferences(true)
+        break
+      case "coaching-feedback":
+        setShowCoachingFeedback(true)
         break
       default:
         break
@@ -500,6 +512,24 @@ export function TodayScreen() {
             <div className="flex-1">
               <h4 className="font-medium text-blue-900 mb-1">Let's keep your progress going</h4>
               <p className="text-sm text-blue-800">Missed workouts? Skip or add them to this week.</p>
+              <div className="flex gap-2 mt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-blue-600 text-xs"
+                  onClick={() => handleActionClick("coaching-feedback")}
+                >
+                  Rate coaching
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-blue-600 text-xs"
+                  onClick={() => handleActionClick("coaching-preferences")}
+                >
+                  Preferences
+                </Button>
+              </div>
             </div>
             <Button variant="ghost" size="sm" className="text-blue-600"
               onClick={() => handleActionClick("chat")}>
@@ -553,6 +583,16 @@ export function TodayScreen() {
         </CardContent>
       </Card>
 
+      {/* Adaptive Coaching Widget */}
+      {userId && (
+        <CoachingInsightsWidget
+          userId={userId}
+          showDetails={true}
+          onSettingsClick={() => setShowCoachingPreferences(true)}
+          className="hover:shadow-lg transition-all duration-300"
+        />
+      )}
+
       {/* Community Stats Widget */}
       {userId && <CommunityStatsWidget userId={userId} />}
 
@@ -573,6 +613,45 @@ export function TodayScreen() {
             setSelectedDateWorkout(null)
           }}
           workout={selectedDateWorkout}
+        />
+      )}
+      
+      {/* Coaching Modals */}
+      {showCoachingPreferences && userId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Coaching Preferences</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCoachingPreferences(false)}
+              >
+                ×
+              </Button>
+            </div>
+            <div className="p-4">
+              <CoachingPreferencesSettings
+                userId={userId}
+                onClose={() => setShowCoachingPreferences(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showCoachingFeedback && userId && (
+        <CoachingFeedbackModal
+          isOpen={showCoachingFeedback}
+          onClose={() => setShowCoachingFeedback(false)}
+          interactionType="workout_recommendation"
+          userId={userId}
+          interactionId={lastCoachingInteraction || undefined}
+          initialContext={{
+            timeOfDay: new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening',
+            weather: '22°C sunny',
+            recentPerformance: todaysWorkout?.completed ? 'completed_workout' : 'scheduled_workout'
+          }}
         />
       )}
     </div>

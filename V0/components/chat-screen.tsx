@@ -13,10 +13,15 @@ import {
   User,
   Loader2,
   RefreshCw,
+  ThumbsUp,
+  ThumbsDown,
+  Settings,
 } from "lucide-react"
 import { dbUtils, type User as UserType } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 import { trackChatMessageSent } from "@/lib/analytics"
+import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
+import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
 
 interface ChatMessage {
   id: string
@@ -24,6 +29,10 @@ interface ChatMessage {
   content: string
   timestamp: Date
   tokenCount?: number
+  coachingInteractionId?: string
+  adaptations?: string[]
+  confidence?: number
+  requestFeedback?: boolean
 }
 
 const SUGGESTED_QUESTIONS = [
@@ -42,6 +51,9 @@ export function ChatScreen() {
   const [user, setUser] = useState<UserType | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false)
+  const [showCoachingPreferences, setShowCoachingPreferences] = useState(false)
+  const [selectedMessageForFeedback, setSelectedMessageForFeedback] = useState<ChatMessage | null>(null)
 
   useEffect(() => {
     loadUser()
@@ -125,11 +137,20 @@ export function ChatScreen() {
       const decoder = new TextDecoder()
       let aiContent = ""
 
+      // Extract coaching metadata from headers
+      const coachingInteractionId = response.headers.get('X-Coaching-Interaction-Id')
+      const adaptations = response.headers.get('X-Coaching-Adaptations')?.split(', ').filter(Boolean)
+      const confidence = parseFloat(response.headers.get('X-Coaching-Confidence') || '0')
+      
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: "",
         timestamp: new Date(),
+        coachingInteractionId: coachingInteractionId || undefined,
+        adaptations: adaptations || [],
+        confidence: confidence || undefined,
+        requestFeedback: confidence > 0 && confidence < 0.8, // Request feedback for lower confidence responses
       }
 
       setMessages(prev => [...prev, assistantMessage])
@@ -162,6 +183,17 @@ export function ChatScreen() {
         }
       }
 
+      // Update final message with feedback request if needed
+      if (assistantMessage.requestFeedback) {
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === assistantMessage.id 
+              ? { ...msg, requestFeedback: true }
+              : msg
+          )
+        )
+      }
+      
       // TODO: Save messages to Dexie.js
       
     } catch (error) {
@@ -219,6 +251,11 @@ export function ChatScreen() {
     handleSendMessage(inputValue)
   }
 
+  const handleFeedbackClick = (message: ChatMessage) => {
+    setSelectedMessageForFeedback(message)
+    setShowFeedbackModal(true)
+  }
+
   const MessageBubble = ({ message }: { message: ChatMessage }) => {
     const isUser = message.role === 'user'
     
@@ -241,10 +278,52 @@ export function ChatScreen() {
             }`}
           >
             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+            
+            {/* Show adaptations for assistant messages */}
+            {!isUser && message.adaptations && message.adaptations.length > 0 && (
+              <div className="mt-2 text-xs opacity-70">
+                <span className="font-medium">Adaptations: </span>
+                {message.adaptations.join(', ')}
+              </div>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground mt-1 px-1">
-            {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </p>
+          
+          <div className="flex items-center gap-2 mt-1 px-1">
+            <p className="text-xs text-muted-foreground">
+              {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </p>
+            
+            {/* Feedback buttons for assistant messages */}
+            {!isUser && message.coachingInteractionId && (
+              <div className="flex items-center gap-1 ml-auto">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 text-green-600 hover:text-green-700"
+                  onClick={() => handleFeedbackClick(message)}
+                  title="This was helpful"
+                >
+                  <ThumbsUp className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                  onClick={() => handleFeedbackClick(message)}
+                  title="This needs improvement"
+                >
+                  <ThumbsDown className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+            
+            {/* Request feedback indicator */}
+            {!isUser && message.requestFeedback && (
+              <Badge variant="outline" className="text-xs ml-auto">
+                Feedback appreciated
+              </Badge>
+            )}
+          </div>
         </div>
 
         {isUser && (
@@ -262,18 +341,28 @@ export function ChatScreen() {
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
       <div className="border-b bg-card p-4">
-        <div className="flex items-center gap-3">
-          <Avatar className="h-10 w-10">
-            <AvatarFallback className="bg-primary text-primary-foreground">
-              <Bot className="h-5 w-5" />
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <h1 className="font-semibold text-lg">AI Running Coach</h1>
-            <p className="text-sm text-muted-foreground">
-              Your personal training assistant
-            </p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-10 w-10">
+              <AvatarFallback className="bg-primary text-primary-foreground">
+                <Bot className="h-5 w-5" />
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <h1 className="font-semibold text-lg">AI Running Coach</h1>
+              <p className="text-sm text-muted-foreground">
+                Your personal training assistant
+              </p>
+            </div>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowCoachingPreferences(true)}
+            title="Coaching preferences"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
@@ -333,6 +422,49 @@ export function ChatScreen() {
           </Button>
         </form>
       </div>
+      
+      {/* Coaching Feedback Modal */}
+      {showFeedbackModal && selectedMessageForFeedback && user && (
+        <CoachingFeedbackModal
+          isOpen={showFeedbackModal}
+          onClose={() => {
+            setShowFeedbackModal(false)
+            setSelectedMessageForFeedback(null)
+          }}
+          interactionType="chat_response"
+          userId={user.id!}
+          interactionId={selectedMessageForFeedback.coachingInteractionId}
+          initialContext={{
+            timeOfDay: new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening',
+            userMood: 'neutral',
+            recentPerformance: 'chatting'
+          }}
+        />
+      )}
+      
+      {/* Coaching Preferences Modal */}
+      {showCoachingPreferences && user && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Coaching Preferences</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCoachingPreferences(false)}
+              >
+                ×
+              </Button>
+            </div>
+            <div className="p-4">
+              <CoachingPreferencesSettings
+                userId={user.id!}
+                onClose={() => setShowCoachingPreferences(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

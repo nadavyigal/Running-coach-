@@ -5,7 +5,9 @@
       "Bash(npm run dev:*)",
       "Bash(npm run test:*)",
       "Bash(npm run build:*)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "WebFetch(domain:www.radix-ui.com)",
+      "Bash(npm run:*)"
     ],
     "deny": []
   }

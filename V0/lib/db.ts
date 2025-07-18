@@ -87,6 +87,119 @@ export interface PerformanceInsight {
   updatedAt: Date;
 }
 
+// Coaching Profile for adaptive coaching intelligence
+export interface CoachingProfile {
+  id?: number;
+  userId: number;
+  communicationStyle: {
+    motivationLevel: 'low' | 'medium' | 'high';
+    detailPreference: 'minimal' | 'medium' | 'detailed';
+    personalityType: 'analytical' | 'encouraging' | 'direct' | 'supportive';
+    preferredTone: 'professional' | 'friendly' | 'enthusiastic' | 'calm';
+  };
+  feedbackPatterns: {
+    averageRating: number;
+    commonConcerns: string[];
+    responsiveness: 'immediate' | 'delayed' | 'sporadic';
+    preferredFeedbackFrequency: 'after_every_workout' | 'weekly' | 'monthly';
+  };
+  behavioralPatterns: {
+    workoutPreferences: {
+      preferredDays: string[];
+      preferredTimes: string[];
+      workoutTypeAffinities: Record<string, number>; // workout type -> preference score
+      difficultyPreference: number; // 0-10 scale
+    };
+    contextualPatterns: {
+      weatherSensitivity: number;
+      scheduleFlexibility: number;
+      stressResponse: 'reduce_intensity' | 'maintain' | 'increase_focus';
+      energyPatterns: Record<string, number>; // day/time -> energy level
+    };
+  };
+  coachingEffectivenessScore: number; // 0-100
+  lastAdaptationDate: Date;
+  adaptationHistory: {
+    date: Date;
+    adaptation: string;
+    effectiveness: number;
+    reason: string;
+  }[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Coaching Feedback for learning and improvement
+export interface CoachingFeedback {
+  id?: number;
+  userId: number;
+  interactionType: 'workout_recommendation' | 'chat_response' | 'plan_adjustment' | 'motivation' | 'guidance';
+  feedbackType: 'rating' | 'text' | 'behavioral' | 'quick_reaction';
+  rating?: number; // 1-5 scale
+  aspects?: {
+    helpfulness: number;
+    relevance: number;
+    clarity: number;
+    motivation: number;
+    accuracy: number;
+  };
+  feedbackText?: string;
+  context: {
+    weather?: string;
+    timeOfDay?: string;
+    userMood?: string;
+    recentPerformance?: string;
+    situationalFactors?: string[];
+  };
+  coachingResponseId?: string; // Reference to specific coaching interaction
+  improvementSuggestions?: string[];
+  createdAt: Date;
+}
+
+// Coaching Interactions for pattern analysis
+export interface CoachingInteraction {
+  id?: number;
+  userId: number;
+  interactionId: string;
+  interactionType: 'chat' | 'recommendation' | 'plan_generation' | 'feedback_response';
+  promptUsed: string;
+  responseGenerated: string;
+  userContext: {
+    currentGoals: string[];
+    recentActivity: string;
+    mood?: string;
+    environment?: string;
+    timeConstraints?: string;
+  };
+  adaptationsApplied: string[];
+  effectivenessScore?: number; // Post-interaction effectiveness rating
+  userEngagement: {
+    responseTime?: number; // seconds to respond
+    followUpQuestions: number;
+    actionTaken: boolean;
+  };
+  createdAt: Date;
+}
+
+// User Behavior Patterns for machine learning
+export interface UserBehaviorPattern {
+  id?: number;
+  userId: number;
+  patternType: 'workout_preference' | 'schedule_pattern' | 'feedback_style' | 'motivation_response' | 'difficulty_adaptation';
+  patternData: {
+    pattern: string;
+    frequency: number;
+    conditions: string[];
+    outcomes: Record<string, any>;
+  };
+  confidenceScore: number; // 0-100, how confident we are in this pattern
+  lastObserved: Date;
+  observationCount: number;
+  correlatedPatterns?: string[]; // IDs of related patterns
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Race goal interface for advanced plan customization
 export interface RaceGoal {
   id?: number;
@@ -247,6 +360,10 @@ export class RunSmartDB extends Dexie {
   performanceInsights!: EntityTable<PerformanceInsight, 'id'>;
   raceGoals!: EntityTable<RaceGoal, 'id'>;
   workoutTemplates!: EntityTable<WorkoutTemplate, 'id'>;
+  coachingProfiles!: EntityTable<CoachingProfile, 'id'>;
+  coachingFeedback!: EntityTable<CoachingFeedback, 'id'>;
+  coachingInteractions!: EntityTable<CoachingInteraction, 'id'>;
+  userBehaviorPatterns!: EntityTable<UserBehaviorPattern, 'id'>;
 
   constructor() {
     super('RunSmartDB');
@@ -365,6 +482,69 @@ export class RunSmartDB extends Dexie {
       await tx.table('plans').toCollection().modify(plan => {
         plan.planType = 'basic';
       });
+    });
+
+    // Version 8: Add Coaching Intelligence tables
+    this.version(8).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt, planType, raceGoalId',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt, type, trainingPhase',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+      cohorts: '++id, inviteCode, name',
+      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+      performanceMetrics: '++id, userId, date, createdAt',
+      personalRecords: '++id, userId, recordType, achievedAt, createdAt',
+      performanceInsights: '++id, userId, type, priority, createdAt, validUntil',
+      raceGoals: '++id, userId, raceDate, priority, createdAt',
+      workoutTemplates: '++id, workoutType, trainingPhase, intensityZone, createdAt',
+      coachingProfiles: '++id, userId, coachingEffectivenessScore, lastAdaptationDate, createdAt',
+      coachingFeedback: '++id, userId, interactionType, feedbackType, rating, createdAt',
+      coachingInteractions: '++id, userId, interactionId, interactionType, createdAt',
+      userBehaviorPatterns: '++id, userId, patternType, confidenceScore, lastObserved, createdAt',
+    }).upgrade(async tx => {
+      // Initialize coaching profiles for existing users
+      const users = await tx.table('users').toArray();
+      for (const user of users) {
+        if (user.id) {
+          await tx.table('coachingProfiles').add({
+            userId: user.id,
+            communicationStyle: {
+              motivationLevel: 'medium',
+              detailPreference: 'medium',
+              personalityType: 'encouraging',
+              preferredTone: 'friendly'
+            },
+            feedbackPatterns: {
+              averageRating: 3.5,
+              commonConcerns: [],
+              responsiveness: 'immediate',
+              preferredFeedbackFrequency: 'weekly'
+            },
+            behavioralPatterns: {
+              workoutPreferences: {
+                preferredDays: [],
+                preferredTimes: [],
+                workoutTypeAffinities: {},
+                difficultyPreference: 5
+              },
+              contextualPatterns: {
+                weatherSensitivity: 5,
+                scheduleFlexibility: 5,
+                stressResponse: 'maintain',
+                energyPatterns: {}
+              }
+            },
+            coachingEffectivenessScore: 50,
+            lastAdaptationDate: new Date(),
+            adaptationHistory: [],
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+        }
+      }
     });
   }
 }
@@ -1607,6 +1787,284 @@ export const dbUtils = {
     }
 
     return newRecords;
+  },
+
+  // Coaching Profile operations
+  async getCoachingProfile(userId: number): Promise<CoachingProfile | undefined> {
+    return await db.coachingProfiles.where('userId').equals(userId).first();
+  },
+
+  async createCoachingProfile(profileData: Omit<CoachingProfile, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+    const now = new Date();
+    return await db.coachingProfiles.add({
+      ...profileData,
+      createdAt: now,
+      updatedAt: now
+    });
+  },
+
+  async updateCoachingProfile(userId: number, updates: Partial<CoachingProfile>): Promise<void> {
+    const profile = await this.getCoachingProfile(userId);
+    if (profile) {
+      await db.coachingProfiles.update(profile.id!, { ...updates, updatedAt: new Date() });
+    }
+  },
+
+  // Coaching Feedback operations
+  async recordCoachingFeedback(feedbackData: Omit<CoachingFeedback, 'id' | 'createdAt'>): Promise<number> {
+    const feedbackId = await db.coachingFeedback.add({
+      ...feedbackData,
+      createdAt: new Date()
+    });
+
+    // Update coaching profile based on feedback
+    await this.updateCoachingProfileFromFeedback(feedbackData.userId, feedbackData);
+    
+    return feedbackId;
+  },
+
+  async getCoachingFeedback(userId: number, limit: number = 50): Promise<CoachingFeedback[]> {
+    return await db.coachingFeedback
+      .where('userId').equals(userId)
+      .reverse()
+      .limit(limit)
+      .toArray();
+  },
+
+  // Coaching Interactions operations
+  async recordCoachingInteraction(interactionData: Omit<CoachingInteraction, 'id' | 'createdAt'>): Promise<number> {
+    return await db.coachingInteractions.add({
+      ...interactionData,
+      createdAt: new Date()
+    });
+  },
+
+  async getCoachingInteractions(userId: number, limit: number = 50): Promise<CoachingInteraction[]> {
+    return await db.coachingInteractions
+      .where('userId').equals(userId)
+      .reverse()
+      .limit(limit)
+      .toArray();
+  },
+
+  // Behavior Pattern operations
+  async recordBehaviorPattern(patternData: Omit<UserBehaviorPattern, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+    const existing = await db.userBehaviorPatterns
+      .where({ userId: patternData.userId, patternType: patternData.patternType })
+      .first();
+
+    const now = new Date();
+    
+    if (existing) {
+      // Update existing pattern
+      await db.userBehaviorPatterns.update(existing.id!, {
+        patternData: patternData.patternData,
+        confidenceScore: patternData.confidenceScore,
+        lastObserved: patternData.lastObserved,
+        observationCount: (existing.observationCount || 0) + 1,
+        updatedAt: now
+      });
+      return existing.id!;
+    } else {
+      // Create new pattern
+      return await db.userBehaviorPatterns.add({
+        ...patternData,
+        observationCount: 1,
+        createdAt: now,
+        updatedAt: now
+      });
+    }
+  },
+
+  async getBehaviorPatterns(userId: number, patternType?: string): Promise<UserBehaviorPattern[]> {
+    let query = db.userBehaviorPatterns.where('userId').equals(userId);
+    
+    if (patternType) {
+      query = query.and(pattern => pattern.patternType === patternType);
+    }
+    
+    return await query.toArray();
+  },
+
+  // Adaptive coaching logic
+  async updateCoachingProfileFromFeedback(userId: number, feedback: CoachingFeedback): Promise<void> {
+    const profile = await this.getCoachingProfile(userId);
+    if (!profile) return;
+
+    // Update feedback patterns
+    const currentAverage = profile.feedbackPatterns.averageRating;
+    const feedbackCount = await db.coachingFeedback.where('userId').equals(userId).count();
+    const newAverage = feedback.rating 
+      ? (currentAverage * (feedbackCount - 1) + feedback.rating) / feedbackCount
+      : currentAverage;
+
+    // Adapt communication style based on feedback
+    let adaptations = [];
+    
+    if (feedback.rating && feedback.rating < 3) {
+      // Poor rating - adjust approach
+      if (feedback.aspects?.motivation && feedback.aspects.motivation < 3) {
+        if (profile.communicationStyle.motivationLevel === 'low') {
+          profile.communicationStyle.motivationLevel = 'medium';
+          adaptations.push('Increased motivation level due to feedback');
+        } else if (profile.communicationStyle.motivationLevel === 'medium') {
+          profile.communicationStyle.motivationLevel = 'high';
+          adaptations.push('Increased motivation level to high due to feedback');
+        }
+      }
+      
+      if (feedback.aspects?.clarity && feedback.aspects.clarity < 3) {
+        if (profile.communicationStyle.detailPreference === 'detailed') {
+          profile.communicationStyle.detailPreference = 'medium';
+          adaptations.push('Reduced detail level for clarity');
+        } else if (profile.communicationStyle.detailPreference === 'minimal') {
+          profile.communicationStyle.detailPreference = 'medium';
+          adaptations.push('Increased detail level for clarity');
+        }
+      }
+    }
+
+    // Update effectiveness score
+    const effectivenessImpact = feedback.rating ? (feedback.rating - 3) * 5 : 0; // -10 to +10
+    const newEffectiveness = Math.max(0, Math.min(100, 
+      profile.coachingEffectivenessScore + effectivenessImpact * 0.1
+    ));
+
+    // Record adaptations
+    if (adaptations.length > 0) {
+      profile.adaptationHistory.push({
+        date: new Date(),
+        adaptation: adaptations.join('; '),
+        effectiveness: feedback.rating || 3,
+        reason: feedback.feedbackText || 'User feedback indicated improvements needed'
+      });
+    }
+
+    await this.updateCoachingProfile(userId, {
+      feedbackPatterns: {
+        ...profile.feedbackPatterns,
+        averageRating: newAverage
+      },
+      communicationStyle: profile.communicationStyle,
+      coachingEffectivenessScore: newEffectiveness,
+      adaptationHistory: profile.adaptationHistory,
+      lastAdaptationDate: adaptations.length > 0 ? new Date() : profile.lastAdaptationDate
+    });
+  },
+
+  async generateAdaptivePrompt(userId: number, basePrompt: string, context?: any): Promise<string> {
+    const profile = await this.getCoachingProfile(userId);
+    if (!profile) return basePrompt;
+
+    let adaptedPrompt = basePrompt;
+
+    // Adapt for communication style
+    const style = profile.communicationStyle;
+    
+    if (style.motivationLevel === 'high') {
+      adaptedPrompt += " Use enthusiastic, highly motivational language with encouragement and positive reinforcement.";
+    } else if (style.motivationLevel === 'low') {
+      adaptedPrompt += " Use calm, measured language without excessive enthusiasm.";
+    }
+
+    if (style.detailPreference === 'detailed') {
+      adaptedPrompt += " Provide comprehensive explanations with technical details, data, and scientific reasoning.";
+    } else if (style.detailPreference === 'minimal') {
+      adaptedPrompt += " Keep responses concise and to the point, avoiding unnecessary details.";
+    }
+
+    if (style.personalityType === 'analytical') {
+      adaptedPrompt += " Focus on data-driven insights, metrics, and logical reasoning.";
+    } else if (style.personalityType === 'encouraging') {
+      adaptedPrompt += " Emphasize positive reinforcement, progress celebration, and supportive guidance.";
+    }
+
+    // Adapt for behavioral patterns
+    const patterns = profile.behavioralPatterns;
+    
+    if (patterns.workoutPreferences.preferredDays.length > 0) {
+      adaptedPrompt += ` Consider that the user typically prefers workouts on: ${patterns.workoutPreferences.preferredDays.join(', ')}.`;
+    }
+
+    // Add contextual adaptations
+    if (context?.weather === 'rain' && patterns.contextualPatterns.weatherSensitivity > 7) {
+      adaptedPrompt += " The user is weather-sensitive, so provide indoor alternatives and adjust expectations for outdoor conditions.";
+    }
+
+    if (context?.timeOfDay === 'morning' && patterns.workoutPreferences.preferredTimes.includes('morning')) {
+      adaptedPrompt += " The user prefers morning workouts, so tailor recommendations accordingly.";
+    }
+
+    return adaptedPrompt;
+  },
+
+  async analyzeWorkoutPreferences(userId: number): Promise<void> {
+    // Analyze completed workouts to identify patterns
+    const recentRuns = await db.runs
+      .where('userId').equals(userId)
+      .reverse()
+      .limit(50)
+      .toArray();
+
+    if (recentRuns.length < 5) return; // Need sufficient data
+
+    // Analyze day preferences
+    const dayFrequency: Record<string, number> = {};
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    recentRuns.forEach(run => {
+      const dayOfWeek = dayNames[new Date(run.completedAt).getDay()];
+      dayFrequency[dayOfWeek] = (dayFrequency[dayOfWeek] || 0) + 1;
+    });
+
+    const preferredDays = Object.entries(dayFrequency)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 3)
+      .map(([day]) => day);
+
+    // Analyze workout type preferences
+    const typeFrequency: Record<string, number> = {};
+    recentRuns.forEach(run => {
+      typeFrequency[run.type] = (typeFrequency[run.type] || 0) + 1;
+    });
+
+    const workoutTypeAffinities: Record<string, number> = {};
+    Object.entries(typeFrequency).forEach(([type, count]) => {
+      workoutTypeAffinities[type] = count / recentRuns.length * 100; // percentage
+    });
+
+    // Record the pattern
+    await this.recordBehaviorPattern({
+      userId,
+      patternType: 'workout_preference',
+      patternData: {
+        pattern: 'day_and_type_preferences',
+        frequency: recentRuns.length,
+        conditions: ['sufficient_data'],
+        outcomes: {
+          preferredDays,
+          workoutTypeAffinities,
+          totalWorkouts: recentRuns.length
+        }
+      },
+      confidenceScore: Math.min(90, recentRuns.length * 2), // Higher confidence with more data
+      lastObserved: new Date()
+    });
+
+    // Update coaching profile
+    const profile = await this.getCoachingProfile(userId);
+    if (profile) {
+      await this.updateCoachingProfile(userId, {
+        behavioralPatterns: {
+          ...profile.behavioralPatterns,
+          workoutPreferences: {
+            ...profile.behavioralPatterns.workoutPreferences,
+            preferredDays,
+            workoutTypeAffinities
+          }
+        }
+      });
+    }
   },
 };
 
