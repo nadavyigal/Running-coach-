@@ -1,6 +1,8 @@
 import { streamText } from "ai"
 import { openai } from "@ai-sdk/openai"
 import { NextRequest } from "next/server"
+import { adaptiveCoachingEngine, UserContext } from '@/lib/adaptiveCoachingEngine'
+import { dbUtils } from '@/lib/db'
 
 // Token budget configuration
 const MONTHLY_TOKEN_BUDGET = 200000 // Approximate tokens for $50/mo budget
@@ -75,7 +77,79 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Build enhanced system prompt with user context
+    // Check if we should use adaptive coaching
+    const useAdaptiveCoaching = userId && parseInt(userId) > 0;
+    
+    if (useAdaptiveCoaching) {
+      // Get the user's latest message
+      const userMessage = messages[messages.length - 1]?.content || '';
+      
+      // Build user context
+      const adaptiveContext: UserContext = {
+        currentGoals: userContext?.goals || ['get running guidance'],
+        recentActivity: userContext?.recentActivity || 'Chatting with coach',
+        mood: userContext?.mood,
+        environment: userContext?.environment,
+        timeConstraints: userContext?.timeConstraints,
+        weather: userContext?.weather,
+        schedule: userContext?.schedule,
+      };
+
+      try {
+        // Generate adaptive coaching response
+        const coachingResponse = await adaptiveCoachingEngine.generatePersonalizedResponse(
+          parseInt(userId),
+          userMessage,
+          adaptiveContext
+        );
+
+        // Store the conversation in database
+        await dbUtils.createChatMessage({
+          userId: parseInt(userId),
+          role: 'user',
+          content: userMessage,
+          conversationId: userContext?.conversationId || 'default'
+        });
+
+        await dbUtils.createChatMessage({
+          userId: parseInt(userId),
+          role: 'assistant',
+          content: coachingResponse.response,
+          conversationId: userContext?.conversationId || 'default'
+        });
+
+        // Return adaptive response as a stream
+        const stream = new ReadableStream({
+          start(controller) {
+            const encoder = new TextEncoder();
+            
+            // Send the response
+            controller.enqueue(encoder.encode(coachingResponse.response));
+            
+            // Add coaching metadata if feedback is requested
+            if (coachingResponse.requestFeedback) {
+              controller.enqueue(encoder.encode('\n\n---\n*How was this response? Your feedback helps me improve my coaching for you.*'));
+            }
+            
+            controller.close();
+          }
+        });
+
+        return new Response(stream, {
+          headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'X-Coaching-Interaction-Id': coachingResponse.interactionId,
+            'X-Coaching-Adaptations': coachingResponse.adaptations.join(', '),
+            'X-Coaching-Confidence': coachingResponse.confidence.toString(),
+          }
+        });
+      } catch (adaptiveError) {
+        console.error('Adaptive coaching failed, falling back to standard chat:', adaptiveError);
+        // Fall through to standard chat
+      }
+    }
+
+    // Standard chat system (fallback or for users without adaptive coaching)
     let systemPrompt = `You are an expert AI running coach. You provide helpful, encouraging, and scientifically-backed advice about running training, technique, nutrition, injury prevention, and motivation. Keep responses concise but informative. Always be supportive and positive. Focus on practical, actionable advice.`
 
     if (userContext) {

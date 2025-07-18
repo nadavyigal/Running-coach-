@@ -29,6 +29,9 @@ import { ShareBadgeModal } from "@/components/share-badge-modal";
 import { Share2, Users } from "lucide-react";
 import { JoinCohortModal } from "@/components/join-cohort-modal";
 import { CommunityStatsWidget } from "@/components/community-stats-widget";
+import { CoachingInsightsWidget } from "@/components/coaching-insights-widget";
+import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
+import { Brain } from "lucide-react";
 
 export function ProfileScreen() {
   // Add state for the shoes modal at the top of the component
@@ -39,6 +42,7 @@ export function ProfileScreen() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [selectedBadge, setSelectedBadge] = useState<{ id: string; name: string } | null>(null);
   const [showJoinCohortModal, setShowJoinCohortModal] = useState(false);
+  const [showCoachingPreferences, setShowCoachingPreferences] = useState(false);
 
   const handleShareClick = (badgeId: string, badgeName: string) => {
     setSelectedBadge({ id: badgeId, name: badgeName });
@@ -85,6 +89,7 @@ export function ProfileScreen() {
 
   const settings = [
     { icon: UserEdit, name: "Edit Profile", desc: "Name, goals, and preferences" },
+    { icon: Brain, name: "Coaching Preferences", desc: "Customize your AI coach behavior", action: "coaching-preferences" },
     { icon: Bell, name: "Notifications", desc: "Reminders and updates" },
     { icon: Shield, name: "Privacy & Data", desc: "Manage your data" },
     { icon: HelpCircle, name: "Help & Support", desc: "Get help and contact us" },
@@ -144,6 +149,16 @@ export function ProfileScreen() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Adaptive Coaching Widget */}
+      {userId && (
+        <CoachingInsightsWidget
+          userId={userId}
+          showDetails={false}
+          onSettingsClick={() => setShowCoachingPreferences(true)}
+          className="hover:shadow-lg transition-all duration-300"
+        />
+      )}
 
       {/* Achievements */}
       {userId && <BadgeCabinet userId={userId} />}
@@ -251,21 +266,31 @@ export function ProfileScreen() {
           <CardTitle>Settings</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {settings.map((setting, index) => (
-            <div
-              key={index}
-              className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <setting.icon className="h-5 w-5 text-gray-600" />
-                <div>
-                  <div className="font-medium">{setting.name}</div>
-                  <div className="text-sm text-gray-600">{setting.desc}</div>
+          {settings.map((setting, index) => {
+            const handleSettingClick = () => {
+              if (setting.action === "coaching-preferences") {
+                setShowCoachingPreferences(true);
+              }
+              // Add other setting handlers here
+            };
+
+            return (
+              <div
+                key={index}
+                className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
+                onClick={handleSettingClick}
+              >
+                <div className="flex items-center gap-3">
+                  <setting.icon className="h-5 w-5 text-gray-600" />
+                  <div>
+                    <div className="font-medium">{setting.name}</div>
+                    <div className="text-sm text-gray-600">{setting.desc}</div>
+                  </div>
                 </div>
+                <ChevronRight className="h-4 w-4 text-gray-400" />
               </div>
-              <ChevronRight className="h-4 w-4 text-gray-400" />
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
 
@@ -294,6 +319,30 @@ export function ProfileScreen() {
           onClose={() => setShowJoinCohortModal(false)}
           userId={userId}
         />
+      )}
+      
+      {/* Coaching Preferences Modal */}
+      {showCoachingPreferences && userId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Coaching Preferences</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCoachingPreferences(false)}
+              >
+                ×
+              </Button>
+            </div>
+            <div className="p-4">
+              <CoachingPreferencesSettings
+                userId={userId}
+                onClose={() => setShowCoachingPreferences(false)}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
