@@ -758,6 +758,73 @@ export class RunSmartDB extends Dexie {
       console.log('Running migration for version 11 - Adding compound index [userId+isActive] for plans table performance optimization')
       // No data migration needed, just index optimization
     });
+
+    // Version 12: Fix multiple active plans per user - ensure only one active plan per user
+    this.version(12).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId, coachingStyle, goalInferred',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt, planType, raceGoalId, [userId+isActive]',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt, type, trainingPhase',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+      cohorts: '++id, inviteCode, name',
+      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+      performanceMetrics: '++id, userId, date, createdAt',
+      personalRecords: '++id, userId, recordType, achievedAt, createdAt',
+      performanceInsights: '++id, userId, type, priority, createdAt, validUntil',
+      raceGoals: '++id, userId, raceDate, priority, createdAt',
+      workoutTemplates: '++id, workoutType, trainingPhase, intensityZone, createdAt',
+      coachingProfiles: '++id, userId, coachingEffectivenessScore, lastAdaptationDate, createdAt',
+      coachingFeedback: '++id, userId, interactionType, feedbackType, rating, createdAt',
+      coachingInteractions: '++id, userId, interactionId, interactionType, createdAt',
+      userBehaviorPatterns: '++id, userId, patternType, confidenceScore, lastObserved, createdAt',
+      goals: '++id, userId, goalType, status, priority, createdAt, updatedAt',
+      goalMilestones: '++id, goalId, milestoneOrder, status, targetDate, createdAt',
+      goalProgressHistory: '++id, goalId, measurementDate, autoRecorded',
+      goalRecommendations: '++id, userId, recommendationType, status, createdAt, expiresAt',
+    }).upgrade(async tx => {
+      console.log('Running migration for version 12 - Deactivating duplicate active plans per user')
+      
+      // Find all users with multiple active plans
+      const allUsers = await tx.table('users').toArray();
+      let totalFixed = 0;
+      
+      for (const user of allUsers) {
+        if (user.id) {
+          // Get all active plans for this user
+          const activePlans = await tx.table('plans')
+            .where('userId').equals(user.id)
+            .and(plan => plan.isActive === true)
+            .toArray();
+            
+          if (activePlans.length > 1) {
+            console.log(`User ${user.id} has ${activePlans.length} active plans, fixing...`);
+            
+            // Sort by creation date (most recent first) and keep only the most recent
+            const sortedPlans = activePlans.sort((a, b) => 
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            
+            // Keep the most recent active, deactivate the rest
+            const planToKeep = sortedPlans[0];
+            const plansToDeactivate = sortedPlans.slice(1);
+            
+            console.log(`Keeping plan ${planToKeep.id} (${planToKeep.title}), deactivating ${plansToDeactivate.length} others`);
+            
+            for (const planToDeactivate of plansToDeactivate) {
+              await tx.table('plans').update(planToDeactivate.id!, { 
+                isActive: false,
+                updatedAt: new Date()
+              });
+              totalFixed++;
+            }
+          }
+        }
+      }
+      
+      console.log(`Migration complete: deactivated ${totalFixed} duplicate active plans`);
+    });
   }
 }
 
@@ -773,6 +840,35 @@ export const badgeTypes: { [key: number]: 'bronze' | 'silver' | 'gold' } = {
 };
 
 export const dbUtils = {
+  // Unified error handling for plan operations
+  handlePlanError(error: unknown, operation: string): { title: string; description: string } {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
+    
+    console.error(`Plan ${operation} failed:`, errorMessage)
+    
+    if (errorMessage.includes("onboarding")) {
+      return {
+        title: "Complete Onboarding First",
+        description: "Please complete the onboarding process to create your training plan."
+      }
+    } else if (errorMessage.includes("not found")) {
+      return {
+        title: "User Account Error", 
+        description: "There was an issue with your account. Please log in again or contact support."
+      }
+    } else if (errorMessage.includes("Database") || errorMessage.includes("Dexie")) {
+      return {
+        title: "Training Plan Error",
+        description: "Unable to access your training plan data. Please try refreshing the page."
+      }
+    } else {
+      return {
+        title: "Training Plan Error",
+        description: "Unable to access or create your training plan. Please try again or contact support."
+      }
+    }
+  },
+
   // Database management utilities
   async ensureCoachingTablesExist(): Promise<boolean> {
     try {
@@ -931,9 +1027,35 @@ export const dbUtils = {
     await dbUtils.updateUser(userId, settings);
   },
 
+  // Helper function to ensure only one active plan per user
+  async deactivateAllUserPlans(userId: number): Promise<void> {
+    console.log(`🔄 Deactivating all active plans for user ${userId}`);
+    const activePlans = await db.plans
+      .where('userId')
+      .equals(userId)
+      .and(plan => plan.isActive === true)
+      .toArray();
+      
+    console.log(`Found ${activePlans.length} active plans to deactivate`);
+    
+    for (const plan of activePlans) {
+      await db.plans.update(plan.id!, { 
+        isActive: false, 
+        updatedAt: new Date() 
+      });
+      console.log(`Deactivated plan ${plan.id} (${plan.title})`);
+    }
+  },
+
   // Plan operations
   async createPlan(planData: Omit<Plan, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
     const now = new Date();
+    
+    // If creating an active plan, deactivate any existing active plans for this user
+    if (planData.isActive) {
+      await this.deactivateAllUserPlans(planData.userId);
+    }
+    
     return await db.plans.add({
       ...planData,
       createdAt: now,
@@ -978,6 +1100,14 @@ export const dbUtils = {
   },
 
   async updatePlan(id: number, updates: Partial<Plan>): Promise<void> {
+    // If activating a plan, first deactivate all other active plans for the same user
+    if (updates.isActive === true) {
+      const plan = await db.plans.get(id);
+      if (plan) {
+        await this.deactivateAllUserPlans(plan.userId);
+      }
+    }
+    
     await db.plans.update(id, { ...updates, updatedAt: new Date() });
   },
 

@@ -227,14 +227,22 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     
+    // Normalize the input date to start of day for proper comparison
+    const normalizedDate = new Date(date)
+    normalizedDate.setHours(0, 0, 0, 0)
+    
     // Disable dates before today
-    if (date < today) {
+    if (normalizedDate < today) {
       return true
     }
     
     // Disable dates after plan end date (if available)
-    if (planEndDate && date > planEndDate) {
-      return true
+    if (planEndDate) {
+      const normalizedPlanEndDate = new Date(planEndDate)
+      normalizedPlanEndDate.setHours(0, 0, 0, 0)
+      if (normalizedDate > normalizedPlanEndDate) {
+        return true
+      }
     }
     
     return false
@@ -408,22 +416,12 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
         }
         
       } catch (error) {
-        console.error("Failed to ensure active plan:", error)
-        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
-        
-        if (errorMessage.includes("onboarding")) {
-          toast({
-            variant: "destructive",
-            title: "Complete Onboarding First",
-            description: "Please complete the onboarding process to create your training plan.",
-          })
-        } else {
-          toast({
-            variant: "destructive",
-            title: "Training Plan Error",
-            description: "Unable to access or create your training plan. Please try again or contact support.",
-          })
-        }
+        const errorInfo = dbUtils.handlePlanError(error, 'creation/recovery')
+        toast({
+          variant: "destructive",
+          title: errorInfo.title,
+          description: errorInfo.description,
+        })
         return
       }
 

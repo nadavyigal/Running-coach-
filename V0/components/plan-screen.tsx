@@ -39,17 +39,35 @@ export function PlanScreen() {
           return
         }
 
-        const activePlan = await dbUtils.getActivePlan(user.id!)
+        let activePlan = await dbUtils.getActivePlan(user.id!)
+        
+        // Fallback: if no active plan found, ensure user has one
+        if (!activePlan) {
+          console.log('No active plan found, attempting to create/recover one...')
+          try {
+            activePlan = await dbUtils.ensureUserHasActivePlan(user.id!)
+            console.log('Successfully created/recovered plan:', activePlan.title)
+          } catch (planError) {
+            const errorInfo = dbUtils.handlePlanError(planError, 'creation/recovery')
+            toast({
+              variant: "destructive",
+              title: errorInfo.title,
+              description: errorInfo.description,
+            })
+            throw planError
+          }
+        }
+        
         if (activePlan) {
           setPlan(activePlan)
           const planWorkouts = await dbUtils.getWorkoutsByPlan(activePlan.id!)
           setWorkouts(planWorkouts)
         }
       } catch (error) {
-        console.error('Failed to load plan data:', error)
+        const errorInfo = dbUtils.handlePlanError(error, 'loading')
         toast({
-          title: "Error",
-          description: "Failed to load your training plan.",
+          title: errorInfo.title,
+          description: errorInfo.description,
           variant: "destructive"
         })
       } finally {
