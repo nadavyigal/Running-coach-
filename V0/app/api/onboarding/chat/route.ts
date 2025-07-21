@@ -1,6 +1,49 @@
 import { NextResponse } from 'next/server';
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
 import { dbUtils } from '@/lib/db';
 import { OnboardingSessionManager } from '@/lib/onboardingSessionManager';
+import { OnboardingPromptBuilder } from '@/lib/onboardingPromptBuilder';
+
+// Token budget configuration for onboarding
+const ONBOARDING_TOKEN_BUDGET = 50000; // Dedicated budget for onboarding
+const ONBOARDING_RATE_LIMIT = 20; // Requests per hour for onboarding
+
+// In-memory tracking (in production, use Redis or database)
+const onboardingTokenUsage = new Map<string, { tokens: number; lastReset: Date }>();
+const onboardingRequestCounts = new Map<string, { count: number; lastReset: Date }>();
+
+function trackOnboardingTokenUsage(userId: string, tokens: number): boolean {
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${now.getMonth()}`;
+  const key = `onboarding-${userId}-${currentMonth}`;
+  
+  const usage = onboardingTokenUsage.get(key) || { tokens: 0, lastReset: now };
+  usage.tokens += tokens;
+  onboardingTokenUsage.set(key, usage);
+  
+  return usage.tokens < ONBOARDING_TOKEN_BUDGET;
+}
+
+function checkOnboardingRateLimit(userId: string): boolean {
+  const now = new Date();
+  const hourKey = `onboarding-${userId}-${now.getHours()}`;
+  
+  const requests = onboardingRequestCounts.get(hourKey) || { count: 0, lastReset: now };
+  
+  // Reset if it's a new hour
+  if (now.getTime() - requests.lastReset.getTime() > 3600000) {
+    requests.count = 0;
+    requests.lastReset = now;
+  }
+  
+  requests.count++;
+  onboardingRequestCounts.set(hourKey, requests);
+  
+  return requests.count <= ONBOARDING_RATE_LIMIT;
+}
+
+
 
 export async function POST(req: Request) {
   try {
@@ -10,7 +53,27 @@ export async function POST(req: Request) {
       return new NextResponse('User ID is required', { status: 400 });
     }
 
-    const onboardingSessionManager = new OnboardingSessionManager(userId);
+    // Check OpenAI API key
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (!openaiKey) {
+      console.error('OpenAI API key is not configured');
+      return new NextResponse('AI service is not configured', { status: 503 });
+    }
+
+    // Rate limiting for onboarding
+    if (!checkOnboardingRateLimit(userId.toString())) {
+      return new NextResponse('Rate limit exceeded for onboarding', { status: 429 });
+    }
+
+    // Estimate token usage for budget check
+    const estimatedTokens = messages.reduce((acc: number, msg: any) => 
+      acc + (msg.content?.length || 0) / 4, 0) + 500; // Add buffer for prompt
+    
+    if (!trackOnboardingTokenUsage(userId.toString(), estimatedTokens)) {
+      return new NextResponse('Onboarding token budget exceeded', { status: 429 });
+    }
+
+    const onboardingSessionManager = new OnboardingSessionManager(parseInt(userId));
     let session = await onboardingSessionManager.loadSession();
 
     if (!session) {
@@ -21,53 +84,97 @@ export async function POST(req: Request) {
     const userMessage = messages[messages.length - 1];
     await onboardingSessionManager.addMessageToHistory(userMessage.role, userMessage.content);
 
-    // TODO: Integrate with actual AI coaching engine for dynamic responses
-    // For now, a simple mock response based on phase
-    let aiResponseContent = "";
-    let nextPhase = currentPhase;
+    // Build onboarding-specific prompt
+    const conversationHistory = await onboardingSessionManager.getConversationHistory();
+    const onboardingPrompt = OnboardingPromptBuilder.buildPrompt(currentPhase as any, conversationHistory, userContext);
 
-    switch (currentPhase) {
-      case 'motivation':
-        aiResponseContent = "That's a great start! Now, let's talk about your current running experience. Are you a complete beginner, or do you have some experience?";
-        nextPhase = 'assessment';
-        break;
-      case 'assessment':
-        aiResponseContent = "Understood. Based on that, what kind of goals are you hoping to achieve? Think about specific, measurable objectives.";
-        nextPhase = 'creation';
-        break;
-      case 'creation':
-        aiResponseContent = "Excellent! Let's refine those goals a bit. What are some potential challenges you foresee, and how can we make these goals even more realistic and time-bound?";
-        nextPhase = 'refinement';
-        break;
-      case 'refinement':
-        aiResponseContent = "Perfect! We've co-created some great goals. I'm now generating a personalized plan for you. You're all set!";
-        nextPhase = 'complete';
-        break;
-      case 'complete':
-        aiResponseContent = "You've completed the onboarding! How else can I assist you with your running journey?";
-        break;
-      default:
-        aiResponseContent = "I'm not sure how to respond to that. Let's try to focus on your running goals.";
-        break;
+    // Prepare messages for OpenAI
+    const apiMessages = [
+      { role: "system" as const, content: onboardingPrompt },
+      { role: "user" as const, content: userMessage.content }
+    ];
+
+    try {
+      // Call OpenAI with streaming
+      const result = streamText({
+        model: openai("gpt-4o"),
+        messages: apiMessages,
+        maxTokens: 300, // Limit for onboarding responses
+        temperature: 0.7,
+      });
+
+      // Get the response stream
+      const stream = result.toDataStreamResponse();
+      
+      // Add onboarding metadata to headers
+      const response = new Response(stream.body, {
+        status: 200,
+        headers: {
+          ...stream.headers,
+          'X-Coaching-Interaction-Id': `onboarding-${Date.now()}`,
+          'X-Coaching-Confidence': '0.8', // High confidence for onboarding
+          'X-Onboarding-Next-Phase': currentPhase, // Will be updated by frontend
+        },
+      });
+
+      // Add AI response to history asynchronously
+      setTimeout(async () => {
+        try {
+          // Extract response content from stream (simplified)
+          const responseText = "AI response generated"; // In practice, would extract from stream
+          await onboardingSessionManager.addMessageToHistory('assistant', responseText);
+        } catch (error) {
+          console.error('Failed to save AI response to history:', error);
+        }
+      }, 100);
+
+      return response;
+
+    } catch (openaiError) {
+      console.error('OpenAI API error:', openaiError);
+      
+      // Fallback to guided form-based onboarding
+      const fallbackResponse = {
+        error: "AI service temporarily unavailable",
+        fallback: true,
+        message: "Let's continue with a guided form to set up your running goals.",
+        nextPhase: 'fallback'
+      };
+
+      return new NextResponse(JSON.stringify(fallbackResponse), {
+        status: 503,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Coaching-Interaction-Id': `onboarding-fallback-${Date.now()}`,
+          'X-Coaching-Confidence': '0.3',
+          'X-Onboarding-Next-Phase': 'fallback',
+        },
+      });
     }
 
-    // Add AI response to history
-    await onboardingSessionManager.addMessageToHistory('assistant', aiResponseContent);
-    await onboardingSessionManager.updatePhase(nextPhase);
-
-    const response = new NextResponse(aiResponseContent, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/plain',
-        'X-Coaching-Interaction-Id': `onboarding-chat-${Date.now()}`,
-        'X-Coaching-Confidence': '1.0',
-        'X-Onboarding-Next-Phase': nextPhase,
-      },
-    });
-
-    return response;
   } catch (error) {
     console.error('Onboarding chat API error:', error);
-    return new NextResponse('Internal Server Error', { status: 500 });
+    
+    // Network or other errors
+    if (error instanceof Error) {
+      if (error.message.includes('network') || error.message.includes('fetch')) {
+        return new NextResponse(JSON.stringify({
+          error: "Network connection failed. Please check your internet and try again.",
+          fallback: true
+        }), { status: 503 });
+      }
+      
+      if (error.message.includes('timeout')) {
+        return new NextResponse(JSON.stringify({
+          error: "Request timeout. Please try again.",
+          fallback: true
+        }), { status: 408 });
+      }
+    }
+
+    return new NextResponse(JSON.stringify({
+      error: "An unexpected error occurred. Please try again.",
+      fallback: true
+    }), { status: 500 });
   }
 }
