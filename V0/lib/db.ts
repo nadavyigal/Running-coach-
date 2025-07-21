@@ -729,6 +729,35 @@ export class RunSmartDB extends Dexie {
         if (user.onboardingSession === undefined) user.onboardingSession = null;
       });
     });
+
+    // Version 11: Add compound index for better plan query performance  
+    this.version(11).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId, coachingStyle, goalInferred',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt, planType, raceGoalId, [userId+isActive]',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt, type, trainingPhase',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+      cohorts: '++id, inviteCode, name',
+      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+      performanceMetrics: '++id, userId, date, createdAt',
+      personalRecords: '++id, userId, recordType, achievedAt, createdAt',
+      performanceInsights: '++id, userId, type, priority, createdAt, validUntil',
+      raceGoals: '++id, userId, raceDate, priority, createdAt',
+      workoutTemplates: '++id, workoutType, trainingPhase, intensityZone, createdAt',
+      coachingProfiles: '++id, userId, coachingEffectivenessScore, lastAdaptationDate, createdAt',
+      coachingFeedback: '++id, userId, interactionType, feedbackType, rating, createdAt',
+      coachingInteractions: '++id, userId, interactionId, interactionType, createdAt',
+      userBehaviorPatterns: '++id, userId, patternType, confidenceScore, lastObserved, createdAt',
+      goals: '++id, userId, goalType, status, priority, createdAt, updatedAt',
+      goalMilestones: '++id, goalId, milestoneOrder, status, targetDate, createdAt',
+      goalProgressHistory: '++id, goalId, measurementDate, autoRecorded',
+      goalRecommendations: '++id, userId, recommendationType, status, createdAt, expiresAt',
+    }).upgrade(async tx => {
+      console.log('Running migration for version 11 - Adding compound index [userId+isActive] for plans table performance optimization')
+      // No data migration needed, just index optimization
+    });
   }
 }
 
@@ -913,7 +942,39 @@ export const dbUtils = {
   },
 
   async getActivePlan(userId: number): Promise<Plan | undefined> {
-    return await db.plans.where({ userId, isActive: true }).first();
+    try {
+      // Use compound index for optimal performance
+      const plan = await db.plans
+        .where('[userId+isActive]')
+        .equals([userId, true])
+        .first();
+        
+      if (plan) {
+        console.log(`🔍 getActivePlan found plan: "${plan.title}" (ID: ${plan.id}) for user ${userId}`);
+      } else {
+        console.log(`🔍 getActivePlan found no active plan for user ${userId}`);
+      }
+      return plan;
+    } catch (error) {
+      console.error(`❌ getActivePlan failed for user ${userId}:`, error);
+      // Fallback to the working query if compound index fails
+      console.log(`🔄 Falling back to chained query...`);
+      try {
+        const plan = await db.plans
+          .where('userId')
+          .equals(userId)
+          .and(plan => plan.isActive === true)
+          .first();
+          
+        if (plan) {
+          console.log(`🔍 Fallback query found plan: "${plan.title}" (ID: ${plan.id}) for user ${userId}`);
+        }
+        return plan;
+      } catch (fallbackError) {
+        console.error(`❌ Fallback query also failed for user ${userId}:`, fallbackError);
+        throw fallbackError;
+      }
+    }
   },
 
   async updatePlan(id: number, updates: Partial<Plan>): Promise<void> {
@@ -2746,13 +2807,26 @@ export const dbUtils = {
         try {
           // Reactivate the most recent plan
           await this.updatePlan(planToReactivate.id!, { isActive: true });
+          
+          // Verify the update succeeded
+          const updatedPlan = await db.plans.get(planToReactivate.id!);
+          if (!updatedPlan || !updatedPlan.isActive) {
+            console.error(`❌ Plan reactivation failed - plan is not active after update`);
+            throw new Error(`Failed to reactivate plan ${planToReactivate.id}`);
+          }
+          
           activePlan = await this.getActivePlan(userId);
           
           if (activePlan) {
-            console.log(`✅ Successfully reactivated plan for user ${userId}`);
+            console.log(`✅ Successfully reactivated plan for user ${userId}: "${activePlan.title}"`);
             return activePlan;
           } else {
             console.warn(`⚠️ Plan reactivation appeared to succeed but getActivePlan still returns null`);
+            // Try to return the directly retrieved plan as fallback
+            if (updatedPlan.userId === userId && updatedPlan.isActive) {
+              console.log(`🆘 Returning directly reactivated plan as fallback`);
+              return updatedPlan as Plan;
+            }
           }
         } catch (reactivationError) {
           console.error(`❌ Failed to reactivate plan: ${reactivationError.message}`);
@@ -2785,20 +2859,53 @@ export const dbUtils = {
         const planId = await this.createPlan(fallbackPlanData);
         console.log(`✅ Fallback plan created with ID: ${planId}`);
         
-        activePlan = await this.getActivePlan(userId);
-        
-        if (!activePlan) {
-          console.error(`❌ Plan creation appeared to succeed but getActivePlan still returns null`);
-          
-          // Additional debugging: check if plan actually exists
-          const createdPlan = await db.plans.get(planId);
-          console.log(`🔍 Direct plan lookup result:`, createdPlan ? `Found plan "${createdPlan.title}"` : 'Plan not found');
-          
-          throw new Error(`Failed to create recovery plan for user ${userId}. Plan creation succeeded but retrieval failed.`);
+        // Use direct plan retrieval first to ensure the plan exists
+        const createdPlan = await db.plans.get(planId);
+        if (!createdPlan) {
+          console.error(`❌ Plan creation failed - plan with ID ${planId} not found in database`);
+          throw new Error(`Failed to create recovery plan for user ${userId}. Plan was not properly saved to database.`);
         }
         
-        console.log(`✅ Successfully created and retrieved fallback plan for user ${userId}: "${activePlan.title}"`);
-        return activePlan;
+        console.log(`✅ Direct plan verification successful: "${createdPlan.title}"`);
+        
+        // Ensure the plan is active (defensive check)
+        if (!createdPlan.isActive) {
+          console.warn(`⚠️ Created plan is not active, fixing...`);
+          await this.updatePlan(planId, { isActive: true });
+        }
+        
+        // Now try to get active plan (with retry for potential timing issues)
+        let retryCount = 0;
+        const maxRetries = 3;
+        
+        while (retryCount < maxRetries) {
+          activePlan = await this.getActivePlan(userId);
+          
+          if (activePlan) {
+            console.log(`✅ Successfully created and retrieved fallback plan for user ${userId}: "${activePlan.title}"`);
+            return activePlan;
+          }
+          
+          retryCount++;
+          console.warn(`⚠️ getActivePlan returned null, retry ${retryCount}/${maxRetries}`);
+          
+          if (retryCount < maxRetries) {
+            // Small delay to handle potential race conditions
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        }
+        
+        // If we get here, something is seriously wrong with the database state
+        console.error(`❌ Plan creation succeeded but getActivePlan consistently returns null after ${maxRetries} retries`);
+        console.error(`🔍 Debug info - Created Plan:`, createdPlan);
+        
+        // As a last resort, return the directly retrieved plan if it matches our criteria
+        if (createdPlan.userId === userId && createdPlan.isActive) {
+          console.log(`🆘 Returning directly retrieved plan as fallback`);
+          return createdPlan as Plan;
+        }
+        
+        throw new Error(`Failed to retrieve recovery plan for user ${userId}. Plan exists but getActivePlan query is failing.`);
         
       } catch (creationError) {
         console.error(`❌ Failed to create fallback plan: ${creationError.message}`);
@@ -2877,4 +2984,88 @@ export const formatDuration = (durationSeconds: number): string => {
     return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   }
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}; 
+};
+
+// Adaptive Coaching Interfaces
+export interface CoachingProfile {
+  id?: number;
+  userId: number;
+  communicationStyle: {
+    motivationLevel: 'low' | 'medium' | 'high';
+    detailPreference: 'minimal' | 'balanced' | 'detailed';
+    personalityType: 'analytical' | 'encouraging' | 'practical' | 'supportive';
+    preferredTone: 'professional' | 'friendly' | 'casual' | 'motivational';
+  };
+  behavioralPatterns: {
+    workoutPreferences: {
+      preferredDays: string[];
+      preferredTimes: string[];
+      workoutTypeAffinities: Record<string, number>; // workout type -> preference score (0-100)
+      difficultyPreference: number; // 1-10 scale
+    };
+    contextualPatterns: {
+      weatherSensitivity: number; // 1-10 scale
+      timeConstraintTolerance: number; // 1-10 scale
+      stressResponse: 'maintain_intensity' | 'reduce_intensity' | 'increase_intensity';
+      motivationTriggers: string[];
+    };
+  };
+  feedbackPatterns: {
+    preferredFeedbackFrequency: 'after_every_workout' | 'weekly' | 'monthly';
+    feedbackStyle: 'detailed' | 'summary' | 'minimal';
+    responsiveness: number; // 1-10 scale of how often they provide feedback
+  };
+  coachingEffectivenessScore: number; // 0-100
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CoachingInteraction {
+  id?: number;
+  userId: number;
+  interactionId: string;
+  interactionType: 'chat' | 'workout_feedback' | 'goal_setting' | 'plan_adjustment';
+  promptUsed: string;
+  responseGenerated: string;
+  userContext: {
+    currentGoals: string[];
+    recentActivity: string;
+    mood?: string;
+    environment?: string;
+    timeConstraints?: string;
+  };
+  adaptationsApplied: string[];
+  userEngagement: {
+    followUpQuestions: number;
+    actionTaken: boolean;
+    timeSpentReading?: number; // seconds
+  };
+  createdAt: Date;
+}
+
+export interface CoachingFeedback {
+  id?: number;
+  userId: number;
+  interactionId: string;
+  interactionType: 'chat' | 'workout_feedback' | 'goal_setting' | 'plan_adjustment';
+  rating?: number; // 1-5 stars
+  feedbackText?: string;
+  feedbackType: 'helpful' | 'not_helpful' | 'too_detailed' | 'not_detailed_enough' | 'wrong_tone' | 'perfect';
+  improvementSuggestions?: string;
+  createdAt: Date;
+}
+
+export interface BehaviorPattern {
+  id?: number;
+  userId: number;
+  patternType: 'workout_consistency' | 'goal_achievement' | 'feedback_style' | 'engagement_level';
+  patternData: {
+    pattern: string;
+    frequency: number;
+    conditions: string[];
+    outcomes: Record<string, any>;
+  };
+  confidenceScore: number; // 0-100
+  lastObserved: Date;
+  createdAt: Date;
+} 

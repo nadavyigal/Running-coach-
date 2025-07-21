@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
-import { MonitorIcon as Running, Calendar, Route, Gauge, Sun, CloudSun, Moon, Loader2 } from "lucide-react"
+import { MonitorIcon as Running, Calendar, Route, Gauge, Sun, CloudSun, Moon, Loader2, MessageCircle } from "lucide-react"
 import { dbUtils } from "@/lib/db"
 import { generatePlan, generateFallbackPlan } from "@/lib/planGenerator"
 import { useToast } from "@/hooks/use-toast"
 import { trackEngagementEvent } from '@/lib/analytics'
 import { planAdjustmentService } from "@/lib/planAdjustmentService"
+import { OnboardingChatOverlay } from "@/components/onboarding-chat-overlay"
 
 interface OnboardingScreenProps {
   onComplete: () => void
@@ -30,6 +31,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     push: false,
   })
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
+  const [showChatOverlay, setShowChatOverlay] = useState(false)
+  const [aiGeneratedProfile, setAiGeneratedProfile] = useState<any>(null)
   const { toast } = useToast()
 
   const totalSteps = 8
@@ -38,6 +41,41 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1)
     }
+  }
+
+  const handleChatOverlayComplete = (goals: any[], userProfile: any) => {
+    setAiGeneratedProfile(userProfile)
+    
+    // Update form state with AI-generated data
+    if (userProfile.goal) {
+      setSelectedGoal(userProfile.goal)
+    }
+    if (userProfile.experience) {
+      setSelectedExperience(userProfile.experience)
+    }
+    if (userProfile.preferredTimes) {
+      setSelectedTimes(userProfile.preferredTimes)
+    }
+    if (userProfile.daysPerWeek) {
+      setDaysPerWeek([userProfile.daysPerWeek])
+    }
+    
+    setShowChatOverlay(false)
+    
+    // Track AI-guided onboarding completion
+    trackEngagementEvent('ai_onboarding_complete', {
+      goals_count: goals.length,
+      coaching_style: userProfile.coachingStyle,
+      goal_types: goals.map((g: any) => g.category)
+    })
+    
+    toast({
+      title: "Goals Created!",
+      description: "Your personalized running goals have been set. Let's continue with your plan.",
+    })
+    
+    // Skip to the next step
+    nextStep()
   }
 
   const canProceed = () => {
@@ -174,7 +212,27 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       const goalDist = selectedGoal === 'distance' ? 5 : 0; // Default to 5k for distance goal, 0 for others
       trackEngagementEvent('onboard_complete', { rookieChallenge: true, age: age ?? 0, goalDist });
       
-      // Step 7: Complete onboarding
+      // Step 7: Validate plan integrity before completion
+      console.log('Validating plan integrity...')
+      try {
+        const validationResult = await dbUtils.validateUserPlanIntegrity(user.id)
+        console.log('Plan validation result:', validationResult)
+        
+        if (!validationResult.hasActivePlan) {
+          console.warn('No active plan found after generation, attempting recovery...')
+          await dbUtils.ensureUserHasActivePlan(user.id)
+          console.log('Plan recovery completed')
+        }
+        
+        if (validationResult.issues.length > 0) {
+          console.warn('Plan integrity issues detected:', validationResult.issues)
+        }
+      } catch (error) {
+        console.error('Plan validation failed:', error)
+        // Continue with onboarding despite validation issues
+      }
+      
+      // Step 8: Complete onboarding
       console.log('Completing onboarding...')
       setIsGeneratingPlan(false)
       onComplete()
@@ -220,6 +278,34 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         return (
           <div className="space-y-6">
             <h2 className="text-2xl font-bold text-center">What's your running goal?</h2>
+            
+            {/* AI Chat Option */}
+            <Card className="border-2 border-dashed border-green-300 bg-green-50 dark:bg-green-900/20">
+              <CardContent className="p-4">
+                <div className="flex items-center space-x-3">
+                  <MessageCircle className="h-6 w-6 text-green-600" />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-green-800 dark:text-green-200">Get AI Guidance</h3>
+                    <p className="text-sm text-green-700 dark:text-green-300">
+                      Chat with our AI coach to discover your perfect running goals
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => setShowChatOverlay(true)}
+                    variant="outline"
+                    size="sm"
+                    className="border-green-300 text-green-700 hover:bg-green-100"
+                  >
+                    Start Chat
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <div className="text-center text-sm text-gray-500">
+              <p>Or choose from our predefined options:</p>
+            </div>
+            
             <div className="space-y-3">
               {[
                 { id: "habit", icon: Calendar, title: "Build a Running Habit", desc: "Start with consistency" },
@@ -241,6 +327,20 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 </Card>
               ))}
             </div>
+            
+            {aiGeneratedProfile && (
+              <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                      AI has suggested: <strong>{aiGeneratedProfile.goal}</strong> goal with {aiGeneratedProfile.coachingStyle} coaching style
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
             <Button onClick={nextStep} disabled={!canProceed()} className="w-full bg-green-500 hover:bg-green-600">
               Continue
             </Button>
@@ -488,6 +588,15 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       <Card className="flex-1 mx-auto w-full max-w-md">
         <CardContent className="p-6">{renderStep()}</CardContent>
       </Card>
+      
+      {/* AI Chat Overlay */}
+      <OnboardingChatOverlay
+        isOpen={showChatOverlay}
+        onClose={() => setShowChatOverlay(false)}
+        onComplete={handleChatOverlayComplete}
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+      />
     </div>
   )
 }

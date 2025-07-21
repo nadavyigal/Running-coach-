@@ -2,15 +2,27 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbUtils } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 const AnalyticsQuerySchema = z.object({
-  timeRange: z.enum(['7d', '30d', '90d', '1y', 'all-time']).nullable().optional().default('30d'),
-  userId: z.string().transform(Number).optional(),
+  timeRange: z.string().nullable().optional().transform((val) => {
+    if (!val || val === 'null') return '30d';
+    if (['7d', '30d', '90d', '1y', 'all-time'].includes(val)) return val as '7d' | '30d' | '90d' | '1y' | 'all-time';
+    throw new z.ZodError([{
+      code: 'invalid_enum_value',
+      received: val,
+      options: ['7d', '30d', '90d', '1y', 'all-time'],
+      path: ['timeRange'],
+      message: `Invalid enum value. Expected '7d' | '30d' | '90d' | '1y' | 'all-time', received '${val}'`
+    }]);
+  }),
+  userId: z.string().nullable().optional().transform((val) => val ? Number(val) : undefined),
   metrics: z.array(z.enum(['pace', 'distance', 'consistency', 'performance', 'records'])).nullable().optional(),
 });
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
+    const { searchParams } = request.nextUrl;
     const params = AnalyticsQuerySchema.parse({
       timeRange: searchParams.get('timeRange'),
       userId: searchParams.get('userId'),

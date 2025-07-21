@@ -69,10 +69,19 @@ export function TodayScreen() {
         if (user) {
           setUserId(user.id || null)
           const today = new Date()
-          const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay())) // Sunday
-          const endOfWeek = new Date(today.setDate(today.getDate() - today.getDay() + 6)) // Saturday
+          const startOfWeek = new Date(today)
+          startOfWeek.setDate(today.getDate() - today.getDay()) // Sunday
+          const endOfWeek = new Date(today)
+          endOfWeek.setDate(today.getDate() - today.getDay() + 6) // Saturday
+
+          console.log('Loading workouts for date range:', {
+            startOfWeek: startOfWeek.toDateString(),
+            endOfWeek: endOfWeek.toDateString(),
+            today: today.toDateString()
+          })
 
           const allWorkouts = await dbUtils.getWorkoutsForDateRange(user.id!, startOfWeek, endOfWeek)
+          console.log('Loaded workouts:', allWorkouts.length, allWorkouts)
           setWeeklyWorkouts(allWorkouts)
 
           const todays = allWorkouts.find(

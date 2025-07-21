@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { dbUtils } from '@/lib/db';
 import { goalProgressEngine } from '@/lib/goalProgressEngine';
 
+export const dynamic = 'force-dynamic';
+
 const AnalyticsQuerySchema = z.object({
   userId: z.string().transform(Number),
   goalId: z.string().transform(Number).optional(),
@@ -12,7 +14,7 @@ const AnalyticsQuerySchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
+    const { searchParams } = request.nextUrl;
     const params = AnalyticsQuerySchema.parse({
       userId: searchParams.get('userId'),
       goalId: searchParams.get('goalId'),

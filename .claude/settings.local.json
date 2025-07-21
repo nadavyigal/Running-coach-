@@ -7,7 +7,12 @@
       "Bash(npm run build:*)",
       "Bash(npm run lint)",
       "WebFetch(domain:www.radix-ui.com)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(pkill:*)",
+      "Bash(true)",
+      "Bash(curl:*)",
+      "Bash(node:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }

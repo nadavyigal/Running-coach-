@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   Send,
   Bot,
@@ -17,10 +18,11 @@ import {
   ThumbsDown,
   Settings,
 } from "lucide-react"
-import { dbUtils, type User as UserType } from "@/lib/db"
+import { dbUtils, type User as UserType } from "@/lib/db" // Will update UserType later
 import { useToast } from "@/hooks/use-toast"
-import { trackChatMessageSent } from "@/lib/analytics"
+import { trackOnboardingEvent } from "@/lib/analytics" // New analytics event
 import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
+import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
 
 interface ChatMessage {
   id: string
@@ -34,9 +36,18 @@ interface ChatMessage {
   requestFeedback?: boolean
 }
 
+// Define conversation phases
+type OnboardingPhase = 'motivation' | 'assessment' | 'creation' | 'refinement' | 'complete';
 
+interface OnboardingChatOverlayProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onComplete: (goals: any[], userProfile: any) => void;
+  currentStep?: number;
+  totalSteps?: number;
+}
 
-export function ChatScreen() {
+export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep, totalSteps }: OnboardingChatOverlayProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputValue, setInputValue] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -45,10 +56,11 @@ export function ChatScreen() {
   const { toast } = useToast()
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
   const [selectedMessageForFeedback, setSelectedMessageForFeedback] = useState<ChatMessage | null>(null)
+  const [currentPhase, setCurrentPhase] = useState<OnboardingPhase>('motivation'); // Track current phase
 
   useEffect(() => {
     loadUser()
-    loadChatHistory()
+    loadOnboardingChatHistory()
   }, [])
 
   useEffect(() => {
@@ -64,16 +76,17 @@ export function ChatScreen() {
     }
   }
 
-  const loadChatHistory = async () => {
-    // TODO: Implement chat history loading from Dexie.js
-    // For now, add a welcome message
+  const loadOnboardingChatHistory = async () => {
+    // TODO: Implement chat history loading from Dexie.js for onboarding sessions
+    // For now, add an initial onboarding welcome message based on the phase
     const welcomeMessage: ChatMessage = {
       id: `welcome-${Date.now()}`,
       role: 'assistant',
-      content: `Hi there! I'm your AI running coach. I'm here to help you with training advice, motivation, and any running-related questions. How can I assist you today?`,
+      content: `Welcome to your AI-guided onboarding! Let's start by discovering your running motivations. What drives you to run, or what do you hope to achieve?`,
       timestamp: new Date(),
     }
     setMessages([welcomeMessage])
+    trackOnboardingEvent('conversation_started', { userId: user?.id, timestamp: new Date() });
   }
 
   const scrollToBottom = () => {
@@ -94,31 +107,24 @@ export function ChatScreen() {
     setInputValue("")
     setIsLoading(true)
 
-    // Track chat message sent
-    await trackChatMessageSent({
-      message_length: content.trim().length,
-      conversation_length: messages.length + 1,
-      is_first_message: messages.length === 1
-    })
-
     try {
-      // Prepare context from user profile and recent runs
       const context = await buildUserContext()
       
-             const response = await fetch('/api/chat', {
-         method: 'POST',
-         headers: {
-           'Content-Type': 'application/json',
-         },
-         body: JSON.stringify({
-           messages: [
-             ...messages.map(msg => ({ role: msg.role, content: msg.content })),
-             { role: 'user', content: content.trim() }
-           ],
-           userId: user?.id?.toString(),
-           userContext: context
-         }),
-       })
+      const response = await fetch('/api/onboarding/chat', { // New API endpoint for onboarding chat
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [
+            ...messages.map(msg => ({ role: msg.role, content: msg.content })),
+            { role: 'user', content: content.trim() }
+          ],
+          userId: user?.id?.toString(),
+          userContext: context,
+          currentPhase: currentPhase, // Pass current phase to API
+        }),
+      })
 
       if (!response.ok) {
         throw new Error(`API request failed: ${response.status}`)
@@ -128,11 +134,11 @@ export function ChatScreen() {
       const decoder = new TextDecoder()
       let aiContent = ""
 
-      // Extract coaching metadata from headers
       const coachingInteractionId = response.headers.get('X-Coaching-Interaction-Id')
       const adaptations = response.headers.get('X-Coaching-Adaptations')?.split(', ').filter(Boolean)
       const confidence = parseFloat(response.headers.get('X-Coaching-Confidence') || '0')
-      
+      const nextPhase = response.headers.get('X-Onboarding-Next-Phase') as OnboardingPhase || currentPhase; // Get next phase from header
+
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
@@ -141,7 +147,7 @@ export function ChatScreen() {
         coachingInteractionId: coachingInteractionId || undefined,
         adaptations: adaptations || [],
         confidence: confidence || undefined,
-        requestFeedback: confidence > 0 && confidence < 0.8, // Request feedback for lower confidence responses
+        requestFeedback: confidence > 0 && confidence < 0.8,
       }
 
       setMessages(prev => [...prev, assistantMessage])
@@ -174,7 +180,6 @@ export function ChatScreen() {
         }
       }
 
-      // Update final message with feedback request if needed
       if (assistantMessage.requestFeedback) {
         setMessages(prev => 
           prev.map(msg => 
@@ -185,17 +190,35 @@ export function ChatScreen() {
         )
       }
       
-      // TODO: Save messages to Dexie.js
+      setCurrentPhase(nextPhase); // Update current phase
+      
+      // Check if onboarding is complete
+      if (nextPhase === 'complete') {
+        // TODO: Extract goals and user profile from conversation
+        const goals = []; // Placeholder - should extract from API response
+        const userProfile = {
+          goal: 'habit',
+          experience: 'beginner',
+          preferredTimes: ['morning'],
+          daysPerWeek: 3,
+          coachingStyle: 'supportive'
+        }; // Placeholder - should extract from API response
+        
+        setTimeout(() => {
+          onComplete(goals, userProfile);
+        }, 2000); // Give user time to read completion message
+      }
+
+      // TODO: Save messages and onboarding session state to Dexie.js
       
     } catch (error) {
-      console.error('Chat error:', error)
+      console.error('Onboarding chat error:', error)
       toast({
-        title: "Chat Error",
+        title: "Onboarding Error",
         description: "Failed to get response from AI coach. Please try again.",
         variant: "destructive",
       })
 
-      // Remove the failed user message and show error message
       setMessages(prev => prev.slice(0, -1))
       
       const errorMessage: ChatMessage = {
@@ -214,7 +237,6 @@ export function ChatScreen() {
     if (!user) return "User data not available."
 
     try {
-      // Get last 3 runs for context
       const recentRuns = await dbUtils.getRunsByUser(user.id!)
       const lastThreeRuns = recentRuns.slice(-3)
 
@@ -223,18 +245,19 @@ export function ChatScreen() {
       if (lastThreeRuns.length > 0) {
         context += ` Recent runs: ${lastThreeRuns.map((run, i) => 
           `Run ${i + 1}: ${run.distance}km in ${Math.round(run.duration / 60)} min`
-        ).join(', ')}.`
+        ).join(', ')}.`;
       }
+
+      // Add onboarding specific context if available
+      // if (user.onboardingSession) {
+      //   context += ` Onboarding Session: Phase ${user.onboardingSession.goalDiscoveryPhase}, Goals: ${user.onboardingSession.discoveredGoals.map(g => g.title).join(', ')}.`
+      // }
 
       return context
     } catch (error) {
       console.error('Failed to build context:', error)
       return "Unable to load user context."
     }
-  }
-
-  const handleSuggestedQuestion = (question: string) => {
-    handleSendMessage(question)
   }
 
   const handleInputSubmit = (e: React.FormEvent) => {
@@ -270,7 +293,6 @@ export function ChatScreen() {
           >
             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
             
-            {/* Show adaptations for assistant messages */}
             {!isUser && message.adaptations && message.adaptations.length > 0 && (
               <div className="mt-2 text-xs opacity-70">
                 <span className="font-medium">Adaptations: </span>
@@ -284,7 +306,6 @@ export function ChatScreen() {
               {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </p>
             
-            {/* Feedback buttons for assistant messages */}
             {!isUser && message.coachingInteractionId && (
               <div className="flex items-center gap-1 ml-auto">
                 <Button
@@ -308,7 +329,6 @@ export function ChatScreen() {
               </div>
             )}
             
-            {/* Request feedback indicator */}
             {!isUser && message.requestFeedback && (
               <Badge variant="outline" className="text-xs ml-auto">
                 Feedback appreciated
@@ -328,8 +348,12 @@ export function ChatScreen() {
     )
   }
 
+  if (!isOpen) return null;
+
   return (
-    <div className="flex flex-col h-full bg-background">
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md w-full h-[80vh] p-0">
+        <div className="flex flex-col h-full bg-background">
       {/* Header */}
       <div className="border-b bg-card p-4">
         <div className="flex items-center justify-between">
@@ -340,21 +364,29 @@ export function ChatScreen() {
               </AvatarFallback>
             </Avatar>
             <div>
-              <h1 className="font-semibold text-lg">AI Running Coach</h1>
+              <h1 className="font-semibold text-lg">AI Onboarding Coach</h1>
               <p className="text-sm text-muted-foreground">
-                Your personal training assistant
+                Let's set your personalized running goals
               </p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowCoachingPreferences(true)}
-            title="Coaching preferences"
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
+          {/* No settings button for onboarding, as preferences are set during the process */}
         </div>
+      </div>
+
+      {/* Progress Indicator */}
+      <div className="w-full bg-gray-200 h-2">
+        <div 
+          className="bg-blue-500 h-full transition-all duration-500 ease-in-out" 
+          style={{
+            width: 
+              currentPhase === 'motivation' ? '25%' :
+              currentPhase === 'assessment' ? '50%' :
+              currentPhase === 'creation' ? '75%' :
+              currentPhase === 'refinement' ? '90%' :
+              '100%'
+          }}
+        ></div>
       </div>
 
       {/* Messages */}
@@ -375,23 +407,21 @@ export function ChatScreen() {
         </div>
       </ScrollArea>
 
-      
-
       {/* Input */}
       <div className="border-t bg-card p-4">
         <form onSubmit={handleInputSubmit} className="flex gap-2">
           <Input
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Ask your running coach anything..."
+            placeholder="Tell me more about your running goals..."
             disabled={isLoading}
             className="flex-1"
           />
-                     <Button 
-             type="submit" 
-             disabled={!inputValue.trim() || isLoading}
-             size="icon"
-           >
+          <Button 
+            type="submit" 
+            disabled={!inputValue.trim() || isLoading}
+            size="icon"
+          >
             <Send className="h-4 w-4" />
           </Button>
         </form>
@@ -415,8 +445,8 @@ export function ChatScreen() {
           }}
         />
       )}
-      
-      
-    </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

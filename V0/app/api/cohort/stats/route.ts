@@ -1,6 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { dbUtils } from '@/lib/db';
 import { z } from 'zod';
+
+export const dynamic = 'force-dynamic';
 
 const cohortStatsSchema = z.object({
   userId: z.string().min(1, 'User ID is required').refine((val) => {
@@ -11,9 +13,9 @@ const cohortStatsSchema = z.object({
   timeRange: z.enum(['7d', '30d', '90d', '1y']).optional().default('30d'),
 });
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
+    const { searchParams } = req.nextUrl;
     const userId = searchParams.get('userId');
     const includePerformance = searchParams.get('includePerformance');
     const timeRange = searchParams.get('timeRange');

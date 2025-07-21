@@ -1,5 +1,6 @@
 import { GET } from './route';
 import { dbUtils } from '@/lib/db';
+import { NextRequest } from 'next/server';
 
 // Mock the dbUtils
 import { vi } from 'vitest';
@@ -13,6 +14,7 @@ vi.mock('@/lib/db', () => ({
 
 // Mock NextResponse for testing API routes
 vi.mock('next/server', () => ({
+  NextRequest: vi.fn(),
   NextResponse: {
     json: vi.fn((data, init) => ({
       json: () => Promise.resolve(data),
@@ -28,8 +30,8 @@ describe('GET /api/cohort/stats', () => {
 
   it('should return 400 when userId is missing', async () => {
     const mockRequest = {
-      url: 'http://localhost/api/cohort/stats',
-    } as Request;
+      nextUrl: new URL('http://localhost/api/cohort/stats'),
+    } as NextRequest;
 
     const response = await GET(mockRequest);
     const data = await response.json();
@@ -42,8 +44,8 @@ describe('GET /api/cohort/stats', () => {
     (dbUtils.getUserById as vi.Mock).mockResolvedValue(null);
 
     const mockRequest = {
-      url: 'http://localhost/api/cohort/stats?userId=123',
-    } as Request;
+      nextUrl: new URL('http://localhost/api/cohort/stats?userId=123'),
+    } as NextRequest;
 
     const response = await GET(mockRequest);
     const data = await response.json();
@@ -57,8 +59,8 @@ describe('GET /api/cohort/stats', () => {
     (dbUtils.getUserById as vi.Mock).mockResolvedValue({ id: 123, cohortId: null });
 
     const mockRequest = {
-      url: 'http://localhost/api/cohort/stats?userId=123',
-    } as Request;
+      nextUrl: new URL('http://localhost/api/cohort/stats?userId=123'),
+    } as NextRequest;
 
     const response = await GET(mockRequest);
     const data = await response.json();
@@ -85,8 +87,8 @@ describe('GET /api/cohort/stats', () => {
     (dbUtils.getCohortStats as vi.Mock).mockResolvedValue(mockStats);
 
     const mockRequest = {
-      url: 'http://localhost/api/cohort/stats?userId=123',
-    } as Request;
+      nextUrl: new URL('http://localhost/api/cohort/stats?userId=123'),
+    } as NextRequest;
 
     const response = await GET(mockRequest);
     const data = await response.json();
@@ -99,8 +101,8 @@ describe('GET /api/cohort/stats', () => {
 
   it('should return 400 for invalid userId', async () => {
     const mockRequest = {
-      url: 'http://localhost/api/cohort/stats?userId=invalid',
-    } as Request;
+      nextUrl: new URL('http://localhost/api/cohort/stats?userId=invalid'),
+    } as NextRequest;
 
     const response = await GET(mockRequest);
     const data = await response.json();
@@ -114,8 +116,8 @@ describe('GET /api/cohort/stats', () => {
     (dbUtils.getUserById as vi.Mock).mockRejectedValue(new Error('Database error'));
 
     const mockRequest = {
-      url: 'http://localhost/api/cohort/stats?userId=123',
-    } as Request;
+      nextUrl: new URL('http://localhost/api/cohort/stats?userId=123'),
+    } as NextRequest;
 
     const response = await GET(mockRequest);
     const data = await response.json();

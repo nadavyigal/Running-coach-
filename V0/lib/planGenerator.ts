@@ -52,6 +52,13 @@ export async function generatePlan(options: GeneratePlanOptions): Promise<{ plan
     const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + (generatedPlan.totalWeeks * 7));
 
+    // First deactivate any existing active plans for this user
+    const existingPlans = await dbUtils.getActivePlan(user.id!);
+    if (existingPlans) {
+      console.log('Deactivating existing plan:', existingPlans.id);
+      await dbUtils.updatePlan(existingPlans.id!, { isActive: false });
+    }
+
     const planId = await dbUtils.createPlan({
       userId: user.id!,
       title: generatedPlan.title,
@@ -61,6 +68,8 @@ export async function generatePlan(options: GeneratePlanOptions): Promise<{ plan
       totalWeeks: generatedPlan.totalWeeks,
       isActive: true
     });
+
+    console.log('Created AI plan with ID:', planId, 'for user:', user.id);
 
     // Create workouts
     const workouts: Workout[] = [];
@@ -148,10 +157,16 @@ export async function generateFallbackPlan(user: User, startDate: Date = new Dat
   const endDate = new Date(startDate);
   endDate.setDate(endDate.getDate() + (totalWeeks * 7));
 
+  // First deactivate any existing active plans for this user
+  const existingPlans = await dbUtils.getActivePlan(user.id!);
+  if (existingPlans) {
+    await dbUtils.updatePlan(existingPlans.id!, { isActive: false });
+  }
+
   const planId = await dbUtils.createPlan({
     userId: user.id!,
     title: `${user.experience.charAt(0).toUpperCase() + user.experience.slice(1)} Running Plan`,
-    description: `A ${totalWeeks}-week progressive running plan tailored for ${user.experience} runners.`,
+    description: `A ${totalWeeks}-week progressive running plan tailored for ${user.experience} runners.${rookie_challenge ? ' 21-Day Rookie Challenge!' : ''}`,
     startDate,
     endDate,
     totalWeeks,
@@ -162,6 +177,8 @@ export async function generateFallbackPlan(user: User, startDate: Date = new Dat
   if (!plan) {
     throw new Error('Failed to create fallback plan');
   }
+
+  console.log('Created fallback plan with ID:', planId, 'for user:', user.id);
 
   // Create a basic workout structure
   const workouts: Workout[] = [];
@@ -196,6 +213,7 @@ export async function generateFallbackPlan(user: User, startDate: Date = new Dat
     }
   }
 
+  console.log(`Fallback plan completed: ${workouts.length} workouts created for plan ${planId}`);
   return { plan, workouts };
 }
 
