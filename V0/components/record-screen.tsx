@@ -335,7 +335,17 @@ export function RecordScreen() {
         await dbUtils.markWorkoutCompleted(currentWorkout.id)
       }
 
-      await planAdjustmentService.afterRun(user.id)
+      // Trigger adaptive plan adjustments (but don't fail run save if this fails)
+      try {
+        await planAdjustmentService.afterRun(user.id)
+      } catch (adaptiveError) {
+        console.error('Adaptive coaching failed:', adaptiveError)
+        toast({
+          title: "Adaptive coaching failed.",
+          description: "Your run was saved, but plan adjustments couldn't be processed.",
+          variant: "destructive"
+        })
+      }
 
       // Track plan session completion
       await trackPlanSessionCompleted({

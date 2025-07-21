@@ -1,6 +1,7 @@
 import { db, dbUtils, type User } from './db'
 import { generateFallbackPlan } from './planGenerator'
 import { toast } from '@/hooks/use-toast'
+import { trackPlanAdjustmentEvent } from './analytics'
 import posthog from 'posthog-js'
 
 class PlanAdjustmentService {
@@ -8,21 +9,32 @@ class PlanAdjustmentService {
   private userId: number | null = null
 
   async recompute(userId: number, reason: 'nightly' | 'post-run') {
-    const user = await db.users.get(userId)
-    if (!user) return
+    try {
+      const user = await db.users.get(userId)
+      if (!user) return
 
-    const activePlan = await dbUtils.getActivePlan(userId)
-    if (activePlan) {
-      await dbUtils.updatePlan(activePlan.id!, { isActive: false })
+      const activePlan = await dbUtils.getActivePlan(userId)
+      if (activePlan) {
+        await dbUtils.updatePlan(activePlan.id!, { isActive: false })
+      }
+
+      await generateFallbackPlan(user)
+
+      // Try to show toast notification, but don't fail if toast context is unavailable
+      try {
+        toast({
+          title: 'Plan Updated',
+          description: 'Your training plan has been adjusted based on your recent activity.'
+        })
+      } catch (toastError) {
+        console.warn('Toast notification unavailable:', toastError)
+      }
+
+      await trackPlanAdjustmentEvent('plan_adjusted', { reason })
+    } catch (error) {
+      console.error('Failed to recompute plan:', error)
+      throw error
     }
-
-    await generateFallbackPlan(user)
-
-    toast({
-      title: 'Plan Updated',
-      description: 'Your training plan has been adjusted based on your recent activity.'
-    })
-    trackPlanAdjustmentEvent('plan_adjusted', { reason })
   }
 
   private scheduleNextNightly() {

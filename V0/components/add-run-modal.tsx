@@ -298,34 +298,122 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
     }
   }
 
-  const handleSave = () => {
-    const workout = {
-      type: selectedWorkout?.id,
-      name: generatedWorkout?.title || selectedWorkout?.name,
-      date: selectedDate,
-      targetValue: Number.parseFloat(targetValue),
-      goalType: selectedGoal,
-      difficulty: selectedDifficulty,
-      notes,
-      generatedWorkout,
+  const handleSave = async () => {
+    if (!selectedWorkout || !selectedDate) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Please select a workout type and date",
+      })
+      return
     }
 
-    console.log("Saving workout:", workout)
-    toast({
-      variant: "success",
-      title: "Workout Scheduled! \ud83c\udf89",
-      description: `${selectedWorkout?.name || 'Workout'} added to your plan`,
-    })
+    try {
+      // Import database utilities
+      const { dbUtils } = await import('@/lib/db')
+      
+      // Get current user
+      const user = await dbUtils.getCurrentUser()
+      if (!user || !user.id) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "User not found. Please complete onboarding first.",
+        })
+        return
+      }
 
-    // Reset and close
-    setStep("select")
-    setSelectedWorkout(null)
-    setTargetValue("5.0")
-    setSelectedDifficulty("open")
-    setSelectedGoal("distance")
-    setNotes("")
-    setGeneratedWorkout(null)
-    onClose()
+      // Ensure user has an active plan (with automatic recovery)
+      let activePlan
+      try {
+        activePlan = await dbUtils.ensureUserHasActivePlan(user.id)
+        
+        // Check if this was a recovered/created plan
+        const wasRecovered = activePlan.title.includes("Recovery") || activePlan.title.includes("Quick Start")
+        if (wasRecovered) {
+          toast({
+            title: "Training Plan Ready! 🎯",
+            description: "We've set up a training plan for you. You can customize it later in settings.",
+          })
+        }
+        
+      } catch (error) {
+        console.error("Failed to ensure active plan:", error)
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
+        
+        if (errorMessage.includes("onboarding")) {
+          toast({
+            variant: "destructive",
+            title: "Complete Onboarding First",
+            description: "Please complete the onboarding process to create your training plan.",
+          })
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Training Plan Error",
+            description: "Unable to access or create your training plan. Please try again or contact support.",
+          })
+        }
+        return
+      }
+
+      // Calculate week number based on plan start date and selected date
+      const planStartDate = new Date(activePlan.startDate)
+      const selectedDateTime = new Date(selectedDate)
+      const daysDiff = Math.floor((selectedDateTime.getTime() - planStartDate.getTime()) / (1000 * 60 * 60 * 24))
+      const weekNumber = Math.floor(daysDiff / 7) + 1
+
+      // Get day of week
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      const dayOfWeek = dayNames[selectedDateTime.getDay()]
+
+      const workoutData = {
+        planId: activePlan.id!,
+        week: weekNumber,
+        day: dayOfWeek,
+        type: selectedWorkout.id as any,
+        distance: selectedGoal === 'distance' ? Number.parseFloat(targetValue) : undefined,
+        duration: selectedGoal === 'duration' ? Number.parseFloat(targetValue) : undefined,
+        notes: notes || generatedWorkout?.description || selectedWorkout.description,
+        completed: false,
+        scheduledDate: selectedDateTime
+      }
+
+      console.log("Saving workout to database:", workoutData)
+      
+      // Save workout to database
+      const workoutId = await dbUtils.createWorkout(workoutData)
+      
+      console.log("Workout saved successfully with ID:", workoutId)
+
+      toast({
+        title: "Workout Scheduled! \ud83c\udf89",
+        description: `${selectedWorkout.name} added to your ${selectedDate.toLocaleDateString()} plan`,
+      })
+
+      // Reset and close
+      setStep("select")
+      setSelectedWorkout(null)
+      setTargetValue("5.0")
+      setSelectedDifficulty("open")
+      setSelectedGoal("distance")
+      setNotes("")
+      setGeneratedWorkout(null)
+      onClose()
+      
+      // Trigger a page refresh to show the new workout
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
+      
+    } catch (error) {
+      console.error('Failed to save workout:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to save workout. Please try again.",
+      })
+    }
   }
 
   const handleAmendGoals = () => {

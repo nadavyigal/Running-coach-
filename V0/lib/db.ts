@@ -17,6 +17,7 @@ export interface User {
   createdAt: Date;
   updatedAt: Date;
   rpe?: number; // Optional Rate of Perceived Exertion
+  age?: number; // User's age
   // Streak tracking fields
   currentStreak?: number; // Current consecutive days of activity
   longestStreak?: number; // All-time best streak
@@ -27,6 +28,41 @@ export interface User {
   reminderEnabled?: boolean;
   reminderSnoozedUntil?: Date | null;
   cohortId?: number | null; // New field for cohort association
+  // AI Guided Onboarding fields
+  motivations?: string[]; // User's motivations for running
+  barriers?: string[]; // Potential barriers to running
+  coachingStyle?: 'supportive' | 'challenging' | 'analytical' | 'encouraging'; // Preferred coaching style
+  goalInferred?: boolean; // Whether goals were inferred by AI
+  onboardingSession?: OnboardingSession;
+}
+
+export interface OnboardingSession {
+  conversationId: string;
+  goalDiscoveryPhase: 'motivation' | 'assessment' | 'creation' | 'refinement' | 'complete';
+  discoveredGoals: SmartGoal[];
+  coachingStyle: 'supportive' | 'challenging' | 'analytical' | 'encouraging';
+  conversationHistory: ConversationMessage[];
+}
+
+export interface ConversationMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  metadata?: any;
+}
+
+export interface SmartGoal {
+  id: string;
+  title: string;
+  description: string;
+  type: 'primary' | 'supporting' | 'health';
+  specific: string;
+  measurable: string;
+  achievable: string;
+  relevant: string;
+  timeBound: string;
+  targetDate: Date;
 }
 
 // Cohort interface
@@ -307,6 +343,84 @@ export interface Run {
   createdAt: Date;
 }
 
+// Goal tracking system
+export interface Goal {
+  id?: number;
+  userId: number;
+  title: string;
+  description: string;
+  goalType: 'time_improvement' | 'distance_achievement' | 'frequency' | 'race_completion' | 'consistency' | 'health';
+  category: 'speed' | 'endurance' | 'consistency' | 'health' | 'strength';
+  priority: 1 | 2 | 3;
+  status: 'active' | 'completed' | 'paused' | 'cancelled';
+  specificTarget: {
+    metric: string;
+    value: number;
+    unit: string;
+    description: string;
+  };
+  measurableOutcome: {
+    successCriteria: string[];
+    trackingMethod: string;
+    measurementFrequency: 'daily' | 'weekly' | 'monthly';
+  };
+  achievabilityAssessment: {
+    difficultyRating: number; // 1-10 scale
+    requiredResources: string[];
+    potentialObstacles: string[];
+    mitigationStrategies: string[];
+  };
+  relevanceJustification: {
+    personalImportance: number; // 1-10 scale
+    alignmentWithValues: string;
+    motivationalFactors: string[];
+  };
+  timeBound: {
+    startDate: Date;
+    deadline: Date;
+    milestoneSchedule: number[]; // Percentage checkpoints [25, 50, 75]
+    estimatedDuration: number; // in days
+  };
+  baselineValue: number;
+  targetValue: number;
+  currentValue: number;
+  lastUpdated: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface GoalMilestone {
+  id?: number;
+  goalId: number;
+  milestoneOrder: number;
+  title: string;
+  description: string;
+  targetValue: number;
+  targetDate: Date;
+  status: 'pending' | 'achieved' | 'missed' | 'adjusted';
+  achievedDate?: Date;
+  achievedValue?: number;
+  celebrationShown: boolean;
+  createdAt: Date;
+}
+
+export interface GoalRecommendation {
+  id?: number;
+  userId: number;
+  goalId?: number; // Related to existing goal, or null for new goal suggestions
+  type: 'goal_creation' | 'goal_modification' | 'goal_achievement_strategy' | 'goal_timeline_adjustment';
+  title: string;
+  description: string;
+  reasoning: string;
+  confidence: number; // 0-1 scale
+  priority: 'low' | 'medium' | 'high';
+  status: 'pending' | 'accepted' | 'rejected' | 'expired';
+  suggestedAction: string;
+  metadata: any; // JSON for additional context
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Running shoes tracking
 export interface Shoe {
   id?: number;
@@ -364,6 +478,9 @@ export class RunSmartDB extends Dexie {
   coachingFeedback!: EntityTable<CoachingFeedback, 'id'>;
   coachingInteractions!: EntityTable<CoachingInteraction, 'id'>;
   userBehaviorPatterns!: EntityTable<UserBehaviorPattern, 'id'>;
+  goals!: EntityTable<Goal, 'id'>;
+  goalMilestones!: EntityTable<GoalMilestone, 'id'>;
+  goalRecommendations!: EntityTable<GoalRecommendation, 'id'>;
 
   constructor() {
     super('RunSmartDB');
@@ -576,6 +693,42 @@ export class RunSmartDB extends Dexie {
       // Goals tables will be automatically created due to schema definition
       // No additional data migration needed for new tables
     });
+
+    // Version 10: Add AI Guided Onboarding fields to users
+    this.version(10).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId, coachingStyle, goalInferred',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt, planType, raceGoalId',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt, type, trainingPhase',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+      cohorts: '++id, inviteCode, name',
+      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+      performanceMetrics: '++id, userId, date, createdAt',
+      personalRecords: '++id, userId, recordType, achievedAt, createdAt',
+      performanceInsights: '++id, userId, type, priority, createdAt, validUntil',
+      raceGoals: '++id, userId, raceDate, priority, createdAt',
+      workoutTemplates: '++id, workoutType, trainingPhase, intensityZone, createdAt',
+      coachingProfiles: '++id, userId, coachingEffectivenessScore, lastAdaptationDate, createdAt',
+      coachingFeedback: '++id, userId, interactionType, feedbackType, rating, createdAt',
+      coachingInteractions: '++id, userId, interactionId, interactionType, createdAt',
+      userBehaviorPatterns: '++id, userId, patternType, confidenceScore, lastObserved, createdAt',
+      goals: '++id, userId, goalType, status, priority, createdAt, updatedAt',
+      goalMilestones: '++id, goalId, milestoneOrder, status, targetDate, createdAt',
+      goalProgressHistory: '++id, goalId, measurementDate, autoRecorded',
+      goalRecommendations: '++id, userId, recommendationType, status, createdAt, expiresAt',
+    }).upgrade(async tx => {
+      console.log('Running migration for version 10 - Adding AI guided onboarding fields')
+      // Add AI guided onboarding fields to existing users
+      await tx.table('users').toCollection().modify(user => {
+        if (user.motivations === undefined) user.motivations = [];
+        if (user.barriers === undefined) user.barriers = [];
+        if (user.coachingStyle === undefined) user.coachingStyle = 'supportive';
+        if (user.goalInferred === undefined) user.goalInferred = false;
+        if (user.onboardingSession === undefined) user.onboardingSession = null;
+      });
+    });
   }
 }
 
@@ -591,11 +744,42 @@ export const badgeTypes: { [key: number]: 'bronze' | 'silver' | 'gold' } = {
 };
 
 export const dbUtils = {
+  // Database management utilities
+  async ensureCoachingTablesExist(): Promise<boolean> {
+    try {
+      const requiredTables = ['coachingProfiles', 'coachingFeedback', 'coachingInteractions', 'userBehaviorPatterns'];
+      const existingTables = db.tables.map(table => table.name);
+      const missingTables = requiredTables.filter(table => !existingTables.includes(table));
+      
+      if (missingTables.length > 0) {
+        console.error('Missing coaching tables:', missingTables);
+        console.log('Current database version:', db.verno);
+        console.log('Expected version: 10 or higher');
+        
+        if (db.verno < 10) {
+          console.log('Database version is too old, forcing refresh...');
+          // Delete the database to force recreation with latest schema
+          await db.delete();
+          // Reload the page to reinitialize the database
+          if (typeof window !== 'undefined') {
+            window.location.reload();
+          }
+          return false;
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error checking coaching tables:', error);
+      return false;
+    }
+  },
+
   // User operations
   async createUser(userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
     console.log("Creating user with data:", userData); // Added for debugging
     const now = new Date();
-    return await db.users.add({
+    const userId = await db.users.add({
       ...userData,
       createdAt: now,
       updatedAt: now,
@@ -608,11 +792,97 @@ export const dbUtils = {
       reminderSnoozedUntil: null,
       cohortId: null,
     });
+
+    // Create coaching profile for the new user
+    try {
+      await this.createCoachingProfile({
+        userId: userId,
+        communicationStyle: {
+          motivationLevel: 'medium',
+          detailPreference: 'medium',
+          personalityType: 'encouraging',
+          preferredTone: 'friendly'
+        },
+        feedbackPatterns: {
+          averageRating: 3.5,
+          commonConcerns: [],
+          responsiveness: 'immediate',
+          preferredFeedbackFrequency: 'weekly'
+        },
+        behavioralPatterns: {
+          workoutPreferences: {
+            preferredDays: [],
+            preferredTimes: [],
+            workoutTypeAffinities: {},
+            difficultyPreference: 5
+          },
+          contextualPatterns: {
+            weatherSensitivity: 5,
+            scheduleFlexibility: 5,
+            stressResponse: 'maintain',
+            energyPatterns: {}
+          }
+        },
+        coachingEffectivenessScore: 50,
+        lastAdaptationDate: now,
+        adaptationHistory: []
+      });
+    } catch (error) {
+      console.error('Failed to create coaching profile for user:', error);
+    }
+
+    return userId;
   },
 
   async getCurrentUser(): Promise<User | undefined> {
     // Return the most recently created user
-    return await db.users.orderBy('createdAt').last();
+    const user = await db.users.orderBy('createdAt').last();
+    
+    // Ensure coaching profile exists for this user
+    if (user && user.id) {
+      const profile = await this.getCoachingProfile(user.id);
+      if (!profile) {
+        console.log('Creating missing coaching profile for user:', user.id);
+        try {
+          await this.createCoachingProfile({
+            userId: user.id,
+            communicationStyle: {
+              motivationLevel: 'medium',
+              detailPreference: 'medium',
+              personalityType: 'encouraging',
+              preferredTone: 'friendly'
+            },
+            feedbackPatterns: {
+              averageRating: 3.5,
+              commonConcerns: [],
+              responsiveness: 'immediate',
+              preferredFeedbackFrequency: 'weekly'
+            },
+            behavioralPatterns: {
+              workoutPreferences: {
+                preferredDays: [],
+                preferredTimes: [],
+                workoutTypeAffinities: {},
+                difficultyPreference: 5
+              },
+              contextualPatterns: {
+                weatherSensitivity: 5,
+                scheduleFlexibility: 5,
+                stressResponse: 'maintain',
+                energyPatterns: {}
+              }
+            },
+            coachingEffectivenessScore: 50,
+            lastAdaptationDate: new Date(),
+            adaptationHistory: []
+          });
+        } catch (error) {
+          console.error('Failed to create coaching profile for existing user:', error);
+        }
+      }
+    }
+    
+    return user;
   },
 
   async updateUser(id: number, updates: Partial<User>): Promise<void> {
@@ -2424,6 +2694,164 @@ export const dbUtils = {
   // Testing utility - delete a milestone
   async deleteGoalMilestone(milestoneId: number): Promise<void> {
     await db.goalMilestones.delete(milestoneId);
+  },
+
+  // Plan recovery and validation utilities
+  async ensureUserHasActivePlan(userId: number): Promise<Plan> {
+    console.log(`🔍 ensureUserHasActivePlan: Starting for user ${userId}`);
+    
+    try {
+      // Check if user has an active plan
+      console.log(`🔍 Step 1: Checking for existing active plan...`);
+      let activePlan = await this.getActivePlan(userId);
+      
+      if (activePlan) {
+        console.log(`✅ Found existing active plan: ${activePlan.title} (ID: ${activePlan.id})`);
+        return activePlan;
+      }
+
+      console.log(`❌ No active plan found for user ${userId}, attempting recovery...`);
+      
+      // Check if user exists and has completed onboarding
+      console.log(`🔍 Step 2: Checking user existence and onboarding status...`);
+      const user = await this.getUserById(userId);
+      
+      if (!user) {
+        console.error(`❌ User ${userId} not found in database`);
+        throw new Error(`User ${userId} not found in database. Please complete onboarding first.`);
+      }
+      
+      console.log(`✅ User found: ${user.name || 'No name'} (onboardingComplete: ${user.onboardingComplete})`);
+      
+      if (!user.onboardingComplete) {
+        console.error(`❌ User ${userId} has not completed onboarding`);
+        throw new Error("User has not completed onboarding. Please complete onboarding first.");
+      }
+
+      // Try to find the most recent plan that could be reactivated
+      console.log(`🔍 Step 3: Looking for existing plans to reactivate...`);
+      const recentPlans = await db.plans
+        .where('userId')
+        .equals(userId)
+        .reverse()
+        .limit(5)
+        .toArray();
+
+      console.log(`📊 Found ${recentPlans.length} existing plans for user ${userId}`);
+      
+      if (recentPlans.length > 0) {
+        const planToReactivate = recentPlans[0];
+        console.log(`🔄 Attempting to reactivate recent plan: "${planToReactivate.title}" (ID: ${planToReactivate.id})`);
+        
+        try {
+          // Reactivate the most recent plan
+          await this.updatePlan(planToReactivate.id!, { isActive: true });
+          activePlan = await this.getActivePlan(userId);
+          
+          if (activePlan) {
+            console.log(`✅ Successfully reactivated plan for user ${userId}`);
+            return activePlan;
+          } else {
+            console.warn(`⚠️ Plan reactivation appeared to succeed but getActivePlan still returns null`);
+          }
+        } catch (reactivationError) {
+          console.error(`❌ Failed to reactivate plan: ${reactivationError.message}`);
+        }
+      }
+
+      // If no plan can be reactivated, create a basic fallback plan
+      console.log(`🔍 Step 4: Creating fallback plan for user ${userId}...`);
+      
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 84); // 12 week plan
+      
+      const fallbackPlanData = {
+        userId: userId,
+        title: "Recovery Training Plan",
+        description: "A basic training plan created automatically. You can customize this in your plan settings.",
+        startDate,
+        endDate,
+        totalWeeks: 12,
+        isActive: true,
+        planType: 'basic' as const,
+        trainingDaysPerWeek: user.daysPerWeek || 3,
+        fitnessLevel: user.experience || 'beginner'
+      };
+      
+      console.log(`📝 Creating plan with data:`, JSON.stringify(fallbackPlanData, null, 2));
+      
+      try {
+        const planId = await this.createPlan(fallbackPlanData);
+        console.log(`✅ Fallback plan created with ID: ${planId}`);
+        
+        activePlan = await this.getActivePlan(userId);
+        
+        if (!activePlan) {
+          console.error(`❌ Plan creation appeared to succeed but getActivePlan still returns null`);
+          
+          // Additional debugging: check if plan actually exists
+          const createdPlan = await db.plans.get(planId);
+          console.log(`🔍 Direct plan lookup result:`, createdPlan ? `Found plan "${createdPlan.title}"` : 'Plan not found');
+          
+          throw new Error(`Failed to create recovery plan for user ${userId}. Plan creation succeeded but retrieval failed.`);
+        }
+        
+        console.log(`✅ Successfully created and retrieved fallback plan for user ${userId}: "${activePlan.title}"`);
+        return activePlan;
+        
+      } catch (creationError) {
+        console.error(`❌ Failed to create fallback plan: ${creationError.message}`);
+        throw new Error(`Failed to create recovery plan for user ${userId}: ${creationError.message}`);
+      }
+      
+    } catch (error) {
+      console.error(`❌ ensureUserHasActivePlan failed for user ${userId}:`, error);
+      throw error;
+    }
+  },
+
+  async validateUserPlanIntegrity(userId: number): Promise<{
+    hasActivePlan: boolean;
+    hasCompletedOnboarding: boolean;
+    planCount: number;
+    issues: string[];
+  }> {
+    const issues: string[] = [];
+    
+    // Check user exists and onboarding status
+    const user = await this.getUserById(userId);
+    const hasCompletedOnboarding = user?.onboardingComplete || false;
+    
+    if (!user) {
+      issues.push("User not found");
+      return { hasActivePlan: false, hasCompletedOnboarding: false, planCount: 0, issues };
+    }
+    
+    if (!hasCompletedOnboarding) {
+      issues.push("User has not completed onboarding");
+    }
+    
+    // Check plan status
+    const activePlans = await db.plans.where({ userId, isActive: true }).toArray();
+    const totalPlans = await db.plans.where('userId').equals(userId).count();
+    
+    const hasActivePlan = activePlans.length > 0;
+    
+    if (!hasActivePlan && hasCompletedOnboarding) {
+      issues.push("User completed onboarding but has no active plan");
+    }
+    
+    if (activePlans.length > 1) {
+      issues.push(`User has multiple active plans (${activePlans.length})`);
+    }
+    
+    return {
+      hasActivePlan,
+      hasCompletedOnboarding,
+      planCount: totalPlans,
+      issues
+    };
   },
 };
 

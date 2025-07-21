@@ -47,29 +47,48 @@ const GoalQuerySchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
+  console.log('🎯 Goals API GET: Starting request');
+  
   try {
     const { searchParams } = new URL(request.url);
+    console.log('🔍 Query parameters:', Object.fromEntries(searchParams.entries()));
+    
     const params = GoalQuerySchema.parse({
       userId: searchParams.get('userId'),
       status: searchParams.get('status'),
       includeProgress: searchParams.get('includeProgress'),
       includeAnalytics: searchParams.get('includeAnalytics')
     });
+    
+    console.log('✅ Parsed parameters:', params);
 
+    console.log(`🔍 Fetching goals for user ${params.userId}...`);
     const goals = await dbUtils.getGoalsByUser(params.userId, params.status);
+    console.log(`📊 Found ${goals.length} goals for user ${params.userId}`);
     
     // Enrich goals with progress and analytics if requested
+    console.log('🔍 Enriching goals with additional data...');
     const enrichedGoals = await Promise.all(goals.map(async (goal) => {
       const baseGoal = { ...goal };
       
       if (params.includeProgress) {
-        const progress = await goalProgressEngine.calculateGoalProgress(goal.id!);
-        (baseGoal as any).progress = progress;
+        try {
+          const progress = await goalProgressEngine.calculateGoalProgress(goal.id!);
+          (baseGoal as any).progress = progress;
+          console.log(`✅ Added progress for goal ${goal.id}`);
+        } catch (progressError) {
+          console.error(`❌ Failed to calculate progress for goal ${goal.id}:`, progressError);
+        }
       }
       
       if (params.includeAnalytics) {
-        const analytics = await goalProgressEngine.generateGoalAnalytics(goal.id!);
-        (baseGoal as any).analytics = analytics;
+        try {
+          const analytics = await goalProgressEngine.generateGoalAnalytics(goal.id!);
+          (baseGoal as any).analytics = analytics;
+          console.log(`✅ Added analytics for goal ${goal.id}`);
+        } catch (analyticsError) {
+          console.error(`❌ Failed to generate analytics for goal ${goal.id}:`, analyticsError);
+        }
       }
       
       return baseGoal;
@@ -82,7 +101,7 @@ export async function GET(request: NextRequest) {
       ? activeGoals.reduce((sum, goal) => sum + goal.progressPercentage, 0) / activeGoals.length 
       : 0;
 
-    return NextResponse.json({
+    const response = {
       goals: enrichedGoals,
       summary: {
         total: goals.length,
@@ -92,12 +111,17 @@ export async function GET(request: NextRequest) {
         abandoned: goals.filter(g => g.status === 'abandoned').length,
         averageProgress: Math.round(averageProgress * 10) / 10
       }
-    });
+    };
+    
+    console.log('✅ Goals API GET: Success, returning response');
+    return NextResponse.json(response);
 
   } catch (error) {
-    console.error('Error fetching goals:', error);
+    console.error('❌ Goals API GET: Error occurred:', error);
+    console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     
     if (error instanceof z.ZodError) {
+      console.error('❌ Validation error details:', error.errors);
       return NextResponse.json(
         { error: 'Invalid query parameters', details: error.errors },
         { status: 400 }
@@ -105,20 +129,32 @@ export async function GET(request: NextRequest) {
     }
     
     return NextResponse.json(
-      { error: 'Failed to fetch goals' },
+      { 
+        error: 'Failed to fetch goals',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
 }
 
 export async function POST(request: NextRequest) {
+  console.log('🎯 Goals API POST: Starting goal creation');
+  
   try {
     const body = await request.json();
+    console.log('📝 Request body received:', JSON.stringify(body, null, 2));
+    
+    console.log('🔍 Validating goal data against schema...');
     const goalData = CreateGoalSchema.parse(body);
+    console.log('✅ Goal data validation passed');
 
     // Validate SMART goal criteria
+    console.log('🔍 Validating SMART goal criteria...');
     const validation = dbUtils.validateSMARTGoal(goalData);
+    
     if (!validation.isValid) {
+      console.error('❌ SMART goal validation failed:', validation.errors);
       return NextResponse.json(
         { 
           error: 'SMART goal validation failed', 
@@ -128,24 +164,60 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    
+    console.log('✅ SMART goal validation passed');
 
     // Create the goal
-    const goalId = await dbUtils.createGoal({
+    console.log('🔍 Creating goal in database...');
+    const goalCreateData = {
       ...goalData,
       currentValue: goalData.baselineValue,
       progressPercentage: 0,
-      status: 'active'
-    });
+      status: 'active' as const
+    };
+    
+    console.log('📝 Final goal data for creation:', JSON.stringify(goalCreateData, null, 2));
+    
+    const goalId = await dbUtils.createGoal(goalCreateData);
+    console.log(`✅ Goal created successfully with ID: ${goalId}`);
 
     // Generate initial milestones
-    await dbUtils.generateGoalMilestones(goalId);
+    console.log('🔍 Generating initial milestones...');
+    try {
+      await dbUtils.generateGoalMilestones(goalId);
+      console.log('✅ Milestones generated successfully');
+    } catch (milestoneError) {
+      console.error('❌ Failed to generate milestones:', milestoneError);
+      // Continue anyway - milestones are not critical for goal creation
+    }
 
     // Get the created goal with progress
+    console.log('🔍 Fetching created goal with progress data...');
     const createdGoal = await dbUtils.getGoal(goalId);
-    const progress = await goalProgressEngine.calculateGoalProgress(goalId);
-    const milestones = await dbUtils.getGoalMilestones(goalId);
+    
+    if (!createdGoal) {
+      console.error('❌ Failed to retrieve created goal');
+      throw new Error('Goal was created but could not be retrieved');
+    }
+    
+    let progress = null;
+    let milestones = [];
+    
+    try {
+      progress = await goalProgressEngine.calculateGoalProgress(goalId);
+      console.log('✅ Progress calculated successfully');
+    } catch (progressError) {
+      console.error('❌ Failed to calculate progress:', progressError);
+    }
+    
+    try {
+      milestones = await dbUtils.getGoalMilestones(goalId);
+      console.log(`✅ Retrieved ${milestones.length} milestones`);
+    } catch (milestonesError) {
+      console.error('❌ Failed to retrieve milestones:', milestonesError);
+    }
 
-    return NextResponse.json({
+    const response = {
       goal: createdGoal,
       progress,
       milestones,
@@ -153,12 +225,17 @@ export async function POST(request: NextRequest) {
         isValid: true,
         suggestions: validation.suggestions
       }
-    }, { status: 201 });
+    };
+    
+    console.log('✅ Goals API POST: Success, returning created goal');
+    return NextResponse.json(response, { status: 201 });
 
   } catch (error) {
-    console.error('Error creating goal:', error);
+    console.error('❌ Goals API POST: Error occurred:', error);
+    console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     
     if (error instanceof z.ZodError) {
+      console.error('❌ Schema validation error details:', error.errors);
       return NextResponse.json(
         { error: 'Invalid goal data', details: error.errors },
         { status: 400 }
@@ -166,7 +243,10 @@ export async function POST(request: NextRequest) {
     }
     
     return NextResponse.json(
-      { error: 'Failed to create goal' },
+      { 
+        error: 'Failed to create goal',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
