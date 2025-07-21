@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -180,7 +180,65 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
   const [selectedDifficulty, setSelectedDifficulty] = useState("open")
   const [generatedWorkout, setGeneratedWorkout] = useState<any>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [planEndDate, setPlanEndDate] = useState<Date | null>(null)
   const { toast } = useToast()
+
+  // Debug logging for date picker
+  useEffect(() => {
+    if (isOpen && step === "configure") {
+      console.log("🔍 AddRunModal Debug - Modal opened in configure step")
+      console.log("📅 Selected date:", selectedDate)
+      console.log("📅 Selected date string:", selectedDate.toISOString())
+      console.log("📅 Today:", new Date().toISOString())
+      console.log("📅 Is selected date in future:", selectedDate > new Date())
+      
+      // Load plan data for calendar validation
+      loadPlanData()
+    }
+  }, [isOpen, step, selectedDate])
+
+  // Load plan data for calendar validation
+  const loadPlanData = async () => {
+    try {
+      const { dbUtils } = await import('@/lib/db')
+      const user = await dbUtils.getCurrentUser()
+      if (user && user.id) {
+        const activePlan = await dbUtils.ensureUserHasActivePlan(user.id)
+        setPlanEndDate(new Date(activePlan.endDate))
+        console.log("📋 Plan end date set for calendar:", activePlan.endDate.toISOString())
+      }
+    } catch (error) {
+      console.error("Failed to load plan data for calendar:", error)
+    }
+  }
+
+  // Debug logging for date selection
+  const handleDateSelect = (date: Date | undefined) => {
+    console.log("🔍 DatePicker onSelect called with:", date)
+    if (date) {
+      console.log("📅 New selected date:", date.toISOString())
+      console.log("📅 Is future date:", date > new Date())
+      setSelectedDate(date)
+    }
+  }
+
+  // Function to check if a date should be disabled in the calendar
+  const isDateDisabled = (date: Date) => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    // Disable dates before today
+    if (date < today) {
+      return true
+    }
+    
+    // Disable dates after plan end date (if available)
+    if (planEndDate && date > planEndDate) {
+      return true
+    }
+    
+    return false
+  }
 
   const presetDistances = [
     { label: "5k", value: "5.0" },
@@ -328,6 +386,18 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
       try {
         activePlan = await dbUtils.ensureUserHasActivePlan(user.id)
         
+        // Debug logging for plan data
+        console.log("🔍 Active plan data:", {
+          id: activePlan.id,
+          title: activePlan.title,
+          startDate: activePlan.startDate,
+          endDate: activePlan.endDate,
+          totalWeeks: activePlan.totalWeeks
+        })
+        
+        // Set plan end date for calendar validation
+        setPlanEndDate(new Date(activePlan.endDate))
+        
         // Check if this was a recovered/created plan
         const wasRecovered = activePlan.title.includes("Recovery") || activePlan.title.includes("Quick Start")
         if (wasRecovered) {
@@ -363,6 +433,39 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
       const daysDiff = Math.floor((selectedDateTime.getTime() - planStartDate.getTime()) / (1000 * 60 * 60 * 24))
       const weekNumber = Math.floor(daysDiff / 7) + 1
 
+      // Debug logging for date calculations
+      console.log("🔍 Date calculations:", {
+        planStartDate: planStartDate.toISOString(),
+        selectedDateTime: selectedDateTime.toISOString(),
+        daysDiff,
+        weekNumber,
+        planEndDate: activePlan.endDate.toISOString(),
+        isWithinPlanRange: selectedDateTime >= planStartDate && selectedDateTime <= activePlan.endDate
+      })
+
+      // Validate that selected date is within plan range
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const planEndDate = new Date(activePlan.endDate)
+      
+      if (selectedDateTime < today) {
+        toast({
+          variant: "destructive",
+          title: "Invalid Date",
+          description: "Please select today or a future date for your workout.",
+        })
+        return
+      }
+      
+      if (selectedDateTime > planEndDate) {
+        toast({
+          variant: "destructive",
+          title: "Date Outside Plan Range",
+          description: `Please select a date within your training plan (up to ${planEndDate.toLocaleDateString()}).`,
+        })
+        return
+      }
+
       // Get day of week
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
       const dayOfWeek = dayNames[selectedDateTime.getDay()]
@@ -372,7 +475,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
         week: weekNumber,
         day: dayOfWeek,
         type: selectedWorkout.id as any,
-        distance: selectedGoal === 'distance' ? Number.parseFloat(targetValue) : undefined,
+        distance: selectedGoal === 'distance' ? Number.parseFloat(targetValue) : 0,
         duration: selectedGoal === 'duration' ? Number.parseFloat(targetValue) : undefined,
         notes: notes || generatedWorkout?.description || selectedWorkout.description,
         completed: false,
@@ -646,8 +749,9 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
                   <Calendar
                     mode="single"
                     selected={selectedDate}
-                    onSelect={(date) => date && setSelectedDate(date)}
+                    onSelect={handleDateSelect}
                     initialFocus
+                    disabled={isDateDisabled}
                   />
                 </PopoverContent>
               </Popover>
