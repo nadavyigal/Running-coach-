@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from "react"
-import { OnboardingScreen } from "@/components/onboarding-screen"
+import { OnboardingChatOverlay } from "@/components/onboarding-chat-overlay"
 import { TodayScreen } from "@/components/today-screen"
 import { PlanScreen } from "@/components/plan-screen"
 import { RecordScreen } from "@/components/record-screen"
@@ -59,15 +59,14 @@ export default function RunSmartApp() {
       setCurrentScreen("chat")
     }
 
+    // Add event listeners only if we're in the browser
     if (typeof window !== "undefined") {
       window.addEventListener("navigate-to-record", handleNavigateToRecord)
       window.addEventListener("navigate-to-analytics", handleNavigateToAnalytics)
       window.addEventListener("navigate-to-chat", handleNavigateToChat)
-    }
 
-    // Cleanup function
-    return () => {
-      if (typeof window !== "undefined") {
+      // Cleanup function
+      return () => {
         window.removeEventListener("navigate-to-record", handleNavigateToRecord)
         window.removeEventListener("navigate-to-analytics", handleNavigateToAnalytics)
         window.removeEventListener("navigate-to-chat", handleNavigateToChat)
@@ -82,7 +81,7 @@ export default function RunSmartApp() {
 
   const renderScreen = () => {
     if (!isOnboardingComplete && currentScreen === "onboarding") {
-      return <OnboardingScreen onComplete={handleOnboardingComplete} />
+      return <OnboardingChatOverlay onComplete={handleOnboardingComplete} />
     }
 
     switch (currentScreen) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { dbUtils } from '@/lib/db';
+import { dbUtils, type CoachingProfile } from '@/lib/db';
 
 const ProfileQuerySchema = z.object({
   userId: z.string().transform(Number).optional(),
@@ -37,81 +37,89 @@ export async function GET(request: NextRequest) {
     });
 
     const userId = params.userId || 1; // Default to user 1 for now
+    console.log('Fetching coaching profile for userId:', userId);
+    
+    // Check database version and ensure coaching tables exist
+    console.log('Verifying database schema...');
+    const coachingTablesExist = await dbUtils.ensureCoachingTablesExist();
+    
+    if (!coachingTablesExist) {
+      console.error('Coaching tables do not exist or database version is outdated');
+      return NextResponse.json(
+        { error: 'Database schema outdated. Please refresh the page to update.' },
+        { status: 500 }
+      );
+    }
     
     // Get coaching profile
+    console.log('Step 1: Fetching coaching profile...');
     const profile = await dbUtils.getCoachingProfile(userId);
+    console.log('Coaching profile result:', profile ? 'Found' : 'Not found');
     
     if (!profile) {
+      console.log('No coaching profile found for user:', userId, 'attempting to create one...');
+      
+      // Try to create a coaching profile automatically
+      try {
+        await dbUtils.createCoachingProfile({
+          userId,
+          communicationStyle: {
+            motivationLevel: 'medium',
+            detailPreference: 'medium',
+            personalityType: 'encouraging',
+            preferredTone: 'friendly'
+          },
+          feedbackPatterns: {
+            averageRating: 3.5,
+            commonConcerns: [],
+            responsiveness: 'immediate',
+            preferredFeedbackFrequency: 'weekly'
+          },
+          behavioralPatterns: {
+            workoutPreferences: {
+              preferredDays: [],
+              preferredTimes: [],
+              workoutTypeAffinities: {},
+              difficultyPreference: 5
+            },
+            contextualPatterns: {
+              weatherSensitivity: 5,
+              scheduleFlexibility: 5,
+              stressResponse: 'maintain',
+              energyPatterns: {}
+            }
+          },
+          coachingEffectivenessScore: 50,
+          lastAdaptationDate: new Date(),
+          adaptationHistory: []
+        });
+        
+        // Fetch the newly created profile
+        const newProfile = await dbUtils.getCoachingProfile(userId);
+        if (newProfile) {
+          console.log('Successfully created coaching profile for user:', userId);
+          return await buildProfileResponse(newProfile, userId);
+        }
+      } catch (createError) {
+        console.error('Failed to create coaching profile:', createError);
+      }
+      
       return NextResponse.json(
-        { error: 'Coaching profile not found' },
+        { error: 'Coaching profile not found and could not be created' },
         { status: 404 }
       );
     }
 
-    // Get recent adaptations
-    const recentAdaptations = profile.adaptationHistory
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 10);
+    console.log('Found coaching profile for user:', userId);
+    return await buildProfileResponse(profile, userId);
 
-    // Get behavior patterns
-    const patterns = await dbUtils.getBehaviorPatterns(userId);
-    
-    // Get recent feedback for effectiveness metrics
-    const recentFeedback = await dbUtils.getCoachingFeedback(userId, 20);
-    const averageRating = recentFeedback.length > 0 
-      ? recentFeedback.reduce((sum, f) => sum + (f.rating || 3), 0) / recentFeedback.length
-      : 3.5;
-
-    // Calculate engagement metrics
-    const recentInteractions = await dbUtils.getCoachingInteractions(userId, 30);
-    const engagementImprovement = recentInteractions.length > 10 
-      ? ((recentInteractions.slice(0, 5).reduce((sum, i) => sum + (i.effectivenessScore || 0), 0) / 5) -
-         (recentInteractions.slice(5, 10).reduce((sum, i) => sum + (i.effectivenessScore || 0), 0) / 5)) * 100
-      : 0;
-
-    const response = {
-      coachingProfile: {
-        communicationStyle: profile.communicationStyle,
-        learnedPreferences: {
-          workoutDays: profile.behavioralPatterns.workoutPreferences.preferredDays,
-          preferredWorkoutTypes: Object.entries(profile.behavioralPatterns.workoutPreferences.workoutTypeAffinities || {})
-            .filter(([, score]) => score > 50)
-            .map(([type]) => type),
-          difficultyPreference: profile.behavioralPatterns.workoutPreferences.difficultyPreference,
-          weatherSensitivity: profile.behavioralPatterns.contextualPatterns.weatherSensitivity,
-          stressResponse: profile.behavioralPatterns.contextualPatterns.stressResponse,
-        },
-        effectivenessMetrics: {
-          overallSatisfaction: Number(averageRating.toFixed(1)),
-          coachingScore: Math.round(profile.coachingEffectivenessScore),
-          engagementImprovement: Math.round(engagementImprovement),
-          totalInteractions: recentInteractions.length,
-          totalFeedback: recentFeedback.length,
-        },
-        behaviorPatterns: patterns.map(pattern => ({
-          type: pattern.patternType,
-          confidence: pattern.confidenceScore,
-          lastObserved: pattern.lastObserved,
-          observationCount: pattern.observationCount,
-          pattern: pattern.patternData.pattern,
-        })),
-      },
-      adaptationHistory: recentAdaptations.map(adaptation => ({
-        date: adaptation.date,
-        adaptation: adaptation.adaptation,
-        effectiveness: adaptation.effectiveness,
-        reason: adaptation.reason,
-      })),
-      metadata: {
-        userId,
-        lastUpdated: profile.updatedAt,
-        profileAge: Math.floor((new Date().getTime() - new Date(profile.createdAt).getTime()) / (1000 * 60 * 60 * 24)),
-      },
-    };
-
-    return NextResponse.json(response);
   } catch (error) {
     console.error('Error fetching coaching profile:', error);
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined
+    });
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -121,7 +129,134 @@ export async function GET(request: NextRequest) {
     }
     
     return NextResponse.json(
-      { error: 'Failed to fetch coaching profile' },
+      { 
+        error: 'Failed to fetch coaching profile',
+        details: error instanceof Error ? error.message : 'Unknown error occurred'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+async function buildProfileResponse(profile: CoachingProfile, userId: number) {
+  try {
+    console.log('Building profile response for userId:', userId);
+    
+    // Get recent adaptations
+    console.log('Step 2: Processing adaptation history...');
+    const recentAdaptations = (profile.adaptationHistory || [])
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 10);
+    console.log('Recent adaptations count:', recentAdaptations.length);
+
+    // Get behavior patterns with error handling
+    console.log('Step 3: Fetching behavior patterns...');
+    let patterns = [];
+    try {
+      patterns = await dbUtils.getBehaviorPatterns(userId);
+      console.log('Behavior patterns retrieved:', patterns.length);
+    } catch (error) {
+      console.error('Failed to fetch behavior patterns:', error);
+      patterns = [];
+    }
+    
+    // Get recent feedback for effectiveness metrics with error handling
+    console.log('Step 4: Fetching coaching feedback...');
+    let recentFeedback = [];
+    try {
+      recentFeedback = await dbUtils.getCoachingFeedback(userId, 20);
+      console.log('Coaching feedback retrieved:', recentFeedback.length);
+    } catch (error) {
+      console.error('Failed to fetch coaching feedback:', error);
+      recentFeedback = [];
+    }
+    
+    const averageRating = recentFeedback.length > 0 
+      ? recentFeedback.reduce((sum, f) => sum + (f.rating || 3), 0) / recentFeedback.length
+      : 3.5;
+    console.log('Average rating calculated:', averageRating);
+
+    // Calculate engagement metrics with error handling
+    console.log('Step 5: Fetching coaching interactions...');
+    let recentInteractions = [];
+    try {
+      recentInteractions = await dbUtils.getCoachingInteractions(userId, 30);
+      console.log('Coaching interactions retrieved:', recentInteractions.length);
+    } catch (error) {
+      console.error('Failed to fetch coaching interactions:', error);
+      recentInteractions = [];
+    }
+    
+    const engagementImprovement = recentInteractions.length > 10 
+      ? ((recentInteractions.slice(0, 5).reduce((sum, i) => sum + (i.effectivenessScore || 0), 0) / 5) -
+         (recentInteractions.slice(5, 10).reduce((sum, i) => sum + (i.effectivenessScore || 0), 0) / 5)) * 100
+      : 0;
+    console.log('Engagement improvement calculated:', engagementImprovement);
+
+    console.log('Step 6: Building response object...');
+    
+    // Validate profile structure and provide safe defaults
+    const communicationStyle = profile.communicationStyle || {
+      motivationLevel: 'medium',
+      detailPreference: 'medium', 
+      personalityType: 'encouraging',
+      preferredTone: 'friendly'
+    };
+    
+    const behavioralPatterns = profile.behavioralPatterns || {
+      workoutPreferences: { preferredDays: [], workoutTypeAffinities: {}, difficultyPreference: 5 },
+      contextualPatterns: { weatherSensitivity: 5, stressResponse: 'maintain' }
+    };
+    
+    console.log('Communication style:', communicationStyle);
+    console.log('Behavioral patterns:', behavioralPatterns);
+
+    const response = {
+      coachingProfile: {
+        communicationStyle,
+        learnedPreferences: {
+          workoutDays: behavioralPatterns.workoutPreferences?.preferredDays || [],
+          preferredWorkoutTypes: Object.entries(behavioralPatterns.workoutPreferences?.workoutTypeAffinities || {})
+            .filter(([, score]) => (score as number) > 50)
+            .map(([type]) => type),
+          difficultyPreference: behavioralPatterns.workoutPreferences?.difficultyPreference || 5,
+          weatherSensitivity: behavioralPatterns.contextualPatterns?.weatherSensitivity || 5,
+          stressResponse: behavioralPatterns.contextualPatterns?.stressResponse || 'maintain',
+        },
+        effectivenessMetrics: {
+          overallSatisfaction: Number(averageRating.toFixed(1)),
+          coachingScore: Math.round(profile.coachingEffectivenessScore || 50),
+          engagementImprovement: Math.round(engagementImprovement),
+          totalInteractions: recentInteractions.length,
+          totalFeedback: recentFeedback.length,
+        },
+        behaviorPatterns: patterns.map(pattern => ({
+          type: pattern.patternType || 'unknown',
+          confidence: pattern.confidenceScore || 0,
+          lastObserved: pattern.lastObserved || new Date().toISOString(),
+          observationCount: pattern.observationCount || 0,
+          pattern: pattern.patternData?.pattern || 'No pattern data',
+        })),
+      },
+      adaptationHistory: recentAdaptations.map(adaptation => ({
+        date: adaptation.date || new Date().toISOString(),
+        adaptation: adaptation.adaptation || 'No adaptation data',
+        effectiveness: adaptation.effectiveness || 0,
+        reason: adaptation.reason || 'No reason provided',
+      })),
+      metadata: {
+        userId,
+        lastUpdated: profile.updatedAt || new Date().toISOString(),
+        profileAge: Math.floor((new Date().getTime() - new Date(profile.createdAt || new Date()).getTime()) / (1000 * 60 * 60 * 24)),
+      },
+    };
+
+    console.log('Step 7: Response built successfully');
+    return NextResponse.json(response);
+  } catch (buildError) {
+    console.error('Error building profile response:', buildError);
+    return NextResponse.json(
+      { error: 'Failed to build coaching profile response' },
       { status: 500 }
     );
   }

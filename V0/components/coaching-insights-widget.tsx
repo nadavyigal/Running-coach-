@@ -80,26 +80,178 @@ export function CoachingInsightsWidget({
     try {
       setLoading(true);
       setError(null);
+      console.log('CoachingInsightsWidget: Fetching data for userId:', userId);
 
-      const response = await fetch(`/api/coaching/profile?userId=${userId}`);
+      // Access IndexedDB directly from client-side
+      const { dbUtils } = await import('@/lib/db');
       
-      if (!response.ok) {
-        if (response.status === 404) {
-          // No profile exists yet - this is normal for new users
-          setProfile(null);
-          return;
-        }
-        throw new Error(`Failed to fetch coaching profile: ${response.status}`);
+      console.log('Step 1: Getting current user...');
+      const user = await dbUtils.getCurrentUser();
+      console.log('Current user:', user);
+      
+      if (!user || user.id !== userId) {
+        console.warn('User not found or ID mismatch');
+        setProfile(null);
+        return;
       }
-
-      const data = await response.json();
-      setProfile(data.coachingProfile);
-      setAdaptationHistory(data.adaptationHistory || []);
+      
+      console.log('Step 2: Getting coaching profile...');
+      const profile = await dbUtils.getCoachingProfile(userId);
+      console.log('Coaching profile result:', profile ? 'Found' : 'Not found');
+      
+      if (!profile) {
+        console.log('No coaching profile found, attempting to create one...');
+        
+        // Create coaching profile with default values
+        const profileData = {
+          userId,
+          communicationStyle: {
+            motivationLevel: 'medium' as const,
+            detailPreference: 'medium' as const,
+            personalityType: 'encouraging' as const,
+            preferredTone: 'friendly' as const
+          },
+          feedbackPatterns: {
+            averageRating: 3.5,
+            commonConcerns: [] as string[],
+            responsiveness: 'immediate' as const,
+            preferredFeedbackFrequency: 'weekly' as const
+          },
+          behavioralPatterns: {
+            workoutPreferences: {
+              preferredDays: [] as string[],
+              preferredTimes: [] as string[],
+              workoutTypeAffinities: {} as Record<string, number>,
+              difficultyPreference: 5
+            },
+            contextualPatterns: {
+              weatherSensitivity: 5,
+              scheduleFlexibility: 5,
+              stressResponse: 'maintain' as const,
+              energyPatterns: {} as Record<string, any>
+            }
+          },
+          coachingEffectivenessScore: 50,
+          lastAdaptationDate: new Date(),
+          adaptationHistory: [] as any[]
+        };
+        
+        await dbUtils.createCoachingProfile(profileData);
+        console.log('Created new coaching profile');
+        
+        // Fetch the newly created profile
+        const newProfile = await dbUtils.getCoachingProfile(userId);
+        if (newProfile) {
+          await buildProfileResponse(newProfile);
+        } else {
+          setProfile(null);
+        }
+        return;
+      }
+      
+      await buildProfileResponse(profile);
+      
     } catch (err) {
       console.error('Error fetching coaching data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load coaching data');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load coaching data';
+      setError(errorMessage);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const buildProfileResponse = async (profile: any) => {
+    try {
+      console.log('Building profile response...');
+      const { dbUtils } = await import('@/lib/db');
+      
+      // Get recent adaptations
+      const recentAdaptations = (profile.adaptationHistory || [])
+        .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 10);
+
+      // Get behavior patterns
+      let patterns = [];
+      try {
+        patterns = await dbUtils.getBehaviorPatterns(userId);
+      } catch (error) {
+        console.warn('Could not fetch behavior patterns:', error);
+        patterns = [];
+      }
+      
+      // Get recent feedback
+      let recentFeedback = [];
+      try {
+        recentFeedback = await dbUtils.getCoachingFeedback(userId, 20);
+      } catch (error) {
+        console.warn('Could not fetch coaching feedback:', error);
+        recentFeedback = [];
+      }
+      
+      const averageRating = recentFeedback.length > 0 
+        ? recentFeedback.reduce((sum: number, f: any) => sum + (f.rating || 3), 0) / recentFeedback.length
+        : 3.5;
+
+      // Get coaching interactions
+      let recentInteractions = [];
+      try {
+        recentInteractions = await dbUtils.getCoachingInteractions(userId, 30);
+      } catch (error) {
+        console.warn('Could not fetch coaching interactions:', error);
+        recentInteractions = [];
+      }
+      
+      const engagementImprovement = recentInteractions.length > 10 
+        ? ((recentInteractions.slice(0, 5).reduce((sum: number, i: any) => sum + (i.effectivenessScore || 0), 0) / 5) -
+           (recentInteractions.slice(5, 10).reduce((sum: number, i: any) => sum + (i.effectivenessScore || 0), 0) / 5)) * 100
+        : 0;
+
+      // Build safe profile data
+      const safeProfile = {
+        communicationStyle: profile.communicationStyle || {
+          motivationLevel: 'medium',
+          detailPreference: 'medium',
+          personalityType: 'encouraging',
+          preferredTone: 'friendly'
+        },
+        learnedPreferences: {
+          workoutDays: profile.behavioralPatterns?.workoutPreferences?.preferredDays || [],
+          preferredWorkoutTypes: Object.entries(profile.behavioralPatterns?.workoutPreferences?.workoutTypeAffinities || {})
+            .filter(([, score]) => (score as number) > 50)
+            .map(([type]) => type),
+          difficultyPreference: profile.behavioralPatterns?.workoutPreferences?.difficultyPreference || 5,
+          weatherSensitivity: profile.behavioralPatterns?.contextualPatterns?.weatherSensitivity || 5,
+          stressResponse: profile.behavioralPatterns?.contextualPatterns?.stressResponse || 'maintain',
+        },
+        effectivenessMetrics: {
+          overallSatisfaction: Number(averageRating.toFixed(1)),
+          coachingScore: Math.round(profile.coachingEffectivenessScore || 50),
+          engagementImprovement: Math.round(engagementImprovement),
+          totalInteractions: recentInteractions.length,
+          totalFeedback: recentFeedback.length,
+        },
+        behaviorPatterns: patterns.map(pattern => ({
+          type: pattern.patternType || 'unknown',
+          confidence: pattern.confidenceScore || 0,
+          lastObserved: pattern.lastObserved || new Date().toISOString(),
+          observationCount: pattern.observationCount || 0,
+          pattern: pattern.patternData?.pattern || 'No pattern data',
+        })),
+      };
+
+      setProfile(safeProfile);
+      setAdaptationHistory(recentAdaptations.map((adaptation: any) => ({
+        date: adaptation.date || new Date().toISOString(),
+        adaptation: adaptation.adaptation || 'No adaptation data',
+        effectiveness: adaptation.effectiveness || 0,
+        reason: adaptation.reason || 'No reason provided',
+      })));
+      
+      console.log('Profile response built successfully');
+      
+    } catch (buildError) {
+      console.error('Error building profile response:', buildError);
+      throw buildError;
     }
   };
 
@@ -120,9 +272,22 @@ export function CoachingInsightsWidget({
     return (
       <Card className={className}>
         <CardContent className="p-6">
-          <div className="flex items-center gap-3 text-red-600">
-            <Brain className="h-5 w-5" />
-            <div className="text-sm">Error loading coaching data</div>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 text-red-600">
+              <Brain className="h-5 w-5" />
+              <div className="text-sm font-medium">Error loading coaching data</div>
+            </div>
+            <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+              {error}
+            </div>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={fetchCoachingData}
+              className="text-xs"
+            >
+              Retry
+            </Button>
           </div>
         </CardContent>
       </Card>

@@ -151,51 +151,70 @@ export function RecordScreen() {
     })
   }
 
-  const startGpsTracking = () => {
-    if (!navigator.geolocation || gpsPermission !== 'granted') return
+  const startGpsTracking = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation || gpsPermission !== 'granted') {
+        resolve(false)
+        return
+      }
 
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (position) => {
-        const newCoordinate: GPSCoordinate = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          timestamp: Date.now(),
-          accuracy: position.coords.accuracy
-        }
-        
-        setCurrentPosition(newCoordinate)
-        setGpsAccuracy(position.coords.accuracy || 0)
-        
-        // Add to GPS path
-        setGpsPath(prev => {
-          const newPath = [...prev, newCoordinate]
-          
-          // Calculate distance
-          if (newPath.length > 1) {
-            const totalDistance = calculateTotalDistance(newPath)
-            setMetrics(prevMetrics => ({
-              ...prevMetrics,
-              distance: totalDistance
-            }))
+      let isFirstPosition = true
+
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (position) => {
+          const newCoordinate: GPSCoordinate = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            timestamp: Date.now(),
+            accuracy: position.coords.accuracy
           }
           
-          return newPath
-        })
-      },
-      (error) => {
-        console.error('GPS tracking error:', error)
-        toast({
-          title: "GPS Tracking Error",
-          description: "Unable to track location. You can continue with manual entry.",
-          variant: "destructive"
-        })
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 5000,
-        maximumAge: 1000
-      }
-    )
+          setCurrentPosition(newCoordinate)
+          setGpsAccuracy(position.coords.accuracy || 0)
+          
+          // Add to GPS path
+          setGpsPath(prev => {
+            const newPath = [...prev, newCoordinate]
+            
+            // Calculate distance
+            if (newPath.length > 1) {
+              const totalDistance = calculateTotalDistance(newPath)
+              setMetrics(prevMetrics => ({
+                ...prevMetrics,
+                distance: totalDistance
+              }))
+            }
+            
+            return newPath
+          })
+
+          // Resolve on first successful position
+          if (isFirstPosition) {
+            isFirstPosition = false
+            resolve(true)
+          }
+        },
+        (error) => {
+          console.error('GPS tracking error:', error)
+          toast({
+            title: "GPS Tracking Error",
+            description: "Unable to track location. You can continue with manual entry.",
+            variant: "destructive"
+          })
+          
+          // Resolve false on error during startup
+          if (isFirstPosition) {
+            isFirstPosition = false
+            resolve(false)
+          }
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 1000
+        }
+      )
+    })
   }
 
   const stopGpsTracking = () => {
@@ -257,20 +276,29 @@ export function RecordScreen() {
     setIsPaused(false)
     setGpsPath([])
     
+    let gpsStarted = false
+    let gpsAttempted = false
+    
     // Try to start GPS tracking
     if (gpsPermission === 'granted') {
-      startGpsTracking()
+      gpsAttempted = true
+      gpsStarted = await startGpsTracking()
     } else if (gpsPermission === 'prompt') {
       const permitted = await requestGpsPermission()
       if (permitted) {
-        startGpsTracking()
+        gpsAttempted = true
+        gpsStarted = await startGpsTracking()
       }
     }
     
-    toast({
-      title: "Run Started! 🏃‍♂️",
-      description: gpsPermission === 'granted' ? "GPS tracking active" : "Manual tracking mode",
-    })
+    // Show success toast only if GPS wasn't attempted or if it started successfully
+    // If GPS was attempted but failed, the error toast from startGpsTracking will be shown instead
+    if (!gpsAttempted || gpsStarted) {
+      toast({
+        title: "Run Started! 🏃‍♂️",
+        description: gpsStarted ? "GPS tracking active" : "Manual tracking mode",
+      })
+    }
   }
 
   const pauseRun = () => {
@@ -283,10 +311,10 @@ export function RecordScreen() {
     })
   }
 
-  const resumeRun = () => {
+  const resumeRun = async () => {
     setIsPaused(false)
     if (gpsPermission === 'granted') {
-      startGpsTracking()
+      await startGpsTracking()
     }
     
     toast({
@@ -335,7 +363,17 @@ export function RecordScreen() {
         await dbUtils.markWorkoutCompleted(currentWorkout.id)
       }
 
-      await planAdjustmentService.afterRun(user.id)
+      // Trigger adaptive plan adjustments (but don't fail run save if this fails)
+      try {
+        await planAdjustmentService.afterRun(user.id)
+      } catch (adaptiveError) {
+        console.error('Adaptive coaching failed:', adaptiveError)
+        toast({
+          title: "Adaptive coaching failed.",
+          description: "Your run was saved, but plan adjustments couldn't be processed.",
+          variant: "destructive"
+        })
+      }
 
       // Track plan session completion
       await trackPlanSessionCompleted({

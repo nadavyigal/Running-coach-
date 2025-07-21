@@ -51,6 +51,15 @@ describe('RecordScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     
+    // Restore geolocation mock
+    Object.defineProperty(global.navigator, 'geolocation', {
+      value: mockGeolocation,
+      writable: true,
+    })
+    
+    // Reset permissions mock to default 'prompt' state
+    mockPermissions.query.mockResolvedValue({ state: 'prompt' })
+    
     // Mock router
     ;(useRouter as any).mockReturnValue({
       push: mockPush,
@@ -128,6 +137,11 @@ describe('RecordScreen', () => {
 
       await act(async () => {
         render(<RecordScreen />)
+      })
+
+      // Wait for GPS prompt state to be recognized
+      await waitFor(() => {
+        expect(screen.getByText('Enable GPS Tracking')).toBeInTheDocument()
       })
 
       const enableButton = screen.getByRole('button', { name: 'Enable' })
@@ -530,6 +544,11 @@ describe('RecordScreen', () => {
 
       await act(async () => {
         render(<RecordScreen />)
+      })
+
+      // Wait for GPS permission check to complete
+      await waitFor(() => {
+        expect(screen.queryByText('GPS Unavailable')).not.toBeInTheDocument()
       })
 
       const startButton = screen.getByRole('button', { name: 'Start Run' })

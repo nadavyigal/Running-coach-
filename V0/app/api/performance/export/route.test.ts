@@ -33,10 +33,9 @@ describe('/api/performance/export', () => {
         distance: 5,
         duration: 1800, // 30 minutes
         pace: 360, // 6 min/km
-        completedAt: new Date('2023-12-01'),
-        createdAt: new Date('2023-12-01'),
+        completedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
+        createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
         type: 'tempo' as const,
-        location: 'Park',
         route: 'Loop',
         notes: 'Good run',
       },
@@ -46,10 +45,9 @@ describe('/api/performance/export', () => {
         distance: 10,
         duration: 3000, // 50 minutes
         pace: 300, // 5 min/km
-        completedAt: new Date('2023-12-02'),
-        createdAt: new Date('2023-12-02'),
+        completedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
+        createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
         type: 'long' as const,
-        location: 'Trail',
         route: 'Out and back',
         notes: 'Felt strong',
       },
@@ -67,12 +65,12 @@ describe('/api/performance/export', () => {
       distance: 5,
       timeForDistance: 1800,
       bestPace: 360,
-      dateAchieved: new Date('2023-12-01'),
+      dateAchieved: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
       runId: 1,
       value: 1800,
-      achievedAt: new Date('2023-12-01'),
-      createdAt: new Date('2023-12-01'),
-      updatedAt: new Date('2023-12-01'),
+      achievedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      updatedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
     });
   });
 
@@ -105,9 +103,9 @@ describe('/api/performance/export', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('text/csv');
     expect(text).toContain('# RUNS');
-    expect(text).toContain('Date,Distance (km),Duration (min),Pace (min/km),Type,Notes');
+    expect(text).toContain('"Date","Distance (km)","Duration (min)","Pace (min/km)","Type","Notes"');
     expect(text).toContain('# PERSONAL RECORDS');
-    expect(text).toContain('Distance,Best Time,Best Pace,Date Achieved,Type');
+    expect(text).toContain('"Distance","Best Time","Best Pace","Date Achieved","Type"');
   });
 
   it('should respect time range filtering', async () => {

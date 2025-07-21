@@ -2,13 +2,35 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbUtils } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 const ExportQuerySchema = z.object({
-  userId: z.string().transform(Number).optional(),
-  format: z.enum(['csv', 'json']).nullable().optional().default('json'),
-  timeRange: z.enum(['7d', '30d', '90d', '1y', 'all-time']).nullable().optional().default('all-time'),
-  includeRuns: z.string().transform(val => val === 'true').nullable().optional().default(true),
-  includeMetrics: z.string().transform(val => val === 'true').nullable().optional().default(true),
-  includeRecords: z.string().transform(val => val === 'true').nullable().optional().default(true),
+  userId: z.string().nullable().optional().transform((val) => val ? Number(val) : undefined),
+  format: z.string().nullable().optional().transform((val) => {
+    if (!val || val === 'null') return 'json';
+    if (['csv', 'json'].includes(val)) return val as 'csv' | 'json';
+    throw new z.ZodError([{
+      code: 'invalid_enum_value',
+      received: val,
+      options: ['csv', 'json'],
+      path: ['format'],
+      message: `Invalid enum value. Expected 'csv' | 'json', received '${val}'`
+    }]);
+  }),
+  timeRange: z.string().nullable().optional().transform((val) => {
+    if (!val || val === 'null') return 'all-time';
+    if (['7d', '30d', '90d', '1y', 'all-time'].includes(val)) return val as '7d' | '30d' | '90d' | '1y' | 'all-time';
+    throw new z.ZodError([{
+      code: 'invalid_enum_value',
+      received: val,
+      options: ['7d', '30d', '90d', '1y', 'all-time'],
+      path: ['timeRange'],
+      message: `Invalid enum value. Expected '7d' | '30d' | '90d' | '1y' | 'all-time', received '${val}'`
+    }]);
+  }),
+  includeRuns: z.string().nullable().optional().transform(val => val === null || val === undefined ? true : val === 'true'),
+  includeMetrics: z.string().nullable().optional().transform(val => val === null || val === undefined ? true : val === 'true'),
+  includeRecords: z.string().nullable().optional().transform(val => val === null || val === undefined ? true : val === 'true'),
 });
 
 function formatRunsAsCSV(runs: any[]): string {
@@ -60,7 +82,7 @@ function formatRecordsAsCSV(records: any[]): string {
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
+    const { searchParams } = request.nextUrl;
     const params = ExportQuerySchema.parse({
       userId: searchParams.get('userId'),
       format: searchParams.get('format'),
@@ -111,13 +133,12 @@ export async function GET(request: NextRequest) {
     if (includeRuns) {
       const runs = await dbUtils.getRunsInTimeRange(userId, startDate, endDate);
       exportData.runs = runs.map(run => ({
-        date: run.date,
+        date: run.completedAt,
         distance: run.distance,
         duration: run.duration,
         pace: run.pace,
         type: run.type,
         notes: run.notes,
-        location: run.location,
         route: run.route,
       }));
     }

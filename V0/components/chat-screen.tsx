@@ -21,7 +21,6 @@ import { dbUtils, type User as UserType } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 import { trackChatMessageSent } from "@/lib/analytics"
 import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
-import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
 
 interface ChatMessage {
   id: string
@@ -35,14 +34,7 @@ interface ChatMessage {
   requestFeedback?: boolean
 }
 
-const SUGGESTED_QUESTIONS = [
-  "How should I prepare for my next run?",
-  "What's a good pace for my level?", 
-  "Help me with running form tips",
-  "How to prevent running injuries?",
-  "What should I eat before running?",
-  "How to stay motivated?",
-]
+
 
 export function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -52,7 +44,6 @@ export function ChatScreen() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
-  const [showCoachingPreferences, setShowCoachingPreferences] = useState(false)
   const [selectedMessageForFeedback, setSelectedMessageForFeedback] = useState<ChatMessage | null>(null)
 
   useEffect(() => {
@@ -384,24 +375,7 @@ export function ChatScreen() {
         </div>
       </ScrollArea>
 
-      {/* Suggested Questions */}
-      {messages.length <= 1 && (
-        <div className="p-4 border-t">
-          <p className="text-sm text-muted-foreground mb-3">Suggested questions:</p>
-          <div className="flex flex-wrap gap-2">
-            {SUGGESTED_QUESTIONS.map((question, index) => (
-                             <Badge
-                 key={index}
-                 variant="secondary"
-                 className="cursor-pointer hover:bg-secondary/80 transition-colors"
-                 onClick={() => handleSuggestedQuestion(question)}
-              >
-                {question}
-              </Badge>
-            ))}
-          </div>
-        </div>
-      )}
+      
 
       {/* Input */}
       <div className="border-t bg-card p-4">
@@ -442,29 +416,7 @@ export function ChatScreen() {
         />
       )}
       
-      {/* Coaching Preferences Modal */}
-      {showCoachingPreferences && user && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-4 border-b flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Coaching Preferences</h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowCoachingPreferences(false)}
-              >
-                ×
-              </Button>
-            </div>
-            <div className="p-4">
-              <CoachingPreferencesSettings
-                userId={user.id!}
-                onClose={() => setShowCoachingPreferences(false)}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      
     </div>
   )
 }

@@ -13,6 +13,9 @@ vi.mock('../lib/db', () => ({
     getActivePlan: vi.fn(),
     getWorkoutsByPlan: vi.fn(),
     getRunStats: vi.fn(),
+    getWorkoutsForDateRange: vi.fn(),
+    getCoachingProfile: vi.fn(),
+    getStreakData: vi.fn(),
   },
 }));
 
@@ -28,6 +31,7 @@ vi.mock('./ui/card', () => ({
   CardContent: ({ children, ...props }: any) => <div data-testid="card-content" {...props}>{children}</div>,
   CardHeader: ({ children, ...props }: any) => <div data-testid="card-header" {...props}>{children}</div>,
   CardTitle: ({ children, ...props }: any) => <h2 data-testid="card-title" {...props}>{children}</h2>,
+  CardDescription: ({ children, ...props }: any) => <p data-testid="card-description" {...props}>{children}</p>,
 }));
 
 vi.mock('./ui/button', () => ({
@@ -43,6 +47,20 @@ vi.mock('./ui/badge', () => ({
 vi.mock('./ui/progress', () => ({
   Progress: ({ value, ...props }: any) => (
     <div data-testid="progress" data-value={value} {...props}></div>
+  ),
+}));
+
+// Mock goal-recommendations to avoid fetch issues in tests
+vi.mock('./goal-recommendations', () => ({
+  GoalRecommendations: ({ userId }: any) => (
+    <div data-testid="goal-recommendations">Goal Recommendations for user {userId}</div>
+  ),
+}));
+
+// Mock coaching-insights-widget to avoid fetch issues in tests
+vi.mock('./coaching-insights-widget', () => ({
+  CoachingInsightsWidget: ({ userId }: any) => (
+    <div data-testid="coaching-insights">Coaching Insights for user {userId}</div>
   ),
 }));
 
@@ -75,7 +93,7 @@ const mockWorkout = {
   week: 1,
   day: 1,
   type: 'easy',
-  scheduledDate: new Date().toISOString(),
+  scheduledDate: new Date(),
   distance: 3,
   duration: 30,
   description: 'Easy run',
@@ -91,16 +109,21 @@ const mockPlan = {
   id: 1,
   userId: 1,
   name: 'Test Plan',
-  startDate: new Date().toISOString(),
-  endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+  startDate: new Date(),
+  endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
   isActive: true,
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
+  createdAt: new Date(),
+  updatedAt: new Date(),
 };
 
 describe('TodayScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    
+    // Set up default mock return values to prevent undefined errors
+    dbUtils.getWorkoutsForDateRange.mockResolvedValue([]);
+    dbUtils.getCoachingProfile.mockResolvedValue(null);
+    dbUtils.getStreakData.mockResolvedValue({ currentStreak: 0, longestStreak: 0 });
   });
 
   it('renders dashboard with today workout and actions', async () => {
@@ -109,6 +132,9 @@ describe('TodayScreen', () => {
     dbUtils.getActivePlan.mockResolvedValue(mockPlan);
     dbUtils.getWorkoutsByPlan.mockResolvedValue([mockWorkout]);
     dbUtils.getRunStats.mockResolvedValue({ totalRuns: 5, totalDistance: 15, totalDuration: 150 });
+    dbUtils.getWorkoutsForDateRange.mockResolvedValue([mockWorkout]);
+    dbUtils.getCoachingProfile.mockResolvedValue({ id: 1, userId: 1 });
+    dbUtils.getStreakData.mockResolvedValue({ currentStreak: 3, longestStreak: 7 });
 
     render(<TodayScreen />);
 
@@ -124,6 +150,9 @@ describe('TodayScreen', () => {
     dbUtils.getCurrentUser.mockResolvedValue(mockUser);
     dbUtils.getActivePlan.mockResolvedValue(undefined);
     dbUtils.getTodaysWorkout.mockResolvedValue(null);
+    dbUtils.getWorkoutsForDateRange.mockResolvedValue([]);
+    dbUtils.getCoachingProfile.mockResolvedValue({ id: 1, userId: 1 });
+    dbUtils.getStreakData.mockResolvedValue({ currentStreak: 0, longestStreak: 0 });
 
     render(<TodayScreen />);
 

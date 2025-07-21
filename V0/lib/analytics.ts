@@ -3,7 +3,7 @@ import { db } from './db'
 
 // Get current user context for analytics
 const getUserContext = async () => {
-  const users = await db.user.toArray()
+  const users = await db.users.toArray()
   const user = users[0] // Single user app
   return {
     user_id: user?.id,
@@ -84,6 +84,11 @@ export const trackRouteSelected = async (properties?: Record<string, any>) => {
 
 export const trackReminderClicked = async (properties?: Record<string, any>) => {
   await trackEvent('reminder_clicked', properties)
+}
+
+// Onboarding analytics
+export const trackOnboardingEvent = async (eventName: string, properties?: Record<string, any>) => {
+  await trackEvent(eventName, properties)
 }
 
 // General analytics function

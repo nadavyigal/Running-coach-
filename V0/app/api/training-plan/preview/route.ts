@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbUtils } from '@/lib/db';
 import { PeriodizationEngine } from '@/lib/periodization';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
+    const { searchParams } = req.nextUrl;
     const userId = searchParams.get('userId');
     const raceGoalId = searchParams.get('raceGoalId');
     const trainingDaysPerWeek = searchParams.get('trainingDaysPerWeek');

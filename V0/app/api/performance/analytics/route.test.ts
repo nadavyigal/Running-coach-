@@ -33,8 +33,8 @@ describe('/api/performance/analytics', () => {
         distance: 5,
         duration: 1800, // 30 minutes
         pace: 360, // 6 min/km
-        completedAt: new Date('2023-12-01'),
-        createdAt: new Date('2023-12-01'),
+        completedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
+        createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
         type: 'tempo' as const,
         location: 'Park',
         route: 'Loop',
@@ -46,8 +46,8 @@ describe('/api/performance/analytics', () => {
         distance: 10,
         duration: 3000, // 50 minutes
         pace: 300, // 5 min/km
-        completedAt: new Date('2023-12-02'),
-        createdAt: new Date('2023-12-02'),
+        completedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
+        createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
         type: 'long' as const,
         location: 'Trail',
         route: 'Out and back',
