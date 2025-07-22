@@ -210,7 +210,7 @@ function calculateConsecutiveAchievements(achievedMilestones: any[]): number {
 function determineCelebrationLevel(
   milestone: any, 
   consecutiveAchievements: number, 
-  goal: any
+  _goal: any
 ): 'bronze' | 'silver' | 'gold' | 'diamond' {
   // Diamond: Critical milestones or major streaks
   if (milestone.category === 'critical' || consecutiveAchievements >= 5) {
