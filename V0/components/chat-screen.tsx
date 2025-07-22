@@ -21,6 +21,7 @@ import { dbUtils, type User as UserType } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 import { trackChatMessageSent } from "@/lib/analytics"
 import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
+import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
 
 interface ChatMessage {
   id: string
@@ -45,6 +46,7 @@ export function ChatScreen() {
   const { toast } = useToast()
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
   const [selectedMessageForFeedback, setSelectedMessageForFeedback] = useState<ChatMessage | null>(null)
+  const [showCoachingPreferences, setShowCoachingPreferences] = useState(false)
 
   useEffect(() => {
     loadUser()
@@ -416,6 +418,14 @@ export function ChatScreen() {
         />
       )}
       
+      {/* Coaching Preferences Settings Modal */}
+      {showCoachingPreferences && user && (
+        <CoachingPreferencesSettings
+          isOpen={showCoachingPreferences}
+          onClose={() => setShowCoachingPreferences(false)}
+          userId={user.id!}
+        />
+      )}
       
     </div>
   )

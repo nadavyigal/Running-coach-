@@ -106,31 +106,53 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
     setMessages(prev => [...prev, userMessage])
     setInputValue("")
     setIsLoading(true)
-
+    
     try {
       const context = await buildUserContext()
       
-      const response = await fetch('/api/onboarding/chat', { // New API endpoint for onboarding chat
+      const requestBody = {
+        messages: [
+          ...messages.map(msg => ({ role: msg.role, content: msg.content })),
+          { role: 'user', content: content.trim() }
+        ],
+        userId: user?.id?.toString(),
+        userContext: context,
+        currentPhase: currentPhase, // Pass current phase to API
+      };
+      
+      const response = await fetch('/api/onboarding/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          messages: [
-            ...messages.map(msg => ({ role: msg.role, content: msg.content })),
-            { role: 'user', content: content.trim() }
-          ],
-          userId: user?.id?.toString(),
-          userContext: context,
-          currentPhase: currentPhase, // Pass current phase to API
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`)
+        let errorText = `API request failed with status ${response.status}`
+        
+        try {
+          const errorData = await response.json()
+          if (errorData.error) {
+            errorText = errorData.error
+          }
+          if (errorData.fallback) {
+            // Handle fallback response
+            errorText = errorData.message || errorText
+          }
+        } catch (parseError) {
+          // If we can't parse the error response, use the status text
+          errorText = response.statusText || errorText
+        }
+        
+        throw new Error(errorText)
       }
 
       const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error('Response body reader is not available')
+      }
+      
       const decoder = new TextDecoder()
       let aiContent = ""
 
@@ -152,32 +174,48 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
 
       setMessages(prev => [...prev, assistantMessage])
 
-      while (reader) {
-        const { done, value } = await reader.read()
-        if (done) break
+      // Add timeout for streaming
+      const timeout = setTimeout(() => {
+        reader.cancel()
+        throw new Error('Streaming response timeout')
+      }, 30000) // 30 second timeout
 
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
-        
-        for (const line of lines) {
-          if (line.startsWith('0:')) {
-            try {
-              const data = JSON.parse(line.slice(2))
-              if (data.textDelta) {
-                aiContent += data.textDelta
-                setMessages(prev => 
-                  prev.map(msg => 
-                    msg.id === assistantMessage.id 
-                      ? { ...msg, content: aiContent }
-                      : msg
+      try {
+        while (reader) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          const chunk = decoder.decode(value)
+          const lines = chunk.split('\n')
+          
+          for (const line of lines) {
+            if (line.startsWith('0:')) {
+              try {
+                const data = JSON.parse(line.slice(2))
+                if (data.textDelta) {
+                  aiContent += data.textDelta
+                  setMessages(prev => 
+                    prev.map(msg => 
+                      msg.id === assistantMessage.id 
+                        ? { ...msg, content: aiContent }
+                        : msg
+                    )
                   )
-                )
+                }
+              } catch (e) {
+                // Ignore JSON parse errors for streaming chunks
+                console.warn('Failed to parse streaming chunk:', e)
               }
-            } catch (e) {
-              // Ignore JSON parse errors for streaming chunks
             }
           }
         }
+      } finally {
+        clearTimeout(timeout)
+      }
+      
+      // If no content was received, show an error
+      if (!aiContent.trim()) {
+        throw new Error('No response content received from AI service')
       }
 
       if (assistantMessage.requestFeedback) {
@@ -194,28 +232,93 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
       
       // Check if onboarding is complete
       if (nextPhase === 'complete') {
-        // TODO: Extract goals and user profile from conversation
-        const goals = []; // Placeholder - should extract from API response
-        const userProfile = {
-          goal: 'habit',
-          experience: 'beginner',
-          preferredTimes: ['morning'],
-          daysPerWeek: 3,
-          coachingStyle: 'supportive'
-        }; // Placeholder - should extract from API response
+        console.log('🎉 Onboarding chat completed, creating user and plan via OnboardingManager...')
         
-        setTimeout(() => {
-          onComplete(goals, userProfile);
-        }, 2000); // Give user time to read completion message
+        try {
+          // Step 1: Extract user profile and goals from conversation
+          const userProfile = extractUserProfileFromConversation(messages);
+          const goals = extractGoalsFromConversation(messages);
+          console.log('📋 Extracted user profile:', userProfile);
+          console.log('📋 Extracted goals:', goals);
+          
+          // Step 2: Complete AI chat onboarding through OnboardingManager
+          console.log('📋 Creating user via OnboardingManager...');
+          const { onboardingManager } = await import('@/lib/onboardingManager');
+          const onboardingResult = await onboardingManager.completeAIChatOnboarding(
+            goals, 
+            userProfile, 
+            messages
+          );
+          
+          if (!onboardingResult.success) {
+            throw new Error(onboardingResult.errors?.join(', ') || 'Failed to complete AI onboarding');
+          }
+          
+          console.log('✅ User and plan created successfully via OnboardingManager:', {
+            userId: onboardingResult.user.id,
+            planId: onboardingResult.planId
+          });
+          
+          // Step 3: Track completion
+          const { trackEngagementEvent } = await import('@/lib/analytics');
+          trackEngagementEvent('onboard_complete', { 
+            rookieChallenge: true, 
+            age: userProfile.age || 0, 
+            goalDist: userProfile.goal === 'distance' ? 5 : 0 
+          });
+          
+          console.log('🎉 AI chat onboarding completed successfully!');
+          
+          // Step 4: Call onComplete with extracted data
+          setTimeout(() => {
+            onComplete(goals, userProfile);
+          }, 2000);
+          
+        } catch (error) {
+          console.error('❌ Failed to complete AI onboarding:', error);
+          
+          toast({
+            title: "Onboarding Failed",
+            description: "Failed to complete onboarding. Please try again.",
+            variant: "destructive"
+          });
+          
+          // Add error message to chat
+          const errorMessage: ChatMessage = {
+            id: `error-${Date.now()}`,
+            role: 'assistant',
+            content: "I'm sorry, there was an issue completing your onboarding. Please try again or contact support.",
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, errorMessage]);
+        }
       }
-
+      
       // TODO: Save messages and onboarding session state to Dexie.js
       
     } catch (error) {
       console.error('Onboarding chat error:', error)
+      
+      // More specific error handling
+      let errorDescription = "Failed to get response from AI coach. Please try again."
+      let errorContent = "I'm sorry, I'm having trouble responding right now. Please try again in a moment."
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Failed to fetch') || error.message.includes('network')) {
+          errorDescription = "Network connection failed. Please check your internet and try again."
+          errorContent = "It looks like there's a connection issue. Please check your internet connection and try again."
+        } else if (error.message.includes('429')) {
+          errorDescription = "Too many requests. Please wait a moment and try again."
+          errorContent = "I'm receiving too many requests right now. Please wait a moment and try again."
+        } else if (error.message.includes('503')) {
+          errorDescription = "AI service is temporarily unavailable."
+          errorContent = "The AI service is temporarily unavailable. Let's continue with the guided form setup instead. I'll close this chat and you can proceed with the standard onboarding."
+        }
+      }
+      
       toast({
         title: "Onboarding Error",
-        description: "Failed to get response from AI coach. Please try again.",
+        description: errorDescription,
         variant: "destructive",
       })
 
@@ -224,41 +327,140 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
       const errorMessage: ChatMessage = {
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: "I'm sorry, I'm having trouble responding right now. Please try again in a moment.",
+        content: errorContent,
         timestamp: new Date(),
       }
       setMessages(prev => [...prev, errorMessage])
+      
+      // If it's a service unavailable error, suggest fallback after a delay
+      if (error instanceof Error && error.message.includes('503')) {
+        setTimeout(() => {
+          onClose() // Close the chat overlay to let user continue with standard onboarding
+        }, 3000)
+      }
     } finally {
       setIsLoading(false)
     }
   }
 
   const buildUserContext = async (): Promise<string> => {
-    if (!user) return "User data not available."
-
-    try {
-      const recentRuns = await dbUtils.getRunsByUser(user.id!)
-      const lastThreeRuns = recentRuns.slice(-3)
-
-      let context = `User Profile: ${user.goal} goal, ${user.experience} level, runs ${user.daysPerWeek} days per week.`
-      
-      if (lastThreeRuns.length > 0) {
-        context += ` Recent runs: ${lastThreeRuns.map((run, i) => 
-          `Run ${i + 1}: ${run.distance}km in ${Math.round(run.duration / 60)} min`
-        ).join(', ')}.`;
-      }
-
-      // Add onboarding specific context if available
-      // if (user.onboardingSession) {
-      //   context += ` Onboarding Session: Phase ${user.onboardingSession.goalDiscoveryPhase}, Goals: ${user.onboardingSession.discoveredGoals.map(g => g.title).join(', ')}.`
-      // }
-
-      return context
-    } catch (error) {
-      console.error('Failed to build context:', error)
-      return "Unable to load user context."
-    }
+    // For onboarding, we don't need complex user context since user is new
+    return "New user starting onboarding process"
   }
+
+  // Helper function to extract user profile from conversation
+  const extractUserProfileFromConversation = (messages: ChatMessage[]): any => {
+    const profile = {
+      goal: 'habit' as 'habit' | 'distance' | 'speed',
+      experience: 'beginner' as 'beginner' | 'intermediate' | 'advanced',
+      preferredTimes: ['morning'] as string[],
+      daysPerWeek: 3,
+      age: 25,
+      coachingStyle: 'supportive' as 'supportive' | 'challenging' | 'analytical' | 'encouraging'
+    };
+    
+    // Extract information from conversation messages
+    const conversationText = messages
+      .filter(msg => msg.role === 'user')
+      .map(msg => msg.content.toLowerCase())
+      .join(' ');
+    
+    // Extract goal
+    if (conversationText.includes('distance') || conversationText.includes('marathon') || conversationText.includes('5k') || conversationText.includes('10k')) {
+      profile.goal = 'distance';
+    } else if (conversationText.includes('speed') || conversationText.includes('faster') || conversationText.includes('pace')) {
+      profile.goal = 'speed';
+    }
+    
+    // Extract experience
+    if (conversationText.includes('beginner') || conversationText.includes('new') || conversationText.includes('start')) {
+      profile.experience = 'beginner';
+    } else if (conversationText.includes('intermediate') || conversationText.includes('regular')) {
+      profile.experience = 'intermediate';
+    } else if (conversationText.includes('advanced') || conversationText.includes('experienced')) {
+      profile.experience = 'advanced';
+    }
+    
+    // Extract preferred times
+    if (conversationText.includes('morning')) {
+      profile.preferredTimes = ['morning'];
+    } else if (conversationText.includes('evening')) {
+      profile.preferredTimes = ['evening'];
+    } else if (conversationText.includes('afternoon')) {
+      profile.preferredTimes = ['afternoon'];
+    }
+    
+    // Extract days per week
+    if (conversationText.includes('3 days') || conversationText.includes('three days')) {
+      profile.daysPerWeek = 3;
+    } else if (conversationText.includes('4 days') || conversationText.includes('four days')) {
+      profile.daysPerWeek = 4;
+    } else if (conversationText.includes('5 days') || conversationText.includes('five days')) {
+      profile.daysPerWeek = 5;
+    }
+    
+    // Extract coaching style
+    if (conversationText.includes('supportive') || conversationText.includes('encouraging')) {
+      profile.coachingStyle = 'supportive';
+    } else if (conversationText.includes('challenging') || conversationText.includes('push')) {
+      profile.coachingStyle = 'challenging';
+    } else if (conversationText.includes('analytical') || conversationText.includes('data')) {
+      profile.coachingStyle = 'analytical';
+    }
+    
+    return profile;
+  };
+
+  // Helper function to extract goals from conversation
+  const extractGoalsFromConversation = (messages: ChatMessage[]): any[] => {
+    const goals: any[] = [];
+    
+    // Extract goals from conversation messages
+    const conversationText = messages
+      .filter(msg => msg.role === 'user')
+      .map(msg => msg.content.toLowerCase())
+      .join(' ');
+    
+    // Create default goals based on extracted profile
+    const profile = extractUserProfileFromConversation(messages);
+    
+    if (profile.goal === 'habit') {
+      goals.push({
+        id: 'habit-1',
+        title: 'Build Consistent Running Habit',
+        description: 'Establish a regular running routine',
+        type: 'primary',
+        category: 'consistency'
+      });
+    } else if (profile.goal === 'distance') {
+      goals.push({
+        id: 'distance-1',
+        title: 'Increase Running Distance',
+        description: 'Gradually build up to longer runs',
+        type: 'primary',
+        category: 'endurance'
+      });
+    } else if (profile.goal === 'speed') {
+      goals.push({
+        id: 'speed-1',
+        title: 'Improve Running Speed',
+        description: 'Work on pace and speed training',
+        type: 'primary',
+        category: 'speed'
+      });
+    }
+    
+    // Add health goal
+    goals.push({
+      id: 'health-1',
+      title: 'Improve Overall Fitness',
+      description: 'Enhance cardiovascular health and endurance',
+      type: 'supporting',
+      category: 'health'
+    });
+    
+    return goals;
+  };
 
   const handleInputSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -352,7 +554,7 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md w-full h-[80vh] p-0">
+      <DialogContent className="max-w-md w-full h-[90vh] sm:h-[80vh] p-0 sm:rounded-lg">
         <div className="flex flex-col h-full bg-background">
       {/* Header */}
       <div className="border-b bg-card p-4">

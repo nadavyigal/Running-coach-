@@ -8,10 +8,16 @@ export interface GeneratePlanOptions {
   rookie_challenge?: boolean; // If true, generate rookie challenge plan
 }
 
+export interface PlanData {
+  plan: Omit<Plan, 'id' | 'createdAt' | 'updatedAt'>;
+  workouts: Omit<Workout, 'id' | 'createdAt' | 'updatedAt'>[];
+}
+
 /**
  * Generate a personalized training plan using OpenAI via API route
+ * Returns plan data without creating database records
  */
-export async function generatePlan(options: GeneratePlanOptions): Promise<{ plan: Plan; workouts: Workout[] }> {
+export async function generatePlan(options: GeneratePlanOptions): Promise<PlanData> {
   const { user, startDate = new Date(), planType, targetDistance, rookie_challenge } = options;
   
   try {
@@ -48,36 +54,33 @@ export async function generatePlan(options: GeneratePlanOptions): Promise<{ plan
     const { plan: generatedPlan, source } = await response.json();
     console.log(`Plan generated successfully using ${source || 'unknown'} source`);
 
-    // Create the plan in the database
+    // Create the plan data structure without database operations
     const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + (generatedPlan.totalWeeks * 7));
 
-    // First deactivate any existing active plans for this user
-    const existingPlans = await dbUtils.getActivePlan(user.id!);
-    if (existingPlans) {
-      console.log('Deactivating existing plan:', existingPlans.id);
-      await dbUtils.updatePlan(existingPlans.id!, { isActive: false });
-    }
-
-    const planId = await dbUtils.createPlan({
+    const plan: Omit<Plan, 'id' | 'createdAt' | 'updatedAt'> = {
       userId: user.id!,
       title: generatedPlan.title,
       description: generatedPlan.description,
       startDate,
       endDate,
       totalWeeks: generatedPlan.totalWeeks,
-      isActive: true
-    });
+      isActive: true,
+      planType: 'basic',
+      targetDistance: generatedPlan.targetDistance,
+      targetTime: generatedPlan.targetTime,
+      fitnessLevel: user.experience,
+      trainingDaysPerWeek: user.daysPerWeek,
+      peakWeeklyVolume: generatedPlan.peakWeeklyVolume
+    };
 
-    console.log('Created AI plan with ID:', planId, 'for user:', user.id);
-
-    // Create workouts
-    const workouts: Workout[] = [];
+    // Create workout data structures without database operations
+    const workouts: Omit<Workout, 'id' | 'createdAt' | 'updatedAt'>[] = [];
     for (const workoutData of generatedPlan.workouts) {
       const workoutDate = calculateWorkoutDate(startDate, workoutData.week, workoutData.day);
       
-      const workoutId = await dbUtils.createWorkout({
-        planId,
+      workouts.push({
+        planId: 0, // Will be set by OnboardingManager
         week: workoutData.week,
         day: workoutData.day,
         type: workoutData.type,
@@ -87,40 +90,13 @@ export async function generatePlan(options: GeneratePlanOptions): Promise<{ plan
         completed: false,
         scheduledDate: workoutDate
       });
-
-      workouts.push({
-        id: workoutId,
-        planId,
-        week: workoutData.week,
-        day: workoutData.day,
-        type: workoutData.type,
-        distance: workoutData.distance,
-        duration: workoutData.duration,
-        notes: workoutData.notes,
-        completed: false,
-        scheduledDate: workoutDate,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
     }
 
-    const plan = await db.plans.get(planId);
-    if (!plan) {
-      throw new Error('Failed to retrieve created plan');
-    }
-
+    console.log('Generated AI plan data with', workouts.length, 'workouts for user:', user.id);
     return { plan, workouts };
   } catch (error) {
-    // Re-throw the error with better context for the caller
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('generatePlan failed:', errorMessage);
-    
-    // Preserve special error types for proper handling upstream
-    if (errorMessage.startsWith('FALLBACK_REQUIRED:')) {
-      throw new Error(errorMessage);
-    }
-    
-    throw new Error(`Plan generation failed: ${errorMessage}`);
+    console.error('❌ AI plan generation failed:', error);
+    throw error;
   }
 }
 
@@ -151,37 +127,30 @@ function calculateWorkoutDate(startDate: Date, week: number, day: string): Date 
 
 /**
  * Generate a simple fallback plan if OpenAI fails
+ * Returns plan data without creating database records
  */
-export async function generateFallbackPlan(user: User, startDate: Date = new Date(), rookie_challenge?: boolean): Promise<{ plan: Plan; workouts: Workout[] }> {
+export async function generateFallbackPlan(user: User, startDate: Date = new Date(), rookie_challenge?: boolean): Promise<PlanData> {
   const totalWeeks = rookie_challenge ? 2 : (user.experience === 'beginner' ? 4 : user.experience === 'intermediate' ? 6 : 8);
   const endDate = new Date(startDate);
   endDate.setDate(endDate.getDate() + (totalWeeks * 7));
 
-  // First deactivate any existing active plans for this user
-  const existingPlans = await dbUtils.getActivePlan(user.id!);
-  if (existingPlans) {
-    await dbUtils.updatePlan(existingPlans.id!, { isActive: false });
-  }
-
-  const planId = await dbUtils.createPlan({
+  const plan: Omit<Plan, 'id' | 'createdAt' | 'updatedAt'> = {
     userId: user.id!,
     title: `${user.experience.charAt(0).toUpperCase() + user.experience.slice(1)} Running Plan`,
     description: `A ${totalWeeks}-week progressive running plan tailored for ${user.experience} runners.${rookie_challenge ? ' 21-Day Rookie Challenge!' : ''}`,
     startDate,
     endDate,
     totalWeeks,
-    isActive: true
-  });
+    isActive: true,
+    planType: 'basic',
+    fitnessLevel: user.experience,
+    trainingDaysPerWeek: user.daysPerWeek
+  };
 
-  const plan = await db.plans.get(planId);
-  if (!plan) {
-    throw new Error('Failed to create fallback plan');
-  }
+  console.log('Generated fallback plan data for user:', user.id);
 
-  console.log('Created fallback plan with ID:', planId, 'for user:', user.id);
-
-  // Create a basic workout structure
-  const workouts: Workout[] = [];
+  // Create a basic workout structure without database operations
+  const workouts: Omit<Workout, 'id' | 'createdAt' | 'updatedAt'>[] = [];
   const weeklyPattern = user.daysPerWeek === 3 
     ? [{ day: 'Mon', type: 'easy' }, { day: 'Wed', type: 'tempo' }, { day: 'Sat', type: 'long' }]
     : user.daysPerWeek === 4
@@ -195,8 +164,8 @@ export async function generateFallbackPlan(user: User, startDate: Date = new Dat
       
       const scheduledDate = calculateWorkoutDate(startDate, week, workout.day);
       
-      const workoutId = await dbUtils.createWorkout({
-        planId,
+      workouts.push({
+        planId: 0, // Will be set by OnboardingManager
         week,
         day: workout.day,
         type: workout.type as any,
@@ -205,15 +174,10 @@ export async function generateFallbackPlan(user: User, startDate: Date = new Dat
         scheduledDate,
         notes: getWorkoutNotes(workout.type as any)
       });
-
-      const createdWorkout = await db.workouts.get(workoutId);
-      if (createdWorkout) {
-        workouts.push(createdWorkout);
-      }
     }
   }
 
-  console.log(`Fallback plan completed: ${workouts.length} workouts created for plan ${planId}`);
+  console.log(`Fallback plan data completed: ${workouts.length} workouts for user ${user.id}`);
   return { plan, workouts };
 }
 

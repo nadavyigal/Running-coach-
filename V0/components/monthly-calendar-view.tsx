@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
+import { dbUtils, type Workout } from "@/lib/db"
 
 export function MonthlyCalendarView() {
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -14,6 +15,8 @@ export function MonthlyCalendarView() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedDateWorkout, setSelectedDateWorkout] = useState<any>(null)
   const [showDateWorkoutModal, setShowDateWorkoutModal] = useState(false)
+  const [workouts, setWorkouts] = useState<Workout[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   const monthNames = [
     "January",
@@ -30,15 +33,58 @@ export function MonthlyCalendarView() {
     "December",
   ]
 
-  const workoutData = {
-    "2025-01-15": { type: "easy", distance: "5km", completed: true, color: "bg-green-500" },
-    "2025-01-17": { type: "tempo", distance: "6km", completed: true, color: "bg-orange-500" },
-    "2025-01-19": { type: "intervals", distance: "8km", completed: false, color: "bg-pink-500" },
-    "2025-01-22": { type: "long", distance: "12km", completed: false, color: "bg-blue-500" },
-    "2025-01-24": { type: "easy", distance: "5km", completed: false, color: "bg-green-500" },
-    "2025-01-26": { type: "tempo", distance: "7km", completed: false, color: "bg-orange-500" },
-    "2025-01-28": { type: "hill", distance: "4km", completed: false, color: "bg-purple-500" },
+  // Workout type color mapping
+  const workoutColorMap: { [key: string]: string } = {
+    easy: "bg-green-500",
+    tempo: "bg-orange-500",
+    intervals: "bg-pink-500",
+    long: "bg-blue-500",
+    rest: "bg-gray-400",
+    "time-trial": "bg-red-500",
+    hill: "bg-purple-500",
   }
+
+  // Load workouts for the current month
+  useEffect(() => {
+    const loadWorkouts = async () => {
+      try {
+        setIsLoading(true)
+        const user = await dbUtils.getCurrentUser()
+        if (user && user.id) {
+          // Get start and end of current month
+          const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+          const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+          
+          const monthWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfMonth, endOfMonth)
+          setWorkouts(monthWorkouts)
+        }
+      } catch (error) {
+        console.error('Failed to load workouts:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadWorkouts()
+  }, [currentDate])
+
+  const formatDateKey = (date: Date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+  }
+
+  // Convert workouts to the format expected by the calendar
+  const workoutData = workouts.reduce((acc, workout) => {
+    const dateKey = formatDateKey(workout.scheduledDate)
+    acc[dateKey] = {
+      type: workout.type,
+      distance: `${workout.distance}km`,
+      completed: workout.completed,
+      color: workoutColorMap[workout.type] || "bg-gray-500",
+      id: workout.id,
+      notes: workout.notes,
+    }
+    return acc
+  }, {} as Record<string, any>)
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
@@ -73,10 +119,6 @@ export function MonthlyCalendarView() {
       }
       return newDate
     })
-  }
-
-  const formatDateKey = (date: Date) => {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
   }
 
   const handleDateClick = (date: Date) => {
@@ -180,19 +222,21 @@ export function MonthlyCalendarView() {
       <div className="grid grid-cols-3 gap-4">
         <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-green-500">12</div>
+            <div className="text-2xl font-bold text-green-500">{workouts.length}</div>
             <div className="text-xs text-gray-600">Planned Runs</div>
           </CardContent>
         </Card>
         <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-blue-500">8</div>
+            <div className="text-2xl font-bold text-blue-500">{workouts.filter(w => w.completed).length}</div>
             <div className="text-xs text-gray-600">Completed</div>
           </CardContent>
         </Card>
         <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-purple-500">67%</div>
+            <div className="text-2xl font-bold text-purple-500">
+              {workouts.length > 0 ? Math.round((workouts.filter(w => w.completed).length / workouts.length) * 100) : 0}%
+            </div>
             <div className="text-xs text-gray-600">Success Rate</div>
           </CardContent>
         </Card>

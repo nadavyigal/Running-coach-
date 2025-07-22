@@ -82,6 +82,136 @@ export interface CohortMember {
   joinDate: Date;
 }
 
+// Wearable Device interfaces
+export interface WearableDevice {
+  id?: number;
+  userId: number;
+  type: 'apple_watch' | 'garmin' | 'fitbit';
+  name: string;
+  model?: string;
+  deviceId: string; // External device identifier
+  connectionStatus: 'connected' | 'disconnected' | 'syncing' | 'error';
+  lastSync: Date | null;
+  capabilities: string[];
+  settings: any; // Device-specific settings
+  authTokens?: {
+    accessToken?: string;
+    refreshToken?: string;
+    expiresAt?: Date;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface HeartRateData {
+  id?: number;
+  runId: number;
+  deviceId: string;
+  timestamp: Date;
+  heartRate: number; // bpm
+  accuracy: 'high' | 'medium' | 'low';
+  createdAt: Date;
+}
+
+export interface HeartRateZone {
+  id?: number;
+  userId: number;
+  zoneNumber: number;
+  name: string;
+  description: string;
+  minBpm: number;
+  maxBpm: number;
+  color: string;
+  targetPercentage?: number;
+  trainingBenefit: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface HeartRateZoneSettings {
+  id?: number;
+  userId: number;
+  calculationMethod: 'max_hr' | 'lactate_threshold' | 'hrr' | 'manual';
+  maxHeartRate?: number;
+  restingHeartRate?: number;
+  lactateThresholdHR?: number;
+  zoneSystem: 'five_zone' | 'three_zone' | 'custom';
+  customZones?: string; // JSON string of CustomZone[]
+  autoUpdate: boolean;
+  lastCalculated: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ZoneDistribution {
+  id?: number;
+  runId: number;
+  zone1Time: number;
+  zone2Time: number;
+  zone3Time: number;
+  zone4Time: number;
+  zone5Time: number;
+  zone1Percentage: number;
+  zone2Percentage: number;
+  zone3Percentage: number;
+  zone4Percentage: number;
+  zone5Percentage: number;
+  totalTime: number;
+  createdAt: Date;
+}
+
+export interface AdvancedMetrics {
+  id?: number;
+  runId: number;
+  deviceId: string;
+  vo2Max?: number;
+  lactateThresholdHR?: number;
+  lactateThresholdPace?: number; // seconds per km
+  trainingStressScore?: number;
+  trainingLoadFocus?: 'base' | 'tempo' | 'threshold' | 'vo2max' | 'anaerobic';
+  performanceCondition?: number; // -20 to +20
+  racePredictor?: {
+    distance: number; // km
+    predictedTime: number; // seconds
+  }[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface RunningDynamicsData {
+  id?: number;
+  runId: number;
+  deviceId: string;
+  averageCadence: number;
+  maxCadence: number;
+  averageGroundContactTime: number; // milliseconds
+  averageVerticalOscillation: number; // centimeters
+  averageStrideLength: number; // meters
+  groundContactBalance?: number; // percentage L/R
+  verticalRatio?: number; // vertical oscillation to stride length ratio
+  cadenceDataPoints?: { timestamp: Date; cadence: number }[];
+  createdAt: Date;
+}
+
+export interface SyncJob {
+  id?: number;
+  userId: number;
+  deviceId: number;
+  type: 'activities' | 'heart_rate' | 'metrics' | 'full_sync';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  priority: 'low' | 'normal' | 'high';
+  scheduledAt: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+  errorMessage?: string;
+  retryCount: number;
+  maxRetries: number;
+  progress?: number;
+  metadata?: any;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Performance Analytics interfaces
 export interface PerformanceMetrics {
   id?: number;
@@ -404,6 +534,19 @@ export interface GoalMilestone {
   createdAt: Date;
 }
 
+export interface GoalProgressHistory {
+  id?: number;
+  goalId: number;
+  measurementDate: Date;
+  currentValue: number;
+  baselineValue: number;
+  targetValue: number;
+  progressPercentage: number;
+  autoRecorded: boolean;
+  notes?: string;
+  createdAt: Date;
+}
+
 export interface GoalRecommendation {
   id?: number;
   userId: number;
@@ -480,7 +623,17 @@ export class RunSmartDB extends Dexie {
   userBehaviorPatterns!: EntityTable<UserBehaviorPattern, 'id'>;
   goals!: EntityTable<Goal, 'id'>;
   goalMilestones!: EntityTable<GoalMilestone, 'id'>;
+  goalProgressHistory!: EntityTable<GoalProgressHistory, 'id'>;
   goalRecommendations!: EntityTable<GoalRecommendation, 'id'>;
+  // Wearable device tables
+  wearableDevices!: EntityTable<WearableDevice, 'id'>;
+  heartRateData!: EntityTable<HeartRateData, 'id'>;
+  heartRateZones!: EntityTable<HeartRateZone, 'id'>;
+  heartRateZoneSettings!: EntityTable<HeartRateZoneSettings, 'id'>;
+  zoneDistributions!: EntityTable<ZoneDistribution, 'id'>;
+  advancedMetrics!: EntityTable<AdvancedMetrics, 'id'>;
+  runningDynamicsData!: EntityTable<RunningDynamicsData, 'id'>;
+  syncJobs!: EntityTable<SyncJob, 'id'>;
 
   constructor() {
     super('RunSmartDB');
@@ -825,6 +978,183 @@ export class RunSmartDB extends Dexie {
       
       console.log(`Migration complete: deactivated ${totalFixed} duplicate active plans`);
     });
+
+    // Version 13: Add wearable device integration tables
+    this.version(13).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId, coachingStyle, goalInferred',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt, planType, raceGoalId, [userId+isActive]',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt, type, trainingPhase',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+      cohorts: '++id, inviteCode, name',
+      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+      performanceMetrics: '++id, userId, date, createdAt',
+      personalRecords: '++id, userId, recordType, achievedAt, createdAt',
+      performanceInsights: '++id, userId, type, priority, createdAt, validUntil',
+      raceGoals: '++id, userId, raceDate, priority, createdAt',
+      workoutTemplates: '++id, workoutType, trainingPhase, intensityZone, createdAt',
+      coachingProfiles: '++id, userId, coachingEffectivenessScore, lastAdaptationDate, createdAt',
+      coachingFeedback: '++id, userId, interactionType, feedbackType, rating, createdAt',
+      coachingInteractions: '++id, userId, interactionId, interactionType, createdAt',
+      userBehaviorPatterns: '++id, userId, patternType, confidenceScore, lastObserved, createdAt',
+      goals: '++id, userId, goalType, status, priority, createdAt, updatedAt',
+      goalMilestones: '++id, goalId, milestoneOrder, status, targetDate, createdAt',
+      goalProgressHistory: '++id, goalId, measurementDate, autoRecorded',
+      goalRecommendations: '++id, userId, recommendationType, status, createdAt, expiresAt',
+      // New wearable device tables
+      wearableDevices: '++id, userId, type, deviceId, connectionStatus, lastSync, createdAt',
+      heartRateData: '++id, runId, deviceId, timestamp, heartRate, accuracy, createdAt',
+      heartRateZones: '++id, userId, zone, minBpm, maxBpm, name, createdAt',
+      advancedMetrics: '++id, runId, deviceId, vo2Max, lactateThresholdHR, trainingStressScore, createdAt',
+      runningDynamicsData: '++id, runId, deviceId, averageCadence, averageGroundContactTime, averageVerticalOscillation, createdAt'
+    }).upgrade(async tx => {
+      console.log('Running migration for version 13 - Adding wearable device tables');
+      
+      // Create default heart rate zones for existing users
+      const users = await tx.table('users').toArray();
+      for (const user of users) {
+        if (user.id) {
+          // Default heart rate zones based on age (if available) or general population
+          const maxHR = user.age ? (220 - user.age) : 190; // Fallback to 190 for general population
+          
+          const zones = [
+            { zone: 1, minBpm: Math.round(maxHR * 0.5), maxBpm: Math.round(maxHR * 0.6), name: 'Recovery', color: '#22c55e' },
+            { zone: 2, minBpm: Math.round(maxHR * 0.6), maxBpm: Math.round(maxHR * 0.7), name: 'Aerobic', color: '#3b82f6' },
+            { zone: 3, minBpm: Math.round(maxHR * 0.7), maxBpm: Math.round(maxHR * 0.8), name: 'Tempo', color: '#f59e0b' },
+            { zone: 4, minBpm: Math.round(maxHR * 0.8), maxBpm: Math.round(maxHR * 0.9), name: 'Threshold', color: '#f97316' },
+            { zone: 5, minBpm: Math.round(maxHR * 0.9), maxBpm: Math.round(maxHR * 1.0), name: 'VO2 Max', color: '#ef4444' }
+          ];
+          
+          for (const zone of zones) {
+            await tx.table('heartRateZones').add({
+              userId: user.id,
+              zone: zone.zone as (1 | 2 | 3 | 4 | 5),
+              minBpm: zone.minBpm,
+              maxBpm: zone.maxBpm,
+              name: zone.name,
+              color: zone.color,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            });
+          }
+        }
+      }
+    });
+
+    // Version 14: Add sync jobs table for background sync functionality
+    this.version(14).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId, coachingStyle, goalInferred',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt, planType, raceGoalId, [userId+isActive]',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt, type, trainingPhase',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt, externalId',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+      cohorts: '++id, inviteCode, name',
+      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+      performanceMetrics: '++id, userId, date, createdAt',
+      personalRecords: '++id, userId, recordType, achievedAt, createdAt',
+      performanceInsights: '++id, userId, type, priority, createdAt, validUntil',
+      raceGoals: '++id, userId, raceDate, priority, createdAt',
+      workoutTemplates: '++id, workoutType, trainingPhase, intensityZone, createdAt',
+      coachingProfiles: '++id, userId, coachingEffectivenessScore, lastAdaptationDate, createdAt',
+      coachingFeedback: '++id, userId, interactionType, feedbackType, rating, createdAt',
+      coachingInteractions: '++id, userId, interactionId, interactionType, createdAt',
+      userBehaviorPatterns: '++id, userId, patternType, confidenceScore, lastObserved, createdAt',
+      goals: '++id, userId, goalType, status, priority, createdAt, updatedAt',
+      goalMilestones: '++id, goalId, milestoneOrder, status, targetDate, createdAt',
+      goalProgressHistory: '++id, goalId, measurementDate, autoRecorded',
+      goalRecommendations: '++id, userId, recommendationType, status, createdAt, expiresAt',
+      // Wearable device tables
+      wearableDevices: '++id, userId, type, deviceId, connectionStatus, lastSync, createdAt',
+      heartRateData: '++id, runId, deviceId, timestamp, heartRate, accuracy, createdAt',
+      heartRateZones: '++id, userId, zoneNumber, minHeartRate, maxHeartRate, zoneName, createdAt',
+      advancedMetrics: '++id, runId, deviceId, vo2Max, lactateThresholdHR, trainingStressScore, createdAt',
+      runningDynamicsData: '++id, runId, deviceId, averageCadence, averageGroundContactTime, averageVerticalOscillation, createdAt',
+      // New sync jobs table
+      syncJobs: '++id, userId, deviceId, type, status, priority, scheduledAt, createdAt, [userId+deviceId+type]'
+    }).upgrade(async tx => {
+      console.log('Running migration for version 14 - Adding sync jobs table');
+      // Sync jobs table will be automatically created
+    });
+
+    // Version 15: Enhanced heart rate zones with settings and distributions
+    this.version(15).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId, coachingStyle, goalInferred',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt, planType, raceGoalId, [userId+isActive]',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt, type, trainingPhase',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt, externalId',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+      cohorts: '++id, inviteCode, name',
+      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+      performanceMetrics: '++id, userId, date, createdAt',
+      coachingFeedback: '++id, userId, interactionType, feedbackType, rating, createdAt',
+      coachingInteractions: '++id, userId, interactionId, interactionType, createdAt',
+      userBehaviorPatterns: '++id, userId, patternType, confidenceScore, lastObserved, createdAt',
+      goals: '++id, userId, goalType, status, priority, createdAt, updatedAt',
+      goalMilestones: '++id, goalId, milestoneOrder, status, targetDate, createdAt',
+      goalProgressHistory: '++id, goalId, measurementDate, autoRecorded',
+      goalRecommendations: '++id, userId, recommendationType, status, createdAt, expiresAt',
+      // Enhanced wearable device tables
+      wearableDevices: '++id, userId, type, deviceId, connectionStatus, lastSync, createdAt',
+      heartRateData: '++id, runId, deviceId, timestamp, heartRate, accuracy, createdAt',
+      heartRateZones: '++id, userId, zoneNumber, name, minBpm, maxBpm, color, createdAt',
+      heartRateZoneSettings: '++id, userId, calculationMethod, zoneSystem, autoUpdate, createdAt',
+      zoneDistributions: '++id, runId, zone1Time, zone2Time, zone3Time, zone4Time, zone5Time, totalTime, createdAt',
+      advancedMetrics: '++id, runId, deviceId, vo2Max, lactateThresholdHR, trainingStressScore, createdAt',
+      runningDynamicsData: '++id, runId, deviceId, averageCadence, averageGroundContactTime, averageVerticalOscillation, createdAt',
+      syncJobs: '++id, userId, deviceId, type, status, priority, scheduledAt, createdAt, [userId+deviceId+type]'
+    }).upgrade(async tx => {
+      console.log('Running migration for version 15 - Enhanced heart rate zones');
+      
+      // Create default heart rate zone settings for existing users
+      const users = await tx.table('users').toArray();
+      for (const user of users) {
+        if (user.id && user.age) {
+          const estimatedMaxHR = 220 - user.age;
+          
+          // Create zone settings
+          await tx.table('heartRateZoneSettings').add({
+            userId: user.id,
+            calculationMethod: 'max_hr',
+            maxHeartRate: estimatedMaxHR,
+            zoneSystem: 'five_zone',
+            autoUpdate: true,
+            lastCalculated: new Date(),
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+          
+          // Create default zones based on max HR
+          const zones = [
+            { zone: 1, name: 'Recovery', min: 0, max: Math.round(estimatedMaxHR * 0.60), color: '#3B82F6' },
+            { zone: 2, name: 'Aerobic Base', min: Math.round(estimatedMaxHR * 0.60), max: Math.round(estimatedMaxHR * 0.70), color: '#10B981' },
+            { zone: 3, name: 'Aerobic', min: Math.round(estimatedMaxHR * 0.70), max: Math.round(estimatedMaxHR * 0.80), color: '#F59E0B' },
+            { zone: 4, name: 'Threshold', min: Math.round(estimatedMaxHR * 0.80), max: Math.round(estimatedMaxHR * 0.90), color: '#F97316' },
+            { zone: 5, name: 'VO2 Max', min: Math.round(estimatedMaxHR * 0.90), max: estimatedMaxHR, color: '#EF4444' }
+          ];
+          
+          for (const zone of zones) {
+            await tx.table('heartRateZones').add({
+              userId: user.id,
+              zoneNumber: zone.zone,
+              name: zone.name,
+              description: `Zone ${zone.zone} training`,
+              minBpm: zone.min,
+              maxBpm: zone.max,
+              color: zone.color,
+              trainingBenefit: `Benefits of Zone ${zone.zone} training`,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            });
+          }
+        }
+      }
+    });
   }
 }
 
@@ -902,72 +1232,87 @@ export const dbUtils = {
 
   // User operations
   async createUser(userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
-    console.log("Creating user with data:", userData); // Added for debugging
+    console.log("=== CREATE USER START ===");
+    console.log("Creating user with data:", userData);
     const now = new Date();
-    const userId = await db.users.add({
-      ...userData,
-      createdAt: now,
-      updatedAt: now,
-      currentStreak: 0,
-      longestStreak: 0,
-      lastActivityDate: null,
-      streakLastUpdated: null,
-      reminderTime: null,
-      reminderEnabled: false,
-      reminderSnoozedUntil: null,
-      cohortId: null,
-    });
-
-    // Create coaching profile for the new user
+    
     try {
-      await this.createCoachingProfile({
-        userId: userId,
-        communicationStyle: {
-          motivationLevel: 'medium',
-          detailPreference: 'medium',
-          personalityType: 'encouraging',
-          preferredTone: 'friendly'
-        },
-        feedbackPatterns: {
-          averageRating: 3.5,
-          commonConcerns: [],
-          responsiveness: 'immediate',
-          preferredFeedbackFrequency: 'weekly'
-        },
-        behavioralPatterns: {
-          workoutPreferences: {
-            preferredDays: [],
-            preferredTimes: [],
-            workoutTypeAffinities: {},
-            difficultyPreference: 5
-          },
-          contextualPatterns: {
-            weatherSensitivity: 5,
-            scheduleFlexibility: 5,
-            stressResponse: 'maintain',
-            energyPatterns: {}
-          }
-        },
-        coachingEffectivenessScore: 50,
-        lastAdaptationDate: now,
-        adaptationHistory: []
+      const userId = await db.users.add({
+        ...userData,
+        createdAt: now,
+        updatedAt: now,
+        currentStreak: 0,
+        longestStreak: 0,
+        lastActivityDate: null,
+        streakLastUpdated: null,
+        reminderTime: null,
+        reminderEnabled: false,
+        reminderSnoozedUntil: null,
+        cohortId: null,
       });
-    } catch (error) {
-      console.error('Failed to create coaching profile for user:', error);
-    }
+      
+      console.log("✅ User created successfully with ID:", userId);
 
-    return userId;
+      // Create coaching profile for the new user
+      try {
+        console.log("📋 Creating coaching profile for user:", userId);
+        await this.createCoachingProfile({
+          userId: userId!,
+          communicationStyle: {
+            motivationLevel: 'medium',
+            detailPreference: 'medium',
+            personalityType: 'encouraging',
+            preferredTone: 'friendly'
+          },
+          feedbackPatterns: {
+            averageRating: 3.5,
+            commonConcerns: [],
+            responsiveness: 'immediate',
+            preferredFeedbackFrequency: 'weekly'
+          },
+          behavioralPatterns: {
+            workoutPreferences: {
+              preferredDays: [],
+              preferredTimes: [],
+              workoutTypeAffinities: {},
+              difficultyPreference: 5
+            },
+            contextualPatterns: {
+              weatherSensitivity: 5,
+              scheduleFlexibility: 5,
+              stressResponse: 'maintain',
+              energyPatterns: {}
+            }
+          },
+          coachingEffectivenessScore: 50,
+          lastAdaptationDate: now,
+          adaptationHistory: []
+        });
+        console.log("✅ Coaching profile created successfully");
+      } catch (error) {
+        console.error('❌ Failed to create coaching profile for user:', error);
+      }
+
+      console.log("=== CREATE USER COMPLETE ===");
+      return userId;
+    } catch (error) {
+      console.error("❌ Failed to create user:", error);
+      throw error;
+    }
   },
 
   async getCurrentUser(): Promise<User | undefined> {
+    console.log("=== GET CURRENT USER START ===");
     // Return the most recently created user
-    const user = await db.users.orderBy('createdAt').last();
+    const users = await db.users.toArray();
+    const user = users.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    console.log("Retrieved user from database:", user ? { id: user.id, onboardingComplete: user.onboardingComplete } : "No user found");
     
     // Ensure coaching profile exists for this user
     if (user && user.id) {
       const profile = await this.getCoachingProfile(user.id);
       if (!profile) {
-        console.log('Creating missing coaching profile for user:', user.id);
+        console.log('📋 Creating missing coaching profile for user:', user.id);
         try {
           await this.createCoachingProfile({
             userId: user.id,
@@ -1024,7 +1369,7 @@ export const dbUtils = {
   },
 
   async updateReminderSettings(userId: number, settings: Partial<User>): Promise<void> {
-    await dbUtils.updateUser(userId, settings);
+    await this.updateUser(userId, settings);
   },
 
   // Helper function to ensure only one active plan per user
@@ -1049,18 +1394,30 @@ export const dbUtils = {
 
   // Plan operations
   async createPlan(planData: Omit<Plan, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+    console.log("=== CREATE PLAN START ===");
+    console.log("Creating plan with data:", planData);
     const now = new Date();
     
-    // If creating an active plan, deactivate any existing active plans for this user
-    if (planData.isActive) {
-      await this.deactivateAllUserPlans(planData.userId);
+    try {
+      // If creating an active plan, deactivate any existing active plans for this user
+      if (planData.isActive) {
+        console.log("📋 Deactivating existing active plans for user:", planData.userId);
+        await this.deactivateAllUserPlans(planData.userId);
+      }
+      
+      const planId = await db.plans.add({
+        ...planData,
+        createdAt: now,
+        updatedAt: now
+      });
+      
+      console.log("✅ Plan created successfully with ID:", planId);
+      console.log("=== CREATE PLAN COMPLETE ===");
+      return planId;
+    } catch (error) {
+      console.error("❌ Failed to create plan:", error);
+      throw error;
     }
-    
-    return await db.plans.add({
-      ...planData,
-      createdAt: now,
-      updatedAt: now
-    });
   },
 
   async getActivePlan(userId: number): Promise<Plan | undefined> {
@@ -1265,21 +1622,18 @@ export const dbUtils = {
   },
 
   async getChatMessages(userId: number, conversationId?: string): Promise<ChatMessage[]> {
-    let collection = db.chatMessages.where('userId').equals(userId);
+    let messages = await db.chatMessages.where('userId').equals(userId).toArray();
     if (conversationId) {
-      collection = collection.and(msg => msg.conversationId === conversationId);
+      messages = messages.filter(msg => msg.conversationId === conversationId);
     }
-    return await collection.orderBy('timestamp').toArray();
+    return messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   },
 
   async getRecentChatMessages(userId: number, limit: number = 50): Promise<ChatMessage[]> {
-    return await db.chatMessages
-      .where('userId')
-      .equals(userId)
-      .orderBy('timestamp')
-      .reverse()
-      .limit(limit)
-      .toArray();
+    const messages = await db.chatMessages.where('userId').equals(userId).toArray();
+    return messages
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, limit);
   },
 
   async deleteChatHistory(userId: number, conversationId?: string): Promise<void> {
@@ -2877,9 +3231,34 @@ export const dbUtils = {
 
   // Testing utility - clear all data
   async clearDatabase(): Promise<void> {
-    await db.transaction('rw', db.tables, async () => {
-      await Promise.all(db.tables.map(table => table.clear()));
-    });
+    try {
+      console.log('🗑️ Clearing database...')
+      await db.delete()
+      console.log('✅ Database cleared successfully')
+    } catch (error) {
+      console.error('❌ Failed to clear database:', error)
+    }
+  },
+
+  async resetDatabase(): Promise<void> {
+    try {
+      console.log('🔄 Resetting database...')
+      await db.delete()
+      await db.open()
+      console.log('✅ Database reset successfully')
+    } catch (error) {
+      console.error('❌ Failed to reset database:', error)
+    }
+  },
+
+  async isDatabaseHealthy(): Promise<boolean> {
+    try {
+      await db.open()
+      return true
+    } catch (error) {
+      console.error('❌ Database health check failed:', error)
+      return false
+    }
   },
 
   // Testing utility - delete a milestone
@@ -3090,6 +3469,276 @@ export const dbUtils = {
       issues
     };
   },
+
+  // Onboarding conflict resolution utilities
+  async cleanupUserData(userId: number): Promise<void> {
+    console.log(`🧹 Cleaning up data for user ${userId}`);
+    
+    try {
+      // Delete all related data for the user
+      await db.transaction('rw', [
+        db.plans,
+        db.workouts, 
+        db.runs,
+        db.chatMessages,
+        db.badges,
+        db.performanceMetrics,
+        db.coachingProfiles,
+        db.coachingFeedback,
+        db.coachingInteractions,
+        db.userBehaviorPatterns,
+        db.goals,
+        db.goalMilestones,
+        db.goalProgressHistory,
+        db.goalRecommendations
+      ], async () => {
+        // Delete plans first (cascading deletes)
+        const userPlans = await db.plans.where('userId').equals(userId).toArray();
+        for (const plan of userPlans) {
+          if (plan.id) {
+            // Delete workouts for this plan
+            await db.workouts.where('planId').equals(plan.id).delete();
+          }
+        }
+        await db.plans.where('userId').equals(userId).delete();
+        
+        // Delete runs
+        await db.runs.where('userId').equals(userId).delete();
+        
+        // Delete chat messages
+        await db.chatMessages.where('userId').equals(userId).delete();
+        
+        // Delete badges
+        await db.badges.where('userId').equals(userId).delete();
+        
+        // Delete performance metrics
+        await db.performanceMetrics.where('userId').equals(userId).delete();
+        
+        // Delete coaching data
+        await db.coachingProfiles.where('userId').equals(userId).delete();
+        await db.coachingFeedback.where('userId').equals(userId).delete();
+        await db.coachingInteractions.where('userId').equals(userId).delete();
+        await db.userBehaviorPatterns.where('userId').equals(userId).delete();
+        
+        // Delete goals and related data
+        const userGoals = await db.goals.where('userId').equals(userId).toArray();
+        for (const goal of userGoals) {
+          if (goal.id) {
+            await db.goalMilestones.where('goalId').equals(goal.id).delete();
+            await db.goalProgressHistory.where('goalId').equals(goal.id).delete();
+          }
+        }
+        await db.goals.where('userId').equals(userId).delete();
+        await db.goalRecommendations.where('userId').equals(userId).delete();
+      });
+      
+      console.log(`✅ Successfully cleaned up data for user ${userId}`);
+    } catch (error) {
+      console.error(`❌ Failed to cleanup data for user ${userId}:`, error);
+      throw error;
+    }
+  },
+
+  // Check if user creation is safe (prevent duplicates during onboarding)
+  async isUserCreationSafe(): Promise<boolean> {
+    try {
+      // Check if there's already a user in the database
+      const existingUser = await this.getCurrentUser();
+      if (existingUser) {
+        console.warn('⚠️ User already exists, creation not safe');
+        return false;
+      }
+
+      // Check database integrity
+      const integrityCheck = await this.validateUserPlanIntegrity(0); // Use 0 as placeholder
+      if (integrityCheck.issues.length > 0) {
+        console.warn('⚠️ Database integrity issues found:', integrityCheck.issues);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('❌ User creation safety check failed:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Validate user onboarding state and plan integrity
+   */
+  async validateUserOnboardingState(userId: number): Promise<{
+    isValid: boolean;
+    hasActivePlan: boolean;
+    hasCompletedOnboarding: boolean;
+    planCount: number;
+    issues: string[];
+    recommendations: string[];
+  }> {
+    try {
+      const user = await this.getUserById(userId);
+      if (!user) {
+        return {
+          isValid: false,
+          hasActivePlan: false,
+          hasCompletedOnboarding: false,
+          planCount: 0,
+          issues: ['User not found'],
+          recommendations: ['Create new user account']
+        };
+      }
+
+      const plans = await this.plans.where('userId').equals(userId).toArray();
+      const activePlans = plans.filter(p => p.isActive);
+      const planCount = plans.length;
+      const hasActivePlan = activePlans.length > 0;
+      const hasCompletedOnboarding = user.onboardingComplete;
+
+      const issues: string[] = [];
+      const recommendations: string[] = [];
+
+      // Check for multiple active plans
+      if (activePlans.length > 1) {
+        issues.push(`Multiple active plans found (${activePlans.length})`);
+        recommendations.push('Deactivate duplicate plans');
+      }
+
+      // Check for incomplete onboarding with active plan
+      if (!hasCompletedOnboarding && hasActivePlan) {
+        issues.push('Active plan exists but onboarding incomplete');
+        recommendations.push('Complete onboarding or deactivate plan');
+      }
+
+      // Check for completed onboarding without active plan
+      if (hasCompletedOnboarding && !hasActivePlan) {
+        issues.push('Onboarding complete but no active plan');
+        recommendations.push('Generate new training plan');
+      }
+
+      const isValid = issues.length === 0;
+
+      return {
+        isValid,
+        hasActivePlan,
+        hasCompletedOnboarding,
+        planCount,
+        issues,
+        recommendations
+      };
+    } catch (error) {
+      console.error('❌ User onboarding state validation failed:', error);
+      return {
+        isValid: false,
+        hasActivePlan: false,
+        hasCompletedOnboarding: false,
+        planCount: 0,
+        issues: ['Validation error occurred'],
+        recommendations: ['Check database integrity']
+      };
+    }
+  },
+
+  async cleanupFailedOnboarding(userId: number): Promise<void> {
+    try {
+      console.log(`🧹 Cleaning up failed onboarding for user ${userId}`);
+      
+      // Deactivate all plans for this user
+      await this.deactivateAllUserPlans(userId);
+      
+      // Reset user onboarding status
+      await this.updateUser(userId, { onboardingComplete: false });
+      
+      // Clear any partial data
+      await this.plans.where('userId').equals(userId).delete();
+      await this.workouts.where('planId').anyOf(
+        await this.plans.where('userId').equals(userId).primaryKeys()
+      ).delete();
+      
+      console.log(`✅ Cleanup completed for user ${userId}`);
+    } catch (error) {
+      console.error('❌ Cleanup failed:', error);
+      throw error;
+    }
+  },
+
+  async repairUserState(userId: number): Promise<{
+    success: boolean;
+    actions: string[];
+    errors: string[];
+  }> {
+    const actions: string[] = [];
+    const errors: string[] = [];
+
+    try {
+      console.log(`🔧 Repairing user state for user ${userId}`);
+      
+      const validation = await this.validateUserOnboardingState(userId);
+      
+      if (!validation.isValid) {
+        // Deactivate multiple active plans
+        if (validation.hasActivePlan) {
+          const activePlans = await this.plans.where('userId').equals(userId).filter(p => p.isActive).toArray();
+          if (activePlans.length > 1) {
+            // Keep the most recent plan, deactivate others
+            const sortedPlans = activePlans.sort((a, b) => 
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            
+            for (let i = 1; i < sortedPlans.length; i++) {
+              await this.updatePlan(sortedPlans[i].id!, { isActive: false });
+              actions.push(`Deactivated duplicate plan ${sortedPlans[i].id}`);
+            }
+          }
+        }
+
+        // Reset onboarding if needed
+        const user = await this.getUserById(userId);
+        if (user && user.onboardingComplete && !validation.hasActivePlan) {
+          await this.updateUser(userId, { onboardingComplete: false });
+          actions.push('Reset onboarding completion status');
+        }
+      }
+
+      return {
+        success: errors.length === 0,
+        actions,
+        errors
+      };
+    } catch (error) {
+      console.error('❌ User state repair failed:', error);
+      errors.push(`Repair failed: ${error}`);
+      return {
+        success: false,
+        actions,
+        errors
+      };
+    }
+  },
+
+  async executeWithRollback<T>(
+    operation: () => Promise<T>,
+    rollbackOperation?: () => Promise<void>
+  ): Promise<{ success: boolean; result?: T; error?: string }> {
+    try {
+      const result = await operation();
+      return { success: true, result };
+    } catch (error) {
+      console.error('❌ Operation failed, attempting rollback:', error);
+      
+      if (rollbackOperation) {
+        try {
+          await rollbackOperation();
+          console.log('✅ Rollback completed successfully');
+        } catch (rollbackError) {
+          console.error('❌ Rollback failed:', rollbackError);
+        }
+      }
+      
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : String(error) 
+      };
+    }
+  }
 };
 
 // Helper functions

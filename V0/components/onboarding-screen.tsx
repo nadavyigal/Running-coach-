@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast"
 import { trackEngagementEvent } from '@/lib/analytics'
 import { planAdjustmentService } from "@/lib/planAdjustmentService"
 import { OnboardingChatOverlay } from "@/components/onboarding-chat-overlay"
+import { onboardingManager } from "@/lib/onboardingManager"
 
 interface OnboardingScreenProps {
   onComplete: () => void
@@ -107,141 +108,67 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     setIsGeneratingPlan(true)
     
     try {
-      console.log('Starting onboarding completion...')
+      console.log('=== ONBOARDING FINISH START ===')
       
       // Step 1: Migrate existing localStorage data first
-      console.log('Migrating localStorage data...')
+      console.log('📋 Step 1: Migrating localStorage data...')
       await dbUtils.migrateFromLocalStorage()
+      console.log('✅ localStorage migration completed')
       
-      // Step 2: Create user record
-      console.log('Creating user record...')
-      const userData = {
+      // Step 2: Create user through OnboardingManager
+      console.log('📋 Step 2: Creating user via OnboardingManager...')
+      const formData = {
         goal: selectedGoal as 'habit' | 'distance' | 'speed',
         experience: selectedExperience === 'occasional' 
           ? 'intermediate' 
           : selectedExperience === 'regular'
           ? 'advanced'
           : selectedExperience as 'beginner' | 'intermediate' | 'advanced',
-        preferredTimes: selectedTimes.length > 0 ? selectedTimes : ['morning'],
+        selectedTimes: selectedTimes.length > 0 ? selectedTimes : ['morning'],
         daysPerWeek: daysPerWeek[0],
-        consents,
-        onboardingComplete: true,
-        rpe: rpe ?? undefined,
-        age: age ?? undefined,
+        rpe,
+        age,
+        consents
       }
       
-      await dbUtils.createUser(userData)
-      console.log('User record created successfully')
-
-      // Step 3: Get the created user
-      console.log('Fetching created user...')
-      const user = await dbUtils.getCurrentUser()
-      if (!user || !user.id) {
-        throw new Error('Failed to retrieve created user - user not found in database')
+      console.log('Form data:', formData)
+      const onboardingResult = await onboardingManager.completeFormOnboarding(formData)
+      
+      if (!onboardingResult.success) {
+        throw new Error(onboardingResult.errors?.join(', ') || 'Failed to complete onboarding')
       }
-      console.log('User retrieved successfully:', user.id)
+      
+      console.log('✅ User and plan created successfully via OnboardingManager:', {
+        userId: onboardingResult.user.id,
+        planId: onboardingResult.planId
+      })
 
       // Initialize plan adjustment service
-      planAdjustmentService.init(user.id)
-      console.log('Plan adjustment service initialized')
-
-      // Step 4: Generate training plan with improved error handling
-      console.log('Generating training plan...')
-      let planResult
-      try {
-        planResult = await generatePlan({ user, rookie_challenge: true })
-        console.log('AI plan generated successfully')
-        
-        // Check if this was an AI-generated plan or fallback
-        const hasAIFeatures = planResult.plan.description?.includes('AI') || 
-                             planResult.plan.title?.includes('AI') ||
-                             planResult.workouts.some(w => w.notes?.includes('AI'))
-        
-        toast({
-          title: "Success!",
-          description: hasAIFeatures 
-            ? "Your personalized training plan has been created using AI."
-            : "Your training plan has been created successfully.",
-        })
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-        console.log('AI plan generation failed, attempting fallback:', errorMessage)
-        
-        // Check if this is a fallback-required error
-        if (errorMessage.includes('FALLBACK_REQUIRED')) {
-          console.log('API key not configured, using fallback plan generation')
-          try {
-            planResult = await generateFallbackPlan(user)
-            console.log('Fallback plan generated successfully')
-            toast({
-              title: "Plan Created",
-              description: "Your training plan has been created. AI features are currently unavailable, but your plan is fully functional.",
-              variant: "default"
-            })
-          } catch (fallbackError) {
-            console.error('Fallback plan generation failed:', fallbackError)
-            throw new Error(`Failed to create training plan: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`)
-          }
-        } else {
-          // For any other error, still try fallback
-          console.warn('AI plan generation failed, attempting fallback:', errorMessage)
-          try {
-            planResult = await generateFallbackPlan(user)
-            console.log('Fallback plan generated successfully')
-            toast({
-              title: "Plan Created",
-              description: "Your training plan has been created using fallback generation. Some AI features may be limited.",
-              variant: "default"
-            })
-          } catch (fallbackError) {
-            console.error('Both AI and fallback plan generation failed:', fallbackError)
-            throw new Error(`Failed to create training plan: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`)
-          }
-        }
-      }
-
-      // Step 5: Verify plan was created successfully
-      if (!planResult || !planResult.plan) {
-        throw new Error('Plan generation completed but no plan was returned')
-      }
-
-      console.log('Plan created successfully:', planResult.plan.title, `with ${planResult.workouts.length} workouts`)
+      console.log('📋 Step 3: Initializing plan adjustment service...')
+      planAdjustmentService.init(onboardingResult.user.id!)
+      console.log('✅ Plan adjustment service initialized')
       
-      // Step 6: Track completion event
-      console.log('Tracking completion event...')
-      const goalDist = selectedGoal === 'distance' ? 5 : 0; // Default to 5k for distance goal, 0 for others
-      trackEngagementEvent('onboard_complete', { rookieChallenge: true, age: age ?? 0, goalDist });
+      // Step 4: Track completion event
+      console.log('📋 Step 4: Tracking completion event...')
+      const goalDist = selectedGoal === 'distance' ? 5 : 0
+      trackEngagementEvent('onboard_complete', { rookieChallenge: true, age: age ?? 0, goalDist })
+      console.log('✅ Completion event tracked')
       
-      // Step 7: Validate plan integrity before completion
-      console.log('Validating plan integrity...')
-      try {
-        const validationResult = await dbUtils.validateUserPlanIntegrity(user.id)
-        console.log('Plan validation result:', validationResult)
-        
-        if (!validationResult.hasActivePlan) {
-          console.warn('No active plan found after generation, attempting recovery...')
-          await dbUtils.ensureUserHasActivePlan(user.id)
-          console.log('Plan recovery completed')
-        }
-        
-        if (validationResult.issues.length > 0) {
-          console.warn('Plan integrity issues detected:', validationResult.issues)
-        }
-      } catch (error) {
-        console.error('Plan validation failed:', error)
-        // Continue with onboarding despite validation issues
-      }
+      // Step 5: Success notification
+      toast({
+        title: "Success!",
+        description: "Your personalized running plan has been created successfully.",
+      })
       
-      // Step 8: Complete onboarding
-      console.log('Completing onboarding...')
+      // Step 6: Complete onboarding
+      console.log('📋 Step 6: Completing onboarding...')
       setIsGeneratingPlan(false)
       onComplete()
       
-      console.log('Onboarding completed successfully!')
+      console.log('🎉 Onboarding completed successfully!')
     } catch (error) {
-      console.error('Onboarding completion failed:', error)
+      console.error('❌ Onboarding completion failed:', error)
       
-      // Provide more specific error message
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
       
       toast({

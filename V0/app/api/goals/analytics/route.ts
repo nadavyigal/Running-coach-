@@ -79,7 +79,7 @@ async function generateGoalAnalytics(
   goals: any[], 
   startDate: Date, 
   endDate: Date, 
-  includeDetailed: boolean
+  _includeDetailed: boolean
 ) {
   // Overview metrics
   const totalGoals = goals.length;
@@ -122,7 +122,7 @@ async function generateGoalAnalytics(
   // Goal performance analysis
   const goalPerformance = await Promise.all(
     goals.map(async (goal) => {
-      const progress = await goalProgressEngine.calculateGoalProgress(goal.id!);
+      const _progress = await goalProgressEngine.calculateGoalProgress(goal.id!);
       const daysActive = Math.ceil((Date.now() - new Date(goal.createdAt).getTime()) / (1000 * 60 * 60 * 24));
       const progressRate = daysActive > 0 ? (goal.progressPercentage || 0) / daysActive : 0;
       const prediction = await goalProgressEngine.predictGoalCompletion(goal.id!);

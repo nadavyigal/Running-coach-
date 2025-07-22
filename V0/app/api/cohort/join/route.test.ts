@@ -1,6 +1,5 @@
 import { POST } from './route';
 import { db } from '@/lib/db';
-import { NextResponse } from 'next/server';
 
 // Mock the db object
 import { vi } from 'vitest';
