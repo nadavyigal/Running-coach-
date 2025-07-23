@@ -48,41 +48,53 @@ describe('DeviceConnectionScreen', () => {
   });
 
   describe('Rendering', () => {
-    it('should render the connection screen with title and description', () => {
-      render(
-        <DeviceConnectionScreen 
-          userId={mockUserId} 
-          onDeviceConnected={mockOnDeviceConnected} 
-        />
-      );
+    it('should render the connection screen with title and description', async () => {
+      await act(async () => {
+        render(
+          <DeviceConnectionScreen 
+            userId={mockUserId} 
+            onDeviceConnected={mockOnDeviceConnected} 
+          />
+        );
+      });
 
-      expect(screen.getByText('Connect Your Devices')).toBeInTheDocument();
-      expect(screen.getByText(/Connect your wearable devices to get personalized coaching/)).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('Connect Your Devices')).toBeInTheDocument();
+        expect(screen.getByText(/Connect your wearable devices to get personalized coaching/)).toBeInTheDocument();
+      });
     });
 
-    it('should render available devices section', () => {
-      render(
-        <DeviceConnectionScreen 
-          userId={mockUserId} 
-          onDeviceConnected={mockOnDeviceConnected} 
-        />
-      );
+    it('should render available devices section', async () => {
+      await act(async () => {
+        render(
+          <DeviceConnectionScreen 
+            userId={mockUserId} 
+            onDeviceConnected={mockOnDeviceConnected} 
+          />
+        );
+      });
 
-      expect(screen.getByText('Available Devices')).toBeInTheDocument();
-      expect(screen.getByText('Apple Watch')).toBeInTheDocument();
-      expect(screen.getByText('Garmin Device')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('Available Devices')).toBeInTheDocument();
+        expect(screen.getByText('Apple Watch')).toBeInTheDocument();
+        expect(screen.getByText('Garmin Device')).toBeInTheDocument();
+      });
     });
 
-    it('should show loading state initially', () => {
-      render(
-        <DeviceConnectionScreen 
-          userId={mockUserId} 
-          onDeviceConnected={mockOnDeviceConnected} 
-        />
-      );
+    it('should show loading state initially', async () => {
+      await act(async () => {
+        render(
+          <DeviceConnectionScreen 
+            userId={mockUserId} 
+            onDeviceConnected={mockOnDeviceConnected} 
+          />
+        );
+      });
 
       // The component should show loading initially while fetching connected devices
-      expect(screen.getByText('Available Devices')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('Available Devices')).toBeInTheDocument();
+      });
     });
   });
 

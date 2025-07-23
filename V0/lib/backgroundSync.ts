@@ -22,7 +22,11 @@ export interface SyncJob {
 export class BackgroundSyncManager {
   private static instance: BackgroundSyncManager;
   private syncInterval: NodeJS.Timeout | null = null;
-  private isRunning = false;
+  private _isRunning = false;
+
+  public isRunning(): boolean {
+    return this._isRunning;
+  }
   private activeJobs = new Set<number>();
   private readonly maxConcurrentJobs = 3;
   private readonly syncIntervalMs = 30000; // 30 seconds

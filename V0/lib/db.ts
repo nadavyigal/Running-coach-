@@ -37,19 +37,29 @@ export interface User {
 }
 
 export interface OnboardingSession {
+  id?: number;
+  userId: number;
   conversationId: string;
   goalDiscoveryPhase: 'motivation' | 'assessment' | 'creation' | 'refinement' | 'complete';
   discoveredGoals: SmartGoal[];
   coachingStyle: 'supportive' | 'challenging' | 'analytical' | 'encouraging';
-  conversationHistory: ConversationMessage[];
+  sessionProgress: number; // 0-100 percentage
+  isCompleted: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface ConversationMessage {
-  id: string;
+  id?: number;
+  sessionId?: number; // Foreign key to OnboardingSession if part of onboarding
+  conversationId: string; // Grouping conversations
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
+  phase?: string; // Which onboarding phase this message belongs to
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface SmartGoal {
@@ -634,6 +644,9 @@ export class RunSmartDB extends Dexie {
   advancedMetrics!: EntityTable<AdvancedMetrics, 'id'>;
   runningDynamicsData!: EntityTable<RunningDynamicsData, 'id'>;
   syncJobs!: EntityTable<SyncJob, 'id'>;
+  // Onboarding and conversation tables
+  onboardingSessions!: EntityTable<OnboardingSession, 'id'>;
+  conversationMessages!: EntityTable<ConversationMessage, 'id'>;
 
   constructor() {
     super('RunSmartDB');
@@ -1154,6 +1167,44 @@ export class RunSmartDB extends Dexie {
           }
         }
       }
+    });
+
+    // Version 16: Add OnboardingSession and ConversationMessage tables for chat persistence
+    this.version(16).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId, coachingStyle, goalInferred',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt, planType, raceGoalId, [userId+isActive]',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt, type, trainingPhase',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt, externalId',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+      cohorts: '++id, inviteCode, name',
+      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+      performanceMetrics: '++id, userId, date, createdAt',
+      coachingFeedback: '++id, userId, interactionType, feedbackType, rating, createdAt',
+      coachingInteractions: '++id, userId, interactionId, interactionType, createdAt',
+      userBehaviorPatterns: '++id, userId, patternType, confidenceScore, lastObserved, createdAt',
+      goals: '++id, userId, goalType, status, priority, createdAt, updatedAt',
+      goalMilestones: '++id, goalId, milestoneOrder, status, targetDate, createdAt',
+      goalProgressHistory: '++id, goalId, measurementDate, autoRecorded',
+      goalRecommendations: '++id, userId, recommendationType, status, createdAt, expiresAt',
+      // Enhanced wearable device tables
+      wearableDevices: '++id, userId, type, deviceId, connectionStatus, lastSync, createdAt',
+      heartRateData: '++id, runId, deviceId, timestamp, heartRate, accuracy, createdAt',
+      heartRateZones: '++id, userId, zoneNumber, name, minBpm, maxBpm, color, createdAt',
+      heartRateZoneSettings: '++id, userId, calculationMethod, zoneSystem, autoUpdate, createdAt',
+      zoneDistributions: '++id, runId, zone1Time, zone2Time, zone3Time, zone4Time, zone5Time, totalTime, createdAt',
+      advancedMetrics: '++id, runId, deviceId, vo2Max, lactateThresholdHR, trainingStressScore, createdAt',
+      runningDynamicsData: '++id, runId, deviceId, averageCadence, averageGroundContactTime, averageVerticalOscillation, createdAt',
+      syncJobs: '++id, userId, deviceId, type, status, priority, scheduledAt, createdAt, [userId+deviceId+type]',
+      // New tables for onboarding and conversation persistence
+      onboardingSessions: '++id, userId, conversationId, goalDiscoveryPhase, isCompleted, createdAt, [userId+conversationId]',
+      conversationMessages: '++id, sessionId, conversationId, role, timestamp, phase, createdAt, [conversationId+timestamp]'
+    }).upgrade(async tx => {
+      console.log('Running migration for version 16 - Add OnboardingSession and ConversationMessage tables');
+      
+      // No data migration needed for new tables - they will start empty
+      // Users can start new onboarding sessions which will use these tables
     });
   }
 }
@@ -3738,6 +3789,137 @@ export const dbUtils = {
         error: error instanceof Error ? error.message : String(error) 
       };
     }
+  },
+
+  // OnboardingSession utilities
+  async createOnboardingSession(userId: number, conversationId: string): Promise<OnboardingSession> {
+    const session: OnboardingSession = {
+      userId,
+      conversationId,
+      goalDiscoveryPhase: 'motivation',
+      discoveredGoals: [],
+      coachingStyle: 'supportive',
+      sessionProgress: 0,
+      isCompleted: false,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    const id = await db.onboardingSessions.add(session);
+    return { ...session, id };
+  },
+
+  async updateOnboardingSession(id: number, updates: Partial<OnboardingSession>): Promise<void> {
+    await db.onboardingSessions.update(id, { ...updates, updatedAt: new Date() });
+  },
+
+  async getOnboardingSession(userId: number, conversationId: string): Promise<OnboardingSession | undefined> {
+    return await db.onboardingSessions
+      .where(['userId', 'conversationId'])
+      .equals([userId, conversationId])
+      .first();
+  },
+
+  async getLatestOnboardingSession(userId: number): Promise<OnboardingSession | undefined> {
+    const sessions = await db.onboardingSessions
+      .where('userId')
+      .equals(userId)
+      .toArray();
+    
+    return sessions.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+  },
+
+  // ConversationMessage utilities
+  async saveConversationMessage(message: Omit<ConversationMessage, 'id' | 'createdAt' | 'updatedAt'>): Promise<ConversationMessage> {
+    const messageWithTimestamps: ConversationMessage = {
+      ...message,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    const id = await db.conversationMessages.add(messageWithTimestamps);
+    return { ...messageWithTimestamps, id };
+  },
+
+  async getConversationMessages(conversationId: string): Promise<ConversationMessage[]> {
+    const messages = await db.conversationMessages
+      .where('conversationId')
+      .equals(conversationId)
+      .toArray();
+    
+    return messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  },
+
+  async getConversationMessagesByPhase(conversationId: string, phase: string): Promise<ConversationMessage[]> {
+    const allMessages = await db.conversationMessages
+      .where('conversationId')
+      .equals(conversationId)
+      .toArray();
+    
+    const filteredMessages = allMessages.filter(message => message.phase === phase);
+    return filteredMessages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  },
+
+  async deleteConversationMessages(conversationId: string): Promise<void> {
+    await db.conversationMessages.where('conversationId').equals(conversationId).delete();
+  },
+
+  // Data validation utilities
+  validateOnboardingSession(session: Partial<OnboardingSession>): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    
+    if (!session.userId) {
+      errors.push('User ID is required');
+    }
+    
+    if (!session.conversationId) {
+      errors.push('Conversation ID is required');
+    }
+    
+    if (session.goalDiscoveryPhase && 
+        !['motivation', 'assessment', 'creation', 'refinement', 'complete'].includes(session.goalDiscoveryPhase)) {
+      errors.push('Invalid goal discovery phase');
+    }
+    
+    if (session.coachingStyle && 
+        !['supportive', 'challenging', 'analytical', 'encouraging'].includes(session.coachingStyle)) {
+      errors.push('Invalid coaching style');
+    }
+    
+    if (session.sessionProgress !== undefined && 
+        (session.sessionProgress < 0 || session.sessionProgress > 100)) {
+      errors.push('Session progress must be between 0 and 100');
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  },
+
+  validateConversationMessage(message: Partial<ConversationMessage>): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    
+    if (!message.conversationId) {
+      errors.push('Conversation ID is required');
+    }
+    
+    if (!message.role || !['user', 'assistant'].includes(message.role)) {
+      errors.push('Valid role (user or assistant) is required');
+    }
+    
+    if (!message.content || message.content.trim().length === 0) {
+      errors.push('Message content is required');
+    }
+    
+    if (!message.timestamp) {
+      errors.push('Message timestamp is required');
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
   }
 };
 

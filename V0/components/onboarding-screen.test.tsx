@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OnboardingScreen } from './onboarding-screen';
 import posthog from 'posthog-js';
 import { trackEngagementEvent } from '@/lib/analytics';
@@ -19,6 +20,7 @@ vi.mock('@/lib/db', () => ({
     migrateFromLocalStorage: vi.fn().mockResolvedValue(undefined),
     createUser: vi.fn().mockResolvedValue(1),
     getCurrentUser: vi.fn().mockResolvedValue({ id: 1 }),
+    updateUser: vi.fn().mockResolvedValue(undefined), // Add this line
   },
 }));
 
@@ -42,6 +44,19 @@ const mockOnComplete = vi.fn();
 describe('OnboardingScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('shows progress indicator with exactly 8 steps', () => {
+    render(<OnboardingScreen onComplete={mockOnComplete} />);
+    
+    // Check that all 8 step indicators are present
+    for (let i = 1; i <= 8; i++) {
+      expect(screen.getByText(i.toString())).toBeInTheDocument();
+    }
+    
+    // Verify no additional steps beyond 8
+    const stepElements = screen.getAllByText(/^[1-8]$/);
+    expect(stepElements).toHaveLength(8);
   });
 
   it('renders and navigates through all steps', async () => {

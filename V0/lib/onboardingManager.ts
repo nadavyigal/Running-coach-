@@ -1,6 +1,7 @@
 import { dbUtils, type User } from '@/lib/db'
 import { generatePlan, generateFallbackPlan, type PlanData } from '@/lib/planGenerator'
 import { trackEngagementEvent } from '@/lib/analytics'
+import { validateOnboardingState } from '@/lib/onboardingStateValidator'
 
 export interface OnboardingResult {
   user: User;
@@ -25,7 +26,7 @@ export interface OnboardingProfile {
   barriers?: string[];
   coachingStyle?: 'supportive' | 'challenging' | 'analytical' | 'encouraging';
   goalInferred?: boolean;
-  onboardingSession?: any;
+  onboardingSession?: Record<string, unknown>;
   onboardingComplete: boolean;
 }
 
@@ -145,8 +146,8 @@ export class OnboardingManager {
         };
       }
 
-      // Step 2: Validate profile data
-      const validationResult = this.validateProfile(profile);
+      // Step 2: Validate profile data and state consistency
+      const validationResult = await validateOnboardingState(profile, this.currentUserId);
       if (!validationResult.isValid) {
         return {
           user: null as any,
@@ -199,14 +200,43 @@ export class OnboardingManager {
       };
 
     } catch (error) {
-      console.error('❌ User creation failed:', error);
-      await this.cleanupFailedOnboarding();
+      console.error('❌ User creation failed during createUserWithProfile:', error);
+      await this.cleanupFailedOnboarding(error); // Pass error for logging
       
       return {
         user: null as any,
         success: false,
         errors: [error instanceof Error ? error.message : 'Unknown error occurred']
       };
+    }
+  }
+
+  /**
+   * Clean up any partial state from failed onboarding
+   */
+  private async cleanupFailedOnboarding(error?: any): Promise<void> {
+    if (this.currentUserId) {
+      try {
+        console.log('🧹 Cleaning up failed onboarding for user:', this.currentUserId);
+        if (error) {
+          console.error('Reason for cleanup:', error);
+        }
+        
+        // Delete any partially created plans and user data
+        await dbUtils.cleanupUserData(this.currentUserId);
+        
+        console.log('✅ Cleanup completed');
+      } catch (cleanupError) {
+        console.error('❌ Cleanup failed during cleanupFailedOnboarding:', cleanupError);
+      } finally {
+        this.onboardingInProgress = false;
+        this.currentUserId = null;
+        console.log('Onboarding state reset: onboardingInProgress=', this.onboardingInProgress, ', currentUserId=', this.currentUserId);
+      }
+    } else {
+      this.onboardingInProgress = false;
+      this.currentUserId = null;
+      console.log('Onboarding state reset (no currentUserId): onboardingInProgress=', this.onboardingInProgress, ', currentUserId=', this.currentUserId);
     }
   }
 
@@ -244,51 +274,35 @@ export class OnboardingManager {
     return updatedUser;
   }
 
-  /**
-   * Validate profile data before user creation
-   */
-  private validateProfile(profile: OnboardingProfile): { isValid: boolean; errors: string[] } {
-    const errors: string[] = [];
-
-    if (!profile.goal || !['habit', 'distance', 'speed'].includes(profile.goal)) {
-      errors.push('Invalid or missing goal');
-    }
-
-    if (!profile.experience || !['beginner', 'intermediate', 'advanced'].includes(profile.experience)) {
-      errors.push('Invalid or missing experience level');
-    }
-
-    if (!profile.preferredTimes || profile.preferredTimes.length === 0) {
-      errors.push('At least one preferred time must be selected');
-    }
-
-    if (!profile.daysPerWeek || profile.daysPerWeek < 2 || profile.daysPerWeek > 7) {
-      errors.push('Days per week must be between 2 and 7');
-    }
-
-    if (!profile.consents.data || !profile.consents.gdpr) {
-      errors.push('Data usage and GDPR consent are required');
-    }
-
-    if (profile.age && (profile.age < 10 || profile.age > 100)) {
-      errors.push('Age must be between 10 and 100 if provided');
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors
-    };
-  }
+  
 
   /**
    * Generate training plan with unified logic
    */
-  private async generateTrainingPlan(user: User): Promise<number> {
+  private async generateTrainingPlan(profile: OnboardingProfile): Promise<number> {
+    const user: User = {
+      id: this.currentUserId!,
+      goal: profile.goal,
+      experience: profile.experience,
+      preferredTimes: profile.preferredTimes,
+      daysPerWeek: profile.daysPerWeek,
+      consents: profile.consents,
+      onboardingComplete: profile.onboardingComplete,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      rpe: profile.rpe,
+      age: profile.age,
+      motivations: profile.motivations,
+      barriers: profile.barriers,
+      coachingStyle: profile.coachingStyle,
+      goalInferred: profile.goalInferred,
+      onboardingSession: profile.onboardingSession,
+    };
     try {
       console.log('🎯 Generating training plan for user:', user.id);
       
       // Try AI-powered plan generation first
-      const planData = await generatePlan({ user });
+      const planData = await generatePlan({ user: user });
       console.log('✅ AI plan generation successful');
       
       // Create plan with conflict prevention

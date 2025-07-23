@@ -22,8 +22,32 @@ vi.mock('../lib/db', () => ({
 }));
 
 vi.mock('../lib/planGenerator', () => ({
-  generatePlan: vi.fn(),
-  generateFallbackPlan: vi.fn(),
+  generatePlan: vi.fn().mockImplementation(async ({ user }) => ({
+    plan: {
+      userId: user.id,
+      title: 'AI Generated Plan',
+      description: 'AI plan',
+      startDate: new Date(),
+      endDate: new Date(),
+      totalWeeks: 4,
+      isActive: true,
+      planType: 'basic',
+    },
+    workouts: [],
+  })),
+  generateFallbackPlan: vi.fn().mockImplementation(async (user) => ({
+    plan: {
+      userId: user.id,
+      title: 'Fallback Plan',
+      description: 'Basic training plan',
+      startDate: new Date(),
+      endDate: new Date(),
+      totalWeeks: 4,
+      isActive: true,
+      planType: 'basic',
+    },
+    workouts: [],
+  })),
 }));
 
 vi.mock('../lib/analytics', () => ({
@@ -55,19 +79,22 @@ describe('Story 1.5: Onboarding Component Conflicts and Plan Creation Issues', (
         updatedAt: new Date(),
       };
 
-      vi.mocked(dbUtils.getCurrentUser).mockResolvedValue(mockUser);
+      vi.mocked(dbUtils.getCurrentUser).mockResolvedValue(undefined); // No existing user
       vi.mocked(dbUtils.createUser).mockResolvedValue(1);
+      vi.mocked(dbUtils.updateUser).mockResolvedValue(undefined);
       vi.mocked(dbUtils.createPlan).mockResolvedValue(1);
       vi.mocked(dbUtils.createWorkout).mockResolvedValue(1);
+      vi.mocked(dbUtils.getUserById).mockResolvedValue(mockUser); // User after creation
 
-      const onboardingManager = new OnboardingManager();
+      const onboardingManager = OnboardingManager.getInstance();
       
-      const result = await onboardingManager.generateTrainingPlan({
+      const result = await onboardingManager.createUserWithProfile({
         goal: 'habit',
         experience: 'beginner',
         preferredTimes: ['morning'],
         daysPerWeek: 3,
         consents: { data: true, gdpr: true, push: true },
+        onboardingComplete: false,
       });
 
       expect(result.success).toBe(true);
@@ -90,37 +117,41 @@ describe('Story 1.5: Onboarding Component Conflicts and Plan Creation Issues', (
         updatedAt: new Date(),
       };
 
-      vi.mocked(dbUtils.getCurrentUser).mockResolvedValue(mockUser);
-      vi.mocked(dbUtils.deactivateAllUserPlans).mockResolvedValue();
+      vi.mocked(dbUtils.getCurrentUser).mockResolvedValue(undefined); // No existing user
+      vi.mocked(dbUtils.createUser).mockResolvedValue(1);
+      vi.mocked(dbUtils.updateUser).mockResolvedValue(undefined);
       vi.mocked(dbUtils.createPlan).mockResolvedValue(1);
       vi.mocked(dbUtils.createWorkout).mockResolvedValue(1);
+      vi.mocked(dbUtils.deactivateAllUserPlans).mockResolvedValue(undefined);
+      vi.mocked(dbUtils.getUserById).mockResolvedValue(mockUser);
 
-      const onboardingManager = new OnboardingManager();
+      const onboardingManager = OnboardingManager.getInstance();
       
-      const result = await onboardingManager.generateTrainingPlan({
+      await onboardingManager.createUserWithProfile({
         goal: 'habit',
         experience: 'beginner',
         preferredTimes: ['morning'],
         daysPerWeek: 3,
         consents: { data: true, gdpr: true, push: true },
+        onboardingComplete: false,
       });
 
-      expect(result.success).toBe(true);
       expect(dbUtils.deactivateAllUserPlans).toHaveBeenCalledWith(1);
       expect(dbUtils.createPlan).toHaveBeenCalledTimes(1);
     });
 
-    it('should handle plan creation failures gracefully', async () => {
+    it('should handle user creation failures gracefully', async () => {
       vi.mocked(dbUtils.createUser).mockRejectedValue(new Error('Database error'));
 
-      const onboardingManager = new OnboardingManager();
+      const onboardingManager = OnboardingManager.getInstance();
       
-      const result = await onboardingManager.generateTrainingPlan({
+      const result = await onboardingManager.createUserWithProfile({
         goal: 'habit',
         experience: 'beginner',
         preferredTimes: ['morning'],
         daysPerWeek: 3,
         consents: { data: true, gdpr: true, push: true },
+        onboardingComplete: false,
       });
 
       expect(result.success).toBe(false);
@@ -213,7 +244,7 @@ describe('Story 1.5: Onboarding Component Conflicts and Plan Creation Issues', (
       vi.mocked(dbUtils.createPlan).mockResolvedValue(1);
       vi.mocked(dbUtils.createWorkout).mockResolvedValue(1);
 
-      const onboardingManager = new OnboardingManager();
+      const onboardingManager = OnboardingManager.getInstance();
       
       await onboardingManager.generateTrainingPlan({
         goal: 'habit',
@@ -231,7 +262,7 @@ describe('Story 1.5: Onboarding Component Conflicts and Plan Creation Issues', (
       vi.mocked(dbUtils.createPlan).mockResolvedValue(1);
       vi.mocked(dbUtils.createWorkout).mockResolvedValue(1);
 
-      const onboardingManager = new OnboardingManager();
+      const onboardingManager = OnboardingManager.getInstance();
       
       const result = await onboardingManager.generateTrainingPlan({
         goal: 'habit',
@@ -257,7 +288,7 @@ describe('Story 1.5: Onboarding Component Conflicts and Plan Creation Issues', (
 
       vi.mocked(dbUtils.validateUserOnboardingState).mockResolvedValue(mockValidation);
 
-      const onboardingManager = new OnboardingManager();
+      const onboardingManager = OnboardingManager.getInstance();
       
       const validation = await dbUtils.validateUserOnboardingState(1);
 
@@ -270,7 +301,7 @@ describe('Story 1.5: Onboarding Component Conflicts and Plan Creation Issues', (
     it('should provide clear error messages for plan creation failures', async () => {
       vi.mocked(dbUtils.createUser).mockRejectedValue(new Error('Network timeout'));
 
-      const onboardingManager = new OnboardingManager();
+      const onboardingManager = OnboardingManager.getInstance();
       
       const result = await onboardingManager.generateTrainingPlan({
         goal: 'habit',
@@ -306,7 +337,7 @@ describe('Story 1.5: Onboarding Component Conflicts and Plan Creation Issues', (
       vi.mocked(dbUtils.createPlan).mockResolvedValue(1);
       vi.mocked(dbUtils.createWorkout).mockResolvedValue(1);
 
-      const onboardingManager = new OnboardingManager();
+      const onboardingManager = OnboardingManager.getInstance();
       
       const result = await onboardingManager.generateTrainingPlan({
         goal: 'habit',
@@ -355,7 +386,7 @@ describe('Story 1.5: Onboarding Component Conflicts and Plan Creation Issues', (
       vi.mocked(dbUtils.createPlan).mockResolvedValue(1);
       vi.mocked(dbUtils.createWorkout).mockResolvedValue(1);
 
-      const onboardingManager = new OnboardingManager();
+      const onboardingManager = OnboardingManager.getInstance();
       
       // Create first plan
       await onboardingManager.generateTrainingPlan({
@@ -396,7 +427,7 @@ describe('Story 1.5: Onboarding Component Conflicts and Plan Creation Issues', (
       vi.mocked(dbUtils.createPlan).mockResolvedValue(1);
       vi.mocked(dbUtils.createWorkout).mockResolvedValue(1);
 
-      const onboardingManager = new OnboardingManager();
+      const onboardingManager = OnboardingManager.getInstance();
       
       // Simulate concurrent plan creation
       const promises = [
