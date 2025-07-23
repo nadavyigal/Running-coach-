@@ -12,7 +12,8 @@
       "Bash(true)",
       "Bash(curl:*)",
       "Bash(node:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": []
   }

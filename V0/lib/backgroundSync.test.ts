@@ -6,6 +6,7 @@ describe('BackgroundSyncManager', () => {
   let syncManager: BackgroundSyncManager;
 
   beforeEach(async () => {
+    vi.useFakeTimers();
     await db.delete();
     await db.open();
     syncManager = BackgroundSyncManager.getInstance();
@@ -14,6 +15,7 @@ describe('BackgroundSyncManager', () => {
   afterEach(async () => {
     syncManager.stop();
     await db.delete();
+    vi.useRealTimers();
   });
 
   describe('Job Management', () => {

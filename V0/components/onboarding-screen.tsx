@@ -10,15 +10,138 @@ import { dbUtils } from "@/lib/db"
 import { generatePlan, generateFallbackPlan } from "@/lib/planGenerator"
 import { useToast } from "@/hooks/use-toast"
 import { trackEngagementEvent } from '@/lib/analytics'
+import { 
+  trackGoalDiscovered,
+  trackOnboardingStarted,
+  trackStepProgression,
+  trackFormValidationError,
+  trackUserContext,
+  OnboardingSessionTracker
+} from '@/lib/onboardingAnalytics'
+import { useErrorToast, NetworkStatusIndicator } from '@/components/error-toast'
+import { useNetworkErrorHandling } from '@/hooks/use-network-error-handling'
+import { useDatabaseErrorHandling } from '@/hooks/use-database-error-handling'
+import { useAIServiceErrorHandling } from '@/hooks/use-ai-service-error-handling'
 import { planAdjustmentService } from "@/lib/planAdjustmentService"
 import { OnboardingChatOverlay } from "@/components/onboarding-chat-overlay"
 import { onboardingManager } from "@/lib/onboardingManager"
+import OnboardingErrorBoundary from "@/components/onboarding-error-boundary"
+import { validateOnboardingState } from "@/lib/onboardingStateValidator"
+import { useEffect } from "react"
 
 interface OnboardingScreenProps {
   onComplete: () => void
 }
 
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
+  // Initialize session tracker
+  const [sessionTracker] = useState(() => new OnboardingSessionTracker())
+  
+  // Initialize error handling hooks
+  const { showError } = useErrorToast()
+  const { safeApiCall, isOnline } = useNetworkErrorHandling({
+    enableOfflineMode: true,
+    enableAutoRetry: true,
+    showToasts: true
+  })
+  const { 
+    saveUser, 
+    savePlan, 
+    checkDatabaseHealth, 
+    recoverFromDatabaseError 
+  } = useDatabaseErrorHandling()
+  const { 
+    aiPlanGenerationWithFallback, 
+    getAIServiceStatus, 
+    enableFallbackMode 
+  } = useAIServiceErrorHandling({
+    enableFallbacks: true,
+    showUserFeedback: true
+  })
+
+  useEffect(() => {
+    // Track onboarding start
+    trackOnboardingStarted('guided_form')
+    
+    // Track user context on start
+    trackUserContext({
+      demographics: { age: undefined, experience: '', goal: '' },
+      preferences: { daysPerWeek: 3, preferredTimes: [], coachingStyle: undefined },
+      deviceInfo: { 
+        platform: typeof window !== 'undefined' ? window.navigator.platform : 'unknown',
+        userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : undefined,
+        screenSize: typeof window !== 'undefined' ? `${window.screen.width}x${window.screen.height}` : undefined
+      },
+      behaviorPatterns: { sessionDuration: 0, interactionCount: 0, completionAttempts: 1 }
+    })
+
+    // Check database health on startup
+    const initializeDatabase = async () => {
+      try {
+        const healthCheck = await checkDatabaseHealth()
+        if (!healthCheck.isHealthy) {
+          console.warn('Database health check failed:', healthCheck.error)
+          if (!healthCheck.canWrite) {
+            showError(new Error('Storage system unavailable'), {
+              onRetry: recoverFromDatabaseError
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Database initialization failed:', error)
+      }
+    }
+
+    // AC3: Detect incomplete onboarding state on app startup and clean up
+    const checkAndCleanupOnboarding = async () => {
+      try {
+        if (onboardingManager.isOnboardingInProgress()) {
+          console.warn("Detected incomplete onboarding state on startup. Attempting cleanup...");
+          await onboardingManager.resetOnboardingState();
+          toast({
+            title: "Onboarding Reset",
+            description: "An incomplete onboarding session was detected and reset. Please start again.",
+            variant: "destructive"
+          });
+        }
+      } catch (error) {
+        console.error('Onboarding cleanup failed:', error)
+        showError(error as Error, {
+          onRetry: checkAndCleanupOnboarding
+        })
+      }
+    };
+    
+    initializeDatabase()
+    checkAndCleanupOnboarding();
+  }, [checkDatabaseHealth, recoverFromDatabaseError, showError, toast]);
+
+  const handleResetErrorBoundary = () => {
+    // This function will be called when the error boundary resets
+    // We should reset the onboarding state here to allow the user to retry
+    onboardingManager.resetOnboardingState();
+    setCurrentStep(1);
+    setSelectedGoal("");
+    setSelectedExperience("");
+    setSelectedTimes([]);
+    setDaysPerWeek([3]);
+    setRpe(null);
+    setAge(null);
+    setConsents({
+      data: false,
+      gdpr: false,
+      push: false,
+    });
+    setIsGeneratingPlan(false);
+    setShowChatOverlay(false);
+    setAiGeneratedProfile(null);
+    toast({
+      title: "Onboarding Restarted",
+      description: "The onboarding process has been reset. Please try again.",
+    });
+  };
+
+
   const [currentStep, setCurrentStep] = useState(1)
   const [selectedGoal, setSelectedGoal] = useState<string>("")
   const [selectedExperience, setSelectedExperience] = useState<string>("")
@@ -40,6 +163,11 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
   const nextStep = () => {
     if (currentStep < totalSteps) {
+      // Track step progression
+      trackStepProgression(currentStep + 1, `step_${currentStep + 1}`, 'forward')
+      sessionTracker.startStep(`step_${currentStep + 1}`)
+      sessionTracker.completeStep(`step_${currentStep}`)
+      
       setCurrentStep(currentStep + 1)
     }
   }
@@ -50,6 +178,17 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     // Update form state with AI-generated data
     if (userProfile.goal) {
       setSelectedGoal(userProfile.goal)
+      
+      // Track goal discovery
+      trackGoalDiscovered({
+        goalType: userProfile.goal,
+        goalCategory: userProfile.goal === 'habit' ? 'consistency' : 
+                     userProfile.goal === 'distance' ? 'endurance' : 'speed',
+        goalConfidenceScore: 0.9, // High confidence for AI-guided
+        discoveryMethod: 'ai_guided',
+        goalReasoning: `AI-discovered goal based on conversation analysis`,
+        userContext: { goals_count: goals.length, coaching_style: userProfile.coachingStyle }
+      })
     }
     if (userProfile.experience) {
       setSelectedExperience(userProfile.experience)
@@ -80,24 +219,57 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   }
 
   const canProceed = () => {
-    switch (currentStep) {
-      case 2:
-        return selectedGoal !== ""
-      case 3:
-        return selectedExperience !== ""
-      case 4:
-        return true // RPE is optional
-      case 5:
-        return age !== null && age >= 10 && age <= 100
-      case 6:
-        return selectedTimes.length > 0 && daysPerWeek[0] >= 2
-      case 7:
-        return consents.data && consents.gdpr
-      case 8:
-        return consents.data && consents.gdpr // Final step also requires consents
-      default:
-        return true
+    const canProceedResult = (() => {
+      switch (currentStep) {
+        case 2:
+          return selectedGoal !== ""
+        case 3:
+          return selectedExperience !== ""
+        case 4:
+          return true // RPE is optional
+        case 5:
+          return age !== null && age >= 10 && age <= 100
+        case 6:
+          return selectedTimes.length > 0 && daysPerWeek[0] >= 2
+        case 7:
+          return consents.data && consents.gdpr
+        case 8:
+          return consents.data && consents.gdpr // Final step also requires consents
+        default:
+          return true
+      }
+    })()
+
+    // Track validation errors
+    if (!canProceedResult) {
+      const getValidationError = () => {
+        switch (currentStep) {
+          case 2:
+            return { field: 'goal', message: 'Goal selection is required' }
+          case 3:
+            return { field: 'experience', message: 'Experience level is required' }
+          case 5:
+            return { field: 'age', message: 'Valid age (10-100) is required' }
+          case 6:
+            return { field: 'schedule', message: 'At least one time slot and 2+ days per week required' }
+          case 7:
+          case 8:
+            return { field: 'consents', message: 'Required consents must be accepted' }
+          default:
+            return { field: 'unknown', message: 'Validation failed' }
+        }
+      }
+
+      const errorInfo = getValidationError()
+      trackFormValidationError({
+        step: currentStep,
+        field: errorInfo.field,
+        errorType: 'validation_failed',
+        errorMessage: errorInfo.message
+      })
     }
+
+    return canProceedResult
   }
 
   const handleTimeSlotToggle = (time: string) => {
@@ -110,12 +282,19 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     try {
       console.log('=== ONBOARDING FINISH START ===')
       
-      // Step 1: Migrate existing localStorage data first
+      // Step 1: Migrate existing localStorage data with error handling
       console.log('📋 Step 1: Migrating localStorage data...')
-      await dbUtils.migrateFromLocalStorage()
+      await safeApiCall(
+        () => dbUtils.migrateFromLocalStorage(),
+        {
+          operation: 'migrate_localStorage',
+          service: 'database',
+          onboardingStep: 'data_migration'
+        }
+      )
       console.log('✅ localStorage migration completed')
       
-      // Step 2: Create user through OnboardingManager
+      // Step 2: Create user through OnboardingManager with enhanced error handling
       console.log('📋 Step 2: Creating user via OnboardingManager...')
       const formData = {
         goal: selectedGoal as 'habit' | 'distance' | 'speed',
@@ -132,7 +311,44 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       }
       
       console.log('Form data:', formData)
-      const onboardingResult = await onboardingManager.completeFormOnboarding(formData)
+      
+      // Use AI plan generation with fallback
+      let onboardingResult
+      try {
+        const aiPlanData = await aiPlanGenerationWithFallback({
+          goal: formData.goal,
+          experience: formData.experience,
+          daysPerWeek: formData.daysPerWeek,
+          age: formData.age,
+          preferredTimes: formData.selectedTimes
+        })
+        
+        // Create user with AI-generated plan
+        onboardingResult = await safeApiCall(
+          () => onboardingManager.completeFormOnboarding({
+            ...formData,
+            aiPlanData
+          }),
+          {
+            operation: 'complete_onboarding_with_ai_plan',
+            service: 'database',
+            onboardingStep: 'user_creation',
+            fallbackData: { success: false, errors: ['AI plan generation failed'] }
+          }
+        )
+      } catch (aiError) {
+        console.warn('AI plan generation failed, using fallback:', aiError)
+        
+        // Fallback to regular onboarding without AI
+        onboardingResult = await safeApiCall(
+          () => onboardingManager.completeFormOnboarding(formData),
+          {
+            operation: 'complete_onboarding_fallback',
+            service: 'database',
+            onboardingStep: 'user_creation'
+          }
+        )
+      }
       
       if (!onboardingResult.success) {
         throw new Error(onboardingResult.errors?.join(', ') || 'Failed to complete onboarding')
@@ -143,15 +359,50 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         planId: onboardingResult.planId
       })
 
-      // Initialize plan adjustment service
+      // Initialize plan adjustment service with error handling
       console.log('📋 Step 3: Initializing plan adjustment service...')
-      planAdjustmentService.init(onboardingResult.user.id!)
-      console.log('✅ Plan adjustment service initialized')
+      try {
+        planAdjustmentService.init(onboardingResult.user.id!)
+        console.log('✅ Plan adjustment service initialized')
+      } catch (planServiceError) {
+        console.warn('Plan adjustment service initialization failed:', planServiceError)
+        // Continue anyway, this is not critical for onboarding
+      }
       
       // Step 4: Track completion event
       console.log('📋 Step 4: Tracking completion event...')
       const goalDist = selectedGoal === 'distance' ? 5 : 0
       trackEngagementEvent('onboard_complete', { rookieChallenge: true, age: age ?? 0, goalDist })
+
+      // Track goal discovery for manual form selection
+      if (selectedGoal && !aiGeneratedProfile) {
+        trackGoalDiscovered({
+          goalType: selectedGoal as 'habit' | 'distance' | 'speed',
+          goalCategory: selectedGoal === 'habit' ? 'consistency' : 
+                       selectedGoal === 'distance' ? 'endurance' : 'speed',
+          goalConfidenceScore: 0.8, // Good confidence for form selection
+          discoveryMethod: 'form_selection',
+          goalReasoning: 'User manually selected goal from predefined options',
+          userContext: { experience: selectedExperience, age, daysPerWeek: daysPerWeek[0] }
+        })
+      }
+
+      // Complete session tracking
+      sessionTracker.complete({
+        completionMethod: aiGeneratedProfile ? 'mixed' : 'guided_form',
+        userDemographics: {
+          age: age || undefined,
+          experience: selectedExperience === 'occasional' 
+            ? 'intermediate' 
+            : selectedExperience === 'regular'
+            ? 'advanced'
+            : selectedExperience as 'beginner' | 'intermediate' | 'advanced',
+          daysPerWeek: daysPerWeek[0],
+          preferredTimes: selectedTimes.length > 0 ? selectedTimes : ['morning']
+        },
+        planGeneratedSuccessfully: true
+      })
+
       console.log('✅ Completion event tracked')
       
       // Step 5: Success notification
@@ -170,6 +421,29 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       console.error('❌ Onboarding completion failed:', error)
       
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      
+      // Track the error
+      const { trackOnboardingError } = await import('@/lib/onboardingAnalytics')
+      trackOnboardingError({
+        errorType: errorMessage.includes('network') ? 'network_failure' : 
+                   errorMessage.includes('plan') ? 'plan_generation_failure' :
+                   errorMessage.includes('database') ? 'database_error' : 'validation_error',
+        errorMessage,
+        errorContext: {
+          step: 'completion',
+          selectedGoal,
+          selectedExperience,
+          age,
+          daysPerWeek: daysPerWeek[0],
+          hasAiProfile: !!aiGeneratedProfile
+        },
+        recoveryAttempted: false,
+        recoverySuccessful: false,
+        userImpact: 'high',
+        onboardingStep: 'step_8'
+      })
+
+      sessionTracker.incrementErrorCount()
       
       toast({
         title: "Onboarding Failed",
@@ -488,42 +762,62 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-400 to-blue-500 p-4 flex flex-col">
-      <div className="text-center mb-8 pt-8">
-        <h1 className="text-3xl font-bold text-white flex items-center justify-center gap-2">
-          <Running className="h-8 w-8" />
-          Run-Smart
-        </h1>
-        <p className="text-white/80">Your AI Running Coach</p>
-      </div>
-
-      <div className="flex justify-center mb-8">
-        <div className="flex space-x-2">
-          {[1, 2, 3, 4, 5, 6, 7].map((step) => (
-            <div
-              key={step}
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                step <= currentStep ? "bg-white text-green-500" : "bg-white/30 text-white"
-              }`}
-            >
-              {step}
-            </div>
-          ))}
+    <OnboardingErrorBoundary onReset={handleResetErrorBoundary}>
+      <NetworkStatusIndicator />
+      <div className="min-h-screen bg-gradient-to-br from-green-400 to-blue-500 p-4 flex flex-col">
+        <div className="text-center mb-8 pt-8">
+          <h1 className="text-3xl font-bold text-white flex items-center justify-center gap-2">
+            <Running className="h-8 w-8" />
+            Run-Smart
+          </h1>
+          <p className="text-white/80">Your AI Running Coach</p>
+          {!isOnline && (
+            <p className="text-orange-200 text-sm mt-2">
+              ⚡ Working in offline mode
+            </p>
+          )}
         </div>
-      </div>
 
-      <Card className="flex-1 mx-auto w-full max-w-md">
-        <CardContent className="p-6">{renderStep()}</CardContent>
-      </Card>
-      
-      {/* AI Chat Overlay */}
-      <OnboardingChatOverlay
-        isOpen={showChatOverlay}
-        onClose={() => setShowChatOverlay(false)}
-        onComplete={handleChatOverlayComplete}
-        currentStep={currentStep}
-        totalSteps={totalSteps}
-      />
-    </div>
+        <div className="flex justify-center mb-8">
+          <div className="flex space-x-2" role="progressbar" aria-label="Onboarding progress" aria-valuenow={currentStep} aria-valuemin={1} aria-valuemax={totalSteps}>
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((step) => (
+              <div
+                key={step}
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors duration-200 ${
+                  step <= currentStep ? "bg-white text-green-500" : "bg-white/30 text-white"
+                }`}
+                role="button"
+                tabIndex={0}
+                aria-label={`Step ${step}${step <= currentStep ? ' - Completed' : step === currentStep ? ' - Current' : ' - Not started'}`}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    // Optional: Allow keyboard navigation to completed steps
+                    if (step <= currentStep) {
+                      // Could implement step navigation here
+                    }
+                  }
+                }}
+              >
+                {step}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <Card className="flex-1 mx-auto w-full max-w-md">
+          <CardContent className="p-6">{renderStep()}</CardContent>
+        </Card>
+        
+        {/* AI Chat Overlay */}
+        <OnboardingChatOverlay
+          isOpen={showChatOverlay}
+          onClose={() => setShowChatOverlay(false)}
+          onComplete={handleChatOverlayComplete}
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+        />
+      </div>
+    </OnboardingErrorBoundary>
   )
 }
