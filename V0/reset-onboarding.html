@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset Onboarding - RunSmart</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .button {
+            background: #4CAF50;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+            transition: background 0.3s;
+        }
+        .button:hover {
+            background: #45a049;
+        }
+        .button.danger {
+            background: #f44336;
+        }
+        .button.danger:hover {
+            background: #da190b;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .success { background: rgba(76, 175, 80, 0.3); }
+        .error { background: rgba(244, 67, 54, 0.3); }
+        .info { background: rgba(33, 150, 243, 0.3); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 Reset Onboarding State</h1>
+        
+        <div class="status info">
+            <strong>Instructions:</strong><br>
+            1. Click "Reset Onboarding" to clear all app data<br>
+            2. Click "Go to App" to open the main application<br>
+            3. The app should now show the onboarding wizard
+        </div>
+
+        <div style="text-align: center;">
+            <button class="button danger" onclick="resetOnboarding()">
+                🔄 Reset Onboarding
+            </button>
+            
+            <button class="button" onclick="goToApp()">
+                🏃‍♂️ Go to App
+            </button>
+        </div>
+
+        <div id="status" class="status" style="display: none;"></div>
+    </div>
+
+    <script>
+        function resetOnboarding() {
+            const statusDiv = document.getElementById('status');
+            statusDiv.style.display = 'block';
+            statusDiv.className = 'status info';
+            statusDiv.innerHTML = '🔄 Clearing onboarding data...';
+
+            try {
+                // Clear localStorage
+                localStorage.clear();
+                console.log('✅ localStorage cleared');
+
+                // Clear IndexedDB
+                const dbName = 'RunSmartDB';
+                const request = indexedDB.deleteDatabase(dbName);
+                
+                request.onsuccess = () => {
+                    statusDiv.className = 'status success';
+                    statusDiv.innerHTML = '✅ Onboarding data cleared successfully!<br>Click "Go to App" to see the onboarding wizard.';
+                };
+                
+                request.onerror = () => {
+                    statusDiv.className = 'status error';
+                    statusDiv.innerHTML = '⚠️ Failed to clear database, but localStorage was cleared.<br>Try going to the app anyway.';
+                };
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = '❌ Error clearing data: ' + error.message;
+            }
+        }
+
+        function goToApp() {
+            window.open('http://localhost:3000', '_blank');
+        }
+
+        // Check if app is running
+        fetch('http://localhost:3000')
+            .then(response => {
+                if (response.ok) {
+                    document.getElementById('status').style.display = 'block';
+                    document.getElementById('status').className = 'status success';
+                    document.getElementById('status').innerHTML = '✅ App is running on localhost:3000';
+                }
+            })
+            .catch(error => {
+                document.getElementById('status').style.display = 'block';
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').innerHTML = '❌ App is not running. Please start the development server first.';
+            });
+    </script>
+</body>
+</html> 

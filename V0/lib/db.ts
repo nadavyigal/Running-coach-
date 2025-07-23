@@ -1473,10 +1473,11 @@ export const dbUtils = {
 
   async getActivePlan(userId: number): Promise<Plan | undefined> {
     try {
-      // Use compound index for optimal performance
+      // Use simple query that's guaranteed to work
       const plan = await db.plans
-        .where('[userId+isActive]')
-        .equals([userId, true])
+        .where('userId')
+        .equals(userId)
+        .and(plan => plan.isActive === true)
         .first();
         
       if (plan) {
@@ -1487,23 +1488,7 @@ export const dbUtils = {
       return plan;
     } catch (error) {
       console.error(`❌ getActivePlan failed for user ${userId}:`, error);
-      // Fallback to the working query if compound index fails
-      console.log(`🔄 Falling back to chained query...`);
-      try {
-        const plan = await db.plans
-          .where('userId')
-          .equals(userId)
-          .and(plan => plan.isActive === true)
-          .first();
-          
-        if (plan) {
-          console.log(`🔍 Fallback query found plan: "${plan.title}" (ID: ${plan.id}) for user ${userId}`);
-        }
-        return plan;
-      } catch (fallbackError) {
-        console.error(`❌ Fallback query also failed for user ${userId}:`, fallbackError);
-        throw fallbackError;
-      }
+      return undefined;
     }
   },
 

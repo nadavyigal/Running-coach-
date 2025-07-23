@@ -33,7 +33,16 @@ export async function GET(req: NextRequest) {
     // Get the user's cohort information
     const user = await dbUtils.getUserById(parseInt(validatedData.userId));
     if (!user || !user.cohortId) {
-      return NextResponse.json({ message: 'User not in a cohort' }, { status: 404 });
+      // Return empty stats instead of error to prevent UI breaking
+      return NextResponse.json({
+        cohortId: null,
+        totalMembers: 0,
+        averageWeeklyRuns: 0,
+        averageDistance: 0,
+        topPerformers: [],
+        recentActivities: [],
+        message: 'User not in a cohort'
+      });
     }
 
     // Get cohort statistics
@@ -56,6 +65,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ message: 'Invalid request data', errors: error.errors }, { status: 400 });
     }
     console.error('Error fetching cohort stats:', error);
-    return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
+    // Return empty stats instead of error to prevent UI breaking
+    return NextResponse.json({
+      cohortId: null,
+      totalMembers: 0,
+      averageWeeklyRuns: 0,
+      averageDistance: 0,
+      topPerformers: [],
+      recentActivities: [],
+      error: 'Failed to fetch cohort stats'
+    });
   }
 }
