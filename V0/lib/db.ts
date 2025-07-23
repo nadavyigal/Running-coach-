@@ -647,6 +647,11 @@ export class RunSmartDB extends Dexie {
   // Onboarding and conversation tables
   onboardingSessions!: EntityTable<OnboardingSession, 'id'>;
   conversationMessages!: EntityTable<ConversationMessage, 'id'>;
+  // Recovery metrics tables
+  sleepData!: EntityTable<SleepData, 'id'>;
+  hrvMeasurements!: EntityTable<HRVMeasurement, 'id'>;
+  recoveryScores!: EntityTable<RecoveryScore, 'id'>;
+  subjectiveWellness!: EntityTable<SubjectiveWellness, 'id'>;
 
   constructor() {
     super('RunSmartDB');
@@ -1205,6 +1210,49 @@ export class RunSmartDB extends Dexie {
       
       // No data migration needed for new tables - they will start empty
       // Users can start new onboarding sessions which will use these tables
+    });
+
+    // Version 17: Add Recovery Metrics tables
+    this.version(17).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId, coachingStyle, goalInferred',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt, planType, raceGoalId, [userId+isActive]',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt, type, trainingPhase',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt, externalId',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+      cohorts: '++id, inviteCode, name',
+      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+      performanceMetrics: '++id, userId, date, createdAt',
+      coachingFeedback: '++id, userId, interactionType, feedbackType, rating, createdAt',
+      coachingInteractions: '++id, userId, interactionId, interactionType, createdAt',
+      userBehaviorPatterns: '++id, userId, patternType, confidenceScore, lastObserved, createdAt',
+      goals: '++id, userId, goalType, status, priority, createdAt, updatedAt',
+      goalMilestones: '++id, goalId, milestoneOrder, status, targetDate, createdAt',
+      goalProgressHistory: '++id, goalId, measurementDate, autoRecorded',
+      goalRecommendations: '++id, userId, recommendationType, status, createdAt, expiresAt',
+      // Enhanced wearable device tables
+      wearableDevices: '++id, userId, type, deviceId, connectionStatus, lastSync, createdAt',
+      heartRateData: '++id, runId, deviceId, timestamp, heartRate, accuracy, createdAt',
+      heartRateZones: '++id, userId, zoneNumber, name, minBpm, maxBpm, color, createdAt',
+      heartRateZoneSettings: '++id, userId, calculationMethod, zoneSystem, autoUpdate, createdAt',
+      zoneDistributions: '++id, runId, zone1Time, zone2Time, zone3Time, zone4Time, zone5Time, totalTime, createdAt',
+      advancedMetrics: '++id, runId, deviceId, vo2Max, lactateThresholdHR, trainingStressScore, createdAt',
+      runningDynamicsData: '++id, runId, deviceId, averageCadence, averageGroundContactTime, averageVerticalOscillation, createdAt',
+      syncJobs: '++id, userId, deviceId, type, status, priority, scheduledAt, createdAt, [userId+deviceId+type]',
+      // Onboarding and conversation tables
+      onboardingSessions: '++id, userId, conversationId, goalDiscoveryPhase, isCompleted, createdAt, [userId+conversationId]',
+      conversationMessages: '++id, sessionId, conversationId, role, timestamp, phase, createdAt, [conversationId+timestamp]',
+      // Recovery metrics tables
+      sleepData: '++id, userId, deviceId, date, createdAt',
+      hrvMeasurements: '++id, userId, deviceId, measurementDate, measurementTime, createdAt',
+      recoveryScores: '++id, userId, date, overallScore, createdAt',
+      subjectiveWellness: '++id, userId, date, energyLevel, moodScore, sorenessLevel, stressLevel, motivationLevel, createdAt'
+    }).upgrade(async tx => {
+      console.log('Running migration for version 17 - Add Recovery Metrics tables');
+      
+      // No data migration needed for new recovery tables - they will start empty
+      // Recovery data will be populated as users connect devices and provide wellness data
     });
   }
 }
@@ -4014,4 +4062,69 @@ export interface BehaviorPattern {
   confidenceScore: number; // 0-100
   lastObserved: Date;
   createdAt: Date;
-} 
+}
+
+// Recovery Metrics interfaces
+export interface SleepData {
+  id?: number;
+  userId: number;
+  deviceId: string;
+  date: Date;
+  bedTime: Date;
+  sleepTime: Date;
+  wakeTime: Date;
+  totalSleepTime: number; // minutes
+  sleepEfficiency: number; // percentage
+  deepSleepTime?: number; // minutes
+  lightSleepTime?: number; // minutes
+  remSleepTime?: number; // minutes
+  awakeDuration?: number; // minutes
+  sleepQualityScore?: number; // 0-100
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface HRVMeasurement {
+  id?: number;
+  userId: number;
+  deviceId: string;
+  measurementDate: Date;
+  measurementTime: Date;
+  rmssd: number; // milliseconds
+  pnn50?: number; // percentage
+  hrvScore?: number; // normalized 0-100
+  measurementQuality: 'excellent' | 'good' | 'fair' | 'poor';
+  measurementDuration: number; // seconds
+  artifacts?: number; // count of artifacts detected
+  createdAt: Date;
+}
+
+export interface RecoveryScore {
+  id?: number;
+  userId: number;
+  date: Date;
+  overallScore: number; // 0-100
+  sleepScore: number; // 0-100
+  hrvScore: number; // 0-100
+  restingHRScore: number; // 0-100
+  subjectiveWellnessScore?: number; // 0-100
+  trainingLoadImpact: number; // negative impact on recovery
+  stressLevel?: number; // 0-100
+  recommendations: string[];
+  confidence: number; // 0-100, how confident we are in the score
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SubjectiveWellness {
+  id?: number;
+  userId: number;
+  date: Date;
+  energyLevel: number; // 1-10
+  moodScore: number; // 1-10
+  sorenessLevel: number; // 1-10
+  stressLevel: number; // 1-10
+  motivationLevel: number; // 1-10
+  notes?: string;
+  createdAt: Date;
+}

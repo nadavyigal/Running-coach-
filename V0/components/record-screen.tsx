@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast"
 import { planAdjustmentService } from "@/lib/planAdjustmentService"
 import { useRouter } from "next/navigation"
 import { trackPlanSessionCompleted } from "@/lib/analytics"
+import RecoveryRecommendations from "@/components/recovery-recommendations"
 
 interface GPSCoordinate {
   latitude: number
@@ -587,6 +588,16 @@ export function RecordScreen() {
           </CardContent>
         </Card>
       )}
+
+      {/* Recovery Status */}
+      <RecoveryRecommendations
+        userId={1}
+        date={new Date()}
+        showBreakdown={false}
+        onRefresh={() => {
+          console.log('Refreshing recovery data for record screen...');
+        }}
+      />
 
       {showRoutesModal && <RouteSelectorModal isOpen={showRoutesModal} onClose={() => setShowRoutesModal(false)} />}
       {showManualModal && (

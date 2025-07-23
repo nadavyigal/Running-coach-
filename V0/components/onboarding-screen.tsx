@@ -114,7 +114,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     
     initializeDatabase()
     checkAndCleanupOnboarding();
-  }, [checkDatabaseHealth, recoverFromDatabaseError, showError, toast]);
+  }, [checkDatabaseHealth, recoverFromDatabaseError, showError]);
 
   const handleResetErrorBoundary = () => {
     // This function will be called when the error boundary resets

@@ -9,6 +9,7 @@ import { AddRunModal } from "@/components/add-run-modal"
 import { MonthlyCalendarView } from "@/components/monthly-calendar-view"
 import { dbUtils, type Plan, type Workout } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
+import RecoveryRecommendations from "@/components/recovery-recommendations"
 
 export function PlanScreen() {
   const [currentView, setCurrentView] = useState<"monthly" | "biweekly" | "progress">("biweekly")
@@ -378,6 +379,16 @@ export function PlanScreen() {
       {currentView === "monthly" && <MonthlyCalendarView />}
       {currentView === "biweekly" && renderBiweeklyView()}
       {currentView === "progress" && renderProgressView()}
+
+      {/* Recovery Status */}
+      <RecoveryRecommendations
+        userId={1}
+        date={new Date()}
+        showBreakdown={false}
+        onRefresh={() => {
+          console.log('Refreshing recovery data for plan view...');
+        }}
+      />
 
       {showAddRunModal && <AddRunModal isOpen={showAddRunModal} onClose={() => setShowAddRunModal(false)} />}
     </div>

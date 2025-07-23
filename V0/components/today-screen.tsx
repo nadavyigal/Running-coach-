@@ -35,6 +35,7 @@ import { CoachingInsightsWidget } from "@/components/coaching-insights-widget"
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
 import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
 import { GoalRecommendations } from "@/components/goal-recommendations"
+import RecoveryRecommendations from "@/components/recovery-recommendations"
 
 export function TodayScreen() {
   const [dailyTip, setDailyTip] = useState(
@@ -600,6 +601,19 @@ export function TodayScreen() {
           showDetails={true}
           onSettingsClick={() => setShowCoachingPreferences(true)}
           className="hover:shadow-lg transition-all duration-300"
+        />
+      )}
+
+      {/* Recovery Recommendations */}
+      {userId && (
+        <RecoveryRecommendations
+          userId={userId}
+          date={new Date()}
+          showBreakdown={true}
+          onRefresh={() => {
+            // Refresh recovery data
+            console.log('Refreshing recovery recommendations...');
+          }}
         />
       )}
 

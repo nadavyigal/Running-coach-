@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Onboarding Debug Tool</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .primary {
+            background-color: #007bff;
+            color: white;
+        }
+        .primary:hover {
+            background-color: #0056b3;
+        }
+        .secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+        .secondary:hover {
+            background-color: #545b62;
+        }
+        .danger {
+            background-color: #dc3545;
+            color: white;
+        }
+        .danger:hover {
+            background-color: #c82333;
+        }
+        .success {
+            background-color: #28a745;
+            color: white;
+        }
+        .success:hover {
+            background-color: #218838;
+        }
+        .console {
+            background-color: #1e1e1e;
+            color: #00ff00;
+            padding: 20px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
+            border: 1px solid #333;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-weight: 500;
+        }
+        .status.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .status.warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Onboarding Debug Tool</h1>
+        
+        <div class="status info">
+            <strong>Instructions:</strong> This tool helps diagnose and fix onboarding errors after database deletion. 
+            Open your app in another tab, then use these buttons to debug issues.
+        </div>
+
+        <div class="button-group">
+            <button class="primary" onclick="runDiagnosis()">🔍 Run Full Diagnosis</button>
+            <button class="secondary" onclick="checkDatabase()">📊 Check Database</button>
+            <button class="secondary" onclick="checkStorage()">💾 Check Storage</button>
+            <button class="secondary" onclick="checkErrors()">🚨 Check Errors</button>
+            <button class="danger" onclick="clearData()">🧹 Clear Problematic Data</button>
+            <button class="danger" onclick="resetDatabase()">🔄 Reset Database</button>
+            <button class="success" onclick="quickFix()">🚀 Quick Fix</button>
+        </div>
+
+        <div class="status warning">
+            <strong>Note:</strong> After running "Quick Fix" or "Reset Database", refresh your app page to see the changes.
+        </div>
+
+        <div class="console" id="console">
+            <div>🔧 Onboarding Debug Tool Ready</div>
+            <div>Click a button above to start debugging...</div>
+        </div>
+    </div>
+
+    <script>
+        // Console output redirection
+        const consoleDiv = document.getElementById('console');
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+
+        function addToConsole(message, type = 'log') {
+            const div = document.createElement('div');
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            div.style.color = type === 'error' ? '#ff6b6b' : type === 'warn' ? '#ffd93d' : '#00ff00';
+            consoleDiv.appendChild(div);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            addToConsole(args.join(' '), 'log');
+        };
+
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            addToConsole(args.join(' '), 'error');
+        };
+
+        console.warn = function(...args) {
+            originalWarn.apply(console, args);
+            addToConsole(args.join(' '), 'warn');
+        };
+
+        // Debug functions
+        async function checkDatabaseState() {
+            try {
+                console.log('📊 Checking database state...');
+                
+                const db = window.indexedDB.open('RunSmartDB');
+                
+                db.onsuccess = function(event) {
+                    console.log('✅ Database is accessible');
+                    const database = event.target.result;
+                    
+                    const tables = database.objectStoreNames;
+                    console.log('📋 Available tables:', Array.from(tables));
+                    
+                    const transaction = database.transaction(['users'], 'readonly');
+                    const userStore = transaction.objectStore('users');
+                    const userCount = userStore.count();
+                    
+                    userCount.onsuccess = function() {
+                        console.log(`👥 Users in database: ${userCount.result}`);
+                        
+                        if (userCount.result === 0) {
+                            console.log('⚠️ No users found - this is expected after database deletion');
+                            console.log('💡 The app should create a new user during onboarding');
+                        }
+                    };
+                    
+                    database.close();
+                };
+                
+                db.onerror = function(event) {
+                    console.error('❌ Database access error:', event.target.error);
+                    console.log('💡 This might be causing the onboarding errors');
+                };
+                
+            } catch (error) {
+                console.error('❌ Error checking database state:', error);
+            }
+        }
+
+        function checkLocalStorage() {
+            console.log('💾 Checking localStorage...');
+            
+            const keys = Object.keys(localStorage);
+            console.log('📋 localStorage keys:', keys);
+            
+            const onboardingKeys = keys.filter(key => 
+                key.includes('onboarding') || 
+                key.includes('user') || 
+                key.includes('plan')
+            );
+            
+            console.log('🎯 Onboarding-related localStorage keys:', onboardingKeys);
+            
+            if (onboardingKeys.length > 0) {
+                console.log('⚠️ Found old onboarding data in localStorage');
+                console.log('💡 This might be causing conflicts');
+            }
+        }
+
+        function checkConsoleErrors() {
+            console.log('🚨 Checking for console errors...');
+            console.log('📊 This will capture errors for the next 5 seconds...');
+            
+            const errors = [];
+            const originalError = console.error;
+            
+            console.error = function(...args) {
+                errors.push(args.join(' '));
+                originalError.apply(console, args);
+            };
+            
+            setTimeout(() => {
+                console.log(`📊 Captured ${errors.length} errors:`);
+                errors.forEach((error, index) => {
+                    console.log(`${index + 1}. ${error}`);
+                });
+                
+                console.error = originalError;
+            }, 5000);
+        }
+
+        function clearProblematicData() {
+            console.log('🧹 Clearing potentially problematic data...');
+            
+            const keysToRemove = [
+                'onboardingComplete',
+                'currentUser',
+                'userPreferences',
+                'onboardingStep',
+                'onboardingData'
+            ];
+            
+            keysToRemove.forEach(key => {
+                if (localStorage.getItem(key)) {
+                    localStorage.removeItem(key);
+                    console.log(`🗑️ Removed ${key} from localStorage`);
+                }
+            });
+            
+            console.log('✅ Data cleanup completed');
+        }
+
+        async function forceDatabaseReset() {
+            console.log('🔄 Force resetting database...');
+            
+            try {
+                const deleteRequest = window.indexedDB.deleteDatabase('RunSmartDB');
+                
+                deleteRequest.onsuccess = function() {
+                    console.log('✅ Database deleted successfully');
+                    console.log('💡 Refresh the page to reinitialize the database');
+                };
+                
+                deleteRequest.onerror = function() {
+                    console.error('❌ Failed to delete database');
+                };
+                
+            } catch (error) {
+                console.error('❌ Error during database reset:', error);
+            }
+        }
+
+        function checkReactErrors() {
+            console.log('⚛️ Checking for React component errors...');
+            
+            const errorBoundaries = document.querySelectorAll('[data-error-boundary]');
+            console.log(`🛡️ Found ${errorBoundaries.length} error boundaries`);
+            
+            const errorElements = document.querySelectorAll('[data-error], .error, [role="alert"]');
+            console.log(`⚠️ Found ${errorElements.length} error elements in DOM`);
+            
+            errorElements.forEach((element, index) => {
+                console.log(`Error element ${index + 1}:`, element.textContent);
+            });
+        }
+
+        async function diagnoseOnboardingIssues() {
+            console.log('🔍 Starting comprehensive onboarding diagnosis...');
+            console.log('='.repeat(50));
+            
+            await checkDatabaseState();
+            checkLocalStorage();
+            checkConsoleErrors();
+            checkReactErrors();
+            
+            console.log('='.repeat(50));
+            console.log('📋 Diagnosis Summary:');
+            console.log('1. Database state checked');
+            console.log('2. localStorage checked');
+            console.log('3. Console errors being monitored');
+            console.log('4. React errors checked');
+            console.log('');
+            console.log('💡 If you see many errors, try:');
+            console.log('   - Running clearProblematicData()');
+            console.log('   - Running forceDatabaseReset() and refreshing');
+            console.log('   - Check the browser console for specific error messages');
+        }
+
+        async function quickFix() {
+            console.log('🚀 Applying quick fix...');
+            
+            clearProblematicData();
+            await forceDatabaseReset();
+            
+            console.log('✅ Quick fix applied!');
+            console.log('🔄 Please refresh the page now');
+        }
+
+        // Button functions
+        function runDiagnosis() {
+            consoleDiv.innerHTML = '<div>🔍 Starting diagnosis...</div>';
+            diagnoseOnboardingIssues();
+        }
+
+        function checkDatabase() {
+            consoleDiv.innerHTML = '<div>📊 Checking database...</div>';
+            checkDatabaseState();
+        }
+
+        function checkStorage() {
+            consoleDiv.innerHTML = '<div>💾 Checking storage...</div>';
+            checkLocalStorage();
+        }
+
+        function checkErrors() {
+            consoleDiv.innerHTML = '<div>🚨 Checking errors...</div>';
+            checkConsoleErrors();
+        }
+
+        function clearData() {
+            consoleDiv.innerHTML = '<div>🧹 Clearing data...</div>';
+            clearProblematicData();
+        }
+
+        function resetDatabase() {
+            consoleDiv.innerHTML = '<div>🔄 Resetting database...</div>';
+            forceDatabaseReset();
+        }
+
+        function quickFix() {
+            consoleDiv.innerHTML = '<div>🚀 Applying quick fix...</div>';
+            quickFix();
+        }
+
+        // Initialize
+        console.log('🔧 Onboarding Debug Tool Loaded');
+        console.log('📋 Available functions:');
+        console.log('- runDiagnosis() - Full diagnosis');
+        console.log('- checkDatabase() - Database check');
+        console.log('- checkStorage() - Storage check');
+        console.log('- checkErrors() - Error monitoring');
+        console.log('- clearData() - Clear problematic data');
+        console.log('- resetDatabase() - Reset database');
+        console.log('- quickFix() - Apply quick fix');
+    </script>
+</body>
+</html> 

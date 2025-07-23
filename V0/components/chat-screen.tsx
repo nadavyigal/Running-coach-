@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast"
 import { trackChatMessageSent } from "@/lib/analytics"
 import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
+import RecoveryRecommendations from "@/components/recovery-recommendations"
 
 interface ChatMessage {
   id: string
@@ -123,7 +124,28 @@ export function ChatScreen() {
        })
 
       if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`)
+        // Try to get error details from response
+        let errorMessage = `API request failed: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+          if (errorData.fallback) {
+            // This is a fallback response, show it as a normal message
+            const fallbackMessage: ChatMessage = {
+              id: `assistant-${Date.now()}`,
+              role: 'assistant',
+              content: errorMessage,
+              timestamp: new Date(),
+            }
+            setMessages(prev => [...prev, fallbackMessage])
+            return; // Don't throw error for fallback responses
+          }
+        } catch {
+          // If we can't parse the error, use the status code
+        }
+        throw new Error(errorMessage)
       }
 
       const reader = response.body?.getReader()
@@ -373,6 +395,21 @@ export function ChatScreen() {
               </div>
             </div>
           )}
+          
+          {/* Recovery Status Widget */}
+          {user && (
+            <div className="mt-4">
+              <RecoveryRecommendations
+                userId={user.id!}
+                date={new Date()}
+                showBreakdown={false}
+                onRefresh={() => {
+                  console.log('Refreshing recovery data for chat...');
+                }}
+              />
+            </div>
+          )}
+          
           <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
@@ -420,11 +457,26 @@ export function ChatScreen() {
       
       {/* Coaching Preferences Settings Modal */}
       {showCoachingPreferences && user && (
-        <CoachingPreferencesSettings
-          isOpen={showCoachingPreferences}
-          onClose={() => setShowCoachingPreferences(false)}
-          userId={user.id!}
-        />
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Coaching Preferences</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCoachingPreferences(false)}
+              >
+                ×
+              </Button>
+            </div>
+            <div className="p-4">
+              <CoachingPreferencesSettings
+                userId={user.id!}
+                onClose={() => setShowCoachingPreferences(false)}
+              />
+            </div>
+          </div>
+        </div>
       )}
       
     </div>

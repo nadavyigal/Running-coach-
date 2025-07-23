@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RunSmart Quick Fix</title>
+</head>
+<body>
+    <h1>🔧 RunSmart Quick Fix</h1>
+    <p>This page will diagnose and fix common issues with your RunSmart app.</p>
+    
+    <div id="status">Running diagnostics...</div>
+    <button onclick="applyFix()" style="margin: 10px; padding: 10px;">Apply Quick Fix</button>
+    <button onclick="resetEverything()" style="margin: 10px; padding: 10px;">Reset Everything</button>
+    
+    <script>
+        async function diagnose() {
+            const status = document.getElementById('status');
+            status.innerHTML = '🔍 Diagnosing issues...<br>';
+            
+            // Check database
+            try {
+                const db = await new Promise((resolve, reject) => {
+                    const request = indexedDB.open('RunSmartDB');
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error);
+                });
+                status.innerHTML += '✅ Database accessible<br>';
+                db.close();
+            } catch (error) {
+                status.innerHTML += '❌ Database error: ' + error.message + '<br>';
+            }
+            
+            // Check localStorage
+            const problemKeys = ['onboardingComplete', 'currentUser', 'userPreferences'];
+            const foundKeys = problemKeys.filter(key => localStorage.getItem(key));
+            if (foundKeys.length > 0) {
+                status.innerHTML += '⚠️ Found problematic localStorage keys: ' + foundKeys.join(', ') + '<br>';
+            } else {
+                status.innerHTML += '✅ localStorage clean<br>';
+            }
+            
+            status.innerHTML += '<br>💡 If you see errors, click "Apply Quick Fix"';
+        }
+        
+        async function applyFix() {
+            const status = document.getElementById('status');
+            status.innerHTML = '🚀 Applying fixes...<br>';
+            
+            // Clear localStorage
+            ['onboardingComplete', 'currentUser', 'userPreferences', 'onboardingStep', 'onboardingData'].forEach(key => {
+                if (localStorage.getItem(key)) {
+                    localStorage.removeItem(key);
+                    status.innerHTML += `🗑️ Cleared ${key}<br>`;
+                }
+            });
+            
+            // Reset database
+            try {
+                await new Promise((resolve, reject) => {
+                    const deleteReq = indexedDB.deleteDatabase('RunSmartDB');
+                    deleteReq.onsuccess = () => resolve();
+                    deleteReq.onerror = () => reject(deleteReq.error);
+                });
+                status.innerHTML += '🔄 Database reset successfully<br>';
+            } catch (error) {
+                status.innerHTML += '❌ Database reset failed: ' + error.message + '<br>';
+            }
+            
+            status.innerHTML += '<br>✅ Fixes applied!<br>';
+            status.innerHTML += '🔄 <strong>Now go to <a href="http://localhost:3005" target="_blank">http://localhost:3005</a> and refresh the page</strong>';
+        }
+        
+        async function resetEverything() {
+            // Nuclear option - clear everything
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            // Delete all databases
+            const databases = await indexedDB.databases();
+            for (const db of databases) {
+                indexedDB.deleteDatabase(db.name);
+            }
+            
+            document.getElementById('status').innerHTML = '💥 Everything cleared! Refresh your RunSmart app.';
+        }
+        
+        // Auto-run diagnosis
+        diagnose();
+    </script>
+</body>
+</html>
