@@ -86,10 +86,17 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    return NextResponse.json(
-      { error: 'Failed to fetch goal recommendations' },
-      { status: 500 }
-    );
+    // Return empty recommendations instead of error to prevent UI breaking
+    return NextResponse.json({
+      stored: [],
+      dynamic: [],
+      summary: {
+        total: 0,
+        highPriority: 0,
+        newGoals: 0,
+        adjustments: 0
+      }
+    });
   }
 }
 
