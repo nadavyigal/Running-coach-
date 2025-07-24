@@ -13,6 +13,7 @@ import { OnboardingDebugPanel } from "@/components/onboarding-debug-panel"
 import { dbUtils } from "@/lib/db"
 import { planAdjustmentService } from "@/lib/planAdjustmentService"
 import { onboardingManager } from "@/lib/onboardingManager"
+import { useChunkErrorHandler } from "@/components/chunk-error-boundary"
 
 export default function RunSmartApp() {
   const [currentScreen, setCurrentScreen] = useState<string>("onboarding")
@@ -20,6 +21,9 @@ export default function RunSmartApp() {
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
   const [showDebugPanel, setShowDebugPanel] = useState(false)
+
+  // Add chunk error handler
+  useChunkErrorHandler()
 
   console.log('🚀 RunSmartApp component rendering...')
 

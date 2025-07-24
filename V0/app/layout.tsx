@@ -3,6 +3,7 @@ import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
 import { ReminderInit } from '@/components/reminder-init'
 import { PostHogProvider } from '@/lib/posthog-provider'
+import { ChunkErrorBoundary } from '@/components/chunk-error-boundary'
 
 export const metadata: Metadata = {
   title: 'v0 App',
@@ -18,11 +19,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <PostHogProvider>
-          <ReminderInit />
-          {children}
-          <Toaster />
-        </PostHogProvider>
+        <ChunkErrorBoundary>
+          <PostHogProvider>
+            <ReminderInit />
+            {children}
+            <Toaster />
+          </PostHogProvider>
+        </ChunkErrorBoundary>
       </body>
     </html>
   )

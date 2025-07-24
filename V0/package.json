@@ -7,11 +7,28 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "type-check": "tsc --noEmit",
     "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "test:coverage:ci": "vitest --coverage --run",
+    "test:coverage:watch": "vitest --coverage --watch",
+    "test:coverage:threshold": "vitest --coverage --run --coverage.thresholds.100",
+    "test:summary": "node scripts/test-summary.js",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "security:audit": "npm audit --audit-level=moderate",
+    "security:audit:fix": "npm audit fix",
+    "security:check": "npm audit --audit-level=high --production",
+    "build:analyze": "ANALYZE=true npm run build",
+    "build:production": "NODE_ENV=production npm run build",
+    "performance:lighthouse": "lighthouse http://localhost:3000 --output html --output-path ./reports/lighthouse.html",
+    "performance:bundle-size": "npx bundlesize",
+    "quality:check": "npm run lint && npm run type-check && npm run test -- --run",
+    "quality:fix": "npm run lint:fix && npm run type-check",
+    "ci:full": "npm run quality:check && npm run security:check && npm run build:production"
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
@@ -53,7 +70,7 @@
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
-    "next": "14.2.16",
+    "next": "14.2.30",
     "next-themes": "^0.4.4",
     "node-fetch": "^3.3.2",
     "posthog-js": "^1.257.0",
@@ -77,13 +94,27 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@vitejs/plugin-react": "^4.6.0",
+    "audit-ci": "^7.1.0",
+    "bundlesize": "^0.18.2",
     "eslint": "^8.57.1",
     "eslint-config-next": "15.3.5",
+    "eslint-plugin-security": "^3.0.1",
     "fake-indexeddb": "^6.0.1",
     "jsdom": "^26.1.0",
+    "lighthouse": "^12.2.1",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5",
     "vitest": "^3.2.4"
-  }
+  },
+  "bundlesize": [
+    {
+      "path": ".next/static/js/*.js",
+      "maxSize": "500kb"
+    },
+    {
+      "path": ".next/static/css/*.css", 
+      "maxSize": "50kb"
+    }
+  ]
 }

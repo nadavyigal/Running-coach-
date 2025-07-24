@@ -110,6 +110,12 @@ export async function POST(req: NextRequest) {
         headers: { "Content-Type": "application/json" }
       })
     }
+
+    // Add explicit timeout for the entire request
+    const TIMEOUT_MS = 30000; // 30 seconds
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Request timeout')), TIMEOUT_MS);
+    });
     
     if (useAdaptiveCoaching) {
       // Get the user's latest message
@@ -131,12 +137,15 @@ export async function POST(req: NextRequest) {
         console.log('📝 User message:', userMessage);
         console.log('🎯 Adaptive context:', adaptiveContext);
         
-        // Generate adaptive coaching response
-        const coachingResponse = await adaptiveCoachingEngine.generatePersonalizedResponse(
-          parseInt(userId),
-          userMessage,
-          adaptiveContext
-        );
+        // Generate adaptive coaching response with timeout
+        const coachingResponse = await Promise.race([
+          adaptiveCoachingEngine.generatePersonalizedResponse(
+            parseInt(userId),
+            userMessage,
+            adaptiveContext
+          ),
+          timeoutPromise
+        ]) as any;
         
         console.log('✅ Adaptive coaching response generated successfully');
         console.log('📊 Response confidence:', coachingResponse.confidence);
@@ -196,6 +205,19 @@ export async function POST(req: NextRequest) {
         console.error('❌ Adaptive coaching failed, falling back to standard chat:');
         console.error('❌ Adaptive error details:', adaptiveError);
         console.error('❌ Adaptive error stack:', adaptiveError instanceof Error ? adaptiveError.stack : 'No stack trace');
+        
+        // If adaptive coaching fails completely, try to provide a basic response
+        if (adaptiveError instanceof Error && adaptiveError.message === 'Request timeout') {
+          console.log('⏱️ Adaptive coaching timed out, trying basic response');
+          return new Response(JSON.stringify({
+            error: "I'm taking a bit longer than usual to respond. Let me try with a simpler approach - what specific running question can I help you with?",
+            fallback: true
+          }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          })
+        }
+        
         // Fall through to standard chat
       }
     }
@@ -221,18 +243,36 @@ export async function POST(req: NextRequest) {
 
     try {
       console.log('🔄 Calling OpenAI streamText...');
-      const result = streamText({
-        model: openai("gpt-4o"),
-        messages: apiMessages,
-        maxTokens: 500, // Limit response length to control costs
-        temperature: 0.7,
-      })
+      
+      // Add timeout to OpenAI call
+      const streamResult = await Promise.race([
+        streamText({
+          model: openai("gpt-4o"),
+          messages: apiMessages,
+          maxTokens: 500, // Limit response length to control costs
+          temperature: 0.7,
+        }),
+        timeoutPromise
+      ]) as any;
 
       console.log('✅ OpenAI streamText call initiated successfully');
-      return result.toDataStreamResponse()
+      return streamResult.toDataStreamResponse()
       
     } catch (openaiError) {
       console.error('❌ OpenAI streamText failed:', openaiError);
+      
+      // If it's a timeout, provide a specific error
+      if (openaiError instanceof Error && openaiError.message === 'Request timeout') {
+        console.error('⏱️ OpenAI request timed out');
+        return new Response(JSON.stringify({
+          error: "The AI coach is taking too long to respond. Please try again with a shorter message.",
+          fallback: true
+        }), {
+          status: 408,
+          headers: { "Content-Type": "application/json" }
+        })
+      }
+      
       throw openaiError; // Re-throw to be caught by outer catch block
     }
 

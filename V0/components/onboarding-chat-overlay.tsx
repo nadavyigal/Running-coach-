@@ -148,6 +148,7 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
       await createFallbackSession()
     } finally {
       setIsLoadingHistory(false)
+      console.log('✅ Chat history loading completed')
     }
   }
 
