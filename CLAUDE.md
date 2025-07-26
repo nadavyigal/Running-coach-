@@ -17,6 +17,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run test -- --coverage` - Run tests with coverage report
 - `npm run test -- ComponentName` - Run specific test file
 - `npm run test:e2e` - Run end-to-end tests with Playwright
+- `npm run test:e2e:ui` - Run Playwright tests with UI
+- `npm run test:e2e:debug` - Debug Playwright tests
+- `npm run test:e2e:report` - Show Playwright test report
 
 ## Architecture Overview
 
@@ -26,8 +29,9 @@ This is a **Next.js 14 PWA** designed as a mobile-first running coach applicatio
 
 **Database & Data:**
 - **Dexie.js** (IndexedDB) for client-side persistence - all data is stored locally
-- Database schema in `lib/db.ts` with entities: User, Plan, Workout, Run, Shoe, ChatMessage, Badge, Cohort
+- Database schema in `lib/db.ts` with entities: User, Plan, Workout, Run, Shoe, ChatMessage, Badge, Cohort, SleepData, HRVMeasurement, RecoveryScore, SubjectiveWellness
 - Database utilities in `lib/dbUtils.ts` for common operations
+- **Recovery Engine** in `lib/recoveryEngine.ts` for advanced metrics and recovery score calculations
 
 **Component Structure:**
 - **Screen Components:** OnboardingScreen, TodayScreen, PlanScreen, RecordScreen, ChatScreen, ProfileScreen
@@ -75,6 +79,8 @@ export interface EntityName {
 - Test files use `.test.tsx` extension
 - Global test setup in `vitest.setup.ts`
 - Vitest configuration in `vitest.config.ts` with jsdom environment
+- Path aliases configured: `@/` for root, `@/lib`, `@/components`, `@/components/ui`
+- Test timeout set to 60 seconds for complex operations
 
 ### Important Technical Details
 
@@ -97,6 +103,12 @@ export interface EntityName {
 - RecordScreen uses Web Geolocation API
 - Real-time tracking during runs
 - Distance/pace calculations in client-side utilities
+
+**Recovery & Health Metrics:**
+- Advanced recovery scoring using sleep, HRV, and subjective wellness data
+- Integration with device APIs (Apple Watch, Garmin) for health data
+- Heart rate zones and training load calculations
+- Background sync functionality for continuous data collection
 
 ### Common Development Tasks
 

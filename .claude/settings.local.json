@@ -13,7 +13,11 @@
       "Bash(curl:*)",
       "Bash(node:*)",
       "Bash(grep:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npm install:*)",
+      "Bash(env)",
+      "Bash(npm audit:*)",
+      "Bash(timeout 30s npm run test -- --run --reporter=basic)"
     ],
     "deny": []
   }

@@ -181,7 +181,7 @@ export function validateRequired(data: Record<string, unknown>, fields: string[]
 }
 
 export function validateEnum(value: unknown, enumValues: string[], fieldName: string): void {
-  if (!enumValues.includes(value)) {
+  if (typeof value !== 'string' || !enumValues.includes(value)) {
     throw new ValidationError(
       `Invalid ${fieldName}. Must be one of: ${enumValues.join(', ')}`,
       { validValues: enumValues, received: value }
@@ -406,7 +406,20 @@ export interface ClientErrorInfo {
 /**
  * Analyze error and provide user-friendly information
  */
-export function analyzeError(error: Error): ClientErrorInfo {
+export function analyzeError(error: unknown): ClientErrorInfo {
+  // Ensure error is an object and has Error-like properties
+  if (!error || typeof error !== 'object') {
+    return {
+      error: new Error('Invalid error object provided'),
+      errorType: 'unknown',
+      userMessage: 'An unexpected error occurred',
+      canRetry: true,
+      suggestedAction: 'Try again or contact support if the problem persists',
+      fallbackOptions: ['Try again', 'Contact support']
+    };
+  }
+
+  const errorObj = error as Error;
   // Network errors
   if (isNetworkErrorClient(error)) {
     return {
@@ -479,9 +492,15 @@ export function analyzeError(error: Error): ClientErrorInfo {
 }
 
 /**
- * Check if error is a network error (client-side)
+ * Check if error is a network error (client-side) - null-safe implementation
  */
-function isNetworkErrorClient(error: Error): boolean {
+function isNetworkErrorClient(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  
+  const errorObj = error as Error;
+  const message = errorObj.message || '';
+  const name = errorObj.name || '';
+  
   const networkIndicators = [
     'fetch',
     'network',
@@ -493,75 +512,105 @@ function isNetworkErrorClient(error: Error): boolean {
     'net::',
     'ERR_NETWORK',
     'ERR_INTERNET_DISCONNECTED'
-  ]
+  ];
   
-  return networkIndicators.some(indicator => 
-    error.message.toLowerCase().includes(indicator.toLowerCase()) ||
-    error.name.toLowerCase().includes(indicator.toLowerCase())
-  )
+  return networkIndicators.some(indicator => {
+    const lowerIndicator = indicator.toLowerCase();
+    return (
+      message.toLowerCase().includes(lowerIndicator) ||
+      name.toLowerCase().includes(lowerIndicator)
+    );
+  });
 }
 
 /**
- * Check if error is an offline error
+ * Check if error is an offline error - null-safe implementation
  */
-function isOfflineError(error: Error): boolean {
+function isOfflineError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  
+  const errorObj = error as Error;
+  const message = errorObj.message || '';
+  
   return error instanceof OfflineError ||
-         error.message.toLowerCase().includes('offline') ||
-         error.message.toLowerCase().includes('no network')
+         message.toLowerCase().includes('offline') ||
+         message.toLowerCase().includes('no network');
 }
 
 /**
- * Check if error is an AI service error
+ * Check if error is an AI service error - null-safe implementation
  */
-function isAIServiceError(error: Error): boolean {
+function isAIServiceError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  
+  const errorObj = error as Error;
+  const message = errorObj.message || '';
+  
   return error instanceof AIServiceError ||
-         error.message.toLowerCase().includes('ai service') ||
-         error.message.toLowerCase().includes('openai') ||
-         error.message.toLowerCase().includes('model') ||
-         error.message.includes('503')
+         message.toLowerCase().includes('ai service') ||
+         message.toLowerCase().includes('openai') ||
+         message.toLowerCase().includes('model') ||
+         message.includes('503');
 }
 
 /**
- * Check if error is a database error
+ * Check if error is a database error - null-safe implementation
  */
-function isDatabaseError(error: Error): boolean {
+function isDatabaseError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  
+  const errorObj = error as Error;
+  const message = errorObj.message || '';
+  
   return error instanceof DatabaseError ||
-         error.message.toLowerCase().includes('database') ||
-         error.message.toLowerCase().includes('storage') ||
-         error.message.toLowerCase().includes('indexeddb')
+         message.toLowerCase().includes('database') ||
+         message.toLowerCase().includes('storage') ||
+         message.toLowerCase().includes('indexeddb');
 }
 
 /**
- * Check if error is a validation error
+ * Check if error is a validation error - null-safe implementation
  */
-function isValidationError(error: Error): boolean {
+function isValidationError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  
+  const errorObj = error as Error;
+  const message = errorObj.message || '';
+  
   return error instanceof ValidationError ||
-         error.message.toLowerCase().includes('validation') ||
-         error.message.toLowerCase().includes('invalid') ||
-         error.message.toLowerCase().includes('required')
+         message.toLowerCase().includes('validation') ||
+         message.toLowerCase().includes('invalid') ||
+         message.toLowerCase().includes('required');
 }
 
 /**
- * Get user-friendly validation error message
+ * Get user-friendly validation error message - null-safe implementation
  */
-function getValidationErrorMessage(error: Error): string {
-  if (error.message.includes('age')) {
-    return 'Please enter a valid age between 10 and 100.'
-  }
-  if (error.message.includes('goal')) {
-    return 'Please select a running goal to continue.'
-  }
-  if (error.message.includes('experience')) {
-    return 'Please select your running experience level.'
-  }
-  if (error.message.includes('consent')) {
-    return 'Please accept the required terms to continue.'
-  }
-  if (error.message.includes('time')) {
-    return 'Please select at least one preferred running time.'
+function getValidationErrorMessage(error: unknown): string {
+  if (!error || typeof error !== 'object') {
+    return 'Please check your input and try again.';
   }
   
-  return error.message || 'Please check your input and try again.'
+  const errorObj = error as Error;
+  const message = errorObj.message || '';
+  
+  if (message.includes('age')) {
+    return 'Please enter a valid age between 10 and 100.';
+  }
+  if (message.includes('goal')) {
+    return 'Please select a running goal to continue.';
+  }
+  if (message.includes('experience')) {
+    return 'Please select your running experience level.';
+  }
+  if (message.includes('consent')) {
+    return 'Please accept the required terms to continue.';
+  }
+  if (message.includes('time')) {
+    return 'Please select at least one preferred running time.';
+  }
+  
+  return message || 'Please check your input and try again.';
 }
 
 /**

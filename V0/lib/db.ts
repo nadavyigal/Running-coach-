@@ -652,6 +652,12 @@ export class RunSmartDB extends Dexie {
   hrvMeasurements!: EntityTable<HRVMeasurement, 'id'>;
   recoveryScores!: EntityTable<RecoveryScore, 'id'>;
   subjectiveWellness!: EntityTable<SubjectiveWellness, 'id'>;
+  
+  // Data Fusion tables
+  dataFusionRules!: EntityTable<DataFusionRule, 'id'>;
+  fusedDataPoints!: EntityTable<FusedDataPoint, 'id'>;
+  dataConflicts!: EntityTable<DataConflict, 'id'>;
+  dataSources!: EntityTable<DataSource, 'id'>;
 
   constructor() {
     super('RunSmartDB');
@@ -1254,6 +1260,49 @@ export class RunSmartDB extends Dexie {
       // No data migration needed for new recovery tables - they will start empty
       // Recovery data will be populated as users connect devices and provide wellness data
     });
+
+    // Version 18: Add Data Fusion tables for multi-device data fusion
+    this.version(18).stores({
+      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId, coachingStyle, goalInferred',
+      plans: '++id, userId, isActive, startDate, endDate, createdAt, planType, raceGoalId, [userId+isActive]',
+      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt, type, trainingPhase',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt, externalId',
+      shoes: '++id, userId, isActive, createdAt',
+      chatMessages: '++id, userId, role, timestamp, conversationId',
+      badges: '++id, userId, type, milestone, unlockedAt',
+      cohorts: '++id, inviteCode, name',
+      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+      performanceMetrics: '++id, userId, date, createdAt',
+      coachingFeedback: '++id, userId, interactionType, feedbackType, rating, createdAt',
+      coachingInteractions: '++id, userId, interactionId, interactionType, createdAt',
+      userBehaviorPatterns: '++id, userId, patternType, confidenceScore, lastObserved, createdAt',
+      goals: '++id, userId, goalType, status, priority, createdAt, updatedAt',
+      goalMilestones: '++id, goalId, milestoneOrder, status, targetDate, createdAt',
+      goalProgressHistory: '++id, goalId, measurementDate, autoRecorded',
+      goalRecommendations: '++id, userId, recommendationType, status, createdAt, expiresAt',
+      wearableDevices: '++id, userId, type, deviceId, connectionStatus, lastSync, createdAt',
+      heartRateData: '++id, runId, deviceId, timestamp, heartRate, accuracy, createdAt',
+      heartRateZones: '++id, userId, zoneNumber, name, minBpm, maxBpm, color, createdAt',
+      heartRateZoneSettings: '++id, userId, calculationMethod, zoneSystem, autoUpdate, createdAt',
+      zoneDistributions: '++id, runId, zone1Time, zone2Time, zone3Time, zone4Time, zone5Time, totalTime, createdAt',
+      advancedMetrics: '++id, runId, deviceId, vo2Max, lactateThresholdHR, trainingStressScore, createdAt',
+      runningDynamicsData: '++id, runId, deviceId, averageCadence, averageGroundContactTime, averageVerticalOscillation, createdAt',
+      syncJobs: '++id, userId, deviceId, type, status, priority, scheduledAt, createdAt, [userId+deviceId+type]',
+      onboardingSessions: '++id, userId, conversationId, goalDiscoveryPhase, isCompleted, createdAt, [userId+conversationId]',
+      conversationMessages: '++id, sessionId, conversationId, role, timestamp, phase, createdAt, [conversationId+timestamp]',
+      sleepData: '++id, userId, deviceId, date, createdAt',
+      hrvMeasurements: '++id, userId, deviceId, measurementDate, createdAt',
+      recoveryScores: '++id, userId, date, createdAt',
+      subjectiveWellness: '++id, userId, date, createdAt',
+      // Data Fusion tables
+      dataFusionRules: '++id, userId, dataType, primarySource, createdAt',
+      fusedDataPoints: '++id, userId, dataType, timestamp, primarySource, createdAt',
+      dataConflicts: '++id, fusedDataPointId, sourceDevice1, sourceDevice2, createdAt',
+      dataSources: '++id, userId, deviceId, deviceType, isActive, createdAt'
+    }).upgrade(async tx => {
+      console.log('Running migration for version 18 - Adding Data Fusion tables for multi-device data fusion');
+      // No data migration needed, new tables will start empty
+    });
   }
 }
 
@@ -1536,6 +1585,25 @@ export const dbUtils = {
       return plan;
     } catch (error) {
       console.error(`❌ getActivePlan failed for user ${userId}:`, error);
+      return undefined;
+    }
+  },
+
+  async getPlan(planId: number): Promise<Plan | undefined> {
+    try {
+      const plan = await db.plans.get(planId);
+      
+      if (plan) {
+        console.log(`🔍 getPlan found plan: "${plan.title}" (ID: ${plan.id})`);
+        // Load associated workouts
+        const workouts = await this.getWorkoutsByPlan(plan.id!);
+        return { ...plan, workouts };
+      } else {
+        console.log(`🔍 getPlan found no plan with ID ${planId}`);
+      }
+      return undefined;
+    } catch (error) {
+      console.error(`❌ getPlan failed for plan ID ${planId}:`, error);
       return undefined;
     }
   },
@@ -4127,4 +4195,63 @@ export interface SubjectiveWellness {
   motivationLevel: number; // 1-10
   notes?: string;
   createdAt: Date;
+}
+
+// Data Fusion Interfaces
+export interface DataFusionRule {
+  id?: number;
+  userId: number;
+  dataType: string;
+  primarySource: string; // device ID
+  fallbackSources: string[]; // ordered list of fallback devices
+  conflictResolution: 'prefer_primary' | 'most_recent' | 'highest_accuracy' | 'average' | 'manual';
+  gapFillingEnabled: boolean;
+  qualityThreshold: number; // minimum quality score to use data
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface FusedDataPoint {
+  id?: number;
+  userId: number;
+  dataType: string;
+  value: number;
+  timestamp: Date;
+  primarySource: string;
+  contributingSources: string[];
+  confidence: number; // 0-100, how confident we are in this value
+  fusionMethod: 'single_source' | 'weighted_average' | 'interpolated' | 'extrapolated';
+  qualityScore: number; // overall quality of the fused data point
+  conflicts?: DataConflict[];
+  createdAt: Date;
+}
+
+export interface DataConflict {
+  id?: number;
+  fusedDataPointId: number;
+  sourceDevice1: string;
+  sourceDevice2: string;
+  value1: number;
+  value2: number;
+  difference: number;
+  resolutionMethod: string;
+  resolvedValue: number;
+  manuallyResolved: boolean;
+  createdAt: Date;
+}
+
+export interface DataSource {
+  id?: number;
+  userId: number;
+  deviceId: string;
+  deviceType: 'apple_watch' | 'garmin' | 'fitbit' | 'phone' | 'ring' | 'scale';
+  dataTypes: string[]; // JSON array of supported data types
+  priority: number; // 1-10, higher = more trusted
+  accuracy: number; // 0-100, based on device specs and user feedback
+  reliability: number; // 0-100, based on successful sync history
+  lastSync: Date;
+  isActive: boolean;
+  capabilities: string[]; // JSON array of device capabilities
+  createdAt: Date;
+  updatedAt: Date;
 }

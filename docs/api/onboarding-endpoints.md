@@ -79,12 +79,46 @@ Handles AI-guided onboarding conversations with real-time streaming responses.
 }
 ```
 
+**Enhanced Error Responses (New):**
+```json
+{
+  "error": "Content-Type must be application/json",
+  "fallback": true
+}
+```
+```json
+{
+  "error": "Request body cannot be empty",
+  "fallback": true
+}
+```
+```json
+{
+  "error": "Invalid JSON in request body",
+  "fallback": true
+}
+```
+```json
+{
+  "error": "Messages array is required and cannot be empty",
+  "fallback": true
+}
+```
+```json
+{
+  "error": "AI service is not configured",
+  "fallback": true,
+  "message": "Please configure your OpenAI API key to use the AI coach."
+}
+```
+
 **Status Codes:**
 - `200` - Success (streaming response)
-- `400` - Bad Request (invalid input)
+- `400` - Bad Request (invalid input, missing fields, invalid JSON)
 - `401` - Unauthorized (missing/invalid token)
-- `503` - Service Unavailable (AI service down)
+- `503` - Service Unavailable (AI service down, missing API key)
 - `429` - Too Many Requests (rate limited)
+- `500` - Internal Server Error (unexpected errors)
 
 ### 2. Goal Wizard API
 
@@ -322,9 +356,14 @@ Updates onboarding session data.
 
 ### Common Error Codes
 - `INVALID_INPUT` - Request body validation failed
+- `INVALID_JSON` - JSON parsing error in request body
+- `EMPTY_REQUEST` - Request body cannot be empty
+- `INVALID_CONTENT_TYPE` - Content-Type must be application/json
+- `MISSING_REQUIRED_FIELDS` - Required fields (messages, currentPhase) missing
 - `UNAUTHORIZED` - Missing or invalid authentication
 - `RATE_LIMITED` - Too many requests
 - `SERVICE_UNAVAILABLE` - AI service unavailable
+- `API_KEY_MISSING` - OpenAI API key not configured
 - `DATABASE_ERROR` - Database operation failed
 - `SESSION_EXPIRED` - Session token expired
 - `VALIDATION_ERROR` - Input validation failed
@@ -546,6 +585,12 @@ const mockErrorResponse = {
 
 ---
 
-*Last Updated: 2025-01-13*
-*Version: 1.0*
-*Maintained by: Development Team* 
+*Last Updated: 2025-07-23*
+*Version: 1.1*
+*Maintained by: Development Team*
+
+## Recent Updates
+- Enhanced chat API error handling and validation
+- Improved JSON parsing with better error messages
+- Added comprehensive request validation
+- Updated error codes and responses for better debugging 

@@ -23,6 +23,7 @@ import { trackChatMessageSent } from "@/lib/analytics"
 import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
+import { planAdaptationEngine } from "@/lib/planAdaptationEngine"
 
 interface ChatMessage {
   id: string
@@ -42,7 +43,9 @@ export function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputValue, setInputValue] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true)
   const [user, setUser] = useState<UserType | null>(null)
+  const [conversationId, setConversationId] = useState<string>('default')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
@@ -51,8 +54,13 @@ export function ChatScreen() {
 
   useEffect(() => {
     loadUser()
-    loadChatHistory()
   }, [])
+  
+  useEffect(() => {
+    if (user) {
+      loadChatHistory()
+    }
+  }, [user, conversationId])
 
   useEffect(() => {
     scrollToBottom()
@@ -68,15 +76,69 @@ export function ChatScreen() {
   }
 
   const loadChatHistory = async () => {
-    // TODO: Implement chat history loading from Dexie.js
-    // For now, add a welcome message
-    const welcomeMessage: ChatMessage = {
-      id: `welcome-${Date.now()}`,
-      role: 'assistant',
-      content: `Hi there! I'm your AI running coach. I'm here to help you with training advice, motivation, and any running-related questions. How can I assist you today?`,
-      timestamp: new Date(),
+    if (!user?.id) {
+      setIsLoadingHistory(false)
+      // Show welcome message for users without ID
+      const welcomeMessage: ChatMessage = {
+        id: `welcome-${Date.now()}`,
+        role: 'assistant',
+        content: `Hi there! I'm your AI running coach. I'm here to help you with training advice, motivation, and any running-related questions. How can I assist you today?`,
+        timestamp: new Date(),
+      }
+      setMessages([welcomeMessage])
+      return
     }
-    setMessages([welcomeMessage])
+
+    try {
+      setIsLoadingHistory(true)
+      console.log('📚 Loading chat history for user:', user.id)
+      
+      // Load existing chat messages from database
+      const existingMessages = await dbUtils.getChatMessages(user.id, conversationId)
+      console.log(`📨 Loaded ${existingMessages.length} existing messages`)
+      
+      if (existingMessages.length > 0) {
+        // Convert database messages to ChatMessage format
+        const chatMessages: ChatMessage[] = existingMessages.map(msg => ({
+          id: msg.id?.toString() || `msg-${Date.now()}-${Math.random()}`,
+          role: msg.role,
+          content: msg.content,
+          timestamp: new Date(msg.timestamp),
+          tokenCount: msg.tokenCount,
+        }))
+        
+        setMessages(chatMessages)
+        console.log('✅ Chat history loaded successfully')
+      } else {
+        // Show welcome message for new conversations
+        const welcomeMessage: ChatMessage = {
+          id: `welcome-${Date.now()}`,
+          role: 'assistant',
+          content: `Hi there! I'm your AI running coach. I'm here to help you with training advice, motivation, and any running-related questions. How can I assist you today?`,
+          timestamp: new Date(),
+        }
+        setMessages([welcomeMessage])
+        console.log('👋 No existing history, showing welcome message')
+      }
+    } catch (error) {
+      console.error('❌ Failed to load chat history:', error)
+      toast({
+        title: "Chat History Error",
+        description: "Failed to load previous messages. Starting fresh conversation.",
+        variant: "destructive",
+      })
+      
+      // Fallback to welcome message
+      const welcomeMessage: ChatMessage = {
+        id: `welcome-${Date.now()}`,
+        role: 'assistant',
+        content: `Hi there! I'm your AI running coach. I'm here to help you with training advice, motivation, and any running-related questions. How can I assist you today?`,
+        timestamp: new Date(),
+      }
+      setMessages([welcomeMessage])
+    } finally {
+      setIsLoadingHistory(false)
+    }
   }
 
   const scrollToBottom = () => {
@@ -148,9 +210,14 @@ export function ChatScreen() {
         throw new Error(errorMessage)
       }
 
+      // Enhanced stream debugging implementation
+      console.log('🔥 Stream Response Status:', response.status);
+      console.log('🔥 Stream Headers:', Object.fromEntries(response.headers.entries()));
+      
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
       let aiContent = ""
+      let updateCount = 0
 
       // Extract coaching metadata from headers
       const coachingInteractionId = response.headers.get('X-Coaching-Interaction-Id')
@@ -172,10 +239,15 @@ export function ChatScreen() {
 
       while (reader) {
         const { done, value } = await reader.read()
-        if (done) break
+        if (done) {
+          console.log('✅ Stream complete. Total updates:', updateCount);
+          break
+        }
 
         const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
+        console.log('📦 Chunk received:', chunk.length, 'chars');
+        
+        const lines = chunk.split('\n').filter(line => line.trim());
         
         for (const line of lines) {
           if (line.startsWith('0:')) {
@@ -183,16 +255,22 @@ export function ChatScreen() {
               const data = JSON.parse(line.slice(2))
               if (data.textDelta) {
                 aiContent += data.textDelta
-                setMessages(prev => 
-                  prev.map(msg => 
+                updateCount++;
+                
+                console.log('🔄 UI Update #', updateCount, 'Content length:', aiContent.length);
+                
+                setMessages(prev => {
+                  const updated = prev.map(msg => 
                     msg.id === assistantMessage.id 
                       ? { ...msg, content: aiContent }
                       : msg
-                  )
-                )
+                  );
+                  console.log('🎯 Messages array updated:', updated.length, 'messages');
+                  return updated;
+                });
               }
-            } catch (e) {
-              // Ignore JSON parse errors for streaming chunks
+            } catch (parseError) {
+              console.error('❌ JSON Parse Error:', parseError, 'Line:', line);
             }
           }
         }
@@ -209,7 +287,34 @@ export function ChatScreen() {
         )
       }
       
-      // TODO: Save messages to Dexie.js
+      // Save messages to database
+      if (user?.id) {
+        try {
+          console.log('💾 Saving user and assistant messages to database...')
+          
+          // Save the user message
+          await dbUtils.createChatMessage({
+            userId: user.id,
+            role: 'user',
+            content: userMessage.content,
+            conversationId: conversationId,
+          })
+          
+          // Save the assistant message
+          await dbUtils.createChatMessage({
+            userId: user.id,
+            role: 'assistant', 
+            content: aiContent,
+            conversationId: conversationId,
+            tokenCount: Math.ceil(aiContent.length / 4), // Rough token estimation
+          })
+          
+          console.log('✅ Messages saved successfully to database')
+        } catch (saveError) {
+          console.error('❌ Failed to save messages to database:', saveError)
+          // Don't show error to user - message saving failure shouldn't disrupt chat
+        }
+      }
       
     } catch (error) {
       console.error('Chat error:', error)
@@ -384,33 +489,44 @@ export function ChatScreen() {
       {/* Messages */}
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">
-          {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
-          ))}
-          {isLoading && (
-            <div className="flex justify-start" role="status" aria-label="Loading">
+          {isLoadingHistory ? (
+            <div className="flex justify-center items-center py-8" role="status" aria-label="Loading chat history">
               <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                <span className="text-sm text-muted-foreground">Coach is thinking...</span>
+                <span className="text-sm text-muted-foreground">Loading chat history...</span>
               </div>
             </div>
+          ) : (
+            <>
+              {messages.map((message) => (
+                <MessageBubble key={message.id} message={message} />
+              ))}
+              {isLoading && (
+                <div className="flex justify-start" role="status" aria-label="Loading">
+                  <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    <span className="text-sm text-muted-foreground">Coach is thinking...</span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Recovery Status Widget */}
+              {user && (
+                <div className="mt-4">
+                  <RecoveryRecommendations
+                    userId={user.id!}
+                    date={new Date()}
+                    showBreakdown={false}
+                    onRefresh={() => {
+                      console.log('Refreshing recovery data for chat...');
+                    }}
+                  />
+                </div>
+              )}
+              
+              <div ref={messagesEndRef} />
+            </>
           )}
-          
-          {/* Recovery Status Widget */}
-          {user && (
-            <div className="mt-4">
-              <RecoveryRecommendations
-                userId={user.id!}
-                date={new Date()}
-                showBreakdown={false}
-                onRefresh={() => {
-                  console.log('Refreshing recovery data for chat...');
-                }}
-              />
-            </div>
-          )}
-          
-          <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
 

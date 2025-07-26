@@ -321,23 +321,6 @@ export class OnboardingManager {
     }
   }
 
-  /**
-   * Clean up any partial state from failed onboarding
-   */
-  private async cleanupFailedOnboarding(): Promise<void> {
-    if (this.currentUserId) {
-      try {
-        console.log('🧹 Cleaning up failed onboarding for user:', this.currentUserId);
-        
-        // Delete any partially created plans
-        await dbUtils.cleanupUserData(this.currentUserId);
-        
-        console.log('✅ Cleanup completed');
-      } catch (cleanupError) {
-        console.error('❌ Cleanup failed:', cleanupError);
-      }
-    }
-  }
 
   /**
    * Get current user or throw error

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbUtils, Goal } from '@/lib/db';
 import { goalProgressEngine } from '@/lib/goalProgressEngine';
+import { planAdaptationEngine } from '@/lib/planAdaptationEngine';
 
 // Validation schemas
 const CreateGoalSchema = z.object({
@@ -288,6 +289,33 @@ export async function PUT(request: NextRequest) {
     // Recalculate progress if target or baseline changed
     if (updates.targetValue !== undefined || updates.baselineValue !== undefined) {
       await dbUtils.updateGoalCurrentProgress(goalId);
+    }
+
+    // Check if plan should be adapted based on goal update
+    try {
+      const goal = await dbUtils.getGoal(goalId);
+      if (goal) {
+        const adaptationAssessment = await planAdaptationEngine.shouldAdaptPlan(goal.userId);
+        
+        if (adaptationAssessment.shouldAdapt && adaptationAssessment.confidence > 70) {
+          console.log('Goal update triggered plan adaptation:', adaptationAssessment.reason);
+          
+          // Get current active plan
+          const currentPlan = await dbUtils.getActivePlan(goal.userId);
+          if (currentPlan) {
+            // Adapt the plan
+            const adaptedPlan = await planAdaptationEngine.adaptExistingPlan(
+              currentPlan.id!,
+              `Goal update: ${adaptationAssessment.reason}`
+            );
+            
+            console.log('Plan adapted successfully after goal update:', adaptedPlan.title);
+          }
+        }
+      }
+    } catch (adaptationError) {
+      console.error('Plan adaptation failed after goal update:', adaptationError);
+      // Don't fail the goal update if adaptation fails
     }
 
     // Get updated goal with progress

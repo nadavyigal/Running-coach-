@@ -9,6 +9,7 @@ import { ManualRunModal } from "@/components/manual-run-modal"
 import { dbUtils, type Run, type Workout } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 import { planAdjustmentService } from "@/lib/planAdjustmentService"
+import { planAdaptationEngine } from "@/lib/planAdaptationEngine"
 import { useRouter } from "next/navigation"
 import { trackPlanSessionCompleted } from "@/lib/analytics"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
@@ -367,6 +368,31 @@ export function RecordScreen() {
       // Trigger adaptive plan adjustments (but don't fail run save if this fails)
       try {
         await planAdjustmentService.afterRun(user.id)
+        
+        // Check if plan should be adapted based on completion
+        const adaptationAssessment = await planAdaptationEngine.shouldAdaptPlan(user.id)
+        
+        if (adaptationAssessment.shouldAdapt && adaptationAssessment.confidence > 70) {
+          console.log('Plan adaptation triggered:', adaptationAssessment.reason)
+          
+          // Get current active plan
+          const currentPlan = await dbUtils.getActivePlan(user.id)
+          if (currentPlan) {
+            // Adapt the plan
+            const adaptedPlan = await planAdaptationEngine.adaptExistingPlan(
+              currentPlan.id!,
+              adaptationAssessment.reason
+            )
+            
+            console.log('Plan adapted successfully:', adaptedPlan.title)
+            
+            // Show user notification about plan adaptation
+            toast({
+              title: "Plan Updated! 📈",
+              description: `Your training plan has been adjusted based on your recent progress: ${adaptationAssessment.reason}`,
+            })
+          }
+        }
       } catch (adaptiveError) {
         console.error('Adaptive coaching failed:', adaptiveError)
         toast({

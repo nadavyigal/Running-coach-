@@ -1,0 +1,206 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop, feature/* ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./V0
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './V0/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint code
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Security audit
+        run: npm audit --audit-level=moderate
+
+      - name: Run tests
+        run: npm run test -- --run --coverage
+
+      - name: Build application
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./V0/coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+
+      - name: Check build size
+        run: |
+          echo "Checking build size..."
+          du -sh .next/static/ || echo "Build directory not found"
+
+  security-scan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./V0
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './V0/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run dependency vulnerability scan
+        run: |
+          npm audit --audit-level=high --production
+          npx audit-ci --high
+
+      - name: Check for known security issues
+        run: |
+          echo "Running security checks..."
+          # Check for potential security issues in code
+          grep -r "eval(" . --include="*.js" --include="*.ts" --include="*.tsx" || true
+          grep -r "innerHTML" . --include="*.js" --include="*.ts" --include="*.tsx" || true
+
+  performance-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./V0
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './V0/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for performance analysis
+        run: |
+          npm run build
+          echo "Build completed successfully"
+
+      - name: Analyze bundle size
+        run: |
+          echo "Analyzing bundle size..."
+          if [ -d ".next/static" ]; then
+            find .next/static -name "*.js" -exec wc -c {} + | sort -n
+            total_size=$(find .next/static -name "*.js" -exec wc -c {} + | tail -1 | awk '{print $1}')
+            echo "Total JS bundle size: $total_size bytes"
+            if [ $total_size -gt 1048576 ]; then
+              echo "Warning: Bundle size exceeds 1MB"
+            fi
+          else
+            echo "Build directory not found"
+          fi
+
+  deploy-staging:
+    needs: [quality-gates, security-scan, performance-check]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    defaults:
+      run:
+        working-directory: ./V0
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './V0/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for staging
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          echo "Staging deployment would happen here"
+
+      - name: Run health checks
+        run: |
+          echo "Running staging health checks..."
+          echo "Health checks would run here"
+
+  deploy-production:
+    needs: [quality-gates, security-scan, performance-check]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: ./V0
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './V0/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for production
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production environment..."
+          echo "Production deployment would happen here"
+
+      - name: Run production health checks
+        run: |
+          echo "Running production health checks..."
+          echo "Production health checks would run here"
+
+      - name: Notify deployment success
+        run: |
+          echo "Production deployment completed successfully"
