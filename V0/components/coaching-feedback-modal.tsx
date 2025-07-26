@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Star, ThumbsUp, ThumbsDown, MessageSquare, Send, Lightbulb } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
+import { planAdaptationEngine } from '@/lib/planAdaptationEngine';
 
 interface CoachingFeedbackModalProps {
   isOpen: boolean;
@@ -103,6 +104,37 @@ export function CoachingFeedbackModal({
       if (response.ok) {
         const result = await response.json();
         
+        // Check if plan should be adapted based on feedback
+        try {
+          const adaptationAssessment = await planAdaptationEngine.shouldAdaptPlan(userId);
+          
+          if (adaptationAssessment.shouldAdapt && adaptationAssessment.confidence > 70) {
+            console.log('Feedback triggered plan adaptation:', adaptationAssessment.reason);
+            
+            // Get current active plan
+            const { dbUtils } = await import('@/lib/db');
+            const currentPlan = await dbUtils.getActivePlan(userId);
+            if (currentPlan) {
+              // Adapt the plan
+              const adaptedPlan = await planAdaptationEngine.adaptExistingPlan(
+                currentPlan.id!,
+                `Feedback-based: ${adaptationAssessment.reason}`
+              );
+              
+              console.log('Plan adapted successfully after feedback:', adaptedPlan.title);
+              
+              // Show user notification about plan adaptation
+              toast({
+                title: "Plan Updated! 📈",
+                description: `Your training plan has been adjusted based on your feedback: ${adaptationAssessment.reason}`,
+              });
+            }
+          }
+        } catch (adaptationError) {
+          console.error('Plan adaptation failed after feedback:', adaptationError);
+          // Don't fail the feedback submission if adaptation fails
+        }
+        
         toast({
           variant: "success",
           title: "Thank you for your feedback! 🙏",
@@ -155,6 +187,37 @@ export function CoachingFeedbackModal({
 
       if (response.ok) {
         const result = await response.json();
+        
+        // Check if plan should be adapted based on detailed feedback
+        try {
+          const adaptationAssessment = await planAdaptationEngine.shouldAdaptPlan(userId);
+          
+          if (adaptationAssessment.shouldAdapt && adaptationAssessment.confidence > 70) {
+            console.log('Detailed feedback triggered plan adaptation:', adaptationAssessment.reason);
+            
+            // Get current active plan
+            const { dbUtils } = await import('@/lib/db');
+            const currentPlan = await dbUtils.getActivePlan(userId);
+            if (currentPlan) {
+              // Adapt the plan
+              const adaptedPlan = await planAdaptationEngine.adaptExistingPlan(
+                currentPlan.id!,
+                `Detailed feedback: ${adaptationAssessment.reason}`
+              );
+              
+              console.log('Plan adapted successfully after detailed feedback:', adaptedPlan.title);
+              
+              // Show user notification about plan adaptation
+              toast({
+                title: "Plan Updated! 📈",
+                description: `Your training plan has been adjusted based on your detailed feedback: ${adaptationAssessment.reason}`,
+              });
+            }
+          }
+        } catch (adaptationError) {
+          console.error('Plan adaptation failed after detailed feedback:', adaptationError);
+          // Don't fail the feedback submission if adaptation fails
+        }
         
         toast({
           variant: "success",

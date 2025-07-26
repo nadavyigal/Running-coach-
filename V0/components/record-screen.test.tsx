@@ -135,22 +135,20 @@ describe('RecordScreen', () => {
         })
       })
 
-      await act(async () => {
-        render(<RecordScreen />)
-      })
+      render(<RecordScreen />)
 
       // Wait for GPS prompt state to be recognized
       await waitFor(() => {
         expect(screen.getByText('Enable GPS Tracking')).toBeInTheDocument()
-      })
+      }, { timeout: 5000 })
 
       const enableButton = screen.getByRole('button', { name: 'Enable' })
       
-      await act(async () => {
-        fireEvent.click(enableButton)
-      })
+      fireEvent.click(enableButton)
 
-      expect(mockGeolocation.getCurrentPosition).toHaveBeenCalled()
+      await waitFor(() => {
+        expect(mockGeolocation.getCurrentPosition).toHaveBeenCalled()
+      }, { timeout: 5000 })
     })
   })
 
@@ -210,44 +208,47 @@ describe('RecordScreen', () => {
     })
 
     it('should calculate distance from GPS coordinates', async () => {
-      await act(async () => {
-        render(<RecordScreen />)
-      })
+      render(<RecordScreen />)
 
       // Start run
       const startButton = screen.getByRole('button', { name: 'Start Run' })
-      await act(async () => {
-        fireEvent.click(startButton)
-      })
+      fireEvent.click(startButton)
+
+      // Wait for GPS tracking to start
+      await waitFor(() => {
+        expect(mockGeolocation.watchPosition).toHaveBeenCalled()
+      }, { timeout: 5000 })
 
       // Wait for GPS updates
       await waitFor(() => {
         const distanceElement = screen.getByText(/0\.00|0\.01/)
         expect(distanceElement).toBeInTheDocument()
-      })
+      }, { timeout: 5000 })
     })
 
     it('should pause and resume GPS tracking', async () => {
-      await act(async () => {
-        render(<RecordScreen />)
-      })
+      render(<RecordScreen />)
 
       // Start run
       const startButton = screen.getByRole('button', { name: 'Start Run' })
-      await act(async () => {
-        fireEvent.click(startButton)
-      })
+      fireEvent.click(startButton)
+
+      // Wait for run to start
+      await waitFor(() => {
+        expect(mockGeolocation.watchPosition).toHaveBeenCalled()
+      }, { timeout: 5000 })
 
       // Clear previous toast calls
       mockToast.mockClear()
 
       // Pause run
       const pauseButton = screen.getByRole('button', { name: 'Pause Run' })
-      await act(async () => {
-        fireEvent.click(pauseButton)
-      })
+      fireEvent.click(pauseButton)
 
-      expect(mockGeolocation.clearWatch).toHaveBeenCalled()
+      await waitFor(() => {
+        expect(mockGeolocation.clearWatch).toHaveBeenCalled()
+      }, { timeout: 5000 })
+
       expect(mockToast).toHaveBeenCalledWith({
         title: "Run Paused ⏸️",
         description: "Tap resume when ready to continue",
@@ -258,14 +259,14 @@ describe('RecordScreen', () => {
 
       // Resume run
       const resumeButton = screen.getByRole('button', { name: 'Resume Run' })
-      await act(async () => {
-        fireEvent.click(resumeButton)
-      })
+      fireEvent.click(resumeButton)
 
-      expect(mockToast).toHaveBeenCalledWith({
-        title: "Run Resumed! 🏃‍♂️",
-        description: "Keep going, you've got this!",
-      })
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith({
+          title: "Run Resumed! 🏃‍♂️",
+          description: "Keep going, you've got this!",
+        })
+      }, { timeout: 5000 })
     })
   })
 
@@ -304,26 +305,20 @@ describe('RecordScreen', () => {
     })
 
     it('should save run data to database when stopped', async () => {
-      await act(async () => {
-        render(<RecordScreen />)
-      })
+      render(<RecordScreen />)
 
       // Start run
       const startButton = screen.getByRole('button', { name: 'Start Run' })
-      await act(async () => {
-        fireEvent.click(startButton)
-      })
+      fireEvent.click(startButton)
 
-      // Wait a bit for metrics to accumulate
-      await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 100))
-      })
+      // Wait for run to start
+      await waitFor(() => {
+        expect(mockGeolocation.watchPosition).toHaveBeenCalled()
+      }, { timeout: 5000 })
 
       // Stop run
       const stopButton = screen.getByRole('button', { name: 'Stop Run' })
-      await act(async () => {
-        fireEvent.click(stopButton)
-      })
+      fireEvent.click(stopButton)
 
       await waitFor(() => {
         expect(dbUtils.createRun).toHaveBeenCalledWith(
@@ -338,7 +333,7 @@ describe('RecordScreen', () => {
             completedAt: expect.any(Date)
           })
         )
-      })
+      }, { timeout: 5000 })
 
       expect(dbUtils.markWorkoutCompleted).toHaveBeenCalledWith(1)
       expect(mockPush).toHaveBeenCalledWith('/')

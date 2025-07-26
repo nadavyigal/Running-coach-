@@ -17,6 +17,7 @@ export function MonthlyCalendarView() {
   const [showDateWorkoutModal, setShowDateWorkoutModal] = useState(false)
   const [workouts, setWorkouts] = useState<Workout[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [draggedWorkout, setDraggedWorkout] = useState<any>(null)
 
   const monthNames = [
     "January",
@@ -122,6 +123,10 @@ export function MonthlyCalendarView() {
   }
 
   const handleDateClick = (date: Date) => {
+    if (draggedWorkout) {
+      return // Don't handle click when dragging
+    }
+    
     const dateKey = formatDateKey(date)
     const workout = workoutData[dateKey as keyof typeof workoutData]
 
@@ -136,6 +141,62 @@ export function MonthlyCalendarView() {
       setSelectedDate(date)
       setShowAddRunModal(true)
     }
+  }
+
+  const handleDragStart = (e: React.DragEvent, workout: any, date: Date) => {
+    e.stopPropagation()
+    setDraggedWorkout({ ...workout, originalDate: date })
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragEnd = () => {
+    setDraggedWorkout(null)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDrop = async (e: React.DragEvent, targetDate: Date) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    if (!draggedWorkout) return
+
+    const targetDateKey = formatDateKey(targetDate)
+    const existingWorkout = workoutData[targetDateKey as keyof typeof workoutData]
+    
+    // Don't allow dropping on a date that already has a workout
+    if (existingWorkout) {
+      alert("This date already has a workout scheduled. Please choose a different date.")
+      setDraggedWorkout(null)
+      return
+    }
+
+    try {
+      // Update the workout in the database
+      await dbUtils.updateWorkout(draggedWorkout.id, {
+        scheduledDate: targetDate,
+        day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][targetDate.getDay()]
+      })
+
+      // Refresh the workouts
+      const user = await dbUtils.getCurrentUser()
+      if (user && user.id) {
+        const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+        const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+        const monthWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfMonth, endOfMonth)
+        setWorkouts(monthWorkouts)
+      }
+
+      alert(`Workout moved to ${targetDate.toLocaleDateString()}!`)
+    } catch (error) {
+      console.error('Failed to move workout:', error)
+      alert("Failed to move workout. Please try again.")
+    }
+
+    setDraggedWorkout(null)
   }
 
   const isToday = (date: Date) => {
@@ -198,18 +259,29 @@ export function MonthlyCalendarView() {
                   key={index}
                   className={`h-12 border rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md ${
                     today ? "bg-green-100 border-green-300 ring-2 ring-green-200" : "hover:bg-gray-50 border-gray-200"
-                  }`}
+                  } ${draggedWorkout ? "hover:bg-blue-100 border-blue-300" : ""}`}
                   onClick={() => handleDateClick(date)}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, date)}
                 >
                   <span className={`text-sm ${today ? "font-bold text-green-800" : "text-gray-700"}`}>
                     {date.getDate()}
                   </span>
                   {workout && (
-                    <div className="flex items-center justify-center mt-1">
+                    <div 
+                      className="flex items-center justify-center mt-1"
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, workout, date)}
+                      onDragEnd={handleDragEnd}
+                      title="Drag to move workout to another day"
+                    >
                       <div
-                        className={`w-1.5 h-1.5 rounded-full ${workout.color} ${workout.completed ? "" : "opacity-60"}`}
+                        className={`w-2 h-2 rounded-full ${workout.color} ${workout.completed ? "" : "opacity-60"} cursor-move hover:scale-125 transition-transform`}
                       />
                     </div>
+                  )}
+                  {draggedWorkout && !workout && (
+                    <div className="text-xs text-blue-600 mt-1">Drop here</div>
                   )}
                 </div>
               )

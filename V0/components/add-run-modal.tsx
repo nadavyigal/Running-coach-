@@ -224,28 +224,40 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
 
   // Function to check if a date should be disabled in the calendar
   const isDateDisabled = (date: Date) => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     
-    // Normalize the input date to start of day for proper comparison
-    const normalizedDate = new Date(date)
-    normalizedDate.setHours(0, 0, 0, 0)
+    const normalizedDate = new Date(date);
+    normalizedDate.setHours(0, 0, 0, 0);
     
-    // Disable dates before today
-    if (normalizedDate < today) {
-      return true
+    // Allow past dates for manual run logging (up to 30 days)
+    const thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    
+    // Allow future dates for scheduling (up to 90 days)
+    const ninetyDaysFromNow = new Date(today);
+    ninetyDaysFromNow.setDate(today.getDate() + 90);
+    
+    // Debug logging for date validation
+    console.log("🔍 Date validation:", {
+      inputDate: date.toISOString(),
+      normalizedDate: normalizedDate.toISOString(),
+      today: today.toISOString(),
+      thirtyDaysAgo: thirtyDaysAgo.toISOString(),
+      ninetyDaysFromNow: ninetyDaysFromNow.toISOString(),
+      isBeforeThirtyDays: normalizedDate < thirtyDaysAgo,
+      isAfterNinetyDays: normalizedDate > ninetyDaysFromNow
+    })
+    
+    const isDisabled = normalizedDate < thirtyDaysAgo || normalizedDate > ninetyDaysFromNow;
+    
+    if (isDisabled) {
+      console.log("❌ Date disabled: outside 30-day past to 90-day future range")
+    } else {
+      console.log("✅ Date allowed")
     }
     
-    // Disable dates after plan end date (if available)
-    if (planEndDate) {
-      const normalizedPlanEndDate = new Date(planEndDate)
-      normalizedPlanEndDate.setHours(0, 0, 0, 0)
-      if (normalizedDate > normalizedPlanEndDate) {
-        return true
-      }
-    }
-    
-    return false
+    return isDisabled;
   }
 
   const presetDistances = [

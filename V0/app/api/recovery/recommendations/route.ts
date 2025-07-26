@@ -8,19 +8,59 @@ export async function GET(request: NextRequest) {
     const date = searchParams.get('date') ? new Date(searchParams.get('date')!) : new Date();
     
     // Get current recovery score to generate recommendations
-    const recoveryScore = await RecoveryEngine.getRecoveryScore(userId, date);
+    let recoveryScore;
+    try {
+      recoveryScore = await RecoveryEngine.getRecoveryScore(userId, date);
+    } catch (error) {
+      console.warn('Failed to get existing recovery score, will calculate new one:', error);
+      recoveryScore = null;
+    }
     
     if (!recoveryScore) {
       // Calculate recovery score if none exists
-      const newScore = await RecoveryEngine.calculateRecoveryScore(userId, date);
-      return NextResponse.json({
-        success: true,
-        data: {
-          recommendations: newScore.recommendations,
-          recoveryScore: newScore.overallScore,
-          confidence: newScore.confidence
-        }
-      });
+      try {
+        const newScore = await RecoveryEngine.calculateRecoveryScore(userId, date);
+        return NextResponse.json({
+          success: true,
+          data: {
+            recommendations: newScore.recommendations,
+            recoveryScore: newScore.overallScore,
+            confidence: newScore.confidence,
+            breakdown: {
+              sleepScore: newScore.sleepScore,
+              hrvScore: newScore.hrvScore,
+              restingHRScore: newScore.restingHRScore,
+              subjectiveWellnessScore: newScore.subjectiveWellnessScore,
+              trainingLoadImpact: newScore.trainingLoadImpact,
+              stressLevel: newScore.stressLevel
+            }
+          }
+        });
+      } catch (calcError) {
+        console.error('Failed to calculate recovery score:', calcError);
+        // Return default recommendations if calculation fails
+        return NextResponse.json({
+          success: true,
+          data: {
+            recommendations: [
+              "Get adequate sleep (7-9 hours) for optimal recovery",
+              "Stay hydrated throughout the day",
+              "Consider light stretching or mobility work",
+              "Monitor how you feel before intense training"
+            ],
+            recoveryScore: 50,
+            confidence: 30,
+            breakdown: {
+              sleepScore: 50,
+              hrvScore: 50,
+              restingHRScore: 50,
+              subjectiveWellnessScore: 50,
+              trainingLoadImpact: 0,
+              stressLevel: 50
+            }
+          }
+        });
+      }
     }
     
     return NextResponse.json({

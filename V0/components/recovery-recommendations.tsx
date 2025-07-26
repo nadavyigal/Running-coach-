@@ -44,6 +44,11 @@ export default function RecoveryRecommendations({
       setError(null);
 
       const response = await fetch(`/api/recovery/recommendations?userId=${userId}&date=${date.toISOString()}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       const data = await response.json();
       
       if (data.success) {
@@ -52,7 +57,9 @@ export default function RecoveryRecommendations({
         setError(data.error || 'Failed to load recommendations');
       }
     } catch (err) {
-      setError('Failed to load recovery recommendations');
+      // Provide more detailed error message
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+      setError(`Failed to load recovery recommendations: ${errorMessage}`);
       console.error('Error loading recommendations:', err);
     } finally {
       setLoading(false);

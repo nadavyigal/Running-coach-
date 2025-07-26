@@ -114,6 +114,27 @@ This guide provides solutions for common onboarding issues in the Run-Smart appl
 3. Try different browser
 4. Contact support for data recovery
 
+### Issue: ChunkLoadError - Loading Chunks Failed
+**Symptoms**: "ChunkLoadError: Loading chunk app/layout failed" or similar chunk timeout errors
+**Causes**:
+- Corrupted Next.js build cache
+- Webpack chunk loading timeouts
+- Network connectivity issues during chunk loading
+- Browser cache conflicts
+
+**Solutions**:
+1. **Clear Next.js cache**: Delete `.next` directory and restart dev server
+2. **Clear browser cache**: Hard refresh (Ctrl+Shift+R) or clear all browser data
+3. **Restart development server**: Stop and restart `npm run dev`
+4. **Use cache clearing script**: Run `clear-cache-and-restart.ps1` (Windows)
+5. **Check network connection**: Ensure stable internet connection
+6. **Try incognito mode**: Test in private browsing to avoid cache issues
+
+**Technical Fix (Developers)**:
+- The app now includes `ChunkErrorBoundary` component that automatically reloads the page when chunk errors occur
+- Enhanced `next.config.mjs` with optimized webpack settings and chunk loading timeouts
+- Automatic error recovery with graceful fallback UI
+
 ### Issue: Session Conflicts
 **Symptoms**: Multiple onboarding sessions detected
 **Causes**:
@@ -155,6 +176,26 @@ This guide provides solutions for common onboarding issues in the Run-Smart appl
 2. Use fallback to guided form-based onboarding
 3. Try again later
 4. Contact support if persistent
+
+### Issue: Chat API Validation Errors
+**Symptoms**: "Invalid JSON" or "Request body cannot be empty" errors in chat
+**Causes**:
+- Malformed request data
+- Missing required fields (messages, currentPhase)
+- Incorrect content-type headers
+- Empty or invalid JSON payload
+
+**Solutions**:
+1. **Refresh the page** to reset the chat session
+2. **Clear browser cache** and restart the session
+3. **Try different browser** if problem persists
+4. **Check network connection** for data corruption during transmission
+
+**Technical Details (Developers)**:
+- Enhanced request validation in `/api/onboarding/chat`
+- Improved error messages with fallback options
+- Better JSON parsing with error handling
+- Automatic fallback to form-based onboarding on API failures
 
 ### Issue: AI Responses Too Slow
 **Symptoms**: Long delays in AI responses
@@ -319,6 +360,21 @@ curl -X POST http://localhost:3000/api/onboarding/chat \
 curl -X POST http://localhost:3000/api/generate-plan \
   -H "Content-Type: application/json" \
   -d '{"goal":"habit","age":25,"experience":"beginner"}'
+
+# Test recovery API endpoints
+curl -X GET http://localhost:3000/api/recovery/score
+curl -X POST http://localhost:3000/api/recovery/sleep \
+  -H "Content-Type: application/json" \
+  -d '{"duration":8,"quality":"good","deepSleep":25}'
+
+# Test device integration endpoints
+curl -X GET http://localhost:3000/api/devices
+curl -X POST http://localhost:3000/api/devices/connect \
+  -H "Content-Type: application/json" \
+  -d '{"deviceType":"applewatch","deviceId":"test-device"}'
+
+# Test health endpoint for app status
+curl -X GET http://localhost:3000/api/health
 ```
 
 #### Monitor Logs
@@ -423,6 +479,12 @@ If AI services are completely unavailable:
 
 ---
 
-*Last Updated: 2025-01-13*
-*Version: 1.0*
-*Maintained by: Development Team* 
+*Last Updated: 2025-07-23*
+*Version: 1.1*
+*Maintained by: Development Team*
+
+## Recent Updates
+- Added ChunkLoadError troubleshooting and automatic error recovery
+- Enhanced Chat API error handling and validation
+- Added new API endpoints for recovery metrics and device integration
+- Improved developer debugging tools and commands 

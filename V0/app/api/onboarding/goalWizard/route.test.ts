@@ -2,22 +2,22 @@ import { NextRequest } from 'next/server'
 import { POST } from './route'
 
 // Mock OpenAI
-jest.mock('@ai-sdk/openai', () => ({
-  openai: jest.fn(() => ({
-    streamText: jest.fn()
+vi.mock('@ai-sdk/openai', () => ({
+  openai: vi.fn(() => ({
+    streamText: vi.fn()
   }))
 }))
 
 // Mock the AI SDK
-jest.mock('ai', () => ({
-  streamText: jest.fn(() => ({
+vi.mock('ai', () => ({
+  streamText: vi.fn(() => ({
     text: Promise.resolve("That's great! Let's explore your goals further.")
   }))
 }))
 
 describe('goalWizard API', () => {
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   it('returns error for invalid request format', async () => {

@@ -1,8 +1,8 @@
 import { streamText } from "ai"
 import { openai } from "@ai-sdk/openai"
-import { NextRequest } from "next/server"
 import { adaptiveCoachingEngine, UserContext } from '@/lib/adaptiveCoachingEngine'
 import { dbUtils } from '@/lib/db'
+import { withChatSecurity, validateAndSanitizeInput, ApiRequest } from '@/lib/security.middleware'
 
 // Token budget configuration
 const MONTHLY_TOKEN_BUDGET = 200000 // Approximate tokens for $50/mo budget
@@ -42,11 +42,21 @@ function checkRateLimit(userId: string): boolean {
   return requests.count <= RATE_LIMIT_PER_USER_PER_HOUR
 }
 
-export async function POST(req: NextRequest) {
+async function chatHandler(req: ApiRequest) {
   console.log('💬 Chat API: Starting request');
   
   try {
-    const body = await req.json();
+    // Validate and sanitize input
+    const validation = await validateAndSanitizeInput(req, 1000);
+    if (!validation.valid) {
+      console.error('❌ Input validation failed:', validation.error);
+      return new Response(JSON.stringify({ error: validation.error || "Invalid input" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    const body = validation.sanitized || await req.json();
     console.log('📝 Request body keys:', Object.keys(body));
     console.log('👤 User ID:', body.userId);
     
@@ -112,7 +122,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Add explicit timeout for the entire request
-    const TIMEOUT_MS = 30000; // 30 seconds
+    const TIMEOUT_MS = 60000; // 60 seconds - increased for complex responses
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('Request timeout')), TIMEOUT_MS);
     });
@@ -337,3 +347,6 @@ export async function POST(req: NextRequest) {
     })
   }
 }
+
+// Export the secured handler
+export const POST = withChatSecurity(chatHandler);

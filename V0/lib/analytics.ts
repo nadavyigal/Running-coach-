@@ -95,3 +95,24 @@ export const trackOnboardingEvent = async (eventName: string, properties?: Recor
 export const trackAnalyticsEvent = async (eventName: string, properties?: Record<string, any>) => {
   await trackEvent(eventName, properties)
 }
+
+// Additional analytics functions for comprehensive coverage
+export const trackOnboardingChatMessage = async (properties?: Record<string, any>) => {
+  await trackEvent('onboarding_chat_message', properties)
+}
+
+export const trackConversationPhase = async (properties?: Record<string, any>) => {
+  await trackEvent('conversation_phase', properties)
+}
+
+export const trackAIGuidanceUsage = async (properties?: Record<string, any>) => {
+  await trackEvent('ai_guidance_usage', properties)
+}
+
+export const trackOnboardingCompletion = async (properties?: Record<string, any>) => {
+  await trackEvent('onboarding_completion', properties)
+}
+
+export const trackError = async (properties?: Record<string, any>) => {
+  await trackEvent('error_occurred', properties)
+}
