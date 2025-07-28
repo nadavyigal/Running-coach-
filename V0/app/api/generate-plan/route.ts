@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
+import { withErrorHandling, ErrorResponses } from '@/lib/errorHandler.middleware';
+import { withSecureOpenAI } from '@/lib/apiKeyManager';
+import { withApiSecurity } from '@/lib/security.middleware';
 
 /**
  * Zod schema for user context from onboarding data
@@ -140,70 +143,44 @@ const PlanSchema = z.object({
  * 
  * @since 1.0.0
  */
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    
-    // Check if this is an enhanced request with onboarding data
-    if (body.userContext) {
-      return await handleEnhancedPlanRequest(body);
-    }
-    
-    // Handle legacy request format
-    const { user, planType, targetDistance, rookie_challenge } = body;
+async function generatePlanHandler(req: NextRequest) {
+  const body = await req.json();
+  
+  // Check if this is an enhanced request with onboarding data
+  if (body.userContext) {
+    return await handleEnhancedPlanRequest(body);
+  }
+  
+  // Handle legacy request format
+  const { user, planType, targetDistance, rookie_challenge } = body;
 
-    // Validate OpenAI API key configuration
-    // This ensures proper API access before attempting plan generation
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your_openai_api_key_here' || !process.env.OPENAI_API_KEY.startsWith('sk-')) {
-      console.warn('OpenAI API key not configured or invalid - returning structured error for fallback');
-      return NextResponse.json({ 
-        error: 'OpenAI API key is not configured or is invalid',
-        errorType: 'API_KEY_INVALID',
-        fallbackRequired: true,
-        message: 'AI plan generation is not available due to an invalid API key. The app will use a fallback plan instead.'
-      }, { status: 422 });
-    }
+  // Build the comprehensive prompt based on user preferences
+  const prompt = buildPlanPrompt(user, planType, targetDistance, rookie_challenge);
 
-    // Build the comprehensive prompt based on user preferences
-    const prompt = buildPlanPrompt(user, planType, targetDistance, rookie_challenge);
-
-    try {
+  // Use secure OpenAI wrapper
+  const result = await withSecureOpenAI(
+    async () => {
       const { object: generatedPlan } = await generateObject({
         model: openai('gpt-4o'),
         schema: PlanSchema,
         prompt,
         temperature: 0.7,
       });
-
-      return NextResponse.json({ 
-        plan: generatedPlan,
-        source: 'ai'
-      });
-    } catch (error) {
-      console.error('Error generating plan with OpenAI:', error);
-      return NextResponse.json({ 
-        error: 'Failed to generate plan with OpenAI',
-        errorType: 'GENERATION_ERROR',
-        fallbackRequired: true,
-        message: 'There was an issue creating the plan using AI. A fallback plan will be used instead.',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      }, { status: 500 });
+      return generatedPlan;
     }
-  } catch (error) {
-    console.error('Failed to generate plan:', error);
-    
-    // Provide structured error information for better frontend handling
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    
-    return NextResponse.json({ 
-      error: 'Failed to generate training plan',
-      errorType: 'GENERATION_ERROR',
-      fallbackRequired: true,
-      message: 'AI plan generation failed. The app will use a fallback plan instead.',
-      details: errorMessage
-    }, { status: 500 });
+  );
+
+  if (!result.success) {
+    return NextResponse.json(result.error, { status: result.error.status });
   }
+
+  return NextResponse.json({ 
+    plan: result.data,
+    source: 'ai'
+  });
 }
+
+export const POST = withApiSecurity(withErrorHandling(generatePlanHandler, 'GeneratePlan'));
 
 /**
  * Handles enhanced plan requests with onboarding data integration
@@ -212,56 +189,35 @@ export async function POST(req: NextRequest) {
  * @returns Promise<NextResponse> JSON response with personalized plan
  */
 async function handleEnhancedPlanRequest(body: any) {
-  try {
-    // Validate the enhanced request
-    const requestData = EnhancedPlanRequest.parse(body);
-    
-    // Validate OpenAI API key
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your_openai_api_key_here' || !process.env.OPENAI_API_KEY.startsWith('sk-')) {
-      return NextResponse.json({ 
-        error: 'OpenAI API key is not configured or is invalid',
-        errorType: 'API_KEY_INVALID',
-        fallbackRequired: true,
-        message: 'AI plan generation is not available due to an invalid API key.'
-      }, { status: 422 });
+  // Validate the enhanced request
+  const requestData = EnhancedPlanRequest.parse(body);
+  
+  // Build enhanced prompt with onboarding data
+  const prompt = buildEnhancedPlanPrompt(requestData);
+
+  // Use secure OpenAI wrapper
+  const result = await withSecureOpenAI(
+    async () => {
+      const { object: generatedPlan } = await generateObject({
+        model: openai('gpt-4o'),
+        schema: PlanSchema,
+        prompt,
+        temperature: 0.7,
+      });
+      return generatedPlan;
     }
+  );
 
-    // Build enhanced prompt with onboarding data
-    const prompt = buildEnhancedPlanPrompt(requestData);
-
-    const { object: generatedPlan } = await generateObject({
-      model: openai('gpt-4o'),
-      schema: PlanSchema,
-      prompt,
-      temperature: 0.7,
-    });
-
-    return NextResponse.json({ 
-      plan: generatedPlan,
-      source: 'ai',
-      adaptationTrigger: requestData.adaptationTrigger,
-      userContext: requestData.userContext
-    });
-    
-  } catch (error) {
-    console.error('Error in enhanced plan generation:', error);
-    
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ 
-        error: 'Invalid enhanced plan request data',
-        errorType: 'VALIDATION_ERROR',
-        details: error.errors,
-        fallbackRequired: true
-      }, { status: 400 });
-    }
-    
-    return NextResponse.json({ 
-      error: 'Failed to generate enhanced training plan',
-      errorType: 'GENERATION_ERROR',
-      fallbackRequired: true,
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+  if (!result.success) {
+    return NextResponse.json(result.error, { status: result.error.status });
   }
+
+  return NextResponse.json({ 
+    plan: result.data,
+    source: 'ai',
+    adaptationTrigger: requestData.adaptationTrigger,
+    userContext: requestData.userContext
+  });
 }
 
 /**
@@ -362,7 +318,7 @@ Generate a structured plan that will help this runner achieve their goals safely
 function buildEnhancedPlanPrompt(requestData: any): string {
   const { userContext, recentRuns, currentGoals, adaptationTrigger } = requestData;
   
-  let prompt = `Create a highly personalized running training plan using comprehensive user context:
+  const prompt = `Create a highly personalized running training plan using comprehensive user context:
 
 **Runner Profile:**
 - Experience Level: ${userContext.experience}

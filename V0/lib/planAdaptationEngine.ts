@@ -189,7 +189,7 @@ export class PlanAdaptationEngine {
   async generatePersonalizedPrompt(userContext: UserContext): Promise<string> {
     const { goal, experience, motivations, barriers, coachingStyle } = userContext;
 
-    let prompt = `Create a personalized running plan for a ${experience} runner with the following characteristics:
+    const prompt = `Create a personalized running plan for a ${experience} runner with the following characteristics:
 
 **Goals & Motivations:**
 - Primary Goal: ${goal}
@@ -335,7 +335,7 @@ Generate a plan that will help this runner overcome their barriers and achieve t
     let reason = '';
     let adaptationType: 'progressive' | 'regressive' | 'maintenance' = 'maintenance';
     let confidence = 0;
-    let recommendedChanges: string[] = [];
+    const recommendedChanges: string[] = [];
 
     // Check for completion issues
     if (completionAnalysis.completionRate < 0.6) {

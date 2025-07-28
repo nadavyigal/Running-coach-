@@ -5,12 +5,13 @@ import { z } from 'zod';
 export const dynamic = 'force-dynamic';
 
 const cohortStatsSchema = z.object({
-  userId: z.string().min(1, 'User ID is required').refine((val) => {
+  userId: z.string().nullable().refine((val) => {
+    if (!val) return false;
     const parsed = parseInt(val);
     return !isNaN(parsed) && parsed > 0;
   }, 'User ID must be a valid positive number'),
-  includePerformance: z.string().transform(val => val === 'true').optional().default(false),
-  timeRange: z.enum(['7d', '30d', '90d', '1y']).optional().default('30d'),
+  includePerformance: z.string().nullable().transform(val => val === 'true').optional().default(false),
+  timeRange: z.enum(['7d', '30d', '90d', '1y']).nullable().optional().default('30d'),
 });
 
 export async function GET(req: NextRequest) {

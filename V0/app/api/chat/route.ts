@@ -3,6 +3,8 @@ import { openai } from "@ai-sdk/openai"
 import { adaptiveCoachingEngine, UserContext } from '@/lib/adaptiveCoachingEngine'
 import { dbUtils } from '@/lib/db'
 import { withChatSecurity, validateAndSanitizeInput, ApiRequest } from '@/lib/security.middleware'
+// Error handling is managed by the secure wrapper and middleware
+import { withSecureOpenAI } from '@/lib/apiKeyManager'
 
 // Token budget configuration
 const MONTHLY_TOKEN_BUDGET = 200000 // Approximate tokens for $50/mo budget
@@ -107,19 +109,7 @@ async function chatHandler(req: ApiRequest) {
     const useAdaptiveCoaching = userId && parseInt(userId) > 0;
     console.log(`🤖 Use adaptive coaching: ${useAdaptiveCoaching} (userId: ${userId})`);
     
-    // Check OpenAI API key
-    const openaiKey = process.env.OPENAI_API_KEY;
-    console.log(`🔑 OpenAI API key: ${openaiKey ? 'Present' : '❌ MISSING'}`);
-    
-    if (!openaiKey) {
-      console.error('❌ OpenAI API key is not configured!');
-      return new Response(JSON.stringify({ 
-        error: "AI service is not configured. Please contact support." 
-      }), {
-        status: 503,
-        headers: { "Content-Type": "application/json" }
-      })
-    }
+    // OpenAI API key validation is now handled by withSecureOpenAI wrapper
 
     // Add explicit timeout for the entire request
     const TIMEOUT_MS = 60000; // 60 seconds - increased for complex responses
@@ -251,40 +241,34 @@ async function chatHandler(req: ApiRequest) {
     console.log(`📨 Prepared ${apiMessages.length} messages for OpenAI`);
     console.log('⚙️ Using model: gpt-4o, maxTokens: 500, temperature: 0.7');
 
-    try {
-      console.log('🔄 Calling OpenAI streamText...');
-      
-      // Add timeout to OpenAI call
-      const streamResult = await Promise.race([
-        streamText({
-          model: openai("gpt-4o"),
-          messages: apiMessages,
-          maxTokens: 500, // Limit response length to control costs
-          temperature: 0.7,
-        }),
-        timeoutPromise
-      ]) as any;
+    // Use secure OpenAI wrapper for stream generation
+    const result = await withSecureOpenAI(
+      async () => {
+        console.log('🔄 Calling OpenAI streamText...');
+        
+        const streamResult = await Promise.race([
+          streamText({
+            model: openai("gpt-4o"),
+            messages: apiMessages,
+            maxTokens: 500, // Limit response length to control costs
+            temperature: 0.7,
+          }),
+          timeoutPromise
+        ]) as any;
 
-      console.log('✅ OpenAI streamText call initiated successfully');
-      return streamResult.toDataStreamResponse()
-      
-    } catch (openaiError) {
-      console.error('❌ OpenAI streamText failed:', openaiError);
-      
-      // If it's a timeout, provide a specific error
-      if (openaiError instanceof Error && openaiError.message === 'Request timeout') {
-        console.error('⏱️ OpenAI request timed out');
-        return new Response(JSON.stringify({
-          error: "The AI coach is taking too long to respond. Please try again with a shorter message.",
-          fallback: true
-        }), {
-          status: 408,
-          headers: { "Content-Type": "application/json" }
-        })
+        console.log('✅ OpenAI streamText call initiated successfully');
+        return streamResult;
       }
-      
-      throw openaiError; // Re-throw to be caught by outer catch block
+    );
+    
+    if (!result.success) {
+      return new Response(JSON.stringify(result.error), {
+        status: result.error.status,
+        headers: { "Content-Type": "application/json" }
+      });
     }
+    
+    return result.data.toDataStreamResponse();
 
   } catch (error) {
     console.error('❌ Chat API error occurred:', error);

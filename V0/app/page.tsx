@@ -16,7 +16,7 @@ import { onboardingManager } from "@/lib/onboardingManager"
 import { useChunkErrorHandler } from "@/components/chunk-error-boundary"
 
 export default function RunSmartApp() {
-  const [currentScreen, setCurrentScreen] = useState<string>("onboarding")
+  const [currentScreen, setCurrentScreen] = useState<string>("today")
   const [isOnboardingComplete, setIsOnboardingComplete] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
@@ -30,17 +30,26 @@ export default function RunSmartApp() {
   useEffect(() => {
     console.log('🔍 RunSmartApp useEffect running...')
     
-    // Add timeout to prevent infinite loading
-    const loadingTimeout = setTimeout(() => {
-      console.log('⏰ Loading timeout reached, showing onboarding as fallback')
-      setIsLoading(false)
-      setHasError(true)
-    }, 5000) // 5 second timeout
+    let loadingTimeout: NodeJS.Timeout | null = null
     
     // Check if onboarding is complete by checking database
     const checkOnboardingStatus = async () => {
       try {
+        // Add timeout to prevent infinite loading
+        loadingTimeout = setTimeout(() => {
+          console.log('⏰ Loading timeout reached, showing onboarding as fallback')
+          setIsLoading(false)
+          setHasError(true)
+        }, 5000) // 5 second timeout
+        
         console.log('📊 Checking onboarding status...')
+        
+        // Add safety check to prevent multiple execution
+        if (!isLoading) {
+          console.log('🛑 Loading already completed, skipping check')
+          return
+        }
+        
         const user = await dbUtils.getCurrentUser()
         console.log('👤 User found:', user ? 'Yes' : 'No')
         
@@ -50,33 +59,47 @@ export default function RunSmartApp() {
           setCurrentScreen("today")
           planAdjustmentService.init(user.id!)
         } else {
-          // Check localStorage for backward compatibility
-          console.log('🔍 Checking localStorage for onboarding status...')
-          const onboardingComplete = localStorage.getItem("onboarding-complete")
-          if (onboardingComplete) {
-            console.log('🔄 Migrating from localStorage...')
-            // Migrate from localStorage
-            await dbUtils.migrateFromLocalStorage()
-            const migratedUser = await dbUtils.getCurrentUser()
-            if (migratedUser) {
-              planAdjustmentService.init(migratedUser.id!)
+          // Check localStorage for backward compatibility only if in browser
+          if (typeof window !== 'undefined') {
+            console.log('🔍 Checking localStorage for onboarding status...')
+            const onboardingComplete = localStorage.getItem("onboarding-complete")
+            if (onboardingComplete) {
+              console.log('🔄 Migrating from localStorage...')
+              // Migrate from localStorage
+              await dbUtils.migrateFromLocalStorage()
+              const migratedUser = await dbUtils.getCurrentUser()
+              if (migratedUser) {
+                planAdjustmentService.init(migratedUser.id!)
+              }
+              setIsOnboardingComplete(true)
+              setCurrentScreen("today")
+            } else {
+              console.log('📝 Onboarding not complete, staying on onboarding screen')
             }
-            setIsOnboardingComplete(true)
-            setCurrentScreen("today")
           } else {
-            console.log('📝 Onboarding not complete, staying on onboarding screen')
+            console.log('📝 Server-side render, skipping localStorage check')
           }
         }
       } catch (error) {
         console.error('❌ Failed to check onboarding status:', error)
         setHasError(true)
       } finally {
-        clearTimeout(loadingTimeout)
+        if (loadingTimeout) {
+          clearTimeout(loadingTimeout)
+        }
         setIsLoading(false)
       }
     }
 
     checkOnboardingStatus()
+  }, [])
+
+  // Separate useEffect for event listeners to avoid SSR issues
+  useEffect(() => {
+    // Only run on client side
+    if (typeof window === "undefined") return
+
+    console.log('🔗 Adding navigation event listeners...')
 
     // Listen for navigation events
     const handleNavigateToRecord = () => {
@@ -98,51 +121,88 @@ export default function RunSmartApp() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.shiftKey && event.key === 'D') {
         event.preventDefault()
-        setShowDebugPanel(!showDebugPanel)
+        setShowDebugPanel(prev => !prev)
       }
     }
 
-    // Add event listeners only if we're in the browser
-    if (typeof window !== "undefined") {
-      console.log('🔗 Adding navigation event listeners...')
-      window.addEventListener("navigate-to-record", handleNavigateToRecord)
-      window.addEventListener("navigate-to-analytics", handleNavigateToAnalytics)
-      window.addEventListener("navigate-to-chat", handleNavigateToChat)
-      window.addEventListener("keydown", handleKeyDown)
+    // Add event listeners
+    window.addEventListener("navigate-to-record", handleNavigateToRecord)
+    window.addEventListener("navigate-to-analytics", handleNavigateToAnalytics)
+    window.addEventListener("navigate-to-chat", handleNavigateToChat)
+    window.addEventListener("keydown", handleKeyDown)
 
-      // Cleanup function
-      return () => {
-        console.log('🧹 Cleaning up navigation event listeners...')
-        window.removeEventListener("navigate-to-record", handleNavigateToRecord)
-        window.removeEventListener("navigate-to-analytics", handleNavigateToAnalytics)
-        window.removeEventListener("navigate-to-chat", handleNavigateToChat)
-        window.removeEventListener("keydown", handleKeyDown)
-        clearTimeout(loadingTimeout)
-      }
+    // Cleanup function
+    return () => {
+      console.log('🧹 Cleaning up navigation event listeners...')
+      window.removeEventListener("navigate-to-record", handleNavigateToRecord)
+      window.removeEventListener("navigate-to-analytics", handleNavigateToAnalytics)
+      window.removeEventListener("navigate-to-chat", handleNavigateToChat)
+      window.removeEventListener("keydown", handleKeyDown)
     }
-  }, [])
+  }, [showDebugPanel])
 
   const handleOnboardingComplete = async () => {
     console.log('✅ Onboarding completed by user')
     
-    // Check if onboarding is still in progress to prevent race conditions
-    if (onboardingManager.isOnboardingInProgress()) {
-      console.log('⚠️ Onboarding already in progress, waiting...')
-      return;
-    }
-    
-    // Initialize plan adjustment service with the user
+    // Wait for onboarding to finish and verify data was saved
     try {
+      console.log('🔍 Waiting for onboarding to complete and verifying data...')
+      
+      // Wait a moment for onboarding operations to finish
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      // Verify user was created successfully
       const user = await dbUtils.getCurrentUser()
-      if (user?.id) {
-        planAdjustmentService.init(user.id)
+      if (!user) {
+        console.error('❌ No user found after onboarding completion')
+        throw new Error('User creation failed during onboarding')
       }
+      
+      console.log('✅ User verified:', { id: user.id, onboardingComplete: user.onboardingComplete })
+      
+      // Verify user has onboarding complete flag
+      if (!user.onboardingComplete) {
+        console.error('❌ User onboarding not marked as complete')
+        throw new Error('Onboarding completion not properly saved')
+      }
+      
+      // Verify user has an active plan
+      const activePlan = await dbUtils.getActivePlan(user.id!)
+      if (!activePlan) {
+        console.error('❌ No active plan found after onboarding completion')
+        throw new Error('Training plan creation failed during onboarding')
+      }
+      
+      console.log('✅ Active plan verified:', { id: activePlan.id, title: activePlan.title })
+      
+      // Initialize plan adjustment service with the user
+      try {
+        planAdjustmentService.init(user.id!)
+        console.log('✅ Plan adjustment service initialized')
+      } catch (error) {
+        console.error('⚠️ Failed to initialize plan adjustment service:', error)
+        // Don't throw here, this is not critical for the onboarding flow
+      }
+      
+      // All verifications passed, update app state
+      console.log('🎉 Onboarding verification complete, transitioning to Today screen')
+      setIsOnboardingComplete(true)
+      setCurrentScreen("today")
+      
     } catch (error) {
-      console.error('⚠️ Failed to initialize plan adjustment service:', error)
+      console.error('❌ Onboarding completion verification failed:', error)
+      
+      // Show error state but don't navigate away
+      setHasError(true)
+      
+      // Reset onboarding state to allow retry
+      onboardingManager.resetOnboardingState()
+      
+      // Optional: Show user-friendly error message
+      if (typeof window !== 'undefined') {
+        alert('Onboarding completion failed. Please try again or refresh the page.')
+      }
     }
-    
-    setIsOnboardingComplete(true)
-    setCurrentScreen("today")
   }
 
   console.log('🎭 Current screen:', currentScreen, 'Onboarding complete:', isOnboardingComplete, 'Loading:', isLoading, 'Error:', hasError)
@@ -173,8 +233,9 @@ export default function RunSmartApp() {
   }
 
   const renderScreen = () => {
-    if (!isOnboardingComplete && currentScreen === "onboarding") {
-      console.log('🎓 Rendering onboarding screen')
+    // Always show onboarding if not completed, regardless of currentScreen
+    if (!isOnboardingComplete) {
+      console.log('🎓 Rendering onboarding screen - onboarding not complete')
       return (
         <OnboardingScreen 
           onComplete={handleOnboardingComplete}

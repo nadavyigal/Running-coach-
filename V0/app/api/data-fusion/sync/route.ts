@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    let fusedPoints = [];
+    const fusedPoints = [];
     
     // If data points are provided, process them
     if (dataPoints && dataPoints.length > 0) {
