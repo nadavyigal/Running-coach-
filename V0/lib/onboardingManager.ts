@@ -279,25 +279,7 @@ export class OnboardingManager {
   /**
    * Generate training plan with unified logic
    */
-  private async generateTrainingPlan(profile: OnboardingProfile): Promise<number> {
-    const user: User = {
-      id: this.currentUserId!,
-      goal: profile.goal,
-      experience: profile.experience,
-      preferredTimes: profile.preferredTimes,
-      daysPerWeek: profile.daysPerWeek,
-      consents: profile.consents,
-      onboardingComplete: profile.onboardingComplete,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      rpe: profile.rpe,
-      age: profile.age,
-      motivations: profile.motivations,
-      barriers: profile.barriers,
-      coachingStyle: profile.coachingStyle,
-      goalInferred: profile.goalInferred,
-      onboardingSession: profile.onboardingSession,
-    };
+  private async generateTrainingPlan(user: User): Promise<number> {
     try {
       console.log('🎯 Generating training plan for user:', user.id);
       

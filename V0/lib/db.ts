@@ -200,6 +200,26 @@ export interface User {
     exportData: boolean;
     deleteData: boolean;
   };
+  // Engagement optimization fields
+  notificationPreferences?: {
+    frequency: 'low' | 'medium' | 'high';
+    timing: 'morning' | 'afternoon' | 'evening';
+    types: Array<{
+      id: string;
+      name: string;
+      description: string;
+      enabled: boolean;
+      category: 'motivational' | 'reminder' | 'achievement' | 'milestone';
+    }>;
+    quietHours: { start: string; end: string };
+  };
+  engagementScore?: number; // 0-100 engagement score
+  optimalTiming?: {
+    bestTime: string;
+    timezone: string;
+    lastEngagement: Date;
+    engagementScore: number;
+  };
 }
 
 export interface OnboardingSession {
@@ -606,8 +626,29 @@ export interface Plan {
   fitnessLevel?: 'beginner' | 'intermediate' | 'advanced';
   trainingDaysPerWeek?: number;
   peakWeeklyVolume?: number; // kilometers
+  // Plan Complexity Engine fields
+  complexityScore?: number; // 0-100 complexity score
+  complexityLevel?: 'basic' | 'standard' | 'advanced';
+  lastComplexityUpdate?: Date;
+  adaptationFactors?: {
+    performance: number;
+    consistency: number;
+    goals: number;
+    feedback: number;
+  };
   createdAt: Date;
   updatedAt: Date;
+}
+
+// Plan feedback for complexity engine
+export interface PlanFeedback {
+  id?: number;
+  planId: number;
+  userId: number;
+  feedbackType: 'difficulty' | 'enjoyment' | 'completion' | 'suggestion';
+  rating: number; // 1-5 scale
+  comment?: string;
+  createdAt: Date;
 }
 
 // Individual workout in a plan
@@ -791,6 +832,7 @@ export class RunSmartDB extends Dexie {
   shoes!: EntityTable<Shoe, 'id'>;
   chatMessages!: EntityTable<ChatMessage, 'id'>;
   badges!: EntityTable<Badge, 'id'>;
+  planFeedback!: EntityTable<PlanFeedback, 'id'>;
   cohorts!: EntityTable<Cohort, 'id'>;
   cohortMembers!: EntityTable<CohortMember, 'id'>;
   performanceMetrics!: EntityTable<PerformanceMetrics, 'id'>;
@@ -835,20 +877,26 @@ export class RunSmartDB extends Dexie {
   habitInsights!: EntityTable<HabitInsight, 'id'>;
   habitPatterns!: EntityTable<HabitPattern, 'id'>;
 
+  // Route tables
+  routes!: EntityTable<Route, 'id'>;
+  routeRecommendations!: EntityTable<RouteRecommendation, 'id'>;
+  userRoutePreferences!: EntityTable<UserRoutePreferences, 'id'>;
+
   constructor() {
     super('RunSmartDB');
     
     // Consolidated schema - Single stable version
     this.version(1).stores({
-      users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId, coachingStyle, goalInferred',
-      plans: '++id, userId, isActive, startDate, endDate, createdAt, planType, raceGoalId, [userId+isActive]',
-      workouts: '++id, planId, week, day, completed, scheduledDate, createdAt, type, trainingPhase',
-      runs: '++id, workoutId, userId, type, completedAt, createdAt, externalId, startAccuracy, endAccuracy, averageAccuracy',
-      shoes: '++id, userId, isActive, createdAt',
-      chatMessages: '++id, userId, role, timestamp, conversationId',
+      users: '++id, name, goal, experience',
+      plans: '++id, userId, isActive, startDate, endDate',
+      workouts: '++id, planId, week, day, type, completed, scheduledDate',
+      runs: '++id, userId, type, distance, duration, completedAt',
+      shoes: '++id, userId, name, brand, model, isActive',
+      chatMessages: '++id, userId, role, timestamp',
       badges: '++id, userId, type, milestone, unlockedAt',
-      cohorts: '++id, inviteCode, name',
-      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+      planFeedback: '++id, planId, userId, feedbackType, rating, createdAt',
+      cohorts: '++id, name, inviteCode',
+      cohortMembers: '++id, userId, cohortId',
       performanceMetrics: '++id, userId, date, createdAt',
       personalRecords: '++id, userId, recordType, achievedAt, createdAt',
       performanceInsights: '++id, userId, type, priority, createdAt, validUntil',
@@ -883,6 +931,9 @@ export class RunSmartDB extends Dexie {
       habitAnalyticsSnapshots: '++id, userId, snapshotDate, riskLevel, consistencyTrend, createdAt',
       habitInsights: '++id, userId, insightType, priority, isRead, validUntil, createdAt',
       habitPatterns: '++id, userId, patternType, confidence, lastObserved, createdAt',
+      routes: '++id, name, distance, difficulty, createdAt',
+      routeRecommendations: '++id, userId, routeId, createdAt',
+      userRoutePreferences: '++id, userId, maxDistance, preferredDifficulty, createdAt',
     });
   }
 }
@@ -915,28 +966,66 @@ function checkIndexedDBSupport(): boolean {
   }
 }
 
+// Database instance - lazy initialization
+let dbInstance: RunSmartDB | null = null;
+
 // Enhanced database initialization with error handling
 function createDatabaseInstance(): RunSmartDB | null {
   try {
     if (!checkIndexedDBSupport()) {
-      console.error('❌ IndexedDB not supported, database functionality will be limited');
+      console.warn('⚠️ IndexedDB not supported, database functionality will be limited');
       return null;
     }
     
     console.log('✅ IndexedDB support confirmed, initializing database...');
-    return new RunSmartDB();
+    const db = new RunSmartDB();
+    
+    // Add error handlers
+    db.on('error', (error) => {
+      console.error('❌ Database error:', error);
+    });
+    
+    db.on('blocked', () => {
+      console.warn('⚠️ Database blocked - another tab may be open');
+    });
+    
+    db.on('versionchange', () => {
+      console.log('🔄 Database version changed, closing...');
+      db.close();
+    });
+    
+    return db;
   } catch (error) {
     console.error('❌ Failed to create database instance:', error);
     return null;
   }
 }
 
-// Create database instance with proper error handling
-export const db = createDatabaseInstance();
+// Lazy database getter - only initialize when needed and in browser
+export function getDatabase(): RunSmartDB | null {
+  if (typeof window === 'undefined') {
+    // Server-side: return null
+    return null;
+  }
+  
+  if (!dbInstance) {
+    dbInstance = createDatabaseInstance();
+  }
+  
+  return dbInstance;
+}
+
+// Export db for backward compatibility - but it will be null on server
+export const db = typeof window !== 'undefined' ? getDatabase() : null;
 
 // Database availability check
 export function isDatabaseAvailable(): boolean {
-  return db !== null && checkIndexedDBSupport();
+  if (typeof window === 'undefined') {
+    return false; // Not available on server
+  }
+  
+  const database = getDatabase();
+  return database !== null && checkIndexedDBSupport();
 }
 
 // Safe database operations wrapper
@@ -946,7 +1035,20 @@ export async function safeDbOperation<T>(
   fallbackValue?: T
 ): Promise<T> {
   try {
+    // Check if we're on the server
+    if (typeof window === 'undefined') {
+      if (fallbackValue !== undefined) {
+        console.log(`🔄 Server-side: Using fallback value for '${operationName}'`);
+        return fallbackValue;
+      }
+      throw new Error(`Database operation '${operationName}' not available on server`);
+    }
+    
     if (!isDatabaseAvailable()) {
+      if (fallbackValue !== undefined) {
+        console.log(`🔄 Database unavailable: Using fallback value for '${operationName}'`);
+        return fallbackValue;
+      }
       throw new Error('Database not available');
     }
     
@@ -1011,6 +1113,56 @@ export interface HabitPattern {
   updatedAt: Date;
 }
 
+// Route interface for enhanced route selection
+export interface Route {
+  id?: number;
+  name: string;
+  distance: number; // in km
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  safetyScore: number; // 0-100
+  popularity: number; // 0-100
+  elevationGain: number; // in meters
+  surfaceType: string[]; // JSON array of surface types
+  wellLit: boolean;
+  lowTraffic: boolean;
+  scenicScore: number; // 0-100
+  estimatedTime: number; // in minutes
+  description: string;
+  tags: string[]; // JSON array of tags
+  gpsPath?: string; // JSON string of GPS coordinates
+  location?: string; // General location/area
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Route recommendation tracking
+export interface RouteRecommendation {
+  id?: number;
+  userId: number;
+  routeId: number;
+  matchScore: number; // 0-100
+  reasoning: string; // Why this route was recommended
+  userPreferences: string; // JSON string of user preferences
+  userExperience: string;
+  selected: boolean; // Whether user selected this route
+  createdAt: Date;
+}
+
+// User route preferences
+export interface UserRoutePreferences {
+  id?: number;
+  userId: number;
+  maxDistance: number;
+  preferredDifficulty: 'beginner' | 'intermediate' | 'advanced';
+  safetyImportance: number; // 0-100
+  scenicImportance: number; // 0-100
+  trafficPreference: 'low' | 'medium' | 'high';
+  lightingPreference: 'day' | 'night' | 'any';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Database utilities
 export const badgeMilestones = [3, 7, 30];
 export const badgeTypes: { [key: number]: 'bronze' | 'silver' | 'gold' } = {
@@ -1019,35 +1171,6 @@ export const badgeTypes: { [key: number]: 'bronze' | 'silver' | 'gold' } = {
   30: 'gold',
 };
 
-export const dbUtils = {
-  // Unified error handling for plan operations
-  handlePlanError(error: unknown, operation: string): { title: string; description: string } {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
-    
-    if (errorMessage.includes("onboarding")) {
-      return {
-        title: "Complete Onboarding First",
-        description: "Please complete the onboarding process to create your training plan."
-      }
-    } else if (errorMessage.includes("not found")) {
-      return {
-        title: "User Account Error", 
-        description: "There was an issue with your account. Please log in again or contact support."
-      }
-    } else if (errorMessage.includes("Database") || errorMessage.includes("Dexie")) {
-      return {
-        title: "Training Plan Error",
-        description: "Unable to access your training plan data. Please try refreshing the page."
-      }
-    } else {
-      return {
-        title: "Training Plan Error",
-        description: "Unable to access or create your training plan. Please try again or contact support."
-      }
-    }
-  },
-  
-  // Additional database utilities would be added here
-  // For now, closing the object to fix syntax errors
-};
+// Re-export the complete dbUtils from dbUtils.ts for backward compatibility
+export { dbUtils } from './dbUtils';
 

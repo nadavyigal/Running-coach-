@@ -16,6 +16,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   Settings,
+  Brain,
 } from "lucide-react"
 import { dbUtils, type User as UserType } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
@@ -23,6 +24,7 @@ import { trackChatMessageSent } from "@/lib/analytics"
 import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
+import { EnhancedAICoach, type AICoachResponse } from "@/components/enhanced-ai-coach"
 import { planAdaptationEngine } from "@/lib/planAdaptationEngine"
 
 interface ChatMessage {
@@ -51,6 +53,7 @@ export function ChatScreen() {
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
   const [selectedMessageForFeedback, setSelectedMessageForFeedback] = useState<ChatMessage | null>(null)
   const [showCoachingPreferences, setShowCoachingPreferences] = useState(false)
+  const [showEnhancedCoach, setShowEnhancedCoach] = useState(false)
 
   useEffect(() => {
     loadUser()
@@ -376,6 +379,21 @@ export function ChatScreen() {
     setShowFeedbackModal(true)
   }
 
+  const handleAICoachResponse = (response: AICoachResponse) => {
+    // Convert AI coach response to chat message
+    const aiMessage: ChatMessage = {
+      id: `ai-coach-${Date.now()}`,
+      role: 'assistant',
+      content: response.response,
+      timestamp: new Date(),
+    }
+    
+    setMessages(prev => [...prev, aiMessage])
+    
+    // Auto-scroll to new message
+    setTimeout(() => scrollToBottom(), 100)
+  }
+
   const MessageBubble = ({ message }: { message: ChatMessage }) => {
     const isUser = message.role === 'user'
     
@@ -475,14 +493,24 @@ export function ChatScreen() {
               </p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowCoachingPreferences(true)}
-            title="Coaching preferences"
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={showEnhancedCoach ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setShowEnhancedCoach(!showEnhancedCoach)}
+              title="Enhanced AI Coach"
+            >
+              <Brain className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowCoachingPreferences(true)}
+              title="Coaching preferences"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -510,6 +538,16 @@ export function ChatScreen() {
                 </div>
               )}
               
+              {/* Enhanced AI Coach Widget */}
+              {user && showEnhancedCoach && (
+                <div className="mt-4">
+                  <EnhancedAICoach
+                    user={user}
+                    onResponse={handleAICoachResponse}
+                  />
+                </div>
+              )}
+
               {/* Recovery Status Widget */}
               {user && (
                 <div className="mt-4">

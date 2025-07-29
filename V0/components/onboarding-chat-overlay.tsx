@@ -395,6 +395,11 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
         }
       }
 
+      // Check if response is a proper Response object
+      if (!('ok' in response)) {
+        throw new Error('Invalid response from AI service')
+      }
+
       if (!response.ok) {
         let errorText = `API request failed with status ${response.status}`
         

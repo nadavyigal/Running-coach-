@@ -1,4 +1,4 @@
-import { db, isDatabaseAvailable, safeDbOperation } from './db';
+import { db, isDatabaseAvailable, safeDbOperation, getDatabase } from './db';
 import { withTransaction, createUserWithDefaults, createGoalWithMilestones, createRunWithMetrics, updateCohortStats, createRecoveryDataBatch } from './dbTransactions';
 import type { 
   User, 
@@ -31,14 +31,21 @@ import type {
  */
 export async function initializeDatabase(): Promise<boolean> {
   try {
+    // Check if we're on the server
+    if (typeof window === 'undefined') {
+      console.log('🔄 Server-side: Database initialization skipped');
+      return true; // Return true for server-side to not block
+    }
+    
     if (!isDatabaseAvailable()) {
       console.error('❌ Database not available');
       return false;
     }
 
     // Test database connection
-    if (db) {
-      await db.open();
+    const database = getDatabase();
+    if (database) {
+      await database.open();
       console.log('✅ Database initialized successfully');
       return true;
     }
@@ -88,9 +95,10 @@ export async function clearDatabase(): Promise<void> {
  */
 export async function getCurrentUser(): Promise<User | null> {
   return safeDbOperation(async () => {
-    if (db) {
+    const database = getDatabase();
+    if (database) {
       // Get the first user (assuming single-user app for now)
-      const user = await db.users.orderBy('createdAt').first();
+      const user = await database.users.orderBy('createdAt').first();
       return user || null;
     }
     return null;
@@ -102,12 +110,13 @@ export async function getCurrentUser(): Promise<User | null> {
  */
 export async function upsertUser(userData: Partial<User>): Promise<number> {
   return safeDbOperation(async () => {
-    if (!db) throw new Error('Database not available');
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
     
-    const existingUser = await db.users.where('id').equals(userData.id || 0).first();
+    const existingUser = await database.users.where('id').equals(userData.id || 0).first();
     
     if (existingUser) {
-      await db.users.update(existingUser.id!, {
+      await database.users.update(existingUser.id!, {
         ...userData,
         updatedAt: new Date()
       });
@@ -130,7 +139,7 @@ export async function upsertUser(userData: Partial<User>): Promise<number> {
         ...userData
       };
       
-      const id = await db.users.add(userToAdd);
+      const id = await database.users.add(userToAdd);
       return id as number;
     }
   }, 'upsertUser');
@@ -141,8 +150,9 @@ export async function upsertUser(userData: Partial<User>): Promise<number> {
  */
 export async function getUser(userId: number): Promise<User | null> {
   return safeDbOperation(async () => {
-    if (db) {
-      return await db.users.get(userId) || null;
+    const database = getDatabase();
+    if (database) {
+      return await database.users.get(userId) || null;
     }
     return null;
   }, 'getUser', null);
@@ -153,11 +163,146 @@ export async function getUser(userId: number): Promise<User | null> {
  */
 export async function getUsersByOnboardingStatus(completed: boolean): Promise<User[]> {
   return safeDbOperation(async () => {
-    if (db) {
-      return await db.users.where('onboardingComplete').equals(completed ? 1 : 0).toArray();
+    const database = getDatabase();
+    if (database) {
+      return await database.users.where('onboardingComplete').equals(completed ? 1 : 0).toArray();
     }
     return [];
   }, 'getUsersByOnboardingStatus', []);
+}
+
+/**
+ * Create user with full profile data
+ */
+export async function createUser(userData: Partial<User>): Promise<number> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    
+    // Ensure required fields are present
+    const userToAdd: Omit<User, 'id'> = {
+      goal: userData.goal || 'habit',
+      experience: userData.experience || 'beginner',
+      preferredTimes: userData.preferredTimes || ['morning'],
+      daysPerWeek: userData.daysPerWeek || 3,
+      consents: userData.consents || {
+        data: true,
+        gdpr: true,
+        push: true
+      },
+      onboardingComplete: userData.onboardingComplete || false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...userData
+    };
+    
+    const id = await database.users.add(userToAdd);
+    console.log('✅ User created successfully:', id);
+    return id as number;
+  }, 'createUser');
+}
+
+/**
+ * Get user by ID
+ */
+export async function getUserById(userId: number): Promise<User | null> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (database) {
+      return await database.users.get(userId) || null;
+    }
+    return null;
+  }, 'getUserById', null);
+}
+
+/**
+ * Update user with partial data
+ */
+export async function updateUser(userId: number, updates: Partial<User>): Promise<void> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    
+    await database.users.update(userId, {
+      ...updates,
+      updatedAt: new Date()
+    });
+    console.log('✅ User updated successfully:', userId);
+  }, 'updateUser');
+}
+
+/**
+ * Update plan with partial data
+ */
+export async function updatePlan(planId: number, updates: Partial<Plan>): Promise<void> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    
+    await database.plans.update(planId, {
+      ...updates,
+      updatedAt: new Date()
+    });
+    console.log('✅ Plan updated successfully:', planId);
+  }, 'updatePlan');
+}
+
+/**
+ * Deactivate all active plans for a user
+ */
+export async function deactivateAllUserPlans(userId: number): Promise<void> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    
+    await database.plans
+      .where('userId').equals(userId)
+      .and(plan => plan.isActive)
+      .modify({ isActive: false, updatedAt: new Date() });
+    
+    console.log('✅ Deactivated all active plans for user:', userId);
+  }, 'deactivateAllUserPlans');
+}
+
+/**
+ * Clean up user data (for failed onboarding cleanup)
+ */
+export async function cleanupUserData(userId: number): Promise<void> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    
+    // Use transaction to ensure all cleanup happens atomically
+    await database.transaction('rw', [
+      database.users,
+      database.plans,
+      database.workouts,
+      database.runs,
+      database.chatMessages,
+      database.goals,
+      database.onboardingSessions,
+      database.conversationMessages
+    ], async () => {
+      // Delete user data in reverse dependency order
+      await database.conversationMessages.where('sessionId').anyOf(
+        await database.onboardingSessions.where('userId').equals(userId).primaryKeys()
+      ).delete();
+      
+      await database.onboardingSessions.where('userId').equals(userId).delete();
+      await database.chatMessages.where('userId').equals(userId).delete();
+      await database.runs.where('userId').equals(userId).delete();
+      
+      // Delete workouts from user's plans
+      const planIds = await database.plans.where('userId').equals(userId).primaryKeys();
+      await database.workouts.where('planId').anyOf(planIds).delete();
+      
+      await database.goals.where('userId').equals(userId).delete();
+      await database.plans.where('userId').equals(userId).delete();
+      await database.users.delete(userId);
+    });
+    
+    console.log('✅ Cleaned up user data for user:', userId);
+  }, 'cleanupUserData');
 }
 
 /**
@@ -170,7 +315,8 @@ export async function migrateFromLocalStorage(): Promise<void> {
       return;
     }
 
-    if (!db) {
+    const database = getDatabase();
+    if (!database) {
       console.log('🔄 Database not available for migration');
       return;
     }
@@ -185,7 +331,7 @@ export async function migrateFromLocalStorage(): Promise<void> {
     }
 
     // Create default user if none exists
-    const existingUser = await db.users.orderBy('createdAt').first();
+    const existingUser = await database.users.orderBy('createdAt').first();
     if (!existingUser) {
       const defaultUser: Omit<User, 'id'> = {
         goal: 'habit',
@@ -202,12 +348,12 @@ export async function migrateFromLocalStorage(): Promise<void> {
         updatedAt: new Date()
       };
       
-      await db.users.add(defaultUser);
+      await database.users.add(defaultUser);
       console.log('✅ Created default user from localStorage migration');
     } else {
       // Update existing user
       if (existingUser.id) {
-        await db.users.update(existingUser.id, {
+        await database.users.update(existingUser.id, {
           onboardingComplete: true,
           updatedAt: new Date()
         });
@@ -316,11 +462,91 @@ export async function createPlan(planData: Omit<Plan, 'id' | 'createdAt' | 'upda
  */
 export async function getActivePlan(userId: number): Promise<Plan | null> {
   return safeDbOperation(async () => {
-    if (db) {
-      return await db.plans.where('userId').equals(userId).and(plan => plan.isActive).first() || null;
+    const database = getDatabase();
+    if (database) {
+      return await database.plans.where('userId').equals(userId).and(plan => plan.isActive).first() || null;
     }
     return null;
   }, 'getActivePlan', null);
+}
+
+/**
+ * Ensure user has an active plan - create one if they don't
+ */
+export async function ensureUserHasActivePlan(userId: number): Promise<Plan> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    
+    // Check if user exists and has completed onboarding
+    const user = await database.users.get(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    
+    if (!user.onboardingComplete) {
+      throw new Error('User has not completed onboarding');
+    }
+    
+    // Check for existing active plan
+    let activePlan = await database.plans.where('userId').equals(userId).and(plan => plan.isActive).first();
+    
+    if (activePlan) {
+      return activePlan;
+    }
+    
+    // Check for inactive plans to reactivate
+    const inactivePlan = await database.plans.where('userId').equals(userId).and(plan => !plan.isActive).first();
+    
+    if (inactivePlan) {
+      await database.plans.update(inactivePlan.id!, { 
+        isActive: true, 
+        updatedAt: new Date() 
+      });
+      return await database.plans.get(inactivePlan.id!) as Plan;
+    }
+    
+    // Create a new basic plan
+    const planData: Omit<Plan, 'id' | 'createdAt' | 'updatedAt'> = {
+      userId,
+      title: 'Default Running Plan',
+      description: 'A basic running plan to get you started',
+      startDate: new Date(),
+      endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+      totalWeeks: 4,
+      isActive: true,
+      planType: 'basic',
+      trainingDaysPerWeek: user.daysPerWeek || 3,
+      peakWeeklyVolume: 20, // km
+      complexityScore: 25,
+      complexityLevel: 'basic'
+    };
+    
+    const planId = await createPlan(planData);
+    const newPlan = await database.plans.get(planId) as Plan;
+    
+    // Create some basic workouts for the plan
+    const workoutDays = ['Monday', 'Wednesday', 'Friday'];
+    for (let week = 1; week <= 4; week++) {
+      for (const day of workoutDays.slice(0, user.daysPerWeek || 3)) {
+        const workoutData: Omit<Workout, 'id' | 'createdAt' | 'updatedAt'> = {
+          planId,
+          week,
+          day,
+          type: 'easy',
+          distance: 3, // 3km easy run
+          duration: 30, // 30 minutes
+          intensity: 'easy',
+          completed: false,
+          scheduledDate: new Date(Date.now() + (week - 1) * 7 * 24 * 60 * 60 * 1000) // Spread across weeks
+        };
+        
+        await createWorkout(workoutData);
+      }
+    }
+    
+    return newPlan;
+  }, 'ensureUserHasActivePlan');
 }
 
 /**
@@ -855,6 +1081,150 @@ export function handleDatabaseError(error: unknown, operation: string): { title:
 }
 
 /**
+ * Comprehensive database health check
+ */
+export async function checkDatabaseHealth(): Promise<{ 
+  isHealthy: boolean;
+  canRead: boolean;
+  canWrite: boolean;
+  error?: string;
+  details: string[];
+}> {
+  const details: string[] = [];
+  let isHealthy = true;
+  let canRead = true;
+  let canWrite = true;
+  let error: string | undefined;
+
+  try {
+    // Check if we're in browser environment
+    if (typeof window === 'undefined') {
+      details.push('Server-side environment detected');
+      return { isHealthy, canRead, canWrite, details };
+    }
+
+    // Check if database is available
+    if (!isDatabaseAvailable()) {
+      isHealthy = false;
+      canRead = false;
+      canWrite = false;
+      error = 'Database not available';
+      details.push('IndexedDB not supported or disabled');
+      return { isHealthy, canRead, canWrite, error, details };
+    }
+
+    const database = getDatabase();
+    if (!database) {
+      isHealthy = false;
+      canRead = false;
+      canWrite = false;
+      error = 'Database instance not created';
+      details.push('Failed to create database instance');
+      return { isHealthy, canRead, canWrite, error, details };
+    }
+
+    details.push('Database instance created successfully');
+
+    // Test database opening
+    try {
+      await database.open();
+      details.push('Database opened successfully');
+    } catch (openError) {
+      isHealthy = false;
+      canRead = false;
+      canWrite = false;
+      error = `Failed to open database: ${openError instanceof Error ? openError.message : String(openError)}`;
+      details.push(error);
+      return { isHealthy, canRead, canWrite, error, details };
+    }
+
+    // Test read operation
+    try {
+      const testRead = await database.users.limit(1).toArray();
+      canRead = true;
+      details.push('Read operation successful');
+    } catch (readError) {
+      canRead = false;
+      isHealthy = false;
+      error = `Read operation failed: ${readError instanceof Error ? readError.message : String(readError)}`;
+      details.push(error);
+    }
+
+    // Test write operation
+    try {
+      // Try to add and immediately delete a test record
+      const testUser = {
+        goal: 'habit' as const,
+        experience: 'beginner' as const,
+        preferredTimes: ['morning'],
+        daysPerWeek: 3,
+        consents: { data: true, gdpr: true, push: true },
+        onboardingComplete: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      const testId = await database.users.add(testUser);
+      await database.users.delete(testId);
+      canWrite = true;
+      details.push('Write operation successful');
+    } catch (writeError) {
+      canWrite = false;
+      isHealthy = false;
+      if (!error) {
+        error = `Write operation failed: ${writeError instanceof Error ? writeError.message : String(writeError)}`;
+      }
+      details.push(`Write test failed: ${writeError instanceof Error ? writeError.message : String(writeError)}`);
+    }
+
+    console.log('✅ Database health check completed:', { isHealthy, canRead, canWrite, details });
+    return { isHealthy, canRead, canWrite, error, details };
+    
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('❌ Database health check failed:', error);
+    return {
+      isHealthy: false,
+      canRead: false,
+      canWrite: false,
+      error: `Health check failed: ${errorMessage}`,
+      details: [`Health check exception: ${errorMessage}`]
+    };
+  }
+}
+
+/**
+ * Attempt to recover from database errors
+ */
+export async function recoverFromDatabaseError(): Promise<boolean> {
+  try {
+    console.log('🔄 Attempting database recovery...');
+    
+    // Close existing database connection
+    if (db && db.isOpen()) {
+      await db.close();
+      console.log('✅ Closed existing database connection');
+    }
+    
+    // Wait a moment for cleanup
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Try to reinitialize
+    const success = await initializeDatabase();
+    if (success) {
+      console.log('✅ Database recovery successful');
+      return true;
+    } else {
+      console.error('❌ Database recovery failed');
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Database recovery failed with error:', error);
+    return false;
+  }
+}
+
+/**
  * Validate database schema integrity
  */
 export async function validateDatabaseSchema(): Promise<{ valid: boolean; errors: string[] }> {
@@ -867,8 +1237,11 @@ export async function validateDatabaseSchema(): Promise<{ valid: boolean; errors
     }
     
     // Test basic operations
-    await db.open();
-    await db.close();
+    const database = getDatabase();
+    if (database) {
+      await database.open();
+      await database.close();
+    }
     
     console.log('✅ Database schema validation passed');
     return { valid: true, errors: [] };
@@ -909,15 +1282,21 @@ export const dbUtils = {
   initializeDatabase,
   closeDatabase,
   clearDatabase,
+  checkDatabaseHealth,
+  recoverFromDatabaseError,
   validateDatabaseSchema,
   migrateDatabase,
   
   // User management
   getCurrentUser,
+  createUser,
+  getUserById,
+  updateUser,
   upsertUser,
   getUser,
   getUsersByOnboardingStatus,
   migrateFromLocalStorage,
+  cleanupUserData,
   
   // Goal management
   createGoal,
@@ -927,8 +1306,11 @@ export const dbUtils = {
   
   // Plan management
   createPlan,
+  updatePlan,
   getActivePlan,
+  ensureUserHasActivePlan,
   getPlanWithWorkouts,
+  deactivateAllUserPlans,
   
   // Workout management
   createWorkout,
@@ -958,7 +1340,10 @@ export const dbUtils = {
   saveDataSource,
   
   // Error handling
-  handleDatabaseError
+  handleDatabaseError,
+  
+  // Plan-specific error handling (backward compatibility)
+  handlePlanError: handleDatabaseError
 };
 
 export default dbUtils; 

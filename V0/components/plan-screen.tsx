@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Calendar, CalendarDays, TrendingUp, Plus, ChevronLeft, ChevronRight, MoreHorizontal, Loader2 } from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
 import { MonthlyCalendarView } from "@/components/monthly-calendar-view"
+import { PlanComplexityIndicator } from "@/components/plan-complexity-indicator"
 import { dbUtils, type Plan, type Workout } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
@@ -374,6 +375,17 @@ export function PlanScreen() {
           </Button>
         ))}
       </div>
+
+      {/* Plan Complexity Indicator */}
+      {plan && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <PlanComplexityIndicator 
+            plan={plan} 
+            userId={plan.userId} 
+            className="h-fit"
+          />
+        </div>
+      )}
 
       {/* Content */}
       {currentView === "monthly" && <MonthlyCalendarView />}
