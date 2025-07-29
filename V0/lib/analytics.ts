@@ -26,7 +26,7 @@ const trackEvent = async (eventName: string, properties?: Record<string, any>) =
       ...properties
     }
     
-    if (typeof window !== 'undefined' && posthog) {
+    if (typeof window !== 'undefined' && posthog && posthog.capture) {
       posthog.capture(eventName, eventProperties)
     }
   } catch (error) {
@@ -43,7 +43,7 @@ const trackEvent = async (eventName: string, properties?: Record<string, any>) =
       ...properties
     }
     
-    if (typeof window !== 'undefined' && posthog) {
+    if (typeof window !== 'undefined' && posthog && posthog.capture) {
       posthog.capture(eventName, eventProperties)
     }
   }

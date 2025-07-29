@@ -184,6 +184,22 @@ export interface User {
   coachingStyle?: 'supportive' | 'challenging' | 'analytical' | 'encouraging'; // Preferred coaching style
   goalInferred?: boolean; // Whether goals were inferred by AI
   onboardingSession?: OnboardingSession;
+  // Privacy settings fields
+  privacySettings?: {
+    dataCollection: {
+      location: boolean;
+      performance: boolean;
+      analytics: boolean;
+      coaching: boolean;
+    };
+    consentHistory: Array<{
+      timestamp: Date;
+      consentType: string;
+      granted: boolean;
+    }>;
+    exportData: boolean;
+    deleteData: boolean;
+  };
 }
 
 export interface OnboardingSession {
@@ -628,9 +644,14 @@ export interface Run {
   notes?: string;
   route?: string;
   gpsPath?: string; // JSON string of GPS coordinates
+  gpsAccuracyData?: string; // JSON string of GPS accuracy data
+  startAccuracy?: number; // GPS accuracy at start (meters)
+  endAccuracy?: number; // GPS accuracy at end (meters)
+  averageAccuracy?: number; // Average GPS accuracy during run (meters)
   shoeId?: number;
   completedAt: Date;
   createdAt: Date;
+  updatedAt?: Date;
 }
 
 // Goal tracking system
@@ -808,6 +829,11 @@ export class RunSmartDB extends Dexie {
   fusedDataPoints!: EntityTable<FusedDataPoint, 'id'>;
   dataConflicts!: EntityTable<DataConflict, 'id'>;
   dataSources!: EntityTable<DataSource, 'id'>;
+  
+  // Habit Analytics tables
+  habitAnalyticsSnapshots!: EntityTable<HabitAnalyticsSnapshot, 'id'>;
+  habitInsights!: EntityTable<HabitInsight, 'id'>;
+  habitPatterns!: EntityTable<HabitPattern, 'id'>;
 
   constructor() {
     super('RunSmartDB');
@@ -817,7 +843,7 @@ export class RunSmartDB extends Dexie {
       users: '++id, goal, experience, onboardingComplete, createdAt, currentStreak, longestStreak, lastActivityDate, reminderTime, reminderEnabled, cohortId, coachingStyle, goalInferred',
       plans: '++id, userId, isActive, startDate, endDate, createdAt, planType, raceGoalId, [userId+isActive]',
       workouts: '++id, planId, week, day, completed, scheduledDate, createdAt, type, trainingPhase',
-      runs: '++id, workoutId, userId, type, completedAt, createdAt, externalId',
+      runs: '++id, workoutId, userId, type, completedAt, createdAt, externalId, startAccuracy, endAccuracy, averageAccuracy',
       shoes: '++id, userId, isActive, createdAt',
       chatMessages: '++id, userId, role, timestamp, conversationId',
       badges: '++id, userId, type, milestone, unlockedAt',
@@ -854,6 +880,9 @@ export class RunSmartDB extends Dexie {
       fusedDataPoints: '++id, userId, dataType, timestamp, createdAt',
       dataConflicts: '++id, userId, dataType, conflictType, detectedAt, createdAt',
       dataSources: '++id, name, type, priority, isActive, createdAt',
+      habitAnalyticsSnapshots: '++id, userId, snapshotDate, riskLevel, consistencyTrend, createdAt',
+      habitInsights: '++id, userId, insightType, priority, isRead, validUntil, createdAt',
+      habitPatterns: '++id, userId, patternType, confidence, lastObserved, createdAt',
     });
   }
 }
@@ -932,6 +961,54 @@ export async function safeDbOperation<T>(
     
     throw error;
   }
+}
+
+// Habit Analytics interfaces
+export interface HabitAnalyticsSnapshot {
+  id?: number;
+  userId: number;
+  snapshotDate: Date;
+  currentStreak: number;
+  longestStreak: number;
+  weeklyConsistency: number; // 0-100 percentage
+  monthlyConsistency: number; // 0-100 percentage
+  consistencyTrend: 'improving' | 'stable' | 'declining';
+  riskLevel: 'low' | 'medium' | 'high';
+  goalAlignment: number; // 0-100
+  planAdherence: number; // 0-100
+  weekOverWeek: number; // percentage change
+  monthOverMonth: number; // percentage change
+  optimalTimes: string[]; // JSON array
+  avgDuration: number; // minutes
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface HabitInsight {
+  id?: number;
+  userId: number;
+  insightType: 'motivation' | 'barrier' | 'suggestion' | 'pattern' | 'risk';
+  title: string;
+  description: string;
+  priority: 'low' | 'medium' | 'high';
+  actionable: boolean;
+  evidence: string[];
+  validUntil?: Date;
+  isRead: boolean;
+  createdAt: Date;
+}
+
+export interface HabitPattern {
+  id?: number;
+  userId: number;
+  patternType: 'day_preference' | 'time_preference' | 'duration_pattern' | 'frequency_pattern';
+  pattern: string; // JSON representation of the pattern
+  confidence: number; // 0-100
+  frequency: number; // how often this pattern occurs
+  impact: number; // impact on habit formation (0-100)
+  lastObserved: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // Database utilities

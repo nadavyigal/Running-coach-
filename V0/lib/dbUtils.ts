@@ -405,6 +405,74 @@ export async function getPlanWorkouts(planId: number, completed?: boolean): Prom
   }, 'getPlanWorkouts', []);
 }
 
+/**
+ * Get workouts for user within date range
+ */
+export async function getWorkoutsForDateRange(userId: number, startDate: Date, endDate: Date): Promise<Workout[]> {
+  return safeDbOperation(async () => {
+    if (!db) return [];
+    
+    // Get all plans for the user
+    const plans = await db.plans.where('userId').equals(userId).toArray();
+    const planIds = plans.map(p => p.id!);
+    
+    if (planIds.length === 0) return [];
+    
+    // Get workouts within date range for all user's plans
+    const allWorkouts = await db.workouts.toArray();
+    const workouts = allWorkouts.filter(workout => 
+      planIds.includes(workout.planId) &&
+      workout.scheduledDate >= startDate && 
+      workout.scheduledDate <= endDate
+    );
+    
+    return workouts;
+  }, 'getWorkoutsForDateRange', []);
+}
+
+/**
+ * Get today's workout for user
+ */
+export async function getTodaysWorkout(userId: number): Promise<Workout | null> {
+  return safeDbOperation(async () => {
+    if (!db) return null;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    
+    // Get all plans for the user
+    const plans = await db.plans.where('userId').equals(userId).toArray();
+    const planIds = plans.map(p => p.id!).filter(Boolean);
+    
+    if (planIds.length === 0) return null;
+    
+    const allWorkouts = await db.workouts.toArray();
+    const todaysWorkout = allWorkouts.find(workout => 
+      planIds.includes(workout.planId) &&
+      workout.scheduledDate >= today && 
+      workout.scheduledDate < tomorrow
+    );
+    
+    return todaysWorkout || null;
+  }, 'getTodaysWorkout', null);
+}
+
+/**
+ * Mark workout as completed
+ */
+export async function markWorkoutCompleted(workoutId: number): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+    
+    await db.workouts.update(workoutId, {
+      completed: true,
+      updatedAt: new Date()
+    });
+  }, 'markWorkoutCompleted');
+}
+
 // ============================================================================
 // RUN TRACKING UTILITIES
 // ============================================================================
@@ -416,11 +484,19 @@ export async function recordRun(runData: Omit<Run, 'id' | 'createdAt'>): Promise
   return safeDbOperation(async () => {
     const id = await db.runs.add({
       ...runData,
-      createdAt: new Date()
+      createdAt: new Date(),
+      updatedAt: new Date()
     });
     console.log('✅ Run recorded successfully:', id);
     return id as number;
   }, 'recordRun');
+}
+
+/**
+ * Create run with GPS accuracy data
+ */
+export async function createRun(runData: Omit<Run, 'id' | 'createdAt'>): Promise<number> {
+  return recordRun(runData);
 }
 
 /**
@@ -858,9 +934,13 @@ export const dbUtils = {
   createWorkout,
   completeWorkout,
   getPlanWorkouts,
+  getWorkoutsForDateRange,
+  getTodaysWorkout,
+  markWorkoutCompleted,
   
   // Run tracking
   recordRun,
+  createRun,
   getUserRuns,
   getRunStats,
   

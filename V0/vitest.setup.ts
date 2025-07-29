@@ -587,13 +587,17 @@ vi.mock("@/lib/db", () => {
     email: 'test@example.com',
     age: 30,
     experience: 'intermediate',
-    goal: 'fitness',
+    goal: 'habit',
     daysPerWeek: 3,
+    preferredTimes: ['morning'],
+    consents: { data: true, gdpr: true, push: true },
     onboardingComplete: true,
     currentStreak: 5,
+    longestStreak: 12,
+    lastActivityDate: new Date('2025-01-14'),
     cohortId: 'cohort-1',
-    createdAt: new Date(),
-    updatedAt: new Date()
+    createdAt: new Date('2025-01-01'),
+    updatedAt: new Date('2025-01-01')
   };
   
   const mockPlan = {
@@ -630,12 +634,13 @@ vi.mock("@/lib/db", () => {
     plans: createMockTable([mockPlan]),
     workouts: createMockTable([]),
     runs: createMockTable([]),
+    goals: createMockTable([]), // Add missing goals table
     chatMessages: createMockTable([]),
     conversationMessages: createMockTable([]),
     onboardingSessions: createMockTable([]),
     badges: createMockTable([]),
-    cohort: createMockTable([]),
-    cohortMember: createMockTable([]),
+    cohorts: createMockTable([]), // Fix typo: should be cohorts
+    cohortMembers: createMockTable([]), // Fix typo: should be cohortMembers
     syncJobs: createMockTable([]),
     wearableDevices: createMockTable([]),
     delete: vi.fn().mockResolvedValue(undefined),

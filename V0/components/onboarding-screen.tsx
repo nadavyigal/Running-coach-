@@ -24,10 +24,13 @@ import { useDatabaseErrorHandling } from '@/hooks/use-database-error-handling'
 import { useAIServiceErrorHandling } from '@/hooks/use-ai-service-error-handling'
 import { planAdjustmentService } from "@/lib/planAdjustmentService"
 import { OnboardingChatOverlay } from "@/components/onboarding-chat-overlay"
+import { GoalDiscoveryWizard } from "@/components/goal-discovery-wizard"
 import { onboardingManager } from "@/lib/onboardingManager"
 import OnboardingErrorBoundary from "@/components/onboarding-error-boundary"
 import { validateOnboardingState } from "@/lib/onboardingStateValidator"
+import { PrivacyDashboard, UserPrivacySettings } from "@/components/privacy-dashboard"
 import { useEffect } from "react"
+import type { GoalDiscoveryResult } from "@/lib/goalDiscoveryEngine"
 
 interface OnboardingScreenProps {
   onComplete: () => void
@@ -156,10 +159,23 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   })
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
   const [showChatOverlay, setShowChatOverlay] = useState(false)
+  const [showGoalWizard, setShowGoalWizard] = useState(false)
   const [aiGeneratedProfile, setAiGeneratedProfile] = useState<any>(null)
+  const [goalDiscoveryResult, setGoalDiscoveryResult] = useState<GoalDiscoveryResult | null>(null)
+  const [privacySettings, setPrivacySettings] = useState<UserPrivacySettings>({
+    dataCollection: {
+      location: true,
+      performance: true,
+      analytics: true,
+      coaching: true,
+    },
+    consentHistory: [],
+    exportData: false,
+    deleteData: false,
+  })
   const { toast } = useToast()
 
-  const totalSteps = 8
+  const totalSteps = 9
 
   const nextStep = () => {
     if (currentStep < totalSteps) {
@@ -215,6 +231,56 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     })
     
     // Skip to the next step
+    nextStep()
+  }
+
+  const handleGoalWizardComplete = (discoveryResult: GoalDiscoveryResult) => {
+    setGoalDiscoveryResult(discoveryResult)
+    
+    // Extract primary goal info for form compatibility
+    const primaryGoal = discoveryResult.primaryGoal
+    if (primaryGoal.category === 'consistency') {
+      setSelectedGoal('habit')
+    } else if (primaryGoal.category === 'endurance') {
+      setSelectedGoal('distance')
+    } else if (primaryGoal.category === 'speed') {
+      setSelectedGoal('speed')
+    }
+
+    // Set experience from discovered profile if available
+    if (discoveryResult.metadata?.userExperience) {
+      setSelectedExperience(discoveryResult.metadata.userExperience)
+    }
+    
+    setShowGoalWizard(false)
+    
+    // Track comprehensive goal discovery
+    trackGoalDiscovered({
+      goalType: primaryGoal.goalType,
+      goalCategory: primaryGoal.category,
+      goalConfidenceScore: primaryGoal.confidence,
+      discoveryMethod: 'goal_wizard',
+      goalReasoning: primaryGoal.reasoning,
+      userContext: { 
+        goals_count: discoveryResult.discoveredGoals.length,
+        success_probability: discoveryResult.estimatedSuccessProbability,
+        ai_enhanced: discoveryResult.metadata?.aiEnhanced || false
+      }
+    })
+    
+    trackEngagementEvent('goal_wizard_complete', {
+      goals_count: discoveryResult.discoveredGoals.length,
+      primary_goal: primaryGoal.title,
+      success_probability: Math.round(discoveryResult.estimatedSuccessProbability * 100),
+      overall_confidence: Math.round(discoveryResult.overallConfidence * 100)
+    })
+    
+    toast({
+      title: "Perfect Goals Discovered!",
+      description: `Found ${discoveryResult.discoveredGoals.length} personalized goals with ${Math.round(discoveryResult.estimatedSuccessProbability * 100)}% success probability.`,
+    })
+    
+    // Skip to a later step since we have comprehensive goal info
     nextStep()
   }
 
@@ -304,10 +370,11 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           ? 'advanced'
           : selectedExperience as 'beginner' | 'intermediate' | 'advanced',
         selectedTimes: selectedTimes.length > 0 ? selectedTimes : ['morning'],
-        daysPerWeek: daysPerWeek[0],
+        daysPerWeek: daysPerWeek[0] || 3,
         rpe,
         age,
-        consents
+        consents,
+        privacySettings
       }
       
       console.log('Form data:', formData)
@@ -480,28 +547,52 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           <div className="space-y-6">
             <h2 className="text-2xl font-bold text-center">What's your running goal?</h2>
             
-            {/* AI Chat Option */}
-            <Card className="border-2 border-dashed border-green-300 bg-green-50 dark:bg-green-900/20">
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-3">
-                  <MessageCircle className="h-6 w-6 text-green-600" />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-green-800 dark:text-green-200">Get AI Guidance</h3>
-                    <p className="text-sm text-green-700 dark:text-green-300">
-                      Chat with our AI coach to discover your perfect running goals
-                    </p>
+            {/* AI Goal Discovery Options */}
+            <div className="space-y-3">
+              <Card className="border-2 border-dashed border-blue-300 bg-blue-50 dark:bg-blue-900/20">
+                <CardContent className="p-4">
+                  <div className="flex items-center space-x-3">
+                    <Gauge className="h-6 w-6 text-blue-600" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-blue-800 dark:text-blue-200">Smart Goal Discovery</h3>
+                      <p className="text-sm text-blue-700 dark:text-blue-300">
+                        Answer a few questions to get personalized goal recommendations with success prediction
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => setShowGoalWizard(true)}
+                      variant="outline"
+                      size="sm"
+                      className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                    >
+                      Discover Goals
+                    </Button>
                   </div>
-                  <Button
-                    onClick={() => setShowChatOverlay(true)}
-                    variant="outline"
-                    size="sm"
-                    className="border-green-300 text-green-700 hover:bg-green-100"
-                  >
-                    Start Chat
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+
+              <Card className="border-2 border-dashed border-green-300 bg-green-50 dark:bg-green-900/20">
+                <CardContent className="p-4">
+                  <div className="flex items-center space-x-3">
+                    <MessageCircle className="h-6 w-6 text-green-600" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-green-800 dark:text-green-200">Chat with AI Coach</h3>
+                      <p className="text-sm text-green-700 dark:text-green-300">
+                        Have a conversation to explore your running motivations and goals
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => setShowChatOverlay(true)}
+                      variant="outline"
+                      size="sm"
+                      className="border-green-300 text-green-700 hover:bg-green-100"
+                    >
+                      Start Chat
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
             
             <div className="text-center text-sm text-gray-500">
               <p>Or choose from our predefined options:</p>
@@ -529,12 +620,45 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               ))}
             </div>
             
-            {aiGeneratedProfile && (
+            {goalDiscoveryResult && (
               <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200">
                 <CardContent className="p-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                        Smart Goal Discovery Results
+                      </p>
+                    </div>
+                    <div className="bg-white dark:bg-blue-950 rounded-lg p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Primary Goal:</span>
+                        <span className="text-sm text-blue-800 dark:text-blue-200">{goalDiscoveryResult.primaryGoal.title}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Success Probability:</span>
+                        <span className="text-sm font-semibold text-green-600">
+                          {Math.round(goalDiscoveryResult.estimatedSuccessProbability * 100)}%
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Supporting Goals:</span>
+                        <span className="text-sm text-blue-800 dark:text-blue-200">
+                          {goalDiscoveryResult.supportingGoals.length} additional
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {aiGeneratedProfile && !goalDiscoveryResult && (
+              <Card className="bg-green-50 dark:bg-green-900/20 border-green-200">
+                <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <p className="text-sm text-green-700 dark:text-green-300">
                       AI has suggested: <strong>{aiGeneratedProfile.goal}</strong> goal with {aiGeneratedProfile.coachingStyle} coaching style
                     </p>
                   </div>
@@ -712,6 +836,25 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         )
       case 8:
         return (
+          <div className="space-y-6">
+            <PrivacyDashboard
+              user={{
+                id: undefined,
+                name: undefined,
+                privacySettings: privacySettings
+              }}
+              onSettingsChange={setPrivacySettings}
+            />
+            <Button
+              onClick={nextStep}
+              className="w-full bg-green-500 hover:bg-green-600"
+            >
+              Continue
+            </Button>
+          </div>
+        )
+      case 9:
+        return (
           <div className="space-y-6" role="region" aria-label="Summary and Confirmation">
             <h2 className="text-2xl font-bold text-center" id="summary-heading">Summary & Confirmation</h2>
             <Card>
@@ -726,6 +869,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                   <li><strong>GDPR Consent:</strong> {consents.gdpr ? 'Yes' : 'No'}</li>
                   <li><strong>Health Data Consent:</strong> {consents.data ? 'Yes' : 'No'}</li>
                   <li><strong>Push Notifications:</strong> {consents.push ? 'Yes' : 'No'}</li>
+                  <li><strong>Privacy Settings:</strong> Configured</li>
                 </ul>
               </CardContent>
             </Card>
@@ -780,7 +924,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
         <div className="flex justify-center mb-8">
           <div className="flex space-x-2" role="progressbar" aria-label="Onboarding progress" aria-valuenow={currentStep} aria-valuemin={1} aria-valuemax={totalSteps}>
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((step) => (
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((step) => (
               <div
                 key={step}
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors duration-200 ${
@@ -816,6 +960,22 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           onComplete={handleChatOverlayComplete}
           currentStep={currentStep}
           totalSteps={totalSteps}
+        />
+        
+        {/* Goal Discovery Wizard */}
+        <GoalDiscoveryWizard
+          isOpen={showGoalWizard}
+          onClose={() => setShowGoalWizard(false)}
+          onComplete={handleGoalWizardComplete}
+          initialProfile={{
+            experience: selectedExperience as any,
+            age: age || undefined,
+            availableTime: {
+              daysPerWeek: daysPerWeek[0],
+              minutesPerSession: 30,
+              preferredTimes: selectedTimes
+            }
+          }}
         />
       </div>
     </OnboardingErrorBoundary>

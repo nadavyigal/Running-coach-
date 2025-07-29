@@ -36,6 +36,7 @@ import { CoachingPreferencesSettings } from "@/components/coaching-preferences-s
 import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
 import { GoalRecommendations } from "@/components/goal-recommendations"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
+import { HabitAnalyticsWidget } from "@/components/habit-analytics-widget"
 
 export function TodayScreen() {
   const [dailyTip, setDailyTip] = useState(
@@ -591,6 +592,15 @@ export function TodayScreen() {
           )}
         </CardContent>
       </Card>
+
+      {/* Habit Analytics Widget */}
+      {userId && (
+        <HabitAnalyticsWidget
+          userId={userId}
+          showDetails={false}
+          className="hover:shadow-lg transition-all duration-300"
+        />
+      )}
 
       {/* Adaptive Coaching Widget */}
       {userId && (
