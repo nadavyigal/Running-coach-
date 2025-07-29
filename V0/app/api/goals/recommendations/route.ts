@@ -5,10 +5,15 @@ import { goalProgressEngine } from '@/lib/goalProgressEngine';
 
 const RecommendationsQuerySchema = z.object({
   userId: z.string().transform(Number),
-  type: z.enum(['new_goal', 'adjustment', 'milestone', 'motivation', 'priority_change']).optional(),
-  status: z.enum(['pending', 'accepted', 'dismissed', 'expired']).optional().default('pending'),
+  type: z.enum(['new_goal', 'adjustment', 'milestone', 'motivation', 'priority_change']).nullable().optional(),
+  status: z.enum(['pending', 'accepted', 'dismissed', 'expired']).nullable().optional().default('pending'),
   includeExpired: z.string().transform(val => val === 'true').optional().default(false)
-});
+}).transform(data => ({
+  ...data,
+  // Convert null values to undefined for optional fields
+  type: data.type === null ? undefined : data.type,
+  status: data.status === null ? 'pending' : data.status
+}));
 
 const CreateRecommendationSchema = z.object({
   userId: z.number(),

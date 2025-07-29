@@ -650,7 +650,7 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
         }
       }
       
-      // TODO: Save messages and onboarding session state to Dexie.js
+      // Messages and session state are automatically saved to Dexie.js via conversationStorage and sessionManager
       
     } catch (error) {
       console.error('Onboarding chat error:', error)

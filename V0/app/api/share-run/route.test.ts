@@ -9,7 +9,7 @@ describe("POST /api/share-run", () => {
     const fakeRun = {
       id: 123,
       userId: 456,
-      type: 'easy' as 'easy',
+      type: 'easy' as const,
       distance: 5,
       duration: 1800,
       completedAt: new Date(),

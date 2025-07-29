@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 
 export function PlanScreen() {
-  const [currentView, setCurrentView] = useState<"monthly" | "biweekly" | "progress">("biweekly")
+  const [currentView, setCurrentView] = useState<"monthly" | "biweekly" | "progress">("monthly")
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [showAddRunModal, setShowAddRunModal] = useState(false)
   const [plan, setPlan] = useState<Plan | null>(null)

@@ -36,6 +36,7 @@ import { CoachingPreferencesSettings } from "@/components/coaching-preferences-s
 import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
 import { GoalRecommendations } from "@/components/goal-recommendations"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
+import { HabitAnalyticsWidget } from "@/components/habit-analytics-widget"
 
 export function TodayScreen() {
   const [dailyTip, setDailyTip] = useState(
@@ -62,50 +63,48 @@ export function TodayScreen() {
     setDailyTip(tips[nextIndex])
   }
 
+  const refreshWorkouts = async () => {
+    setIsLoadingWorkout(true)
+    try {
+      const user = await dbUtils.getCurrentUser()
+      if (user) {
+        setUserId(user.id || null)
+        const today = new Date()
+        const startOfWeek = new Date(today)
+        startOfWeek.setDate(today.getDate() - today.getDay()) // Sunday
+        const endOfWeek = new Date(today)
+        endOfWeek.setDate(today.getDate() - today.getDay() + 6) // Saturday
+
+        const allWorkouts = await dbUtils.getWorkoutsForDateRange(user.id!, startOfWeek, endOfWeek)
+        setWeeklyWorkouts(allWorkouts)
+
+        const todays = allWorkouts.find(
+          (w) =>
+            w.scheduledDate.getDate() === new Date().getDate() &&
+            w.scheduledDate.getMonth() === new Date().getMonth() &&
+            w.scheduledDate.getFullYear() === new Date().getFullYear(),
+        )
+        setTodaysWorkout(todays || null)
+      } else {
+        setUserId(null)
+        setWeeklyWorkouts([])
+        setTodaysWorkout(null)
+      }
+    } catch (error) {
+      console.error('Failed to refresh workouts:', error)
+      toast({
+        title: "Error",
+        description: "Failed to refresh workouts.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoadingWorkout(false)
+    }
+  }
+
   // Load today's workout and weekly workouts
   useEffect(() => {
-    const loadWorkouts = async () => {
-      try {
-        const user = await dbUtils.getCurrentUser()
-        if (user) {
-          setUserId(user.id || null)
-          const today = new Date()
-          const startOfWeek = new Date(today)
-          startOfWeek.setDate(today.getDate() - today.getDay()) // Sunday
-          const endOfWeek = new Date(today)
-          endOfWeek.setDate(today.getDate() - today.getDay() + 6) // Saturday
-
-          console.log('Loading workouts for date range:', {
-            startOfWeek: startOfWeek.toDateString(),
-            endOfWeek: endOfWeek.toDateString(),
-            today: today.toDateString()
-          })
-
-          const allWorkouts = await dbUtils.getWorkoutsForDateRange(user.id!, startOfWeek, endOfWeek)
-          console.log('Loaded workouts:', allWorkouts.length, allWorkouts)
-          setWeeklyWorkouts(allWorkouts)
-
-          const todays = allWorkouts.find(
-            (w) =>
-              w.scheduledDate.getDate() === new Date().getDate() &&
-              w.scheduledDate.getMonth() === new Date().getMonth() &&
-              w.scheduledDate.getFullYear() === new Date().getFullYear(),
-          )
-          setTodaysWorkout(todays || null)
-        }
-      } catch (error) {
-        console.error('Failed to load workouts:', error)
-        toast({
-          title: "Error",
-          description: "Failed to load workouts.",
-          variant: "destructive",
-        })
-      } finally {
-        setIsLoadingWorkout(false)
-      }
-    }
-
-    loadWorkouts()
+    refreshWorkouts()
   }, [toast])
 
   const today = new Date()
@@ -594,6 +593,15 @@ export function TodayScreen() {
         </CardContent>
       </Card>
 
+      {/* Habit Analytics Widget */}
+      {userId && (
+        <HabitAnalyticsWidget
+          userId={userId}
+          showDetails={false}
+          className="hover:shadow-lg transition-all duration-300"
+        />
+      )}
+
       {/* Adaptive Coaching Widget */}
       {userId && (
         <CoachingInsightsWidget
@@ -611,8 +619,8 @@ export function TodayScreen() {
           date={new Date()}
           showBreakdown={true}
           onRefresh={() => {
-            // Refresh recovery data
-            console.log('Refreshing recovery recommendations...');
+            console.log('Refreshing recovery recommendations and workouts...');
+            refreshWorkouts();
           }}
         />
       )}

@@ -17,7 +17,8 @@
       "Bash(npm install:*)",
       "Bash(env)",
       "Bash(npm audit:*)",
-      "Bash(timeout 30s npm run test -- --run --reporter=basic)"
+      "Bash(timeout 30s npm run test -- --run --reporter=basic)",
+      "Bash(find:*)"
     ],
     "deny": []
   }

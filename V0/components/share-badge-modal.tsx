@@ -14,8 +14,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy, Share2 } from "lucide-react";
-import { useState } from "react";
+import { toast } from "@/components/ui/use-toast";
+import { Copy, Share2, Twitter, Facebook } from "lucide-react";
+import { useState, useEffect } from "react";
+import { dbUtils } from "@/lib/db";
 
 interface ShareBadgeModalProps {
   badgeId: string;
@@ -33,8 +35,35 @@ export function ShareBadgeModal({
   const [shareableLink, setShareableLink] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+
+  // Get current user ID when component mounts
+  useEffect(() => {
+    const getCurrentUserId = async () => {
+      try {
+        const user = await dbUtils.getCurrentUser();
+        if (user?.id) {
+          setCurrentUserId(user.id);
+        } else {
+          setError("No user found. Please complete onboarding first.");
+        }
+      } catch (err) {
+        console.error("Failed to get current user:", err);
+        setError("Failed to get user information.");
+      }
+    };
+
+    if (isOpen) {
+      getCurrentUserId();
+    }
+  }, [isOpen]);
 
   const generateShareLink = async () => {
+    if (!currentUserId) {
+      setError("User not found. Please try again.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -43,28 +72,75 @@ export function ShareBadgeModal({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ badgeId, userId: "current_user_id" }), // TODO: Replace with actual user ID
+        body: JSON.stringify({ badgeId, userId: currentUserId }),
       });
 
       if (!response.ok) {
-        throw new Error("Failed to generate shareable link.");
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to generate shareable link.");
       }
 
       const data = await response.json();
       setShareableLink(data.shareableLink);
     } catch (err) {
-      setError("Could not generate share link. Please try again.");
+      const errorMessage = err instanceof Error ? err.message : "Could not generate share link. Please try again.";
+      setError(errorMessage);
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const copyToClipboard = () => {
+  const copyToClipboard = async () => {
     if (shareableLink) {
-      navigator.clipboard.writeText(shareableLink);
-      // Optionally, show a toast notification
-      alert("Link copied to clipboard!");
+      try {
+        await navigator.clipboard.writeText(shareableLink);
+        toast({
+          title: "Copied!",
+          description: "Share link copied to clipboard.",
+        });
+      } catch (err) {
+        // Fallback for browsers that don't support clipboard API
+        const textArea = document.createElement('textarea');
+        textArea.value = shareableLink;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        toast({
+          title: "Copied!",
+          description: "Share link copied to clipboard.",
+        });
+      }
+    }
+  };
+
+  const shareOnTwitter = () => {
+    if (shareableLink) {
+      const text = encodeURIComponent(`🏃‍♂️ I just earned the ${badgeName} badge! Check out my running achievement: ${shareableLink} #RunSmart #Running #Fitness`);
+      window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank', 'width=550,height=420');
+    }
+  };
+
+  const shareOnFacebook = () => {
+    if (shareableLink) {
+      const url = encodeURIComponent(shareableLink);
+      window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank', 'width=550,height=420');
+    }
+  };
+
+  const shareViaWebAPI = async () => {
+    if (navigator.share && shareableLink) {
+      try {
+        await navigator.share({
+          title: `${badgeName} Badge Achievement`,
+          text: `I just earned the ${badgeName} badge in RunSmart!`,
+          url: shareableLink,
+        });
+      } catch (err) {
+        console.error('Error sharing:', err);
+      }
     }
   };
 
@@ -95,16 +171,21 @@ export function ShareBadgeModal({
           )}
           {error && <p className="text-red-500 text-sm">{error}</p>}
           {shareableLink && (
-            <div className="flex justify-center space-x-4 mt-4">
-              {/* TODO: Implement actual social media sharing buttons */}
-              <Button variant="outline" size="icon" onClick={() => alert("Twitter share not implemented")}>
-                <Share2 className="h-5 w-5" />
-                <span className="sr-only">Share on Twitter</span>
+            <div className="flex justify-center space-x-3 mt-4">
+              <Button variant="outline" size="sm" onClick={shareOnTwitter}>
+                <Twitter className="h-4 w-4 mr-2" />
+                Twitter
               </Button>
-              <Button variant="outline" size="icon" onClick={() => alert("Facebook share not implemented")}>
-                <Share2 className="h-5 w-5" />
-                <span className="sr-only">Share on Facebook</span>
+              <Button variant="outline" size="sm" onClick={shareOnFacebook}>
+                <Facebook className="h-4 w-4 mr-2" />
+                Facebook
               </Button>
+              {navigator.share && (
+                <Button variant="outline" size="sm" onClick={shareViaWebAPI}>
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Share
+                </Button>
+              )}
             </div>
           )}
         </div>

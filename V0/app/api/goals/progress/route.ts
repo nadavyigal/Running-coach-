@@ -4,11 +4,11 @@ import { dbUtils } from '@/lib/db';
 import { goalProgressEngine } from '@/lib/goalProgressEngine';
 
 const ProgressQuerySchema = z.object({
-  goalId: z.string().transform(Number).optional(),
-  userId: z.string().transform(Number).optional(),
-  includeHistory: z.string().transform(val => val === 'true').optional().default(false),
-  includeAnalytics: z.string().transform(val => val === 'true').optional().default(false),
-  historyLimit: z.string().transform(Number).optional().default(20)
+  goalId: z.string().nullable().transform(val => val ? Number(val) : undefined).optional(),
+  userId: z.string().nullable().transform(val => val ? Number(val) : undefined).optional(),
+  includeHistory: z.string().nullable().transform(val => val === 'true').optional().default(false),
+  includeAnalytics: z.string().nullable().transform(val => val === 'true').optional().default(false),
+  historyLimit: z.string().nullable().transform(val => val ? Number(val) : 20).optional().default(20)
 });
 
 const RecordProgressSchema = z.object({

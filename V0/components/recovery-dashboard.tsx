@@ -6,8 +6,10 @@ import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
 import { Alert, AlertDescription } from './ui/alert';
+import WellnessInputModal from './wellness-input-modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Calendar, TrendingUp, TrendingDown, Activity, Moon, Heart, Brain } from 'lucide-react';
+import { dbUtils } from '@/lib/db';
 
 interface RecoveryScore {
   id?: number;
@@ -57,6 +59,7 @@ export default function RecoveryDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showWellnessModal, setShowWellnessModal] = useState(false);
 
   useEffect(() => {
     loadRecoveryData();
@@ -129,6 +132,40 @@ export default function RecoveryDashboard() {
     if (level >= 6) return 'Good';
     if (level >= 4) return 'Fair';
     return 'Poor';
+  };
+
+  const handleWellnessSubmit = async (wellnessData: any) => {
+    try {
+      setLoading(true);
+      
+      // Get current user
+      const user = await dbUtils.getCurrentUser();
+      if (!user?.id) {
+        throw new Error('No user found');
+      }
+
+      // Create wellness entry
+      const wellnessId = await dbUtils.createSubjectiveWellness({
+        userId: user.id,
+        date: new Date(wellnessData.date),
+        energyLevel: wellnessData.energyLevel,
+        moodScore: wellnessData.moodScore,
+        sorenessLevel: wellnessData.sorenessLevel,
+        stressLevel: wellnessData.stressLevel,
+        motivationLevel: wellnessData.motivationLevel,
+      });
+
+      // Refresh the dashboard data
+      await loadRecoveryData();
+      
+      console.log('Wellness data saved successfully:', wellnessId);
+    } catch (error) {
+      console.error('Failed to save wellness data:', error);
+      setError('Failed to save wellness data');
+      throw error; // Re-throw to let the modal handle the error
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) {
@@ -396,7 +433,7 @@ export default function RecoveryDashboard() {
                 ) : (
                   <div className="text-center py-8">
                     <p className="text-gray-600 mb-4">No wellness data for today</p>
-                    <Button onClick={() => {/* TODO: Open wellness input modal */}}>
+                    <Button onClick={() => setShowWellnessModal(true)}>
                       Add Wellness Data
                     </Button>
                   </div>
@@ -406,6 +443,14 @@ export default function RecoveryDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Wellness Input Modal */}
+      <WellnessInputModal
+        open={showWellnessModal}
+        onOpenChange={setShowWellnessModal}
+        onSubmit={handleWellnessSubmit}
+        loading={loading}
+      />
     </div>
   );
 } 

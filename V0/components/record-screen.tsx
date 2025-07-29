@@ -13,6 +13,8 @@ import { planAdaptationEngine } from "@/lib/planAdaptationEngine"
 import { useRouter } from "next/navigation"
 import { trackPlanSessionCompleted } from "@/lib/analytics"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
+import { GPSAccuracyIndicator } from "@/components/gps-accuracy-indicator"
+import { GPSMonitoringService, type GPSAccuracyData } from "@/lib/gps-monitoring"
 
 interface GPSCoordinate {
   latitude: number
@@ -36,6 +38,12 @@ export function RecordScreen() {
   const [showRoutesModal, setShowRoutesModal] = useState(false)
   const [showManualModal, setShowManualModal] = useState(false)
   const [currentWorkout, setCurrentWorkout] = useState<Workout | null>(null)
+  
+  // GPS monitoring state
+  const [gpsMonitoringService] = useState(() => new GPSMonitoringService())
+  const [currentGPSAccuracy, setCurrentGPSAccuracy] = useState<GPSAccuracyData | null>(null)
+  const [gpsAccuracyHistory, setGpsAccuracyHistory] = useState<GPSAccuracyData[]>([])
+  const [showGPSDetails, setShowGPSDetails] = useState(false)
   
   // GPS and tracking state
   const [gpsPath, setGpsPath] = useState<GPSCoordinate[]>([])
@@ -125,6 +133,11 @@ export function RecordScreen() {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setGpsPermission('granted')
+          
+          // Calculate GPS accuracy metrics
+          const accuracyData = gpsMonitoringService.calculateAccuracyMetrics(position)
+          setCurrentGPSAccuracy(accuracyData)
+          
           setCurrentPosition({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -164,6 +177,13 @@ export function RecordScreen() {
 
       watchIdRef.current = navigator.geolocation.watchPosition(
         (position) => {
+          // Calculate GPS accuracy metrics
+          const accuracyData = gpsMonitoringService.calculateAccuracyMetrics(position)
+          setCurrentGPSAccuracy(accuracyData)
+          
+          // Add to accuracy history for run
+          setGpsAccuracyHistory(prev => [...prev, accuracyData])
+          
           const newCoordinate: GPSCoordinate = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -346,6 +366,13 @@ export function RecordScreen() {
         return
       }
 
+      // Calculate GPS accuracy metrics for the run
+      const startAccuracy = gpsAccuracyHistory.length > 0 ? gpsAccuracyHistory[0].accuracyRadius : undefined
+      const endAccuracy = gpsAccuracyHistory.length > 0 ? gpsAccuracyHistory[gpsAccuracyHistory.length - 1].accuracyRadius : undefined
+      const averageAccuracy = gpsAccuracyHistory.length > 0 
+        ? gpsAccuracyHistory.reduce((sum, acc) => sum + acc.accuracyRadius, 0) / gpsAccuracyHistory.length 
+        : undefined
+
       const runData: Omit<Run, 'id' | 'createdAt'> = {
         userId: user.id,
         workoutId: currentWorkout?.id,
@@ -355,6 +382,10 @@ export function RecordScreen() {
         pace: metrics.pace,
         calories: metrics.calories,
         gpsPath: gpsPath.length > 0 ? JSON.stringify(gpsPath) : undefined,
+        gpsAccuracyData: gpsAccuracyHistory.length > 0 ? JSON.stringify(gpsAccuracyHistory) : undefined,
+        startAccuracy,
+        endAccuracy,
+        averageAccuracy: averageAccuracy ? Math.round(averageAccuracy * 10) / 10 : undefined,
         completedAt: new Date()
       }
 
@@ -421,6 +452,9 @@ export function RecordScreen() {
       // Reset state
       setMetrics({ distance: 0, duration: 0, pace: 0, calories: 0 })
       setGpsPath([])
+      setGpsAccuracyHistory([])
+      setCurrentGPSAccuracy(null)
+      gpsMonitoringService.clearHistory()
       
       // Navigate back to today screen
       router.push('/')
@@ -521,6 +555,16 @@ export function RecordScreen() {
             <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2">
               <Satellite className={`h-4 w-4 ${getGpsStatusColor()}`} />
               <span className="text-sm font-medium">{getGpsStatusText()}</span>
+              {currentGPSAccuracy && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowGPSDetails(!showGPSDetails)}
+                  className="h-6 w-6 p-0 ml-1"
+                >
+                  <Info className="h-3 w-3" />
+                </Button>
+              )}
             </div>
 
             {/* Workout Info Overlay */}
@@ -533,6 +577,17 @@ export function RecordScreen() {
           </div>
         </CardContent>
       </Card>
+
+      {/* GPS Accuracy Indicator */}
+      {showGPSDetails && currentGPSAccuracy && (
+        <GPSAccuracyIndicator
+          accuracy={currentGPSAccuracy}
+          onAccuracyChange={setCurrentGPSAccuracy}
+          className="animate-in slide-in-from-top duration-300"
+          compact={!isRunning}
+          showTroubleshooting={!isRunning}
+        />
+      )}
 
       {/* Metrics */}
       <div className="grid grid-cols-4 gap-3">
@@ -561,6 +616,17 @@ export function RecordScreen() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Compact GPS Accuracy (always visible when GPS active) */}
+      {!showGPSDetails && currentGPSAccuracy && gpsPermission === 'granted' && (
+        <GPSAccuracyIndicator
+          accuracy={currentGPSAccuracy}
+          onAccuracyChange={setCurrentGPSAccuracy}
+          compact={true}
+          showTroubleshooting={false}
+          className="mb-4"
+        />
+      )}
 
       {/* Controls */}
       <div className="flex justify-center gap-4">
