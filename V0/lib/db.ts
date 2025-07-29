@@ -440,8 +440,28 @@ export interface Plan {
   fitnessLevel?: 'beginner' | 'intermediate' | 'advanced';
   trainingDaysPerWeek?: number;
   peakWeeklyVolume?: number; // kilometers
+  // Progressive Plan Complexity fields
+  complexityLevel?: 'basic' | 'standard' | 'advanced';
+  complexityScore?: number;
+  adaptationFactors?: AdaptationFactor[];
+  userFeedback?: PlanFeedback[];
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface AdaptationFactor {
+  factor: 'performance' | 'feedback' | 'consistency' | 'goals';
+  weight: number;
+  currentValue: number;
+  targetValue: number;
+}
+
+export interface PlanFeedback {
+  id?: number;
+  planId: number;
+  rating: number; // 1-5 scale
+  comment?: string;
+  createdAt: Date;
 }
 
 // Individual workout in a plan
