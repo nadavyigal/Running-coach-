@@ -598,6 +598,8 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   tokenCount?: number;
+  /** Serialized context used to generate the assistant response */
+  aiContext?: string;
   conversationId?: string;
 }
 
