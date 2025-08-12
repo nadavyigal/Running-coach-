@@ -887,7 +887,7 @@ export class RunSmartDB extends Dexie {
     
     // Consolidated schema - Single stable version
     this.version(1).stores({
-      users: '++id, name, goal, experience',
+      users: '++id, name, goal, experience, onboardingComplete',
       plans: '++id, userId, isActive, startDate, endDate',
       workouts: '++id, planId, week, day, type, completed, scheduledDate',
       runs: '++id, userId, type, distance, duration, completedAt',
@@ -969,7 +969,7 @@ function checkIndexedDBSupport(): boolean {
 // Database instance - lazy initialization
 let dbInstance: RunSmartDB | null = null;
 
-// Enhanced database initialization with error handling
+// Enhanced database initialization with error handling and concurrent access safety
 function createDatabaseInstance(): RunSmartDB | null {
   try {
     if (!checkIndexedDBSupport()) {
@@ -980,19 +980,62 @@ function createDatabaseInstance(): RunSmartDB | null {
     console.log('✅ IndexedDB support confirmed, initializing database...');
     const db = new RunSmartDB();
     
-    // Add error handlers
-    db.on('error', (error) => {
+    // Enhanced error handlers for concurrent access
+    db.on('blocked', (event: any) => {
+      console.warn('⚠️ Database blocked - handling concurrent access:', event);
+      
+      // Attempt to close other connections after a delay
+      setTimeout(() => {
+        try {
+          console.log('🔄 Attempting to resolve database blocking...');
+          // Force close and reopen can help resolve blocking
+          if (db.isOpen()) {
+            db.close();
+            setTimeout(() => {
+              db.open().catch(reopenError => {
+                console.error('❌ Failed to reopen database after blocking:', reopenError);
+              });
+            }, 1000);
+          }
+        } catch (blockResolveError) {
+          console.error('❌ Error resolving database blocking:', blockResolveError);
+        }
+      }, 2000);
+    });
+    
+    // Handle version changes gracefully
+    db.on('versionchange', (event: any) => {
+      console.log('🔄 Database version changed, handling gracefully...', event);
+      // Close the database but don't immediately reopen to prevent conflicts
+      db.close();
+      
+      // Notify if there are other tabs that need to reload
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem('db-version-change', Date.now().toString());
+        window.addEventListener('storage', (e) => {
+          if (e.key === 'db-version-change') {
+            console.log('🔄 Database version change detected across tabs');
+          }
+        });
+      }
+    });
+    
+    // Handle database errors
+    db.on('error', (error: any) => {
       console.error('❌ Database error:', error);
     });
     
-    db.on('blocked', () => {
-      console.warn('⚠️ Database blocked - another tab may be open');
-    });
-    
-    db.on('versionchange', () => {
-      console.log('🔄 Database version changed, closing...');
-      db.close();
-    });
+    // Add transaction timeout handling
+    const originalTransaction = db.transaction.bind(db);
+    db.transaction = function(mode: any, tables: any, fn: any) {
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Transaction timeout after 30 seconds')), 30000);
+      });
+      
+      const transactionPromise = originalTransaction(mode, tables, fn);
+      
+      return Promise.race([transactionPromise, timeoutPromise]);
+    };
     
     return db;
   } catch (error) {
@@ -1015,8 +1058,23 @@ export function getDatabase(): RunSmartDB | null {
   return dbInstance;
 }
 
-// Export db for backward compatibility - but it will be null on server
-export const db = typeof window !== 'undefined' ? getDatabase() : null;
+// Export db for backward compatibility using a Proxy that resolves the
+// actual database instance on each property access. This avoids capturing
+// a null value during SSR/module eval and fixes client hydration issues.
+export const db = new Proxy({} as RunSmartDB, {
+  get(_target, prop, _receiver) {
+    const database = getDatabase();
+    if (!database) {
+      throw new Error('Database not available (IndexedDB unsupported or blocked)');
+    }
+    const value = (database as any)[prop as any];
+    // Preserve method binding to the Dexie instance
+    if (typeof value === 'function') {
+      return value.bind(database);
+    }
+    return value;
+  }
+});
 
 // Database availability check
 export function isDatabaseAvailable(): boolean {

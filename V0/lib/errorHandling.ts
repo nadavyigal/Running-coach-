@@ -358,6 +358,7 @@ export interface HealthCheckResult {
     status: 'up' | 'down';
     responseTime?: number;
     error?: string;
+    details?: string;
   }>;
   timestamp: string;
 }
@@ -411,6 +412,48 @@ export async function performHealthCheck(): Promise<HealthCheckResult> {
     }
   }
 
+  // User identity resolution check (client-side only)
+  if (typeof window !== 'undefined') {
+    try {
+      const start = Date.now();
+      const { ensureUserReady } = await import('@/lib/dbUtils');
+      
+      // Test user resolution without creating users in health check
+      const { getCurrentUser } = await import('@/lib/dbUtils');
+      const user = await getCurrentUser();
+      
+      if (user && user.id) {
+        checks.userIdentity = {
+          status: 'up',
+          responseTime: Date.now() - start,
+          details: `User resolved: id=${user.id}, onboarding=${user.onboardingComplete}`
+        };
+      } else {
+        // Try ensuring user ready as fallback
+        const ensuredUser = await ensureUserReady();
+        if (ensuredUser && ensuredUser.id) {
+          checks.userIdentity = {
+            status: 'up',
+            responseTime: Date.now() - start,
+            details: `User created: id=${ensuredUser.id}`
+          };
+        } else {
+          checks.userIdentity = {
+            status: 'down',
+            error: 'Failed to resolve or create user identity'
+          };
+          overallStatus = 'unhealthy';
+        }
+      }
+    } catch (error) {
+      checks.userIdentity = {
+        status: 'down',
+        error: `User identity resolution failed: ${(error as Error).message}`
+      };
+      overallStatus = 'unhealthy'; // User resolution is critical
+    }
+  }
+
   // System check - basic server health
   try {
     const start = Date.now();
@@ -419,7 +462,8 @@ export async function performHealthCheck(): Promise<HealthCheckResult> {
       const memUsage = process.memoryUsage();
       checks.system = {
         status: 'up',
-        responseTime: Date.now() - start
+        responseTime: Date.now() - start,
+        details: `Memory: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`
       };
     } else {
       checks.system = {

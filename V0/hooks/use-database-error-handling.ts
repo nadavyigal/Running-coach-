@@ -204,46 +204,125 @@ export function useDatabaseErrorHandling() {
     })
   }, [safeDbOperation])
 
-  // Database health check
+  // Enhanced database health check with comprehensive testing
   const checkDatabaseHealth = useCallback(async (): Promise<{
     isHealthy: boolean
     canRead: boolean
     canWrite: boolean
+    canTransact: boolean
+    connectionStatus: 'excellent' | 'good' | 'poor' | 'failed'
     error?: string
+    latency?: number
   }> => {
+    const startTime = Date.now();
+    let canRead = false;
+    let canWrite = false;
+    let canTransact = false;
+    let connectionStatus: 'excellent' | 'good' | 'poor' | 'failed' = 'failed';
+    
     try {
-      // Test read operation
-      await db.users.limit(1).toArray()
-      const canRead = true
-
-      // Test write operation
-      const testData = {
-        id: 999999, // Use high ID to avoid conflicts
-        name: 'test',
-        email: 'test@test.com',
-        age: 25,
-        experience: 'beginner' as const,
-        goal: 'habit' as const,
-        daysPerWeek: 3,
-        preferredTimes: ['morning'],
-        onboardingComplete: false,
-        currentStreak: 0,
-        createdAt: new Date(),
-        updatedAt: new Date()
+      // Test 1: Database availability
+      if (!db.isOpen()) {
+        await db.open();
       }
-      
-      await db.users.add(testData)
-      await db.users.delete(999999) // Clean up test data
-      const canWrite = true
 
-      return { isHealthy: true, canRead, canWrite }
+      // Test 2: Read operation
+      try {
+        await db.users.limit(1).toArray();
+        canRead = true;
+        console.log('✅ Database read test passed');
+      } catch (readError) {
+        console.error('❌ Database read test failed:', readError);
+      }
+
+      // Test 3: Write operation with enhanced error handling
+      let tempId: any = null;
+      try {
+        const testUser = {
+          goal: 'habit' as const,
+          experience: 'beginner' as const,
+          preferredTimes: ['morning'],
+          daysPerWeek: 3,
+          consents: { data: true, gdpr: true, push: true },
+          onboardingComplete: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          name: `health_check_${Date.now()}`
+        };
+        
+        tempId = await db.users.add(testUser as any);
+        if (typeof tempId === 'number') {
+          await db.users.delete(tempId);
+          canWrite = true;
+          console.log('✅ Database write test passed');
+        }
+      } catch (writeError) {
+        console.error('❌ Database write test failed:', writeError);
+        // Attempt cleanup if tempId was created
+        if (tempId && typeof tempId === 'number') {
+          try {
+            await db.users.delete(tempId);
+          } catch (cleanupError) {
+            console.warn('⚠️ Failed to cleanup test user:', cleanupError);
+          }
+        }
+      }
+
+      // Test 4: Transaction capability
+      try {
+        await db.transaction('rw', [db.users], async () => {
+          // Simple transaction test - just count users
+          const userCount = await db.users.count();
+          console.log('📊 Transaction test - user count:', userCount);
+        });
+        canTransact = true;
+        console.log('✅ Database transaction test passed');
+      } catch (transactionError) {
+        console.error('❌ Database transaction test failed:', transactionError);
+      }
+
+      // Calculate performance metrics
+      const latency = Date.now() - startTime;
+      
+      // Determine connection quality
+      if (canRead && canWrite && canTransact) {
+        if (latency < 100) {
+          connectionStatus = 'excellent';
+        } else if (latency < 500) {
+          connectionStatus = 'good';
+        } else {
+          connectionStatus = 'poor';
+        }
+      } else if (canRead && canWrite) {
+        connectionStatus = 'good';
+      } else if (canRead) {
+        connectionStatus = 'poor';
+      }
+
+      const isHealthy = canRead && canWrite && canTransact;
+
+      return {
+        isHealthy,
+        canRead,
+        canWrite,
+        canTransact,
+        connectionStatus,
+        latency
+      };
+
     } catch (error) {
+      const latency = Date.now() - startTime;
+      console.error('❌ Database health check failed:', error);
+      
       return {
         isHealthy: false,
-        canRead: false,
-        canWrite: false,
-        error: (error as Error).message
-      }
+        canRead,
+        canWrite,
+        canTransact,
+        connectionStatus: 'failed',
+        error: (error as Error).message,
+        latency
+      };
     }
   }, [])
 
