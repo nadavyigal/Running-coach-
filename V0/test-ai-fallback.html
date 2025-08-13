@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Fallback Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #cce7ff; color: #004085; }
+        button { padding: 10px 20px; margin: 10px 0; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h1>AI Fallback Test for Running Coach App</h1>
+    <p>Testing fallback behavior when OpenAI is not configured properly.</p>
+    
+    <div id="test-results"></div>
+    
+    <button onclick="testChatAPI()">Test Chat API</button>
+    <button onclick="testOnboardingChatAPI()">Test Onboarding Chat API</button>
+    <button onclick="testGoalRecommendationsAPI()">Test Goal Recommendations API</button>
+    <button onclick="testRecoveryAPI()">Test Recovery Recommendations API</button>
+    
+    <script>
+        const resultsDiv = document.getElementById('test-results');
+        
+        function addResult(test, status, message) {
+            const div = document.createElement('div');
+            div.className = `test-result ${status}`;
+            div.innerHTML = `<strong>${test}:</strong> ${message}`;
+            resultsDiv.appendChild(div);
+        }
+        
+        async function testChatAPI() {
+            try {
+                addResult('Chat API', 'info', 'Testing...');
+                
+                const response = await fetch('http://localhost:3000/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        messages: [{ role: 'user', content: 'Hello coach!' }]
+                    })
+                });
+                
+                const text = await response.text();
+                
+                if (response.ok) {
+                    // Check if it's a proper fallback message
+                    if (text.includes('AI coaching is currently unavailable') || 
+                        text.includes('technical difficulties') ||
+                        text.includes('offline') ||
+                        text.includes('fallback')) {
+                        addResult('Chat API', 'success', 'Proper fallback message returned');
+                    } else {
+                        addResult('Chat API', 'success', 'API responded successfully');
+                    }
+                } else {
+                    if (response.status === 503) {
+                        addResult('Chat API', 'success', 'Service unavailable with proper status code');
+                    } else {
+                        addResult('Chat API', 'error', `Error ${response.status}: ${text.substring(0, 100)}...`);
+                    }
+                }
+            } catch (error) {
+                addResult('Chat API', 'error', `Network error: ${error.message}`);
+            }
+        }
+        
+        async function testOnboardingChatAPI() {
+            try {
+                addResult('Onboarding Chat API', 'info', 'Testing...');
+                
+                const response = await fetch('http://localhost:3000/api/onboarding/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: 'I want to start running'
+                    })
+                });
+                
+                const text = await response.text();
+                
+                if (response.ok) {
+                    if (text.includes('AI coaching is currently unavailable') || 
+                        text.includes('technical difficulties') ||
+                        text.includes('offline') ||
+                        text.includes('fallback')) {
+                        addResult('Onboarding Chat API', 'success', 'Proper fallback message returned');
+                    } else {
+                        addResult('Onboarding Chat API', 'success', 'API responded successfully');
+                    }
+                } else {
+                    addResult('Onboarding Chat API', 'error', `Error ${response.status}: ${text.substring(0, 100)}...`);
+                }
+            } catch (error) {
+                addResult('Onboarding Chat API', 'error', `Network error: ${error.message}`);
+            }
+        }
+        
+        async function testGoalRecommendationsAPI() {
+            try {
+                addResult('Goal Recommendations API', 'info', 'Testing...');
+                
+                const response = await fetch('http://localhost:3000/api/goals/recommendations', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        userProfile: { experience: 'beginner', goals: ['health'] }
+                    })
+                });
+                
+                const text = await response.text();
+                
+                if (response.ok) {
+                    addResult('Goal Recommendations API', 'success', 'API responded successfully');
+                } else {
+                    addResult('Goal Recommendations API', 'error', `Error ${response.status}: ${text.substring(0, 100)}...`);
+                }
+            } catch (error) {
+                addResult('Goal Recommendations API', 'error', `Network error: ${error.message}`);
+            }
+        }
+        
+        async function testRecoveryAPI() {
+            try {
+                addResult('Recovery Recommendations API', 'info', 'Testing...');
+                
+                const response = await fetch('http://localhost:3000/api/recovery/recommendations', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        userId: 1,
+                        recoveryData: { sleep: 7, hrv: 40 }
+                    })
+                });
+                
+                const text = await response.text();
+                
+                if (response.ok) {
+                    addResult('Recovery Recommendations API', 'success', 'API responded successfully');
+                } else {
+                    addResult('Recovery Recommendations API', 'error', `Error ${response.status}: ${text.substring(0, 100)}...`);
+                }
+            } catch (error) {
+                addResult('Recovery Recommendations API', 'error', `Network error: ${error.message}`);
+            }
+        }
+        
+        // Auto-run all tests
+        window.onload = function() {
+            setTimeout(() => {
+                testChatAPI();
+            }, 500);
+            
+            setTimeout(() => {
+                testOnboardingChatAPI();
+            }, 1000);
+            
+            setTimeout(() => {
+                testGoalRecommendationsAPI();
+            }, 1500);
+            
+            setTimeout(() => {
+                testRecoveryAPI();
+            }, 2000);
+        };
+    </script>
+</body>
+</html>

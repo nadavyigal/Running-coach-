@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Running Coach Diagnosis</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .test-section { margin: 20px 0; padding: 15px; border: 2px solid #007bff; border-radius: 10px; }
+        button { background-color: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background-color: #0056b3; }
+        textarea { width: 100%; height: 200px; margin: 10px 0; }
+        .app-frame { width: 100%; height: 600px; border: 2px solid #333; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>🏃‍♂️ Running Coach Application Diagnosis</h1>
+    
+    <div class="test-section">
+        <h2>🔍 Quick Tests</h2>
+        <button onclick="testAppLoad()">Test App Load</button>
+        <button onclick="testLocalStorage()">Test LocalStorage</button>
+        <button onclick="testConsoleErrors()">Check Console Errors</button>
+        <button onclick="clearStorage()">Clear Storage</button>
+        <button onclick="runFullDiagnosis()">Run Full Diagnosis</button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <div class="test-section">
+        <h2>📱 Live App (localhost:3004)</h2>
+        <iframe src="http://localhost:3004" class="app-frame" id="appFrame"></iframe>
+        <div>
+            <button onclick="reloadApp()">Reload App</button>
+            <button onclick="inspectApp()">Inspect App State</button>
+            <button onclick="simulateOnboarding()">Simulate Onboarding</button>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>📋 Diagnosis Log</h2>
+        <textarea id="logOutput" readonly placeholder="Diagnosis results will appear here..."></textarea>
+        <button onclick="clearLog()">Clear Log</button>
+        <button onclick="exportLog()">Export Log</button>
+    </div>
+
+    <script>
+        let logOutput = '';
+        
+        function log(message) {
+            console.log(message);
+            logOutput += new Date().toLocaleTimeString() + ': ' + message + '\n';
+            document.getElementById('logOutput').value = logOutput;
+        }
+        
+        function addResult(message, type = 'success') {
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.textContent = message;
+            document.getElementById('results').appendChild(div);
+            log(message);
+        }
+        
+        async function testAppLoad() {
+            log('🧪 Testing app load...');
+            try {
+                const response = await fetch('http://localhost:3004');
+                if (response.ok) {
+                    const html = await response.text();
+                    const hasLoading = html.includes('Loading RunSmart');
+                    const hasReact = html.includes('__next');
+                    
+                    addResult(`✅ App loads successfully (${response.status})`, 'success');
+                    addResult(`📄 Content length: ${html.length} chars`, hasLoading ? 'warning' : 'success');
+                    addResult(`⚛️ React detected: ${hasReact}`, hasReact ? 'success' : 'warning');
+                    addResult(`⏳ Shows loading screen: ${hasLoading}`, hasLoading ? 'warning' : 'success');
+                    
+                    if (hasLoading) {
+                        addResult('⚠️ App is stuck on loading screen - may indicate database/initialization issue', 'warning');
+                    }
+                } else {
+                    addResult(`❌ App failed to load: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                addResult(`❌ Failed to connect to app: ${error.message}`, 'error');
+            }
+        }
+        
+        function testLocalStorage() {
+            log('🧪 Testing localStorage...');
+            try {
+                const onboardingComplete = localStorage.getItem('onboarding-complete');
+                const userData = localStorage.getItem('user-data');
+                
+                addResult(`📝 Onboarding complete: ${onboardingComplete}`, onboardingComplete === 'true' ? 'success' : 'warning');
+                addResult(`👤 User data exists: ${!!userData}`, userData ? 'success' : 'warning');
+                
+                if (userData) {
+                    try {
+                        const parsed = JSON.parse(userData);
+                        addResult(`📊 User data valid JSON: ${Object.keys(parsed).join(', ')}`, 'success');
+                    } catch {
+                        addResult('❌ User data is invalid JSON', 'error');
+                    }
+                }
+                
+                // Test localStorage write capability
+                localStorage.setItem('test-key', 'test-value');
+                const testRead = localStorage.getItem('test-key');
+                localStorage.removeItem('test-key');
+                
+                addResult(`🔧 LocalStorage working: ${testRead === 'test-value'}`, testRead === 'test-value' ? 'success' : 'error');
+                
+            } catch (error) {
+                addResult(`❌ localStorage test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        function testConsoleErrors() {
+            log('🧪 Checking console errors...');
+            
+            // Clear previous errors
+            const originalError = console.error;
+            const originalWarn = console.warn;
+            const errors = [];
+            const warnings = [];
+            
+            console.error = function(...args) {
+                errors.push(args.join(' '));
+                originalError.apply(console, args);
+            };
+            
+            console.warn = function(...args) {
+                warnings.push(args.join(' '));
+                originalWarn.apply(console, args);
+            };
+            
+            setTimeout(() => {
+                console.error = originalError;
+                console.warn = originalWarn;
+                
+                addResult(`❌ Console errors: ${errors.length}`, errors.length === 0 ? 'success' : 'error');
+                addResult(`⚠️ Console warnings: ${warnings.length}`, warnings.length === 0 ? 'success' : 'warning');
+                
+                errors.forEach(error => addResult(`Error: ${error}`, 'error'));
+                warnings.forEach(warning => addResult(`Warning: ${warning}`, 'warning'));
+            }, 3000);
+            
+            addResult('⏳ Monitoring console for 3 seconds...', 'warning');
+        }
+        
+        function clearStorage() {
+            log('🧪 Clearing storage...');
+            try {
+                localStorage.clear();
+                sessionStorage.clear();
+                addResult('✅ Storage cleared successfully', 'success');
+            } catch (error) {
+                addResult(`❌ Failed to clear storage: ${error.message}`, 'error');
+            }
+        }
+        
+        function reloadApp() {
+            log('🔄 Reloading app iframe...');
+            document.getElementById('appFrame').src = document.getElementById('appFrame').src;
+        }
+        
+        function inspectApp() {
+            log('🔍 Inspecting app state...');
+            const iframe = document.getElementById('appFrame');
+            
+            try {
+                // Try to access iframe content (will fail if cross-origin)
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                const bodyText = iframeDoc.body ? iframeDoc.body.textContent : 'No body';
+                
+                addResult(`📄 App content preview: ${bodyText.substring(0, 200)}...`, 'success');
+                
+                // Check for specific elements
+                const hasOnboarding = bodyText.includes('Start My Journey') || bodyText.includes('onboarding');
+                const hasToday = bodyText.includes('Today');
+                const hasLoading = bodyText.includes('Loading');
+                
+                addResult(`🎯 Has onboarding: ${hasOnboarding}`, hasOnboarding ? 'success' : 'warning');
+                addResult(`📅 Has today screen: ${hasToday}`, hasToday ? 'success' : 'warning');
+                addResult(`⏳ Shows loading: ${hasLoading}`, hasLoading ? 'warning' : 'success');
+                
+            } catch (error) {
+                addResult('⚠️ Cannot inspect iframe content (cross-origin security)', 'warning');
+                addResult('💡 Open browser dev tools and check the iframe manually', 'warning');
+            }
+        }
+        
+        function simulateOnboarding() {
+            log('🎭 Simulating onboarding completion...');
+            
+            // Set up onboarding completion in localStorage
+            const userData = {
+                experience: 'beginner',
+                goal: 'habit',
+                daysPerWeek: 3,
+                preferredTimes: ['morning'],
+                age: 30,
+                motivations: ['health'],
+                barriers: ['time'],
+                coachingStyle: 'supportive'
+            };
+            
+            localStorage.setItem('user-data', JSON.stringify(userData));
+            localStorage.setItem('onboarding-complete', 'true');
+            
+            addResult('✅ Simulated onboarding completion', 'success');
+            addResult('🔄 Reload the app to see if it shows the main screens', 'warning');
+            
+            // Automatically reload the iframe
+            setTimeout(() => {
+                reloadApp();
+                addResult('🔄 App reloaded with simulated onboarding completion', 'success');
+            }, 1000);
+        }
+        
+        async function runFullDiagnosis() {
+            log('🏁 Running full diagnosis...');
+            document.getElementById('results').innerHTML = '';
+            
+            addResult('🚀 Starting comprehensive diagnosis...', 'warning');
+            
+            await testAppLoad();
+            testLocalStorage();
+            testConsoleErrors();
+            
+            setTimeout(() => {
+                // Final assessment
+                addResult('🎯 DIAGNOSIS SUMMARY:', 'warning');
+                
+                const onboardingComplete = localStorage.getItem('onboarding-complete') === 'true';
+                const hasUserData = !!localStorage.getItem('user-data');
+                
+                if (!onboardingComplete || !hasUserData) {
+                    addResult('❌ PRIMARY ISSUE: Onboarding system not working properly', 'error');
+                    addResult('💡 FIX: Check onboarding completion logic in page.tsx and simple-onboarding-test.tsx', 'warning');
+                }
+                
+                addResult('🔧 RECOMMENDED ACTIONS:', 'warning');
+                addResult('1. Check browser console for JavaScript errors', 'warning');
+                addResult('2. Verify database initialization in app startup', 'warning');
+                addResult('3. Test onboarding button click functionality', 'warning');
+                addResult('4. Check if AI coach chat API endpoints are working', 'warning');
+                addResult('5. Verify navigation between main screens works', 'warning');
+                
+                log('🏁 Full diagnosis complete!');
+            }, 5000);
+        }
+        
+        function clearLog() {
+            logOutput = '';
+            document.getElementById('logOutput').value = '';
+        }
+        
+        function exportLog() {
+            const blob = new Blob([logOutput], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'running-coach-diagnosis-' + new Date().toISOString().split('T')[0] + '.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        // Auto-start basic diagnosis
+        window.addEventListener('load', () => {
+            log('🎬 Diagnosis page loaded');
+            addResult('🎯 Ready to diagnose Running Coach app on localhost:3004', 'warning');
+            addResult('💡 Click "Run Full Diagnosis" to start comprehensive testing', 'warning');
+        });
+    </script>
+</body>
+</html>

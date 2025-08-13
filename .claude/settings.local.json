@@ -18,7 +18,11 @@
       "Bash(env)",
       "Bash(npm audit:*)",
       "Bash(timeout 30s npm run test -- --run --reporter=basic)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(rm:*)",
+      "Bash(cp:*)"
     ],
     "deny": []
   }

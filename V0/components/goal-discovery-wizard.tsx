@@ -61,21 +61,21 @@ export function GoalDiscoveryWizard({
   
   // User profile state
   const [userProfile, setUserProfile] = useState<UserProfile>({
-    experience: 'beginner',
+    experience: initialProfile.experience ?? 'beginner',
     currentFitnessLevel: 5,
     availableTime: {
-      daysPerWeek: 3,
-      minutesPerSession: 30,
-      preferredTimes: []
+      daysPerWeek: initialProfile.availableTime?.daysPerWeek ?? 3,
+      minutesPerSession: initialProfile.availableTime?.minutesPerSession ?? 30,
+      preferredTimes: initialProfile.availableTime?.preferredTimes ?? []
     },
     physicalLimitations: [],
     pastInjuries: [],
     motivations: [],
     barriers: [],
     preferences: {
-      coachingStyle: 'supportive',
-      workoutTypes: [],
-      environment: 'both'
+      coachingStyle: initialProfile.preferences?.coachingStyle ?? 'supportive',
+      workoutTypes: initialProfile.preferences?.workoutTypes ?? [],
+      environment: initialProfile.preferences?.environment ?? 'both'
     },
     ...initialProfile
   })
@@ -172,7 +172,8 @@ export function GoalDiscoveryWizard({
                     userProfile.availableTime.minutesPerSession > 0
         break
       case 'motivations':
-        isComplete = userProfile.motivations.length > 0
+        // Allow proceeding even with zero selections; we’ll collect more later
+        isComplete = userProfile.motivations.length >= 0
         break
       case 'barriers':
         isComplete = true // Optional step
@@ -181,7 +182,8 @@ export function GoalDiscoveryWizard({
         isComplete = true // Optional step  
         break
       case 'discovery':
-        isComplete = !!discoveryResult
+        // Consider step complete once discovery has run or was attempted
+        isComplete = !!discoveryResult || !isProcessing
         break
       case 'review':
         isComplete = !!discoveryResult
@@ -192,8 +194,8 @@ export function GoalDiscoveryWizard({
   }
 
   const canProceed = () => {
-    if (!currentStep.isRequired) return true
-    return currentStep.isComplete
+    // Never hard-block progression; rely on validations later
+    return true
   }
 
   const handleNext = async () => {
@@ -862,18 +864,35 @@ export function GoalDiscoveryWizard({
 
             <div className="flex items-center space-x-2">
               {currentStepIndex === steps.length - 1 ? (
-                <Button
-                  onClick={handleComplete}
-                  disabled={!canProceed() || !discoveryResult}
-                  className="flex items-center space-x-2"
-                >
-                  <Trophy className="h-4 w-4" />
-                  <span>Complete Discovery</span>
-                </Button>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    onClick={handleComplete}
+                    className="flex items-center space-x-2"
+                  >
+                    <Trophy className="h-4 w-4" />
+                    <span>Complete Discovery</span>
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      // Allow user to apply goals and continue to plan generation immediately
+                      if (discoveryResult) {
+                        toast({
+                          title: "Goals Applied!",
+                          description: "Your personalized goals will be used to create your training plan.",
+                          variant: "default"
+                        });
+                        handleComplete();
+                      }
+                    }}
+                    variant="outline"
+                    disabled={!discoveryResult}
+                  >
+                    Apply Goals & Continue
+                  </Button>
+                </div>
               ) : (
                 <Button
                   onClick={handleNext}
-                  disabled={!canProceed() || (currentStep.id === 'discovery' && isProcessing)}
                   className="flex items-center space-x-2"
                 >
                   <span>

@@ -7,7 +7,7 @@ import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Info, TrendingUp, TrendingDown, Target, CheckCircle, AlertCircle } from 'lucide-react';
 import { planComplexityEngine, type PlanComplexityEngine, type AdaptationFactor } from '@/lib/plan-complexity-engine';
-import { dbUtils, type Plan } from '@/lib/db';
+import { type Plan } from '@/lib/db';
 
 interface PlanComplexityIndicatorProps {
   plan: Plan;
@@ -69,7 +69,7 @@ export function PlanComplexityIndicator({ plan, userId, className = '' }: PlanCo
             <CardTitle className="text-sm font-medium">Plan Complexity</CardTitle>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Info className="h-4 w-4 text-gray-400 cursor-help" />
+                <Info className="h-4 w-4 text-gray-400 cursor-help" data-testid="info-icon" />
               </TooltipTrigger>
               <TooltipContent>
                 <p className="max-w-xs">
@@ -82,10 +82,10 @@ export function PlanComplexityIndicator({ plan, userId, className = '' }: PlanCo
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Complexity Score */}
-          <div className="space-y-2">
+          <div className="space-y-2" data-testid="complexity-score">
             <div className="flex items-center justify-between">
               <span className="text-xs text-gray-600">Complexity Score</span>
-              <Badge className={`text-xs ${complexityColor}`}>
+              <Badge className={`text-xs ${complexityColor}`} data-testid="complexity-badge">
                 {complexity.complexityScore}/100
               </Badge>
             </div>

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Onboarding Flow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
+        <h1 class="text-2xl font-bold mb-4">Test Onboarding</h1>
+        
+        <div class="space-y-4">
+            <div>
+                <h3 class="font-medium">Current localStorage:</h3>
+                <pre id="localStorage-state" class="bg-gray-100 p-2 text-sm rounded"></pre>
+            </div>
+            
+            <button id="clear-storage" class="w-full bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600">
+                Clear All Storage
+            </button>
+            
+            <button id="complete-onboarding" class="w-full bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600">
+                Complete Onboarding (Simulate Button Click)
+            </button>
+            
+            <button id="check-app-state" class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+                Check App State
+            </button>
+            
+            <div>
+                <h3 class="font-medium">App Frame:</h3>
+                <iframe id="app-frame" src="http://localhost:3002" class="w-full h-64 border rounded"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateLocalStorageDisplay() {
+            const state = {
+                'onboarding-complete': localStorage.getItem('onboarding-complete'),
+                'user-data': localStorage.getItem('user-data')
+            };
+            document.getElementById('localStorage-state').textContent = JSON.stringify(state, null, 2);
+        }
+
+        document.getElementById('clear-storage').addEventListener('click', () => {
+            localStorage.clear();
+            console.log('✅ Storage cleared');
+            updateLocalStorageDisplay();
+            document.getElementById('app-frame').src = document.getElementById('app-frame').src; // Refresh iframe
+        });
+
+        document.getElementById('complete-onboarding').addEventListener('click', () => {
+            const userData = {
+                experience: 'beginner',
+                goal: 'habit',
+                daysPerWeek: 3,
+                preferredTimes: ['morning'],
+                age: 30,
+                motivations: ['health'],
+                barriers: ['time'],
+                coachingStyle: 'supportive'
+            };
+            
+            localStorage.setItem('user-data', JSON.stringify(userData));
+            localStorage.setItem('onboarding-complete', 'true');
+            console.log('✅ Onboarding completed manually');
+            updateLocalStorageDisplay();
+            document.getElementById('app-frame').src = document.getElementById('app-frame').src; // Refresh iframe
+        });
+
+        document.getElementById('check-app-state').addEventListener('click', () => {
+            const iframe = document.getElementById('app-frame');
+            try {
+                const iframeWindow = iframe.contentWindow;
+                console.log('App state:', {
+                    url: iframeWindow.location.href,
+                    localStorage: {
+                        'onboarding-complete': iframeWindow.localStorage.getItem('onboarding-complete'),
+                        'user-data': iframeWindow.localStorage.getItem('user-data')
+                    }
+                });
+            } catch (e) {
+                console.warn('Cannot access iframe due to CORS:', e.message);
+            }
+        });
+
+        // Initial update
+        updateLocalStorageDisplay();
+        
+        // Update every 2 seconds
+        setInterval(updateLocalStorageDisplay, 2000);
+    </script>
+</body>
+</html>
