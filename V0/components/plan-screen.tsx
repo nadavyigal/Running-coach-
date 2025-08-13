@@ -11,6 +11,7 @@ import { PlanComplexityIndicator } from "@/components/plan-complexity-indicator"
 import { dbUtils, type Plan, type Workout } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
+import { formatLocalizedDate } from "@/lib/timezone-utils"
 
 export function PlanScreen() {
   const [currentView, setCurrentView] = useState<"monthly" | "biweekly" | "progress">("monthly")
@@ -119,7 +120,7 @@ export function PlanScreen() {
 
       return {
         title: `Week ${weekNumber}`,
-        dates: `${weekStart.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })} - ${weekEnd.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}`,
+        dates: `${formatLocalizedDate(weekStart, undefined, { day: 'numeric', month: 'short' })} - ${formatLocalizedDate(weekEnd, undefined, { day: 'numeric', month: 'short' })}`,
         completed,
         total,
         distance: `${totalDistance.toFixed(1)}km`,
