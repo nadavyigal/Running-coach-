@@ -38,7 +38,7 @@ export function validateOpenAIKey(): ApiKeyValidationResult {
     };
   }
   
-  // Check basic format (OpenAI keys start with 'sk-')
+  // Check basic format (OpenAI keys start with 'sk-' including project-scoped keys like 'sk-proj-')
   if (!key.startsWith('sk-')) {
     return {
       isValid: false,

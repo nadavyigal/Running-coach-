@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 import {
   Send,
   Bot,
@@ -16,7 +16,6 @@ import {
   RefreshCw,
   ThumbsUp,
   ThumbsDown,
-  Settings,
 } from "lucide-react"
 import { dbUtils, type User as UserType, type OnboardingSession } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
@@ -32,7 +31,7 @@ import { useErrorToast } from '@/components/error-toast'
 import { useAIServiceErrorHandling } from '@/hooks/use-ai-service-error-handling'
 import { useNetworkErrorHandling } from '@/hooks/use-network-error-handling'
 import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
-import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
+// import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
 import { conversationStorage } from '@/lib/conversationStorage'
 import { sessionManager, type SessionResumeData } from '@/lib/sessionManager'
 
@@ -58,7 +57,7 @@ interface OnboardingChatOverlayProps {
   totalSteps?: number;
 }
 
-export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep, totalSteps }: OnboardingChatOverlayProps) {
+export function OnboardingChatOverlay({ isOpen, onClose, onComplete }: OnboardingChatOverlayProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputValue, setInputValue] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -97,6 +96,13 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
   useEffect(() => {
     initializeOnboardingSession()
   }, [])
+
+  useEffect(() => {
+    // If dialog opens after initial mount, ensure a session is loaded/created
+    if (isOpen && user && !currentSession && !isLoadingHistory) {
+      loadOrCreateSession()
+    }
+  }, [isOpen])
 
   useEffect(() => {
     if (user && !currentSession) {
@@ -141,10 +147,7 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
       
     } catch (error) {
       console.error('Failed to load or create session:', error)
-      showError({
-        title: 'Session Error',
-        description: 'Failed to initialize conversation. Please try again.',
-      })
+      showError(new Error('Failed to initialize conversation. Please try again.'))
       await createFallbackSession()
     } finally {
       setIsLoadingHistory(false)
@@ -258,11 +261,12 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
       timestamp: new Date(),
     }
     setMessages([fallbackMessage])
+    setIsLoadingHistory(false) // Ensure loading state is cleared
     
     toast({
       title: "Limited Mode",
       description: "Running in limited mode. Your conversation may not be saved.",
-      variant: "destructive"
+      variant: "default"
     })
   }
 
@@ -314,6 +318,8 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || isLoading) return
 
+    console.log('💬 Sending user message:', content.trim())
+    
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -378,12 +384,12 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
           ...messages.map(msg => ({ role: msg.role, content: msg.content })),
           { role: 'user', content: content.trim() }
         ],
-        { userId: user?.id?.toString(), userContext: context, currentPhase }
+        { userId: user?.id?.toString() ?? '', userContext: context, currentPhase }
       )
 
       // Handle fallback response
-      if (response && typeof response === 'object' && 'fallback' in response) {
-        const fallbackResponse = response as { fallback: boolean, message: string, redirectToForm: boolean }
+      if (response && typeof response === 'object' && 'fallback' in (response as any)) {
+        const fallbackResponse = (response as unknown) as { fallback: boolean, message: string, redirectToForm: boolean }
         if (fallbackResponse.redirectToForm) {
           toast({
             title: "Switching to Guided Form",
@@ -393,6 +399,11 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
           onClose() // Close chat overlay to allow form-based onboarding
           return
         }
+      }
+
+      // Check if response is a proper Response object
+      if (!response || !('ok' in response)) {
+        throw new Error('Invalid response from AI service')
       }
 
       if (!response.ok) {
@@ -406,6 +417,17 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
           if (errorData.fallback) {
             // Handle fallback response
             errorText = errorData.message || errorText
+            
+            // If this is a redirect to form, handle it gracefully
+            if (errorData.redirectToForm) {
+              toast({
+                title: "Switching to Guided Form",
+                description: errorText,
+                variant: "default"
+              })
+              onClose() // Close chat overlay to allow form-based onboarding
+              return
+            }
           }
         } catch (parseError) {
           // If we can't parse the error response, use the status text
@@ -433,9 +455,9 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
         role: 'assistant',
         content: "",
         timestamp: new Date(),
-        coachingInteractionId: coachingInteractionId || undefined,
+        coachingInteractionId: coachingInteractionId ?? '',
         adaptations: adaptations || [],
-        confidence: confidence || undefined,
+        confidence: isNaN(confidence) ? 0 : confidence,
         requestFeedback: confidence > 0 && confidence < 0.8,
       }
 
@@ -456,6 +478,7 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
           const lines = chunk.split('\n')
           
           for (const line of lines) {
+            if (!line) continue
             if (line.startsWith('0:')) {
               try {
                 const data = JSON.parse(line.slice(2))
@@ -473,6 +496,8 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete, currentStep
                 // Ignore JSON parse errors for streaming chunks
                 console.warn('Failed to parse streaming chunk:', e)
               }
+            } else {
+              // Ignore control/error channels (2:, 3:) and any stray lines
             }
           }
         }

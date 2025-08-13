@@ -3,15 +3,38 @@ import { streamText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { OnboardingPromptBuilder } from '@/lib/onboardingPromptBuilder';
 
+// Cancellable timeout helper to guard long-running OpenAI calls without leaking unhandled rejections
+function createTimeout(ms: number) {
+  let timer: NodeJS.Timeout | null = null;
+  let rejectFn: ((reason?: any) => void) | null = null;
+  const promise = new Promise((_, reject) => {
+    rejectFn = reject;
+    timer = setTimeout(() => reject(new Error('Request timeout')), ms);
+  });
+  const cancel = () => {
+    if (timer) clearTimeout(timer);
+    // ensure no further rejection
+    rejectFn = null;
+    timer = null;
+  };
+  return { promise, cancel } as const;
+}
+
 export async function POST(req: Request) {
   console.log('🎯 Onboarding Chat API: Starting request');
   
   try {
-    // Add request timeout
-    const TIMEOUT_MS = 30000; // 30 seconds
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Request timeout')), TIMEOUT_MS);
-    });
+    // Check OpenAI API key first before doing anything else
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (!openaiKey || openaiKey === 'your_openai_api_key_here') {
+      console.error('❌ OpenAI API key not configured, returning fallback immediately');
+      return NextResponse.json({
+        error: 'AI coaching is currently unavailable. Please use the guided form to complete your setup.',
+        fallback: true,
+        message: 'AI chat is not available right now. Let\'s continue with the step-by-step form instead.',
+        redirectToForm: true
+      }, { status: 503 });
+    }
     
     // Add request body validation
     const contentType = req.headers.get('content-type');
@@ -73,16 +96,7 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    // Check OpenAI API key
-    const openaiKey = process.env.OPENAI_API_KEY;
-    if (!openaiKey) {
-      console.error('OpenAI API key is not configured');
-      return NextResponse.json({
-        error: 'AI service is not configured',
-        fallback: true,
-        message: 'Please configure your OpenAI API key to use the AI coach.'
-      }, { status: 503 });
-    }
+    // OpenAI key check already done at the beginning of the function
 
     // Build onboarding prompt using conversation history from request
     const conversationHistory = messages.map((msg: any) => ({
@@ -104,29 +118,62 @@ export async function POST(req: Request) {
     
     console.log('📤 Calling OpenAI with messages:', apiMessages.length);
 
-    // Call OpenAI with streaming and timeout
-    const streamResult = await Promise.race([
-      streamText({
-        model: openai("gpt-4o"),
-        messages: apiMessages,
-        maxTokens: 300, // Limit for onboarding responses
-        temperature: 0.7,
-      }),
-      timeoutPromise
-    ]) as any;
+    // Call OpenAI with streaming and a cancellable timeout
+    const { promise: timeout, cancel } = createTimeout(20000);
+    const streamPromise = streamText({
+      model: openai("gpt-4o"),
+      messages: apiMessages,
+      maxTokens: 300, // Limit for onboarding responses
+      temperature: 0.7,
+    });
+    const streamResult = await Promise.race([streamPromise, timeout]) as any;
+    // clear timeout so we don't get an unhandledRejection later
+    cancel();
 
     console.log('✅ OpenAI response received');
     
-    // Get the response stream and return
-    const stream = streamResult.toDataStreamResponse();
-    
-    return new Response(stream.body, {
+    // Transform stream into '0:{"textDelta": ...}' lines expected by client parser
+    const original = streamResult.toDataStreamResponse();
+    const reader = original.body?.getReader();
+    if (!reader) return original;
+    const transformed = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const text = decoder.decode(value);
+          const lines = text.split('\n').filter(Boolean);
+          for (const line of lines) {
+            // Only forward content lines (channel 0). Drop control/error channels like '2:' and '3:'.
+            if (line.startsWith('0:')) {
+              controller.enqueue(encoder.encode(line + '\n'))
+            }
+          }
+        }
+        controller.close();
+      }
+    });
+
+    // Naive phase advancement: after at least one user+assistant exchange in a phase, move forward.
+    // In a real system this could be driven by an LLM tool result or heuristics.
+    const phaseOrder = ["motivation","assessment","creation","refinement","complete"] as const
+    const currentIndex = Math.max(0, phaseOrder.indexOf((currentPhase as string) as any))
+    const nextPhaseHeader = currentIndex >= 0 && currentIndex < phaseOrder.length - 1
+      ? phaseOrder[currentIndex + 1]
+      : "complete"
+
+    return new Response(transformed, {
       status: 200,
       headers: {
-        ...stream.headers,
+        ...original.headers,
         'X-Coaching-Interaction-Id': `onboarding-${Date.now()}`,
         'X-Coaching-Confidence': '0.8',
-        'X-Onboarding-Next-Phase': currentPhase,
+        // Drive client phase progression
+        'X-Onboarding-Next-Phase': nextPhaseHeader,
+        'X-Debug-Onboarding-Phase': String(currentPhase),
+        'X-Debug-Messages-Count': String(messages?.length || 0),
       },
     });
 
@@ -134,39 +181,93 @@ export async function POST(req: Request) {
     console.error('❌ Onboarding chat API error:', error);
     console.error('❌ Error type:', error instanceof Error ? error.constructor.name : typeof error);
     console.error('❌ Error message:', error instanceof Error ? error.message : String(error));
+    console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack available');
     
-    // Handle specific error types
+    // Enhanced error handling with proper categorization
     if (error instanceof Error) {
-      if (error.message === 'Request timeout') {
+      const errorMessage = error.message.toLowerCase();
+      
+      // Timeout errors
+      if (error.message === 'Request timeout' || errorMessage.includes('timeout')) {
         console.log('⏱️ Request timed out');
         return NextResponse.json({
           error: "I'm taking a bit longer than usual to respond. Let me try a simpler approach - what specific running question can I help you with?",
-          fallback: true
+          fallback: true,
+          errorType: 'timeout',
+          retryAfter: 5000
         }, { status: 408 });
       }
       
-      if (error.message.includes('rate limit')) {
+      // Rate limiting errors
+      if (errorMessage.includes('rate limit') || errorMessage.includes('429') || errorMessage.includes('too many requests')) {
         console.log('🚫 Rate limit hit');
         return NextResponse.json({
           error: "I'm getting a lot of questions right now. Please try again in a moment.",
-          fallback: true
+          fallback: true,
+          errorType: 'rate_limit',
+          retryAfter: 60000
         }, { status: 429 });
       }
       
-      if (error.message.includes('API key') || error.message.includes('unauthorized')) {
+      // Authentication/API key errors
+      if (errorMessage.includes('api key') || errorMessage.includes('unauthorized') || errorMessage.includes('401')) {
         console.log('🔑 API key issue');
         return NextResponse.json({
           error: "AI service is temporarily unavailable. Please try the guided form instead.",
           fallback: true,
-          redirectToForm: true
+          redirectToForm: true,
+          errorType: 'auth_error'
         }, { status: 503 });
       }
+      
+      // Service unavailable errors
+      if (errorMessage.includes('503') || errorMessage.includes('service unavailable') || errorMessage.includes('temporarily unavailable')) {
+        console.log('🛑 Service unavailable');
+        return NextResponse.json({
+          error: "AI service is temporarily down. Let's continue with the guided form instead.",
+          fallback: true,
+          redirectToForm: true,
+          errorType: 'service_unavailable',
+          retryAfter: 300000 // 5 minutes
+        }, { status: 503 });
+      }
+      
+      // Network/connection errors
+      if (errorMessage.includes('network') || errorMessage.includes('connection') || errorMessage.includes('fetch failed')) {
+        console.log('🌐 Network error');
+        return NextResponse.json({
+          error: "Connection issue detected. Please check your internet and try again.",
+          fallback: true,
+          errorType: 'network_error',
+          retryAfter: 10000
+        }, { status: 502 });
+      }
+      
+      // Token/context limit errors
+      if (errorMessage.includes('token') || errorMessage.includes('context length') || errorMessage.includes('too long')) {
+        console.log('📏 Token limit exceeded');
+        return NextResponse.json({
+          error: "Your message is too complex. Let's continue with the guided form instead.",
+          fallback: true,
+          redirectToForm: true,
+          errorType: 'token_limit'
+        }, { status: 413 });
+      }
     }
+    
+    // Generic error fallback with enhanced logging
+    console.error('❌ Unhandled error in onboarding chat:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString()
+    });
     
     return NextResponse.json({
       error: "I'm having trouble processing your message right now. Please try again or use the guided form.",
       fallback: true,
-      redirectToForm: true
+      redirectToForm: true,
+      errorType: 'generic_error',
+      errorCode: 'CHAT_API_ERROR'
     }, { status: 500 });
   }
 }

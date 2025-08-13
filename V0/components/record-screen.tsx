@@ -3,10 +3,11 @@
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertTriangle } from "lucide-react"
+import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertTriangle, Info } from "lucide-react"
 import { RouteSelectorModal } from "@/components/route-selector-modal"
+import { RouteSelectionWizard } from "@/components/route-selection-wizard"
 import { ManualRunModal } from "@/components/manual-run-modal"
-import { dbUtils, type Run, type Workout } from "@/lib/db"
+import { dbUtils, type Run, type Workout, type User } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 import { planAdjustmentService } from "@/lib/planAdjustmentService"
 import { planAdaptationEngine } from "@/lib/planAdaptationEngine"
@@ -15,6 +16,7 @@ import { trackPlanSessionCompleted } from "@/lib/analytics"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { GPSAccuracyIndicator } from "@/components/gps-accuracy-indicator"
 import { GPSMonitoringService, type GPSAccuracyData } from "@/lib/gps-monitoring"
+import { routeRecommendationService, type Route } from "@/lib/route-recommendations"
 
 interface GPSCoordinate {
   latitude: number
@@ -36,8 +38,11 @@ export function RecordScreen() {
   const [gpsPermission, setGpsPermission] = useState<'prompt' | 'granted' | 'denied' | 'unsupported'>('prompt')
   const [gpsAccuracy, setGpsAccuracy] = useState<number>(0)
   const [showRoutesModal, setShowRoutesModal] = useState(false)
+  const [showRouteWizard, setShowRouteWizard] = useState(false)
   const [showManualModal, setShowManualModal] = useState(false)
   const [currentWorkout, setCurrentWorkout] = useState<Workout | null>(null)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
   
   // GPS monitoring state
   const [gpsMonitoringService] = useState(() => new GPSMonitoringService())
@@ -62,9 +67,10 @@ export function RecordScreen() {
   const { toast } = useToast()
   const router = useRouter()
 
-  // Load today's workout on mount
+  // Load today's workout and user data on mount
   useEffect(() => {
     loadTodaysWorkout()
+    loadCurrentUser()
     checkGpsSupport()
     
     return () => {
@@ -92,6 +98,17 @@ export function RecordScreen() {
     return () => clearInterval(interval)
   }, [isRunning, isPaused])
 
+  const loadCurrentUser = async () => {
+    try {
+      const user = await dbUtils.getCurrentUser()
+      if (user) {
+        setCurrentUser(user)
+      }
+    } catch (error) {
+      console.error('Error loading user:', error)
+    }
+  }
+
   const checkGpsSupport = async () => {
     if (!navigator.geolocation) {
       setGpsPermission('unsupported')
@@ -99,26 +116,27 @@ export function RecordScreen() {
     }
 
     try {
-      const result = await navigator.permissions.query({name: 'geolocation'})
-      setGpsPermission(result.state as 'granted' | 'denied' | 'prompt')
+      const permission = await navigator.permissions.query({ name: 'geolocation' as PermissionName })
+      setGpsPermission(permission.state)
       
-      result.addEventListener('change', () => {
-        setGpsPermission(result.state as 'granted' | 'denied' | 'prompt')
-      })
+      permission.onchange = () => {
+        setGpsPermission(permission.state)
+      }
     } catch (error) {
-      console.warn('Permissions API not supported, will request on use')
+      console.error('Error checking GPS permission:', error)
+      setGpsPermission('prompt')
     }
   }
 
   const loadTodaysWorkout = async () => {
     try {
       const user = await dbUtils.getCurrentUser()
-      if (user?.id) {
-        const workout = await dbUtils.getTodaysWorkout(user.id)
-        setCurrentWorkout(workout || null)
+      if (user) {
+        const workout = await dbUtils.getTodaysWorkout(user.id!)
+        setCurrentWorkout(workout)
       }
     } catch (error) {
-      console.error('Failed to load today\'s workout:', error)
+      console.error('Error loading today\'s workout:', error)
     }
   }
 
@@ -133,28 +151,12 @@ export function RecordScreen() {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setGpsPermission('granted')
-          
-          // Calculate GPS accuracy metrics
-          const accuracyData = gpsMonitoringService.calculateAccuracyMetrics(position)
-          setCurrentGPSAccuracy(accuracyData)
-          
-          setCurrentPosition({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            timestamp: Date.now(),
-            accuracy: position.coords.accuracy
-          })
           setGpsAccuracy(position.coords.accuracy)
           resolve(true)
         },
         (error) => {
           console.error('GPS permission denied:', error)
           setGpsPermission('denied')
-          toast({
-            title: "GPS Access Denied",
-            description: "You can still record your run manually or enable GPS in your browser settings.",
-            variant: "destructive"
-          })
           resolve(false)
         },
         {
@@ -168,74 +170,53 @@ export function RecordScreen() {
 
   const startGpsTracking = (): Promise<boolean> => {
     return new Promise((resolve) => {
-      if (!navigator.geolocation || gpsPermission !== 'granted') {
+      if (!navigator.geolocation) {
         resolve(false)
         return
       }
 
-      let isFirstPosition = true
-
       watchIdRef.current = navigator.geolocation.watchPosition(
         (position) => {
-          // Calculate GPS accuracy metrics
-          const accuracyData = gpsMonitoringService.calculateAccuracyMetrics(position)
-          setCurrentGPSAccuracy(accuracyData)
-          
-          // Add to accuracy history for run
-          setGpsAccuracyHistory(prev => [...prev, accuracyData])
-          
-          const newCoordinate: GPSCoordinate = {
+          const newPosition: GPSCoordinate = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
-            timestamp: Date.now(),
+            timestamp: position.timestamp,
             accuracy: position.coords.accuracy
           }
-          
-          setCurrentPosition(newCoordinate)
-          setGpsAccuracy(position.coords.accuracy || 0)
-          
-          // Add to GPS path
-          setGpsPath(prev => {
-            const newPath = [...prev, newCoordinate]
+
+          setCurrentPosition(newPosition)
+          setGpsAccuracy(position.coords.accuracy)
+
+          if (isRunning && !isPaused) {
+            setGpsPath(prev => [...prev, newPosition])
             
-            // Calculate distance
-            if (newPath.length > 1) {
-              const totalDistance = calculateTotalDistance(newPath)
-              setMetrics(prevMetrics => ({
-                ...prevMetrics,
-                distance: totalDistance
+            // Update distance
+            if (prev.length > 0) {
+              const newDistance = prev.reduce((total, point, index) => {
+                if (index === 0) return 0
+                return total + calculateDistanceBetweenPoints(prev[index - 1], point)
+              }, 0) + calculateDistanceBetweenPoints(prev[prev.length - 1], newPosition)
+              
+              setMetrics(prev => ({
+                ...prev,
+                distance: newDistance,
+                pace: prev.duration > 0 ? prev.duration / newDistance : 0
               }))
             }
-            
-            return newPath
-          })
-
-          // Resolve on first successful position
-          if (isFirstPosition) {
-            isFirstPosition = false
-            resolve(true)
           }
         },
         (error) => {
           console.error('GPS tracking error:', error)
-          toast({
-            title: "GPS Tracking Error",
-            description: "Unable to track location. You can continue with manual entry.",
-            variant: "destructive"
-          })
-          
-          // Resolve false on error during startup
-          if (isFirstPosition) {
-            isFirstPosition = false
-            resolve(false)
-          }
+          resolve(false)
         },
         {
           enableHighAccuracy: true,
-          timeout: 5000,
+          timeout: 10000,
           maximumAge: 1000
         }
       )
+
+      resolve(true)
     })
   }
 
@@ -249,11 +230,10 @@ export function RecordScreen() {
   const calculateTotalDistance = (path: GPSCoordinate[]): number => {
     if (path.length < 2) return 0
     
-    let totalDistance = 0
-    for (let i = 1; i < path.length; i++) {
-      totalDistance += calculateDistanceBetweenPoints(path[i - 1], path[i])
-    }
-    return totalDistance
+    return path.reduce((total, point, index) => {
+      if (index === 0) return 0
+      return total + calculateDistanceBetweenPoints(path[index - 1], point)
+    }, 0)
   }
 
   const calculateDistanceBetweenPoints = (point1: GPSCoordinate, point2: GPSCoordinate): number => {
@@ -261,209 +241,164 @@ export function RecordScreen() {
     const dLat = (point2.latitude - point1.latitude) * Math.PI / 180
     const dLon = (point2.longitude - point1.longitude) * Math.PI / 180
     const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(point1.latitude * Math.PI / 180) * Math.cos(point2.latitude * Math.PI / 180) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2)
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(point1.latitude * Math.PI / 180) * Math.cos(point2.latitude * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
     return R * c
   }
 
   const estimateCalories = (durationSeconds: number, distanceKm: number): number => {
-    // Basic calorie estimation: ~60 calories per km for average runner
-    const caloriesPerKm = 60
-    const caloriesFromDistance = distanceKm * caloriesPerKm
-    
-    // Add time-based component (3 calories per minute baseline)
-    const caloriesFromTime = (durationSeconds / 60) * 3
-    
-    return Math.round(caloriesFromDistance + caloriesFromTime)
+    // Simple calorie estimation: ~60 calories per km for average runner
+    return Math.round(distanceKm * 60)
   }
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
   const formatPace = (paceSecondsPerKm: number) => {
-    if (paceSecondsPerKm === 0 || !isFinite(paceSecondsPerKm)) return "--:--"
+    if (paceSecondsPerKm === 0) return '--:--'
     const mins = Math.floor(paceSecondsPerKm / 60)
     const secs = Math.floor(paceSecondsPerKm % 60)
-    return `${mins}:${secs.toString().padStart(2, "0")}`
+    return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
   const startRun = async () => {
-    startTimeRef.current = Date.now()
+    const gpsGranted = await requestGpsPermission()
+    if (!gpsGranted) {
+      toast({
+        title: "GPS Required",
+        description: "Please enable location access to track your run.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const trackingStarted = await startGpsTracking()
+    if (!trackingStarted) {
+      toast({
+        title: "GPS Error",
+        description: "Unable to start GPS tracking. Please try again.",
+        variant: "destructive"
+      })
+      return
+    }
+
     setIsRunning(true)
     setIsPaused(false)
+    startTimeRef.current = Date.now()
     setGpsPath([])
-    
-    let gpsStarted = false
-    let gpsAttempted = false
-    
-    // Try to start GPS tracking
-    if (gpsPermission === 'granted') {
-      gpsAttempted = true
-      gpsStarted = await startGpsTracking()
-    } else if (gpsPermission === 'prompt') {
-      const permitted = await requestGpsPermission()
-      if (permitted) {
-        gpsAttempted = true
-        gpsStarted = await startGpsTracking()
-      }
-    }
-    
-    // Show success toast only if GPS wasn't attempted or if it started successfully
-    // If GPS was attempted but failed, the error toast from startGpsTracking will be shown instead
-    if (!gpsAttempted || gpsStarted) {
-      toast({
-        title: "Run Started! 🏃‍♂️",
-        description: gpsStarted ? "GPS tracking active" : "Manual tracking mode",
-      })
-    }
+    setMetrics({
+      distance: 0,
+      duration: 0,
+      pace: 0,
+      calories: 0
+    })
+
+    toast({
+      title: "Run Started",
+      description: "GPS tracking active. Your run is being recorded.",
+    })
   }
 
   const pauseRun = () => {
     setIsPaused(true)
-    stopGpsTracking()
-    
     toast({
-      title: "Run Paused ⏸️",
-      description: "Tap resume when ready to continue",
+      title: "Run Paused",
+      description: "Your run has been paused. Resume when ready.",
     })
   }
 
   const resumeRun = async () => {
-    setIsPaused(false)
-    if (gpsPermission === 'granted') {
-      await startGpsTracking()
+    const trackingStarted = await startGpsTracking()
+    if (!trackingStarted) {
+      toast({
+        title: "GPS Error",
+        description: "Unable to resume GPS tracking.",
+        variant: "destructive"
+      })
+      return
     }
-    
+
+    setIsPaused(false)
     toast({
-      title: "Run Resumed! 🏃‍♂️",
-      description: "Keep going, you've got this!",
+      title: "Run Resumed",
+      description: "GPS tracking resumed. Your run continues.",
     })
   }
 
   const stopRun = async () => {
+    stopGpsTracking()
     setIsRunning(false)
     setIsPaused(false)
-    stopGpsTracking()
-    
-    // Save run to database
-    await saveRun()
+
+    const totalDistance = calculateTotalDistance(gpsPath)
+    const finalDuration = metrics.duration
+
+    if (totalDistance > 0 && finalDuration > 0) {
+      await saveRun(totalDistance, finalDuration)
+    } else {
+      toast({
+        title: "Run Stopped",
+        description: "Run stopped. No data to save.",
+      })
+    }
   }
 
-  const saveRun = async () => {
+  const saveRun = async (distance: number, duration: number) => {
     try {
       const user = await dbUtils.getCurrentUser()
-      if (!user?.id) {
+      if (!user) {
         toast({
           title: "Error",
-          description: "User not found. Please complete onboarding first.",
+          description: "User not found. Please try again.",
           variant: "destructive"
         })
         return
       }
 
-      // Calculate GPS accuracy metrics for the run
-      const startAccuracy = gpsAccuracyHistory.length > 0 ? gpsAccuracyHistory[0].accuracyRadius : undefined
-      const endAccuracy = gpsAccuracyHistory.length > 0 ? gpsAccuracyHistory[gpsAccuracyHistory.length - 1].accuracyRadius : undefined
-      const averageAccuracy = gpsAccuracyHistory.length > 0 
-        ? gpsAccuracyHistory.reduce((sum, acc) => sum + acc.accuracyRadius, 0) / gpsAccuracyHistory.length 
-        : undefined
-
-      const runData: Omit<Run, 'id' | 'createdAt'> = {
-        userId: user.id,
-        workoutId: currentWorkout?.id,
-        type: currentWorkout?.type === 'rest' ? 'other' : (currentWorkout?.type || 'other'),
-        distance: metrics.distance,
-        duration: metrics.duration,
-        pace: metrics.pace,
-        calories: metrics.calories,
-        gpsPath: gpsPath.length > 0 ? JSON.stringify(gpsPath) : undefined,
-        gpsAccuracyData: gpsAccuracyHistory.length > 0 ? JSON.stringify(gpsAccuracyHistory) : undefined,
-        startAccuracy,
-        endAccuracy,
-        averageAccuracy: averageAccuracy ? Math.round(averageAccuracy * 10) / 10 : undefined,
-        completedAt: new Date()
+      const runData = {
+        userId: user.id!,
+        type: currentWorkout?.type || 'easy',
+        distance,
+        duration,
+        pace: duration / distance,
+        calories: estimateCalories(duration, distance),
+        notes: selectedRoute ? `Route: ${selectedRoute.name}` : undefined,
+        route: selectedRoute?.name,
+        gpsPath: JSON.stringify(gpsPath),
+        gpsAccuracyData: JSON.stringify(gpsAccuracyHistory),
+        startAccuracy: gpsPath[0]?.accuracy,
+        endAccuracy: gpsPath[gpsPath.length - 1]?.accuracy,
+        averageAccuracy: gpsAccuracyHistory.length > 0 
+          ? gpsAccuracyHistory.reduce((sum, acc) => sum + acc.accuracy, 0) / gpsAccuracyHistory.length
+          : undefined,
+        completedAt: new Date(),
+        workoutId: currentWorkout?.id
       }
 
       const runId = await dbUtils.createRun(runData)
 
-      // Mark workout as completed if linked
-      if (currentWorkout?.id) {
-        await dbUtils.markWorkoutCompleted(currentWorkout.id)
+      // Mark workout as completed if it exists
+      if (currentWorkout) {
+        await dbUtils.markWorkoutCompleted(currentWorkout.id!)
       }
-
-      // Trigger adaptive plan adjustments (but don't fail run save if this fails)
-      try {
-        await planAdjustmentService.afterRun(user.id)
-        
-        // Check if plan should be adapted based on completion
-        const adaptationAssessment = await planAdaptationEngine.shouldAdaptPlan(user.id)
-        
-        if (adaptationAssessment.shouldAdapt && adaptationAssessment.confidence > 70) {
-          console.log('Plan adaptation triggered:', adaptationAssessment.reason)
-          
-          // Get current active plan
-          const currentPlan = await dbUtils.getActivePlan(user.id)
-          if (currentPlan) {
-            // Adapt the plan
-            const adaptedPlan = await planAdaptationEngine.adaptExistingPlan(
-              currentPlan.id!,
-              adaptationAssessment.reason
-            )
-            
-            console.log('Plan adapted successfully:', adaptedPlan.title)
-            
-            // Show user notification about plan adaptation
-            toast({
-              title: "Plan Updated! 📈",
-              description: `Your training plan has been adjusted based on your recent progress: ${adaptationAssessment.reason}`,
-            })
-          }
-        }
-      } catch (adaptiveError) {
-        console.error('Adaptive coaching failed:', adaptiveError)
-        toast({
-          title: "Adaptive coaching failed.",
-          description: "Your run was saved, but plan adjustments couldn't be processed.",
-          variant: "destructive"
-        })
-      }
-
-      // Track plan session completion
-      await trackPlanSessionCompleted({
-        session_type: currentWorkout?.type || 'other',
-        distance_km: metrics.distance,
-        duration_seconds: metrics.duration,
-        pace_seconds_per_km: metrics.pace,
-        calories_burned: metrics.calories,
-        had_gps_tracking: gpsPath.length > 0,
-        workout_id: currentWorkout?.id
-      })
 
       toast({
-        title: "Run Saved! 🎉",
-        description: `Great job! ${metrics.distance.toFixed(2)}km in ${formatTime(metrics.duration)}`,
+        title: "Run Saved",
+        description: `${distance.toFixed(2)}km in ${formatTime(duration)}`,
       })
 
-      // Reset state
-      setMetrics({ distance: 0, duration: 0, pace: 0, calories: 0 })
-      setGpsPath([])
-      setGpsAccuracyHistory([])
-      setCurrentGPSAccuracy(null)
-      gpsMonitoringService.clearHistory()
-      
       // Navigate back to today screen
       router.push('/')
-      
     } catch (error) {
-      console.error('Failed to save run:', error)
+      console.error('Error saving run:', error)
       toast({
-        title: "Error Saving Run",
-        description: "Your run data couldn't be saved. Please try again.",
+        title: "Error",
+        description: "Failed to save run. Please try again.",
         variant: "destructive"
       })
     }
@@ -479,188 +414,197 @@ export function RecordScreen() {
   }
 
   const getGpsStatusText = () => {
-    switch (gpsPermission) {
-      case 'granted': return gpsAccuracy < 10 ? 'GPS High Accuracy' : `GPS ~${Math.round(gpsAccuracy)}m`
-      case 'denied': return 'GPS Denied'
-      case 'unsupported': return 'GPS Unavailable'
-      default: return 'Requesting GPS...'
-    }
+    if (gpsPermission === 'granted') return 'GPS Active'
+    if (gpsPermission === 'denied') return 'GPS Denied'
+    if (gpsPermission === 'unsupported') return 'GPS Unsupported'
+    return 'GPS Pending'
+  }
+
+  const handleRouteSelected = (route: Route) => {
+    setSelectedRoute(route)
+    toast({
+      title: "Route Selected",
+      description: `${route.name} - ${route.distance}km (${route.safetyScore}% safe)`,
+    })
+  }
+
+  const handleRouteWizardClose = () => {
+    setShowRouteWizard(false)
   }
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="min-h-screen bg-gray-50 p-4 space-y-4">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between">
         <Button variant="ghost" size="sm" onClick={() => router.push('/')} aria-label="Back to Today Screen">
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <h1 className="text-xl font-bold">Record Run</h1>
-        <Button variant="ghost" size="sm" onClick={() => setShowRoutesModal(true)} aria-label="Open Route Selector">
-          <Map className="h-4 w-4" />
-        </Button>
+        <h1 className="text-xl font-semibold">Record Run</h1>
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setShowRoutesModal(true)} aria-label="Open Route Selector">
+            <MapPin className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setShowRouteWizard(true)} aria-label="Open Route Wizard">
+            <Map className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      {/* GPS Permission Request */}
-      {gpsPermission === 'prompt' && (
-        <Card className="bg-blue-50 border-blue-200">
+      {/* Selected Route Display */}
+      {selectedRoute && (
+        <Card className="bg-green-50 border-green-200">
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <MapPin className="h-5 w-5 text-blue-500" />
-              <div className="flex-1">
-                <h3 className="font-medium text-blue-900">Enable GPS Tracking</h3>
-                <p className="text-sm text-blue-700">Allow location access for accurate run tracking</p>
-              </div>
-              <Button onClick={requestGpsPermission} size="sm" className="bg-blue-500 hover:bg-blue-600">
-                Enable
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* GPS Error/Fallback */}
-      {(gpsPermission === 'denied' || gpsPermission === 'unsupported') && (
-        <Card className="bg-yellow-50 border-yellow-200">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
-              <div className="flex-1">
-                <h3 className="font-medium text-yellow-900">GPS Unavailable</h3>
-                <p className="text-sm text-yellow-700">You can still track your run manually</p>
-              </div>
-              <Button onClick={() => setShowManualModal(true)} size="sm" variant="outline">
-                Manual Entry
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Map Container */}
-      <Card className="h-64 relative overflow-hidden">
-        <CardContent className="p-0 h-full">
-          <div className="h-full bg-gradient-to-br from-green-100 to-blue-100 flex items-center justify-center relative">
-            {gpsPath.length > 0 ? (
-              <RouteVisualization gpsPath={gpsPath} currentPosition={currentPosition} />
-            ) : (
-              <div className="text-center">
-                <Map className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                <p className="text-gray-600">
-                  {gpsPermission === 'granted' ? 'Ready to track' : 'Manual mode'}
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-medium text-green-900">{selectedRoute.name}</h3>
+                <p className="text-sm text-green-700">
+                  {selectedRoute.distance}km • {selectedRoute.safetyScore}% safe • {selectedRoute.difficulty}
                 </p>
               </div>
-            )}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setSelectedRoute(null)}
+                className="text-green-700 border-green-300"
+              >
+                Clear
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-            {/* GPS Status Overlay */}
-            <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2">
-              <Satellite className={`h-4 w-4 ${getGpsStatusColor()}`} />
-              <span className="text-sm font-medium">{getGpsStatusText()}</span>
-              {currentGPSAccuracy && (
+      {/* GPS Status */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Satellite className={`h-5 w-5 ${getGpsStatusColor()}`} />
+              <div>
+                <p className="font-medium">{getGpsStatusText()}</p>
+                <p className="text-sm text-gray-600">
+                  Accuracy: {gpsAccuracy > 0 ? `${gpsAccuracy.toFixed(1)}m` : 'Unknown'}
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowGPSDetails(!showGPSDetails)}
+            >
+              {showGPSDetails ? 'Hide' : 'Details'}
+            </Button>
+          </div>
+
+          {/* GPS Details */}
+          {showGPSDetails && (
+            <div className="mt-4 pt-4 border-t">
+              <GPSAccuracyIndicator 
+                currentAccuracy={currentGPSAccuracy}
+                accuracyHistory={gpsAccuracyHistory}
+                onAccuracyUpdate={(data) => {
+                  setCurrentGPSAccuracy(data)
+                  setGpsAccuracyHistory(prev => [...prev.slice(-10), data])
+                }}
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Main Controls */}
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center space-y-6">
+            {/* Metrics Display */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-blue-600">
+                  {metrics.distance.toFixed(2)}
+                </p>
+                <p className="text-sm text-gray-600">Distance (km)</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-green-600">
+                  {formatTime(metrics.duration)}
+                </p>
+                <p className="text-sm text-gray-600">Duration</p>
+              </div>
+            </div>
+
+            {/* Control Buttons */}
+            <div className="flex justify-center gap-4">
+              {!isRunning ? (
                 <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowGPSDetails(!showGPSDetails)}
-                  className="h-6 w-6 p-0 ml-1"
+                  onClick={startRun}
+                  size="lg"
+                  className="bg-green-600 hover:bg-green-700"
+                  disabled={gpsPermission !== 'granted'}
                 >
-                  <Info className="h-3 w-3" />
+                  <Play className="h-5 w-5 mr-2" />
+                  Start Run
                 </Button>
+              ) : (
+                <>
+                  {isPaused ? (
+                    <Button
+                      onClick={resumeRun}
+                      size="lg"
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <Play className="h-5 w-5 mr-2" />
+                      Resume
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={pauseRun}
+                      size="lg"
+                      variant="outline"
+                    >
+                      <Pause className="h-5 w-5 mr-2" />
+                      Pause
+                    </Button>
+                  )}
+                  <Button
+                    onClick={stopRun}
+                    size="lg"
+                    variant="destructive"
+                  >
+                    <Square className="h-5 w-5 mr-2" />
+                    Stop
+                  </Button>
+                </>
               )}
             </div>
 
-            {/* Workout Info Overlay */}
-            {currentWorkout && (
-              <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-2">
-                <div className="text-sm font-medium">{currentWorkout.type.charAt(0).toUpperCase() + currentWorkout.type.slice(1)}</div>
-                <div className="text-xs text-gray-600">{currentWorkout.distance}km target</div>
+            {/* Manual Entry Option */}
+            {!isRunning && (
+              <div className="pt-4 border-t">
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowManualModal(true)}
+                  className="text-gray-600"
+                >
+                  <Volume2 className="h-4 w-4 mr-2" />
+                  Add Manual Run
+                </Button>
               </div>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* GPS Accuracy Indicator */}
-      {showGPSDetails && currentGPSAccuracy && (
-        <GPSAccuracyIndicator
-          accuracy={currentGPSAccuracy}
-          onAccuracyChange={setCurrentGPSAccuracy}
-          className="animate-in slide-in-from-top duration-300"
-          compact={!isRunning}
-          showTroubleshooting={!isRunning}
-        />
+      {/* Route Visualization */}
+      {gpsPath.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="font-medium mb-3">Route</h3>
+            <div className="h-64 bg-gray-100 rounded-lg overflow-hidden">
+              <RouteVisualization gpsPath={gpsPath} currentPosition={currentPosition} />
+            </div>
+          </CardContent>
+        </Card>
       )}
-
-      {/* Metrics */}
-      <div className="grid grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="p-3 text-center">
-            <div className="text-xl font-bold text-green-500">{metrics.distance.toFixed(2)}</div>
-            <div className="text-xs text-gray-600">Distance (km)</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 text-center">
-            <div className="text-xl font-bold text-blue-500">{formatTime(metrics.duration)}</div>
-            <div className="text-xs text-gray-600">Duration</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 text-center">
-            <div className="text-xl font-bold text-purple-500">{formatPace(metrics.pace)}</div>
-            <div className="text-xs text-gray-600">Pace (/km)</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 text-center">
-            <div className="text-xl font-bold text-orange-500">{metrics.calories}</div>
-            <div className="text-xs text-gray-600">Calories</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Compact GPS Accuracy (always visible when GPS active) */}
-      {!showGPSDetails && currentGPSAccuracy && gpsPermission === 'granted' && (
-        <GPSAccuracyIndicator
-          accuracy={currentGPSAccuracy}
-          onAccuracyChange={setCurrentGPSAccuracy}
-          compact={true}
-          showTroubleshooting={false}
-          className="mb-4"
-        />
-      )}
-
-      {/* Controls */}
-      <div className="flex justify-center gap-4">
-        {!isRunning ? (
-          <Button onClick={startRun} className="bg-green-500 hover:bg-green-600 h-16 w-16 rounded-full" aria-label="Start Run">
-            <Play className="h-6 w-6" />
-          </Button>
-        ) : (
-          <>
-            {!isPaused ? (
-              <Button onClick={pauseRun} variant="outline" className="h-16 w-16 rounded-full" aria-label="Pause Run">
-                <Pause className="h-6 w-6" />
-              </Button>
-            ) : (
-              <Button onClick={resumeRun} className="bg-green-500 hover:bg-green-600 h-16 w-16 rounded-full" aria-label="Resume Run">
-                <Play className="h-6 w-6" />
-              </Button>
-            )}
-            <Button onClick={stopRun} variant="destructive" className="h-16 w-16 rounded-full" aria-label="Stop Run">
-              <Square className="h-6 w-6" />
-            </Button>
-          </>
-        )}
-      </div>
-
-      {/* Voice Cues */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2 text-sm">
-            <Volume2 className="h-4 w-4 text-green-500" />
-            <span>Voice coaching enabled</span>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Running Tips */}
       {isRunning && (
@@ -691,7 +635,16 @@ export function RecordScreen() {
         }}
       />
 
+      {/* Modals */}
       {showRoutesModal && <RouteSelectorModal isOpen={showRoutesModal} onClose={() => setShowRoutesModal(false)} />}
+      {showRouteWizard && (
+        <RouteSelectionWizard
+          isOpen={showRouteWizard}
+          onClose={handleRouteWizardClose}
+          userExperience={currentUser?.experience || 'beginner'}
+          onRouteSelected={handleRouteSelected}
+        />
+      )}
       {showManualModal && (
         <ManualRunModal 
           isOpen={showManualModal} 

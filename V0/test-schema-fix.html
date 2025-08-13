@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Schema Fix</title>
+</head>
+<body>
+    <h1>Database Schema Fix Test</h1>
+    <div id="results"></div>
+    <button onclick="testSchemaFix()">Test Schema Fix</button>
+
+    <script type="module">
+        async function testSchemaFix() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<p>Testing...</p>';
+            
+            try {
+                console.log('🧪 Starting database schema test...');
+                
+                // Import database utilities
+                const { dbUtils } = await import('./lib/dbUtils.js');
+                console.log('📦 Database utils loaded');
+                
+                // Clear database first
+                await dbUtils.clearDatabase();
+                console.log('🧹 Database cleared');
+                
+                // Test user creation
+                const userData = {
+                    goal: 'habit',
+                    experience: 'beginner',
+                    preferredTimes: ['morning'],
+                    daysPerWeek: 3,
+                    consents: { data: true, gdpr: true, push: false },
+                    onboardingComplete: true,
+                    age: 25
+                };
+                
+                console.log('📋 Creating user...');
+                const userId = await dbUtils.createUser(userData);
+                console.log('✅ User created with ID:', userId);
+                
+                // Test getCurrentUser - this was failing before
+                console.log('📋 Testing getCurrentUser...');
+                const user = await dbUtils.getCurrentUser();
+                console.log('✅ getCurrentUser result:', user);
+                
+                if (user && user.onboardingComplete) {
+                    resultsDiv.innerHTML = `
+                        <p style="color: green;">✅ SUCCESS!</p>
+                        <p>User created with ID: ${userId}</p>
+                        <p>getCurrentUser works: ${user.id}</p>
+                        <p>Onboarding complete: ${user.onboardingComplete}</p>
+                    `;
+                } else {
+                    resultsDiv.innerHTML = `
+                        <p style="color: red;">❌ FAILED!</p>
+                        <p>User created but getCurrentUser failed</p>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error('❌ Test failed:', error);
+                resultsDiv.innerHTML = `
+                    <p style="color: red;">❌ ERROR!</p>
+                    <p>${error.message}</p>
+                `;
+            }
+        }
+        
+        // Make function global
+        window.testSchemaFix = testSchemaFix;
+        
+        // Auto-run test
+        setTimeout(testSchemaFix, 1000);
+    </script>
+</body>
+</html>

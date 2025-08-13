@@ -29,14 +29,23 @@ export class ChunkErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ChunkErrorBoundary caught an error:', error, errorInfo)
     
-    // If it's a chunk loading error, try to reload the page
+    // If it's a chunk loading error, try to reload the page with cache-busting
     if (error.message.includes('ChunkLoadError') || error.message.includes('Loading chunk')) {
       console.log('Detected chunk loading error, attempting to reload...')
       
       // Wait a bit before reloading to avoid infinite loops
       setTimeout(() => {
         if (typeof window !== 'undefined') {
-          window.location.reload()
+          const reloadCount = Number(sessionStorage.getItem('chunk_reload_count') || '0')
+          if (reloadCount < 2) {
+            sessionStorage.setItem('chunk_reload_count', String(reloadCount + 1))
+            const url = new URL(window.location.href)
+            url.searchParams.set('cb', Date.now().toString())
+            window.location.replace(url.toString())
+          } else {
+            // Give user a manual option after two attempts
+            console.warn('Chunk reload attempts exceeded. Showing fallback UI.')
+          }
         }
       }, 2000)
     }
@@ -85,15 +94,37 @@ export function useChunkErrorHandler() {
            event.error.message.includes('Loading chunk'))) {
         console.log('Chunk loading error detected, reloading page...')
         setTimeout(() => {
-          window.location.reload()
+          const reloadCount = Number(sessionStorage.getItem('chunk_reload_count') || '0')
+          if (reloadCount < 2) {
+            sessionStorage.setItem('chunk_reload_count', String(reloadCount + 1))
+            const url = new URL(window.location.href)
+            url.searchParams.set('cb', Date.now().toString())
+            window.location.replace(url.toString())
+          }
         }, 2000)
       }
     }
 
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = (event.reason && (event.reason.message || event.reason.toString())) || ''
+      if (typeof reason === 'string' && (reason.includes('ChunkLoadError') || reason.includes('Loading chunk'))) {
+        console.log('Unhandled rejection due to chunk error, reloading...')
+        const reloadCount = Number(sessionStorage.getItem('chunk_reload_count') || '0')
+        if (reloadCount < 2) {
+          sessionStorage.setItem('chunk_reload_count', String(reloadCount + 1))
+          const url = new URL(window.location.href)
+          url.searchParams.set('cb', Date.now().toString())
+          window.location.replace(url.toString())
+        }
+      }
+    }
+
     window.addEventListener('error', handleChunkError)
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
     
     return () => {
       window.removeEventListener('error', handleChunkError)
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
     }
   }, [])
 } 

@@ -148,7 +148,7 @@ export const CommunityStatsWidget: React.FC<CommunityStatsWidgetProps> = ({ user
               <Trophy className="h-4 w-4 text-amber-500" />
               <span className="text-sm text-muted-foreground">Distance</span>
               <Badge variant="outline" className="text-amber-600 border-amber-600">
-                {stats.weeklyDistance.toFixed(1)} km
+                {(Number(stats.weeklyDistance) || 0).toFixed(1)} km
               </Badge>
             </div>
           </div>

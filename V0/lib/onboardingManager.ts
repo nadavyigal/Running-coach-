@@ -28,6 +28,7 @@ export interface OnboardingProfile {
   goalInferred?: boolean;
   onboardingSession?: Record<string, unknown>;
   onboardingComplete: boolean;
+  privacySettings?: any;
 }
 
 export class OnboardingManager {
@@ -35,6 +36,10 @@ export class OnboardingManager {
   private onboardingInProgress = false;
   private currentUserId: number | null = null;
   private planCreationMutex = false; // Race condition guard
+  private activeOperations = new Map<string, Promise<any>>(); // Track active operations
+  private operationTimeouts = new Map<string, NodeJS.Timeout>(); // Track operation timeouts
+  private maxConcurrentOperations = 1; // Limit concurrent onboarding operations
+  private operationTimeout = 60000; // 60 seconds timeout for operations
 
   private constructor() {}
 
@@ -43,6 +48,71 @@ export class OnboardingManager {
       OnboardingManager.instance = new OnboardingManager();
     }
     return OnboardingManager.instance;
+  }
+
+  /**
+   * Enhanced operation management with concurrency control and timeouts
+   */
+  private async executeWithConcurrencyControl<T>(
+    operationId: string,
+    operation: () => Promise<T>
+  ): Promise<T> {
+    // Check if operation is already running
+    const existingOperation = this.activeOperations.get(operationId);
+    if (existingOperation) {
+      console.log(`⏳ Operation ${operationId} already running, waiting for completion`);
+      return existingOperation as Promise<T>;
+    }
+
+    // Check concurrent operation limit
+    if (this.activeOperations.size >= this.maxConcurrentOperations) {
+      throw new Error(`Maximum concurrent operations (${this.maxConcurrentOperations}) exceeded`);
+    }
+
+    console.log(`🚀 Starting operation ${operationId}`);
+
+    // Create timeout for operation
+    const timeoutId = setTimeout(() => {
+      console.error(`⏰ Operation ${operationId} timed out after ${this.operationTimeout}ms`);
+      this.cleanupOperation(operationId);
+    }, this.operationTimeout);
+
+    this.operationTimeouts.set(operationId, timeoutId);
+
+    // Execute operation with cleanup
+    const operationPromise = operation()
+      .then(result => {
+        console.log(`✅ Operation ${operationId} completed successfully`);
+        this.cleanupOperation(operationId);
+        return result;
+      })
+      .catch(error => {
+        console.error(`❌ Operation ${operationId} failed:`, error);
+        this.cleanupOperation(operationId);
+        throw error;
+      });
+
+    this.activeOperations.set(operationId, operationPromise);
+    return operationPromise;
+  }
+
+  /**
+   * Clean up operation tracking and timeouts
+   */
+  private cleanupOperation(operationId: string): void {
+    const timeout = this.operationTimeouts.get(operationId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.operationTimeouts.delete(operationId);
+    }
+    this.activeOperations.delete(operationId);
+  }
+
+  /**
+   * Generate unique operation ID for tracking
+   */
+  private generateOperationId(prefix: string): string {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
   /**
@@ -117,16 +187,49 @@ export class OnboardingManager {
   }
 
   /**
-   * Centralized user creation with conflict prevention
+   * Centralized user creation with enhanced conflict prevention and concurrency control
    */
   public async createUserWithProfile(profile: OnboardingProfile): Promise<OnboardingResult> {
+    const operationId = this.generateOperationId('create_user');
+    
+    return this.executeWithConcurrencyControl(operationId, async () => {
+      return await this.internalCreateUserWithProfile(profile);
+    });
+  }
+
+  /**
+   * Internal user creation implementation
+   */
+  private async internalCreateUserWithProfile(profile: OnboardingProfile): Promise<OnboardingResult> {
+    console.log('🎯 OnboardingManager.createUserWithProfile called with profile:', {
+      goal: profile.goal,
+      experience: profile.experience,
+      onboardingComplete: profile.onboardingComplete,
+      hasPrivacySettings: !!profile.privacySettings
+    });
+    
     if (this.onboardingInProgress) {
-      console.warn('⚠️ Onboarding already in progress, preventing duplicate user creation');
-      return {
-        user: await this.getCurrentUserOrFail(),
-        success: false,
-        errors: ['Onboarding already in progress']
-      };
+      console.warn('⚠️ Onboarding already in progress, checking if user exists or allowing retry...');
+      
+      // Check if this is a legitimate retry attempt or duplicate user creation
+      try {
+        const existingUser = await this.checkExistingUser();
+        if (existingUser && existingUser.onboardingComplete) {
+          console.log('✅ User already exists and completed onboarding, returning existing user');
+          return {
+            user: existingUser,
+            success: true
+          };
+        }
+        
+        // If no completed user exists, reset state and allow retry
+        console.log('🔄 No completed user found, resetting state and allowing retry');
+        this.resetOnboardingState();
+      } catch (error) {
+        console.error('Error checking existing user during retry:', error);
+        // Reset state and continue
+        this.resetOnboardingState();
+      }
     }
 
     this.onboardingInProgress = true;
@@ -279,25 +382,7 @@ export class OnboardingManager {
   /**
    * Generate training plan with unified logic
    */
-  private async generateTrainingPlan(profile: OnboardingProfile): Promise<number> {
-    const user: User = {
-      id: this.currentUserId!,
-      goal: profile.goal,
-      experience: profile.experience,
-      preferredTimes: profile.preferredTimes,
-      daysPerWeek: profile.daysPerWeek,
-      consents: profile.consents,
-      onboardingComplete: profile.onboardingComplete,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      rpe: profile.rpe,
-      age: profile.age,
-      motivations: profile.motivations,
-      barriers: profile.barriers,
-      coachingStyle: profile.coachingStyle,
-      goalInferred: profile.goalInferred,
-      onboardingSession: profile.onboardingSession,
-    };
+  private async generateTrainingPlan(user: User): Promise<number> {
     try {
       console.log('🎯 Generating training plan for user:', user.id);
       
@@ -397,6 +482,8 @@ export class OnboardingManager {
     rpe: number | null;
     age: number | null;
     consents: { data: boolean; gdpr: boolean; push: boolean };
+    privacySettings?: any;
+    aiPlanData?: any;
   }): Promise<OnboardingResult> {
     const profile: OnboardingProfile = {
       goal: formData.goal as 'habit' | 'distance' | 'speed',
@@ -407,7 +494,8 @@ export class OnboardingManager {
       rpe: formData.rpe || undefined,
       age: formData.age || undefined,
       goalInferred: false,
-      onboardingComplete: true
+      onboardingComplete: true,
+      privacySettings: formData.privacySettings
     };
 
     return await this.createUserWithProfile(profile);

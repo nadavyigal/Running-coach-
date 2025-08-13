@@ -254,7 +254,8 @@ class GoalDiscoveryEngine {
     insights: Record<string, any>
   ): Promise<DiscoveredGoal[]> {
     const candidates: DiscoveredGoal[] = [];
-    const templates = this.GOAL_TEMPLATES[userProfile.experience];
+    const experienceKey = userProfile.experience || 'beginner';
+    const templates = this.GOAL_TEMPLATES[experienceKey as keyof typeof this.GOAL_TEMPLATES] || this.GOAL_TEMPLATES.beginner;
 
     // Generate goals from templates
     for (const [category, template] of Object.entries(templates)) {

@@ -192,6 +192,26 @@ async function handleEnhancedPlanRequest(body: any) {
   // Validate the enhanced request
   const requestData = EnhancedPlanRequest.parse(body);
   
+  // Verify user exists if userId is provided
+  if (requestData.userId) {
+    try {
+      const { dbUtils } = await import('@/lib/db');
+      const user = await dbUtils.getUserById(requestData.userId);
+      if (!user) {
+        return NextResponse.json(
+          { error: 'User not found', errorType: 'user_not_found', fallbackRequired: true },
+          { status: 404 }
+        );
+      }
+    } catch (userCheckError) {
+      console.warn('User verification failed:', userCheckError);
+      return NextResponse.json(
+        { error: 'User verification failed', errorType: 'database_error', fallbackRequired: true },
+        { status: 500 }
+      );
+    }
+  }
+  
   // Build enhanced prompt with onboarding data
   const prompt = buildEnhancedPlanPrompt(requestData);
 
@@ -260,7 +280,15 @@ async function handleEnhancedPlanRequest(body: any) {
  */
 function buildPlanPrompt(user: any, planType?: string, targetDistance?: string, rookie_challenge?: boolean): string {
   if (!user || !user.experience || !user.goal || !user.daysPerWeek || !user.preferredTimes) {
-    throw new Error('Invalid user data provided for plan generation');
+    console.warn('⚠️ Invalid user data provided, using fallback defaults');
+    // Provide fallback defaults instead of throwing
+    user = {
+      experience: 'beginner',
+      goal: 'habit',
+      daysPerWeek: 3,
+      preferredTimes: ['morning'],
+      ...user // Keep any valid properties from original user
+    };
   }
 
   const basePrompt = `Create a personalized running training plan for a runner with the following profile:

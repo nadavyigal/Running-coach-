@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #00ff00;
+        }
+        .log {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #00ff00;
+            background: #2a2a2a;
+        }
+        .error {
+            color: #ff4444;
+            border-left-color: #ff4444;
+        }
+        .success {
+            color: #44ff44;
+            border-left-color: #44ff44;
+        }
+        .warning {
+            color: #ffaa44;
+            border-left-color: #ffaa44;
+        }
+        button {
+            padding: 10px 20px;
+            background: #00aa00;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #00cc00;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Database Operations Test</h1>
+    <p>This page tests the user creation and retrieval fixes.</p>
+    
+    <button onclick="runTest()">🚀 Run Test</button>
+    <button onclick="clearLogs()">🧹 Clear Logs</button>
+    <button onclick="location.href='/'">🏠 Back to App</button>
+    
+    <div id="logs"></div>
+
+    <script type="module">
+        window.log = function(message, type = 'log') {
+            const logsDiv = document.getElementById('logs');
+            const logDiv = document.createElement('div');
+            logDiv.className = `log ${type}`;
+            logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsDiv.appendChild(logDiv);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+            console.log(message);
+        };
+
+        window.clearLogs = function() {
+            document.getElementById('logs').innerHTML = '';
+        };
+
+        window.runTest = async function() {
+            log('🔍 Starting user creation and retrieval test...', 'log');
+            
+            try {
+                // Import the database utilities dynamically
+                log('📦 Loading database utilities...', 'log');
+                const dbModule = await import('./lib/db.js');
+                const { dbUtils } = dbModule;
+                
+                log('🧹 Clearing database...', 'log');
+                await dbUtils.clearDatabase();
+                
+                log('📋 Creating test user with onboardingComplete: true...', 'log');
+                const userData = {
+                    goal: 'habit',
+                    experience: 'beginner',
+                    preferredTimes: ['morning'],
+                    daysPerWeek: 3,
+                    consents: {
+                        data: true,
+                        gdpr: true,
+                        push: false
+                    },
+                    onboardingComplete: true,
+                    age: 25
+                };
+                
+                const startTime = performance.now();
+                const userId = await dbUtils.createUser(userData);
+                const createTime = performance.now() - startTime;
+                
+                log(`✅ User created with ID: ${userId} (${createTime.toFixed(2)}ms)`, 'success');
+                
+                log('📋 Retrieving user with getCurrentUser()...', 'log');
+                const retrieveStart = performance.now();
+                const user = await dbUtils.getCurrentUser();
+                const retrieveTime = performance.now() - retrieveStart;
+                
+                if (!user) {
+                    throw new Error('User not found after creation!');
+                }
+                
+                log(`✅ User retrieved successfully: ID ${user.id}, onboardingComplete: ${user.onboardingComplete} (${retrieveTime.toFixed(2)}ms)`, 'success');
+                
+                // Test specific user retrieval
+                log('📋 Testing getUserById()...', 'log');
+                const userById = await dbUtils.getUserById(userId);
+                if (!userById) {
+                    throw new Error('getUserById failed!');
+                }
+                log(`✅ getUserById worked: ID ${userById.id}`, 'success');
+                
+                // Test with incomplete user
+                log('📋 Creating user with onboardingComplete: false...', 'log');
+                const incompleteUserData = {
+                    ...userData,
+                    onboardingComplete: false
+                };
+                
+                const incompleteUserId = await dbUtils.createUser(incompleteUserData);
+                log(`✅ Incomplete user created with ID: ${incompleteUserId}`, 'success');
+                
+                // getCurrentUser should still prioritize completed user
+                log('📋 Testing getCurrentUser() priority...', 'log');
+                const currentUser = await dbUtils.getCurrentUser();
+                log(`✅ getCurrentUser returned: ID ${currentUser.id}, completed: ${currentUser.onboardingComplete}`, 'success');
+                
+                if (currentUser.id === userId && currentUser.onboardingComplete) {
+                    log('✅ Priority working correctly - completed user returned', 'success');
+                } else {
+                    log('⚠️ Priority issue - completed user not prioritized', 'warning');
+                }
+                
+                // Test onboarding manager
+                log('📋 Testing OnboardingManager user creation...', 'log');
+                await dbUtils.clearDatabase();
+                
+                const onboardingModule = await import('./lib/onboardingManager.js');
+                const { onboardingManager } = onboardingModule;
+                
+                const profile = {
+                    goal: 'habit',
+                    experience: 'beginner',
+                    preferredTimes: ['morning'],
+                    daysPerWeek: 3,
+                    consents: {
+                        data: true,
+                        gdpr: true,
+                        push: false
+                    },
+                    onboardingComplete: true,
+                    age: 30
+                };
+                
+                log('🎯 Creating user through OnboardingManager...', 'log');
+                const onboardingResult = await onboardingManager.createUserWithProfile(profile);
+                
+                if (onboardingResult.success && onboardingResult.user) {
+                    log(`✅ OnboardingManager success: User ID ${onboardingResult.user.id}`, 'success');
+                    
+                    // Verify we can retrieve this user
+                    const retrievedUser = await dbUtils.getCurrentUser();
+                    if (retrievedUser && retrievedUser.id === onboardingResult.user.id) {
+                        log('✅ OnboardingManager user can be retrieved', 'success');
+                    } else {
+                        log('❌ OnboardingManager user cannot be retrieved', 'error');
+                    }
+                } else {
+                    log(`❌ OnboardingManager failed: ${onboardingResult.errors?.join(', ')}`, 'error');
+                }
+                
+                log('🎉 All tests completed successfully!', 'success');
+                
+            } catch (error) {
+                log(`❌ Test failed: ${error.message}`, 'error');
+                console.error('Full error:', error);
+            }
+        };
+
+        // Auto-run test on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            log('🏠 Database test page loaded', 'log');
+            log('💡 Click "Run Test" to start testing', 'log');
+        });
+    </script>
+</body>
+</html>

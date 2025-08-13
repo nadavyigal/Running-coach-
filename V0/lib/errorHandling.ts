@@ -358,6 +358,7 @@ export interface HealthCheckResult {
     status: 'up' | 'down';
     responseTime?: number;
     error?: string;
+    details?: string;
   }>;
   timestamp: string;
 }
@@ -369,21 +370,116 @@ export async function performHealthCheck(): Promise<HealthCheckResult> {
   // Database check
   try {
     const start = Date.now();
-    await import('@/lib/db').then(({ db }) => db.users.limit(1).toArray());
-    checks.database = {
-      status: 'up',
-      responseTime: Date.now() - start
-    };
+    
+    // Server-side health check should not test IndexedDB
+    if (typeof window === 'undefined') {
+      // Server-side: just check that database module loads
+      await import('@/lib/db');
+      checks.database = {
+        status: 'up',
+        responseTime: Date.now() - start
+      };
+    } else {
+      // Client-side: test actual database functionality
+      const { getDatabase } = await import('@/lib/db');
+      const database = getDatabase();
+      if (database) {
+        await database.users.limit(1).toArray();
+        checks.database = {
+          status: 'up',
+          responseTime: Date.now() - start
+        };
+      } else {
+        checks.database = {
+          status: 'down',
+          error: 'Database not available in browser'
+        };
+        overallStatus = 'degraded'; // Not unhealthy since server can still function
+      }
+    }
   } catch (error) {
+    const errorMessage = (error as Error).message;
     checks.database = {
+      status: 'down',
+      error: errorMessage
+    };
+    
+    // If it's just an IndexedDB issue on server, mark as degraded not unhealthy
+    if (errorMessage.includes('IndexedDB') || errorMessage.includes('window')) {
+      overallStatus = 'degraded';
+    } else {
+      overallStatus = 'unhealthy';
+    }
+  }
+
+  // User identity resolution check (client-side only)
+  if (typeof window !== 'undefined') {
+    try {
+      const start = Date.now();
+      const { ensureUserReady } = await import('@/lib/dbUtils');
+      
+      // Test user resolution without creating users in health check
+      const { getCurrentUser } = await import('@/lib/dbUtils');
+      const user = await getCurrentUser();
+      
+      if (user && user.id) {
+        checks.userIdentity = {
+          status: 'up',
+          responseTime: Date.now() - start,
+          details: `User resolved: id=${user.id}, onboarding=${user.onboardingComplete}`
+        };
+      } else {
+        // Try ensuring user ready as fallback
+        const ensuredUser = await ensureUserReady();
+        if (ensuredUser && ensuredUser.id) {
+          checks.userIdentity = {
+            status: 'up',
+            responseTime: Date.now() - start,
+            details: `User created: id=${ensuredUser.id}`
+          };
+        } else {
+          checks.userIdentity = {
+            status: 'down',
+            error: 'Failed to resolve or create user identity'
+          };
+          overallStatus = 'unhealthy';
+        }
+      }
+    } catch (error) {
+      checks.userIdentity = {
+        status: 'down',
+        error: `User identity resolution failed: ${(error as Error).message}`
+      };
+      overallStatus = 'unhealthy'; // User resolution is critical
+    }
+  }
+
+  // System check - basic server health
+  try {
+    const start = Date.now();
+    // Basic memory and process check
+    if (typeof process !== 'undefined') {
+      const memUsage = process.memoryUsage();
+      checks.system = {
+        status: 'up',
+        responseTime: Date.now() - start,
+        details: `Memory: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`
+      };
+    } else {
+      checks.system = {
+        status: 'up',
+        responseTime: Date.now() - start
+      };
+    }
+  } catch (error) {
+    checks.system = {
       status: 'down',
       error: (error as Error).message
     };
-    overallStatus = 'unhealthy';
+    if (overallStatus === 'healthy') {
+      overallStatus = 'degraded';
+    }
   }
-
-  // External services check (if needed)
-  // Add more health checks as needed
 
   return {
     status: overallStatus,

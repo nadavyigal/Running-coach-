@@ -109,6 +109,22 @@ async function chatHandler(req: ApiRequest) {
     const useAdaptiveCoaching = userId && parseInt(userId) > 0;
     console.log(`🤖 Use adaptive coaching: ${useAdaptiveCoaching} (userId: ${userId})`);
     
+    // If userId is provided, verify user exists
+    if (userId && parseInt(userId) > 0) {
+      try {
+        const user = await dbUtils.getUserById(parseInt(userId));
+        if (!user) {
+          console.warn(`⚠️ User ${userId} not found, proceeding with anonymous chat`);
+          // Don't fail the request, just proceed without user-specific features
+        } else {
+          console.log(`✅ User ${userId} found and verified`);
+        }
+      } catch (userCheckError) {
+        console.warn('⚠️ User verification failed, proceeding with anonymous chat:', userCheckError);
+        // Don't fail the request, just proceed without user-specific features
+      }
+    }
+    
     // OpenAI API key validation is now handled by withSecureOpenAI wrapper
 
     // Add explicit timeout for the entire request
@@ -174,20 +190,13 @@ async function chatHandler(req: ApiRequest) {
           // Continue anyway - message storage failure shouldn't block response
         }
 
-        // Return adaptive response as a stream
+        // Return adaptive response as a stream in the same SSE-like format the client expects
         console.log('📤 Creating adaptive response stream...');
         const stream = new ReadableStream({
           start(controller) {
             const encoder = new TextEncoder();
-            
-            // Send the response
-            controller.enqueue(encoder.encode(coachingResponse.response));
-            
-            // Add coaching metadata if feedback is requested
-            if (coachingResponse.requestFeedback) {
-              controller.enqueue(encoder.encode('\n\n---\n*How was this response? Your feedback helps me improve my coaching for you.*'));
-            }
-            
+            const chunk = `0:${JSON.stringify({ textDelta: coachingResponse.response })}\n`;
+            controller.enqueue(encoder.encode(chunk));
             controller.close();
           }
         });
@@ -268,7 +277,33 @@ async function chatHandler(req: ApiRequest) {
       });
     }
     
-    return result.data.toDataStreamResponse();
+    // Ensure the returned stream uses the same '0:{json}' lines format
+    const original = await result.data.toDataStreamResponse();
+    const reader = original.body?.getReader();
+    if (!reader) return original;
+    const transformed = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const text = decoder.decode(value);
+          // Wrap raw text chunks into the expected format if they are plain text
+          const lines = text.split('\n').filter(Boolean);
+          for (const line of lines) {
+            // If already in the expected format, pass through
+            if (line.startsWith('0:')) {
+              controller.enqueue(encoder.encode(line + '\n'));
+            } else {
+              controller.enqueue(encoder.encode(`0:${JSON.stringify({ textDelta: line })}\n`));
+            }
+          }
+        }
+        controller.close();
+      }
+    });
+    return new Response(transformed, { headers: original.headers });
 
   } catch (error) {
     console.error('❌ Chat API error occurred:', error);

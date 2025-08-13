@@ -175,23 +175,46 @@ export function useAIServiceErrorHandling(config: AIServiceConfig = {}) {
   ) => {
     return safeAICall(
       async () => {
+        console.log('🤖 Attempting AI chat with context:', context)
         const response = await fetch('/api/onboarding/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ messages, ...context })
         })
 
+        console.log('📡 Chat API response status:', response.status)
+        
         if (!response.ok) {
-          throw new AIServiceError(`Chat API failed: ${response.status} ${response.statusText}`)
+          // Try to get the error message from the response
+          let errorMessage = `Chat API failed: ${response.status} ${response.statusText}`
+          try {
+            const errorData = await response.json()
+            if (errorData.message) {
+              errorMessage = errorData.message
+            }
+            if (errorData.redirectToForm) {
+              console.log('🔄 API suggested redirect to form')
+              return {
+                fallback: true,
+                message: errorMessage,
+                redirectToForm: true
+              }
+            }
+          } catch (parseError) {
+            console.warn('Failed to parse error response:', parseError)
+          }
+          
+          throw new AIServiceError(errorMessage)
         }
 
         return response
       },
       () => {
+        console.log('🔄 Using AI chat fallback - redirecting to form')
         // Fallback: redirect to form-based onboarding
         return {
           fallback: true,
-          message: 'AI chat unavailable. Please use the guided form instead.',
+          message: 'AI chat is not available right now. Let\'s continue with the guided form instead.',
           redirectToForm: true
         }
       },
@@ -218,7 +241,7 @@ export function useAIServiceErrorHandling(config: AIServiceConfig = {}) {
         const response = await fetch('/api/generate-plan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(userData)
+          body: JSON.stringify({ user: userData, rookie_challenge: true })
         })
 
         if (!response.ok) {

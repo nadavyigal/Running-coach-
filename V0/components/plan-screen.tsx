@@ -7,14 +7,14 @@ import { Badge } from "@/components/ui/badge"
 import { Calendar, CalendarDays, TrendingUp, Plus, ChevronLeft, ChevronRight, MoreHorizontal, Loader2 } from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
 import { MonthlyCalendarView } from "@/components/monthly-calendar-view"
+import { PlanComplexityIndicator } from "@/components/plan-complexity-indicator"
 import { dbUtils, type Plan, type Workout } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
-import { PlanComplexityIndicator } from "@/components/plan-complexity-indicator"
 
 export function PlanScreen() {
   const [currentView, setCurrentView] = useState<"monthly" | "biweekly" | "progress">("monthly")
-  const [currentMonth, setCurrentMonth] = useState(new Date())
+  // const [currentMonth, setCurrentMonth] = useState(new Date())
   const [showAddRunModal, setShowAddRunModal] = useState(false)
   const [plan, setPlan] = useState<Plan | null>(null)
   const [workouts, setWorkouts] = useState<Workout[]>([])
@@ -37,11 +37,14 @@ export function PlanScreen() {
       try {
         const user = await dbUtils.getCurrentUser()
         if (!user) {
+          console.warn('⚠️ PlanScreen: No current user found; skipping plan load')
           setIsLoading(false)
           return
         }
 
+        console.log('🔍 PlanScreen: Current user:', user)
         let activePlan = await dbUtils.getActivePlan(user.id!)
+        console.log('🔍 PlanScreen: Active plan query result:', activePlan)
         
         // Fallback: if no active plan found, ensure user has one
         if (!activePlan) {
@@ -62,8 +65,12 @@ export function PlanScreen() {
         
         if (activePlan) {
           setPlan(activePlan)
-          const planWorkouts = await dbUtils.getWorkoutsByPlan(activePlan.id!)
+          // Use existing util to fetch workouts for a plan
+          const planWorkouts = await dbUtils.getPlanWorkouts(activePlan.id!)
           setWorkouts(planWorkouts)
+          console.log('📅 PlanScreen: Loaded plan and', planWorkouts.length, 'workouts')
+        } else {
+          console.warn('⚠️ PlanScreen: Still no active plan after ensureUserHasActivePlan')
         }
       } catch (error) {
         const errorInfo = dbUtils.handlePlanError(error, 'loading')
@@ -104,8 +111,8 @@ export function PlanScreen() {
       const totalDistance = sortedWorkouts.reduce((sum, w) => sum + w.distance, 0)
 
       // Calculate date range for the week
-      const firstWorkout = sortedWorkouts[0]
-      const weekStart = new Date(firstWorkout.scheduledDate)
+      const firstWorkout = sortedWorkouts[0]!
+      const weekStart = new Date(firstWorkout.scheduledDate as Date)
       weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1) // Monday
       const weekEnd = new Date(weekStart)
       weekEnd.setDate(weekEnd.getDate() + 6) // Sunday
@@ -127,8 +134,8 @@ export function PlanScreen() {
     })
 
     return weeks.sort((a, b) => {
-      const weekA = parseInt(a.title.split(' ')[1])
-      const weekB = parseInt(b.title.split(' ')[1])
+      const weekA = parseInt((a.title.split(' ')[1] || '0'))
+      const weekB = parseInt((b.title.split(' ')[1] || '0'))
       return weekA - weekB
     })
   }
@@ -152,6 +159,7 @@ export function PlanScreen() {
           <Button onClick={() => window.location.reload()} className="bg-green-500 hover:bg-green-600">
             Refresh
           </Button>
+          <div className="text-xs text-gray-400 mt-2">Check console logs for user/plan state details.</div>
         </div>
       )
     }
@@ -378,6 +386,17 @@ export function PlanScreen() {
           </Button>
         ))}
       </div>
+
+      {/* Plan Complexity Indicator */}
+      {plan && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <PlanComplexityIndicator 
+            plan={plan} 
+            userId={plan.userId} 
+            className="h-fit"
+          />
+        </div>
+      )}
 
       {/* Content */}
       {currentView === "monthly" && <MonthlyCalendarView />}
