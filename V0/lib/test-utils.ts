@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, RenderOptions } from '@testing-library/react';
+import { render, RenderOptions, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 
 // Error boundary for testing error scenarios
@@ -54,8 +54,10 @@ export const createErrorBoundaryTest = (
   return render(
     React.createElement(
       TestErrorBoundary,
-      { fallback: ErrorFallback },
-      React.createElement(Component, props)
+      { 
+        fallback: ErrorFallback,
+        children: React.createElement(Component, props)
+      }
     )
   );
 };
@@ -337,8 +339,10 @@ export const renderWithErrorBoundary = (
   const Wrapper = ({ children }: { children: React.ReactNode }) =>
     React.createElement(
       TestErrorBoundary,
-      { fallback: ErrorFallback },
-      children
+      { 
+        fallback: ErrorFallback,
+        children
+      }
     );
 
   return render(ui, { wrapper: Wrapper, ...options });

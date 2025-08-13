@@ -14,7 +14,8 @@ import type {
   DataFusionRule,
   FusedDataPoint,
   DataConflict,
-  DataSource
+  DataSource,
+  RaceGoal
 } from './db';
 
 /**
@@ -1491,6 +1492,182 @@ export async function createRunAndUpdateProgress(
 }
 
 // ============================================================================
+// RACE GOAL MANAGEMENT UTILITIES
+// ============================================================================
+
+/**
+ * Get race goals for user
+ */
+export async function getRaceGoalsByUser(userId: number): Promise<RaceGoal[]> {
+  return safeDbOperation(async () => {
+    if (db) {
+      return await db.raceGoals.where('userId').equals(userId).toArray();
+    }
+    return [];
+  }, 'getRaceGoalsByUser', []);
+}
+
+/**
+ * Create race goal
+ */
+export async function createRaceGoal(goalData: Omit<RaceGoal, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+    
+    const id = await db.raceGoals.add({
+      ...goalData,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+    console.log('✅ Race goal created successfully:', id);
+    return id as number;
+  }, 'createRaceGoal');
+}
+
+/**
+ * Update race goal
+ */
+export async function updateRaceGoal(goalId: number, updates: Partial<RaceGoal>): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+    
+    await db.raceGoals.update(goalId, {
+      ...updates,
+      updatedAt: new Date()
+    });
+    console.log('✅ Race goal updated successfully:', goalId);
+  }, 'updateRaceGoal');
+}
+
+/**
+ * Delete race goal
+ */
+export async function deleteRaceGoal(goalId: number): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+    
+    await db.raceGoals.delete(goalId);
+    console.log('✅ Race goal deleted successfully:', goalId);
+  }, 'deleteRaceGoal');
+}
+
+/**
+ * Get race goal by ID
+ */
+export async function getRaceGoalById(goalId: number): Promise<RaceGoal | null> {
+  return safeDbOperation(async () => {
+    if (db) {
+      return await db.raceGoals.get(goalId) || null;
+    }
+    return null;
+  }, 'getRaceGoalById', null);
+}
+
+/**
+ * Get workouts by plan ID
+ */
+export async function getWorkoutsByPlan(planId: number): Promise<Workout[]> {
+  return safeDbOperation(async () => {
+    if (db) {
+      return await db.workouts.where('planId').equals(planId).toArray();
+    }
+    return [];
+  }, 'getWorkoutsByPlan', []);
+}
+
+/**
+ * Update workout
+ */
+export async function updateWorkout(workoutId: number, updates: Partial<Workout>): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+    
+    await db.workouts.update(workoutId, {
+      ...updates,
+      updatedAt: new Date()
+    });
+    console.log('✅ Workout updated successfully:', workoutId);
+  }, 'updateWorkout');
+}
+
+/**
+ * Delete workout
+ */
+export async function deleteWorkout(workoutId: number): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+    
+    await db.workouts.delete(workoutId);
+    console.log('✅ Workout deleted successfully:', workoutId);
+  }, 'deleteWorkout');
+}
+
+/**
+ * Assess fitness level for user
+ */
+export async function assessFitnessLevel(userId: number): Promise<{ level: string; score: number } | null> {
+  return safeDbOperation(async () => {
+    if (!db) return null;
+    
+    // Get recent runs to assess fitness
+    const recentRuns = await db.runs
+      .where('userId').equals(userId)
+      .and(run => run.completedAt >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
+      .toArray();
+    
+    if (recentRuns.length === 0) {
+      return { level: 'beginner', score: 0 };
+    }
+    
+    // Calculate average pace and distance
+    const avgDistance = recentRuns.reduce((sum, run) => sum + run.distance, 0) / recentRuns.length;
+    const avgPace = recentRuns.reduce((sum, run) => sum + (run.duration / run.distance), 0) / recentRuns.length;
+    
+    // Simple fitness scoring based on distance and pace
+    let score = 0;
+    if (avgDistance >= 10) score += 40;
+    else if (avgDistance >= 5) score += 20;
+    else if (avgDistance >= 3) score += 10;
+    
+    if (avgPace <= 4) score += 40; // sub 4 min/km
+    else if (avgPace <= 5) score += 30; // sub 5 min/km
+    else if (avgPace <= 6) score += 20; // sub 6 min/km
+    else if (avgPace <= 7) score += 10; // sub 7 min/km
+    
+    // Frequency bonus
+    if (recentRuns.length >= 12) score += 20; // 3+ runs per week
+    else if (recentRuns.length >= 8) score += 15; // 2+ runs per week
+    else if (recentRuns.length >= 4) score += 10; // 1+ runs per week
+    
+    let level = 'beginner';
+    if (score >= 80) level = 'advanced';
+    else if (score >= 50) level = 'intermediate';
+    
+    return { level, score };
+  }, 'assessFitnessLevel', null);
+}
+
+/**
+ * Calculate target paces for race goal
+ */
+export async function calculateTargetPaces(raceGoal: RaceGoal): Promise<{ easy: number; tempo: number; threshold: number; interval: number } | null> {
+  return safeDbOperation(async () => {
+    if (!raceGoal.targetTime || !raceGoal.distance) return null;
+    
+    // Calculate race pace (minutes per km)
+    const racePaceMinPerKm = (raceGoal.targetTime / 60) / raceGoal.distance;
+    
+    // Calculate training paces based on Jack Daniels' Running Formula
+    const easy = racePaceMinPerKm + 1.5; // Easy pace: race pace + 1.5 min/km
+    const tempo = racePaceMinPerKm + 0.5; // Tempo pace: race pace + 0.5 min/km
+    const threshold = racePaceMinPerKm + 0.3; // Threshold: race pace + 0.3 min/km
+    const interval = racePaceMinPerKm - 0.2; // Interval: race pace - 0.2 min/km
+    
+    return { easy, tempo, threshold, interval };
+  }, 'calculateTargetPaces', null);
+}
+
+// ============================================================================
 // DATA FUSION UTILITIES
 // ============================================================================
 
@@ -1841,6 +2018,15 @@ export const dbUtils = {
   getUserGoals,
   getGoalWithMilestones,
   
+  // Race goal management
+  getRaceGoalsByUser,
+  createRaceGoal,
+  updateRaceGoal,
+  deleteRaceGoal,
+  getRaceGoalById,
+  assessFitnessLevel,
+  calculateTargetPaces,
+  
   // Plan management
   createPlan,
   updatePlan,
@@ -1856,6 +2042,9 @@ export const dbUtils = {
   getWorkoutsForDateRange,
   getTodaysWorkout,
   markWorkoutCompleted,
+  getWorkoutsByPlan,
+  updateWorkout,
+  deleteWorkout,
   
   // Run tracking
   recordRun,
