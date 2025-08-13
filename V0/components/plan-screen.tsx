@@ -11,7 +11,6 @@ import { PlanComplexityIndicator } from "@/components/plan-complexity-indicator"
 import { dbUtils, type Plan, type Workout } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
-import { PlanComplexityIndicator } from "@/components/plan-complexity-indicator"
 
 export function PlanScreen() {
   const [currentView, setCurrentView] = useState<"monthly" | "biweekly" | "progress">("monthly")
