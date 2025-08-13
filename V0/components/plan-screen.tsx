@@ -11,6 +11,7 @@ import { PlanComplexityIndicator } from "@/components/plan-complexity-indicator"
 import { dbUtils, type Plan, type Workout } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
+import { PlanComplexityIndicator } from "@/components/plan-complexity-indicator"
 
 export function PlanScreen() {
   const [currentView, setCurrentView] = useState<"monthly" | "biweekly" | "progress">("monthly")
@@ -270,6 +271,7 @@ export function PlanScreen() {
         </select>
       </div>
 
+
       {/* Metrics Improvement */}
       <div className="space-y-4">
         {[
@@ -361,6 +363,8 @@ export function PlanScreen() {
           <Plus className="h-4 w-4" />
         </Button>
       </div>
+
+      {plan && <PlanComplexityIndicator plan={plan} />}
 
       {/* View Toggle */}
       <div className="flex bg-gray-100 rounded-lg p-1">

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { planComplexityEngine } from '../lib/plan-complexity-engine';
+import { planComplexityEngine, PlanComplexityEngineService } from '../lib/plan-complexity-engine';
 import { getCurrentUser, getUserRuns, getPlanWorkouts } from '../lib/dbUtils';
+import type { AdaptationFactor } from '../lib/db';
 
 // Mock the database utilities
 vi.mock('../lib/dbUtils', () => ({
@@ -192,5 +193,37 @@ describe('Plan Complexity Engine', () => {
 
       expect(suggestions).toContain('You may benefit from more challenging workouts');
     });
+  });
+
+  // Additional tests for static methods from main branch
+  describe('PlanComplexityEngineService static methods', () => {
+    it('calculates complexity score based on adaptation factors', () => {
+      const factors: AdaptationFactor[] = [
+        { factor: 'performance', weight: 2, currentValue: 8, targetValue: 10 },
+        { factor: 'consistency', weight: 1, currentValue: 5, targetValue: 10 }
+      ]
+      const engine = {
+        userExperience: 'beginner' as const,
+        planLevel: 'basic' as const,
+        adaptationFactors: factors,
+        complexityScore: 0
+      }
+      const updated = PlanComplexityEngineService.updateComplexity(engine)
+      // Expected weighted score: ((8/10)*2 + (5/10)*1)/3 = 0.7 -> 70
+      expect(updated.complexityScore).toBe(70)
+      expect(updated.planLevel).toBe('advanced')
+    })
+
+    it('initializes from plan', () => {
+      const plan = {
+        fitnessLevel: 'intermediate' as const,
+        complexityLevel: 'standard' as const,
+        complexityScore: 50
+      }
+      const engine = PlanComplexityEngineService.initializeFromPlan(plan)
+      expect(engine.userExperience).toBe('intermediate')
+      expect(engine.planLevel).toBe('standard')
+      expect(engine.complexityScore).toBe(50)
+    })
   });
 });

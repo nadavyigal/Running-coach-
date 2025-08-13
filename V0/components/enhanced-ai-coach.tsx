@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -435,4 +436,58 @@ export function EnhancedAICoach({ user, onResponse, className = '' }: EnhancedAI
       </Card>
     </div>
   );
+}
+
+// Simple AI Coach interface (from main branch) - for backward compatibility
+export function SimpleEnhancedAICoach({ user, onResponse }: { user: User; onResponse: (res: any) => void }) {
+  const [text, setText] = useState('')
+  const [response, setResponse] = useState<any | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleSend = async () => {
+    if (!text.trim() || isLoading) return
+    setIsLoading(true)
+    try {
+      const runs = await dbUtils.getRunsByUser(user.id!)
+      // Simplified fallback for compatibility
+      const fallback = {
+        response: `Hi ${user.name}, I understand you want to know about: ${text}`,
+        suggestedQuestions: [],
+        followUpActions: [],
+        confidence: 0.5,
+        contextUsed: []
+      }
+      setResponse(fallback)
+      onResponse(fallback)
+    } catch (e) {
+      const fallback = {
+        response: 'Unable to generate response.',
+        suggestedQuestions: [],
+        followUpActions: [],
+        confidence: 0,
+        contextUsed: []
+      }
+      setResponse(fallback)
+      onResponse(fallback)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-2">
+        <Input
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder="Ask the coach..."
+          data-testid="input"
+        />
+        <Button onClick={handleSend} disabled={isLoading || !text.trim()} data-testid="send">
+          Send
+        </Button>
+      </div>
+      {response && <p data-testid="response">{response.response}</p>}
+    </div>
+  )
 }

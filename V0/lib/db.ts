@@ -626,18 +626,21 @@ export interface Plan {
   fitnessLevel?: 'beginner' | 'intermediate' | 'advanced';
   trainingDaysPerWeek?: number;
   peakWeeklyVolume?: number; // kilometers
-  // Plan Complexity Engine fields
-  complexityScore?: number; // 0-100 complexity score
+  // Progressive Plan Complexity fields
   complexityLevel?: 'basic' | 'standard' | 'advanced';
+  complexityScore?: number; // 0-100 complexity score
   lastComplexityUpdate?: Date;
-  adaptationFactors?: {
-    performance: number;
-    consistency: number;
-    goals: number;
-    feedback: number;
-  };
+  adaptationFactors?: AdaptationFactor[];
+  userFeedback?: PlanFeedback[];
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface AdaptationFactor {
+  factor: 'performance' | 'feedback' | 'consistency' | 'goals';
+  weight: number;
+  currentValue: number;
+  targetValue: number;
 }
 
 // Plan feedback for complexity engine
@@ -645,7 +648,7 @@ export interface PlanFeedback {
   id?: number;
   planId: number;
   userId: number;
-  feedbackType: 'difficulty' | 'enjoyment' | 'completion' | 'suggestion';
+  feedbackType?: 'difficulty' | 'enjoyment' | 'completion' | 'suggestion';
   rating: number; // 1-5 scale
   comment?: string;
   createdAt: Date;
@@ -810,6 +813,8 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   tokenCount?: number;
+  /** Serialized context used to generate the assistant response */
+  aiContext?: string;
   conversationId?: string;
 }
 

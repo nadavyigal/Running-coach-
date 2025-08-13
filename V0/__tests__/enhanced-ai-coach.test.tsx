@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { EnhancedAICoach } from '@/components/enhanced-ai-coach';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { EnhancedAICoach, SimpleEnhancedAICoach } from '@/components/enhanced-ai-coach';
 import { dbUtils } from '@/lib/db';
 import { adaptiveCoachingEngine } from '@/lib/adaptiveCoachingEngine';
 import { vi, expect, test, beforeEach, describe } from 'vitest';
@@ -187,4 +187,38 @@ describe('EnhancedAICoach', () => {
       expect(document.querySelector('.animate-pulse')).not.toBeInTheDocument();
     }, { timeout: 10000 });
   }, 15000);
+
+  // Additional tests for SimpleEnhancedAICoach component
+  describe('SimpleEnhancedAICoach (from main branch)', () => {
+    test('sends context aware message', async () => {
+      const onResponse = vi.fn()
+      render(<SimpleEnhancedAICoach user={mockUser} onResponse={onResponse} />)
+
+      fireEvent.change(screen.getByTestId('input'), { target: { value: 'Hello' } })
+      fireEvent.click(screen.getByTestId('send'))
+
+      await waitFor(() => {
+        expect(onResponse).toHaveBeenCalledWith(
+          expect.objectContaining({ response: expect.stringContaining('Hi Test') })
+        )
+        expect(screen.getByTestId('response')).toBeInTheDocument()
+      })
+    })
+
+    test('handles service errors', async () => {
+      ;(dbUtils.getRunsByUser as any).mockRejectedValueOnce(new Error('fail'))
+      const onResponse = vi.fn()
+      render(<SimpleEnhancedAICoach user={mockUser} onResponse={onResponse} />)
+
+      fireEvent.change(screen.getByTestId('input'), { target: { value: 'Hi' } })
+      fireEvent.click(screen.getByTestId('send'))
+
+      await waitFor(() => {
+        expect(onResponse).toHaveBeenCalledWith(
+          expect.objectContaining({ response: 'Unable to generate response.' })
+        )
+        expect(screen.getByText('Unable to generate response.')).toBeInTheDocument()
+      })
+    })
+  });
 });
