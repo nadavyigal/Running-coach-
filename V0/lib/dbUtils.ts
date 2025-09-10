@@ -17,6 +17,14 @@ import type {
   DataSource,
   RaceGoal
 } from './db';
+import { 
+  nowUTC, 
+  addDaysUTC, 
+  addWeeksUTC,
+  getUserTimezone,
+  startOfDayUTC,
+  migrateLocalDateToUTC
+} from './timezone-utils';
 
 /**
  * Database Utilities - Comprehensive database operations with error handling
@@ -375,8 +383,8 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
           userId,
           title: 'Default Running Plan',
           description: 'A basic running plan to get you started',
-          startDate: new Date(),
-          endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          startDate: nowUTC(),
+          endDate: addDaysUTC(30),
           totalWeeks: 4,
           isActive: true,
           planType: 'basic',
@@ -384,8 +392,9 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
           peakWeeklyVolume: 20,
           complexityScore: 25,
           complexityLevel: 'basic',
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdInTimezone: getUserTimezone(),
+          createdAt: nowUTC(),
+          updatedAt: nowUTC(),
         } as any;
         validatePlanContract(planData);
         planId = (await database.plans.add(planData)) as number;
@@ -403,9 +412,9 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
               duration: 30,
               intensity: 'easy',
               completed: false,
-              scheduledDate: new Date(Date.now() + (week - 1) * 7 * 24 * 60 * 60 * 1000),
-              createdAt: new Date(),
-              updatedAt: new Date(),
+              scheduledDate: addDaysUTC((week - 1) * 7),
+              createdAt: nowUTC(),
+              updatedAt: nowUTC(),
             } as Omit<Workout, 'id'>);
           }
         }
@@ -885,8 +894,8 @@ export async function createPlan(planData: Omit<Plan, 'id' | 'createdAt' | 'upda
     
     const id = await db.plans.add({
       ...planData,
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: nowUTC(),
+      updatedAt: nowUTC()
     });
     console.log('✅ Plan created successfully:', id);
     return id as number;
@@ -965,7 +974,7 @@ export async function ensureUserHasActivePlan(userId: number): Promise<Plan> {
         if (inactivePlan) {
           await database.plans.update(inactivePlan.id!, { 
             isActive: true, 
-            updatedAt: new Date() 
+            updatedAt: nowUTC() 
           });
           const reactivatedPlan = await database.plans.get(inactivePlan.id!) as Plan;
           console.log(`♻️ Reactivated existing plan for userId=${userId}, planId=${reactivatedPlan.id}`);
@@ -977,15 +986,16 @@ export async function ensureUserHasActivePlan(userId: number): Promise<Plan> {
           userId,
           title: 'Default Running Plan',
           description: 'A basic running plan to get you started',
-          startDate: new Date(),
-          endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+          startDate: nowUTC(),
+          endDate: addDaysUTC(30), // 30 days from now in UTC
           totalWeeks: 4,
           isActive: true,
           planType: 'basic',
           trainingDaysPerWeek: user.daysPerWeek || 3,
           peakWeeklyVolume: 20, // km
           complexityScore: 25,
-          complexityLevel: 'basic'
+          complexityLevel: 'basic',
+          createdInTimezone: user.timezone || getUserTimezone()
         };
         
         const planId = await createPlan(planData);
@@ -1005,7 +1015,7 @@ export async function ensureUserHasActivePlan(userId: number): Promise<Plan> {
               duration: 30, // 30 minutes
               intensity: 'easy',
               completed: false,
-              scheduledDate: new Date(Date.now() + (week - 1) * 7 * 24 * 60 * 60 * 1000) // Spread across weeks
+              scheduledDate: addDaysUTC((week - 1) * 7) // Spread across weeks in UTC
             };
             
             await createWorkout(workoutData);
@@ -1140,10 +1150,8 @@ export async function getTodaysWorkout(userId: number): Promise<Workout | null> 
   return safeDbOperation(async () => {
     if (!db) return null;
     
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
+    const today = startOfDayUTC(nowUTC());
+    const tomorrow = addDaysUTC(1, today);
     
     // Get all plans for the user
     const plans = await db.plans.where('userId').equals(userId).toArray();
@@ -1980,6 +1988,91 @@ export async function migrateDatabase(): Promise<boolean> {
   }
 }
 
+/**
+ * Migrate existing plans and workouts from local timezone to UTC
+ * This should be run once to migrate existing data
+ */
+export async function migrateExistingPlansToUTC(): Promise<{ success: boolean; migratedPlans: number; migratedWorkouts: number; error?: any }> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    
+    let migratedPlans = 0;
+    let migratedWorkouts = 0;
+    
+    console.log('🔄 Starting UTC migration for existing plans and workouts...');
+    
+    // Get all plans that don't have timezone info (need migration)
+    const plansToMigrate = await database.plans
+      .where('createdInTimezone')
+      .equals(undefined as any)
+      .toArray();
+    
+    console.log(`📋 Found ${plansToMigrate.length} plans to migrate`);
+    
+    for (const plan of plansToMigrate) {
+      try {
+        // Assume the plan was created in the user's current timezone if unknown
+        const userTimezone = getUserTimezone();
+        
+        // Migrate plan dates
+        const migratedStartDate = migrateLocalDateToUTC(plan.startDate, userTimezone);
+        const migratedEndDate = migrateLocalDateToUTC(plan.endDate, userTimezone);
+        
+        await database.plans.update(plan.id!, {
+          startDate: migratedStartDate,
+          endDate: migratedEndDate,
+          createdInTimezone: userTimezone,
+          updatedAt: nowUTC()
+        });
+        
+        migratedPlans++;
+        console.log(`✅ Migrated plan ${plan.id} (${plan.title}) to UTC`);
+        
+        // Migrate associated workouts
+        const workouts = await database.workouts.where('planId').equals(plan.id!).toArray();
+        
+        for (const workout of workouts) {
+          const migratedScheduledDate = migrateLocalDateToUTC(workout.scheduledDate, userTimezone);
+          
+          await database.workouts.update(workout.id!, {
+            scheduledDate: migratedScheduledDate,
+            updatedAt: nowUTC()
+          });
+          
+          migratedWorkouts++;
+        }
+        
+        console.log(`📅 Migrated ${workouts.length} workouts for plan ${plan.id}`);
+        
+      } catch (error) {
+        console.error(`❌ Failed to migrate plan ${plan.id}:`, error);
+        // Continue with other plans even if one fails
+      }
+    }
+    
+    // Update user timezone if not set
+    const users = await database.users.where('timezone').equals(undefined as any).toArray();
+    for (const user of users) {
+      if (user.id) {
+        await database.users.update(user.id, {
+          timezone: getUserTimezone(),
+          updatedAt: nowUTC()
+        });
+      }
+    }
+    
+    console.log(`✅ UTC migration complete: ${migratedPlans} plans, ${migratedWorkouts} workouts`);
+    
+    return { 
+      success: true, 
+      migratedPlans, 
+      migratedWorkouts 
+    };
+    
+  }, 'migrateExistingPlansToUTC', { success: false, migratedPlans: 0, migratedWorkouts: 0 });
+}
+
 // ============================================================================
 // EXPORT ALL UTILITIES
 // ============================================================================
@@ -2069,7 +2162,10 @@ export const dbUtils = {
   handleDatabaseError,
   
   // Plan-specific error handling (backward compatibility)
-  handlePlanError: handleDatabaseError
+  handlePlanError: handleDatabaseError,
+  
+  // UTC Migration
+  migrateExistingPlansToUTC
 };
 
 export default dbUtils; 

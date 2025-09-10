@@ -220,6 +220,8 @@ export interface User {
     lastEngagement: Date;
     engagementScore: number;
   };
+  // Timezone handling for UTC plan activation
+  timezone?: string; // User's timezone (e.g., "America/New_York", "Europe/London")
 }
 
 export interface OnboardingSession {
@@ -632,6 +634,8 @@ export interface Plan {
   lastComplexityUpdate?: Date;
   adaptationFactors?: AdaptationFactor[];
   userFeedback?: PlanFeedback[];
+  // Timezone handling for UTC plan activation
+  createdInTimezone?: string; // Timezone where plan was originally created
   createdAt: Date;
   updatedAt: Date;
 }
