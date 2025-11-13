@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { dbUtils } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 import { engagementOptimizationService } from '@/lib/engagement-optimization';
 
 export async function GET(request: NextRequest) {

@@ -1,10 +1,10 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ChatScreen } from './chat-screen'
-import { dbUtils } from '@/lib/db'
+import { dbUtils } from '@/lib/dbUtils'
 
 // Mock the database utilities
-vi.mock('@/lib/db', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getCurrentUser: vi.fn().mockResolvedValue({
       id: 1,

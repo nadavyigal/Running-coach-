@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { POST } from "./route";
 import { NextResponse } from "next/server";
-import * as dbModule from '../../../lib/db';
+import * as dbUtilsModule from '../../../lib/dbUtils';
 
 describe("POST /api/share-run", () => {
   it("should return a shareable link for a given runId", async () => {
@@ -15,7 +15,7 @@ describe("POST /api/share-run", () => {
       completedAt: new Date(),
       createdAt: new Date(),
     };
-    const spy = vi.spyOn(dbModule.dbUtils, 'getRunsByUser').mockResolvedValue([fakeRun]);
+    const spy = vi.spyOn(dbUtilsModule.dbUtils, 'getRunsByUser').mockResolvedValue([fakeRun]);
 
     const mockRequest = {
       json: async () => ({ runId: "123", userId: "456" }),

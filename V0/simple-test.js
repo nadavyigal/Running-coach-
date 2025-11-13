@@ -11,7 +11,7 @@ if (typeof window === 'undefined') {
 async function testDatabase() {
   try {
     console.log('📦 Importing database utilities...')
-    const { dbUtils } = await import('./lib/db.js')
+    const { dbUtils } = await import('./lib/dbUtils.js')
     
     console.log('🧹 Clearing database...')
     await dbUtils.clearDatabase()

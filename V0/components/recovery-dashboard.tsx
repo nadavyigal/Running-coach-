@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from './ui/alert';
 import WellnessInputModal from './wellness-input-modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Calendar, TrendingUp, TrendingDown, Activity, Moon, Heart, Brain } from 'lucide-react';
-import { dbUtils } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 
 interface RecoveryScore {
   id?: number;

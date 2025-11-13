@@ -1,5 +1,5 @@
 // Test script to verify onboarding completion fix
-import { dbUtils } from './lib/db.js';
+import { dbUtils } from './lib/dbUtils.js';
 
 async function testOnboardingCompletion() {
   console.log('🔍 Testing onboarding completion fix...');

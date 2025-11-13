@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { dbUtils, type Plan, type Workout, type User } from "@/lib/db";
+import { type Plan, type Workout, type User } from "@/lib/db";
+import { dbUtils } from "@/lib/dbUtils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 
@@ -120,7 +121,7 @@ import { AddActivityModal } from "@/components/add-activity-modal"
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
-import { dbUtils, type Workout } from "@/lib/db"
+import { type Workout } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 import { StreakIndicator } from "@/components/streak-indicator"
 import { CommunityStatsWidget } from "@/components/community-stats-widget"
@@ -158,7 +159,7 @@ import { AddActivityModal } from "@/components/add-activity-modal"
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
-import { dbUtils, type Workout } from "@/lib/db"
+import { type Workout } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 import { StreakIndicator } from "@/components/streak-indicator"
 import { CommunityStatsWidget } from "@/components/community-stats-widget"

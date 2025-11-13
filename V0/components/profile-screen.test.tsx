@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { ProfileScreen } from './profile-screen';
-import { dbUtils } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 import { vi } from 'vitest';
 
 // Mock the BadgeCabinet component
@@ -11,7 +11,7 @@ vi.mock('./badge-cabinet', () => ({
 }));
 
 // Mock dbUtils
-vi.mock('@/lib/db', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getCurrentUser: vi.fn(),
     checkAndUnlockBadges: vi.fn(),

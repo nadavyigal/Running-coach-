@@ -9,7 +9,8 @@ console.log('Starting database diagnostics...');
     console.log('Checking database status...');
     
     // Import the database
-    const { db, dbUtils } = await import('./lib/db.js');
+    const { db } = await import('./lib/db.js');
+    const { dbUtils } = await import('./lib/dbUtils.js');
     
     // Check database version
     console.log('Database name:', db.name);

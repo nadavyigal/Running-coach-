@@ -1,5 +1,5 @@
 // Test to simulate actual app behavior and verify bug fix
-import { dbUtils } from './lib/db.js';
+import { dbUtils } from './lib/dbUtils.js';
 
 async function testAppBehavior() {
   console.log('🔍 Testing actual app behavior...');

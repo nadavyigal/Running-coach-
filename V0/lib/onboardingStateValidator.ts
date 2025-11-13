@@ -1,5 +1,5 @@
 import { OnboardingProfile } from './onboardingManager';
-import { dbUtils } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 
 interface ValidationResult {
   isValid: boolean;

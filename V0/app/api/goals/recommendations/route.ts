@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { dbUtils, GoalRecommendation } from '@/lib/db';
+import { GoalRecommendation } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 import { goalProgressEngine } from '@/lib/goalProgressEngine';
 
 const RecommendationsQuerySchema = z.object({

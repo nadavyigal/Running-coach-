@@ -1,9 +1,9 @@
 import { engagementOptimizationService } from '@/lib/engagement-optimization';
-import { dbUtils } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 import { vi } from 'vitest';
 
 // Mock the database utilities
-vi.mock('@/lib/db', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getCurrentUser: vi.fn(),
     getRuns: vi.fn(),

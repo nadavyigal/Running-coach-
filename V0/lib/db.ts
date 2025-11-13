@@ -1238,6 +1238,3 @@ export const badgeTypes: { [key: number]: 'bronze' | 'silver' | 'gold' } = {
   30: 'gold',
 };
 
-// Re-export the complete dbUtils from dbUtils.ts for backward compatibility
-export { dbUtils } from './dbUtils';
-

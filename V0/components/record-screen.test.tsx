@@ -1,12 +1,12 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { vi, beforeEach, afterEach, describe, it, expect } from 'vitest'
 import { RecordScreen } from './record-screen'
-import { dbUtils } from '@/lib/db'
+import { dbUtils } from '@/lib/dbUtils'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
 
 // Mock dependencies
-vi.mock('@/lib/db')
+vi.mock('@/lib/dbUtils')
 vi.mock('next/navigation')
 vi.mock('@/hooks/use-toast')
 vi.mock('@/components/route-selector-modal', () => ({

@@ -4,7 +4,7 @@ import { OnboardingSessionManager } from '@/lib/onboardingSessionManager';
 
 // Mock dependencies
 vi.mock('@/lib/onboardingSessionManager');
-vi.mock('@/lib/db');
+vi.mock('@/lib/dbUtils');
 vi.mock('ai');
 vi.mock('@ai-sdk/openai');
 

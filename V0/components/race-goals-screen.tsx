@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { RaceGoalModal } from "./race-goal-modal"
-import { dbUtils } from "@/lib/db"
+import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import {

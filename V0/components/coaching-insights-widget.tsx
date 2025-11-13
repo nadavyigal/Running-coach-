@@ -83,7 +83,7 @@ export function CoachingInsightsWidget({
       console.log('CoachingInsightsWidget: Fetching data for userId:', userId);
 
       // Access IndexedDB directly from client-side
-      const { dbUtils } = await import('@/lib/db');
+      const { dbUtils } = await import('@/lib/dbUtils');
       
       console.log('Step 1: Getting current user...');
       const user = await dbUtils.getCurrentUser();
@@ -163,7 +163,7 @@ export function CoachingInsightsWidget({
   const buildProfileResponse = async (profile: any) => {
     try {
       console.log('Building profile response...');
-      const { dbUtils } = await import('@/lib/db');
+      const { dbUtils } = await import('@/lib/dbUtils');
       
       // Get recent adaptations
       const recentAdaptations = (profile.adaptationHistory || [])

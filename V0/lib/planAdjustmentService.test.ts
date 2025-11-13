@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { planAdjustmentService } from './planAdjustmentService'
-import { db, dbUtils } from './db'
+import { db } from './db'
+import { dbUtils } from './dbUtils'
 import { generateFallbackPlan } from './planGenerator'
 import { trackPlanAdjustmentEvent } from './analytics'
 
@@ -10,7 +11,10 @@ vi.mock('./db', () => ({
     users: {
       get: vi.fn()
     }
-  },
+  }
+}))
+
+vi.mock('./dbUtils', () => ({
   dbUtils: {
     getActivePlan: vi.fn(),
     updatePlan: vi.fn()

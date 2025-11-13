@@ -187,7 +187,7 @@
             
             try {
                 // Test if we can access the database
-                const dbModule = await import('/lib/db.js');
+                const dbModule = await import('/lib/dbUtils.js');
                 const { dbUtils } = dbModule;
                 
                 log('✅ Database module loaded successfully', 'success');
@@ -215,7 +215,7 @@
             log('📋 Test 2: User Creation', 'info');
             
             try {
-                const { dbUtils } = await import('/lib/db.js');
+                const { dbUtils } = await import('/lib/dbUtils.js');
                 
                 // Clear database first
                 await dbUtils.clearDatabase();
@@ -256,7 +256,7 @@
             log('📋 Test 3: User Retrieval', 'info');
             
             try {
-                const { dbUtils } = await import('/lib/db.js');
+                const { dbUtils } = await import('/lib/dbUtils.js');
                 
                 const startTime = performance.now();
                 const user = await dbUtils.getCurrentUser();
@@ -289,7 +289,7 @@
             log('📋 Test 4: OnboardingManager Integration', 'info');
             
             try {
-                const { dbUtils } = await import('/lib/db.js');
+                const { dbUtils } = await import('/lib/dbUtils.js');
                 const { onboardingManager } = await import('/lib/onboardingManager.js');
                 
                 // Clear database
@@ -335,7 +335,7 @@
             log('📋 Test 5: Boolean Query Testing', 'info');
             
             try {
-                const { dbUtils } = await import('/lib/db.js');
+                const { dbUtils } = await import('/lib/dbUtils.js');
                 
                 // Clear and create test users
                 await dbUtils.clearDatabase();
@@ -391,7 +391,7 @@
             log('📋 Test 6: Full Integration Flow', 'info');
             
             try {
-                const { dbUtils } = await import('/lib/db.js');
+                const { dbUtils } = await import('/lib/dbUtils.js');
                 
                 // Simulate the exact flow that was failing
                 await dbUtils.clearDatabase();
@@ -445,7 +445,7 @@
                 log('🔗 Click "Open Main App" button to test manually', 'info');
                 
                 // Test basic database operations that onboarding relies on
-                const { dbUtils } = await import('/lib/db.js');
+                const { dbUtils } = await import('/lib/dbUtils.js');
                 await dbUtils.clearDatabase();
                 
                 // Simulate onboarding screen completion

@@ -30,7 +30,7 @@ test.describe('Critical Database Schema Fix', () => {
         console.log('🧪 Testing database operations...');
         
         // Import database
-        const dbModule = await import('/lib/db.js');
+        const dbModule = await import('/lib/dbUtils.js');
         const { dbUtils } = dbModule;
         
         console.log('📦 Database module loaded');

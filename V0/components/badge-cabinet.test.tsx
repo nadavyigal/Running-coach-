@@ -1,10 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { BadgeCabinet } from './badge-cabinet';
-import { Badge, dbUtils } from '@/lib/db';
+import { Badge } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
-vi.mock('@/lib/db', async () => {
-    const actual = await vi.importActual('@/lib/db');
+vi.mock('@/lib/dbUtils', async () => {
+    const actual = await vi.importActual<typeof import('@/lib/dbUtils')>('@/lib/dbUtils');
     return {
         ...actual,
         dbUtils: {
