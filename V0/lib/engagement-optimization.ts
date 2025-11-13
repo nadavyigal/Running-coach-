@@ -1,4 +1,5 @@
-import { dbUtils, type User, type Run, type Goal, type Badge } from '@/lib/db';
+import { type User, type Run, type Goal, type Badge } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 
 export interface EngagementOptimization {
   userId: string;

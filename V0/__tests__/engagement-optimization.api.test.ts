@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { GET, POST, PUT } from '@/app/api/engagement-optimization/route';
-import { dbUtils } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 import { engagementOptimizationService } from '@/lib/engagement-optimization';
 
 // Mock the database utilities
-vi.mock('@/lib/db', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getCurrentUser: vi.fn(),
     getRuns: vi.fn(),

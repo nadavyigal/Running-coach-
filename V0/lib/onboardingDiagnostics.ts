@@ -5,7 +5,8 @@
  * onboarding states that can prevent users from accessing the application.
  */
 
-import { dbUtils, type User, db } from './db'
+import { type User, db } from './db'
+import { dbUtils } from './dbUtils'
 
 export interface OnboardingDiagnosticReport {
   indexedDBState: {

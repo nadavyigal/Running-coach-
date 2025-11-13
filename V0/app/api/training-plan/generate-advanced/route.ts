@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { dbUtils } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 import { PeriodizationEngine } from '@/lib/periodization';
 
 export async function POST(req: NextRequest) {

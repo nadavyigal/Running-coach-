@@ -1,4 +1,4 @@
-import { dbUtils } from './db'
+import { dbUtils } from './dbUtils'
 import { toast } from '@/hooks/use-toast'
 import posthog from 'posthog-js'
 import { trackReminderEvent, trackReminderClicked } from './analytics'

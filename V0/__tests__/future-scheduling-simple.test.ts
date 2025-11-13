@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { dbUtils } from '@/lib/db'
+import { dbUtils } from '@/lib/dbUtils'
 
 // Mock the database utilities
-vi.mock('@/lib/db', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getCurrentUser: vi.fn().mockResolvedValue({
       id: 1,

@@ -1,4 +1,5 @@
-import { db, dbUtils, type User } from './db'
+import { db, type User } from './db'
+import { dbUtils } from './dbUtils'
 import { generateFallbackPlan } from './planGenerator'
 import { toast } from '@/hooks/use-toast'
 import { trackPlanAdjustmentEvent } from './analytics'

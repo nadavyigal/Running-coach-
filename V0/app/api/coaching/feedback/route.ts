@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { dbUtils } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 import { adaptiveCoachingEngine } from '@/lib/adaptiveCoachingEngine';
 
 const FeedbackSchema = z.object({

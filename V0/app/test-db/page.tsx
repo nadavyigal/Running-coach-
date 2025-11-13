@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { dbUtils } from '@/lib/db'
+import { dbUtils } from '@/lib/dbUtils'
 import { onboardingManager } from '@/lib/onboardingManager'
 
 export default function DatabaseTest() {

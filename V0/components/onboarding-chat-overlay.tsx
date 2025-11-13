@@ -17,7 +17,8 @@ import {
   ThumbsUp,
   ThumbsDown,
 } from "lucide-react"
-import { dbUtils, type User as UserType, type OnboardingSession } from "@/lib/db"
+import { type User as UserType, type OnboardingSession } from "@/lib/db"
+import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { trackOnboardingEvent } from "@/lib/analytics"
 import { 

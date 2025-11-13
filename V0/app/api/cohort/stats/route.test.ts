@@ -1,11 +1,11 @@
 import { GET } from './route';
-import { dbUtils } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 import { NextRequest } from 'next/server';
 
 // Mock the dbUtils
 import { vi } from 'vitest';
 
-vi.mock('@/lib/db', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getUserById: vi.fn(),
     getCohortStats: vi.fn(),

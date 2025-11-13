@@ -18,7 +18,8 @@ import {
   Settings,
   Brain,
 } from "lucide-react"
-import { dbUtils, type User as UserType } from "@/lib/db"
+import { type User as UserType } from "@/lib/db"
+import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { trackChatMessageSent } from "@/lib/analytics"
 import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"

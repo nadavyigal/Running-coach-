@@ -1,11 +1,11 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { EnhancedAICoach, SimpleEnhancedAICoach } from '@/components/enhanced-ai-coach';
-import { dbUtils } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 import { adaptiveCoachingEngine } from '@/lib/adaptiveCoachingEngine';
 import { vi, expect, test, beforeEach, describe } from 'vitest';
 
 // Mock the dependencies
-vi.mock('@/lib/db', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getRunsByUser: vi.fn(),
   },

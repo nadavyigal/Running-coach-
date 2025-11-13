@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { dbUtils } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 import { generatePlan, generateFallbackPlan } from '@/lib/planGenerator';
 
 // Mock the database utilities
-vi.mock('@/lib/db', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     clearDatabase: vi.fn().mockResolvedValue(undefined),
     createUser: vi.fn().mockResolvedValue(1),

@@ -4,7 +4,8 @@
  * for helping users identify and set appropriate running goals
  */
 
-import { dbUtils, type User } from '@/lib/db';
+import { type User } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 
 // Core interfaces for goal discovery
 export interface DiscoveredGoal {

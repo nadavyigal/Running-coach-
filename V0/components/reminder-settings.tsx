@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { reminderService } from '@/lib/reminderService'
-import { dbUtils } from '@/lib/db'
+import { dbUtils } from '@/lib/dbUtils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 

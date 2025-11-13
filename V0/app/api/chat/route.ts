@@ -1,7 +1,7 @@
 import { streamText } from "ai"
 import { openai } from "@ai-sdk/openai"
 import { adaptiveCoachingEngine, UserContext } from '@/lib/adaptiveCoachingEngine'
-import { dbUtils } from '@/lib/db'
+import { dbUtils } from '@/lib/dbUtils'
 import { withChatSecurity, validateAndSanitizeInput, ApiRequest } from '@/lib/security.middleware'
 // Error handling is managed by the secure wrapper and middleware
 import { withSecureOpenAI } from '@/lib/apiKeyManager'

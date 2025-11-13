@@ -1,4 +1,5 @@
-import { dbUtils, type User } from '@/lib/db'
+import { type User } from '@/lib/db'
+import { dbUtils } from '@/lib/dbUtils'
 import { generatePlan, generateFallbackPlan, type PlanData } from '@/lib/planGenerator'
 import { trackEngagementEvent } from '@/lib/analytics'
 import { validateOnboardingState } from '@/lib/onboardingStateValidator'
