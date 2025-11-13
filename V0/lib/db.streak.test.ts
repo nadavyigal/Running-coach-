@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { db } from './db';
-import { dbUtils } from './dbUtils';
+import { dbUtils } from '@/lib/dbUtils';
 
 describe('Streak Calculation Engine', () => {
   vi.setConfig({ testTimeout: 30000 });

@@ -3,10 +3,10 @@ import { vi, MockedFunction } from 'vitest';
 import React from 'react';
 import { TodayScreen } from './today-screen';
 import { StreakIndicator } from "./streak-indicator"
-import { dbUtils } from '../lib/dbUtils';
+import { dbUtils } from '@/lib/dbUtils';
 
 // Mock dbUtils and hooks
-vi.mock('../lib/dbUtils', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getCurrentUser: vi.fn(),
     getTodaysWorkout: vi.fn(),

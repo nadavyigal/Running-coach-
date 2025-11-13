@@ -6,7 +6,7 @@
  */
 
 import { type User, db } from './db'
-import { dbUtils } from './dbUtils'
+import { dbUtils } from '@/lib/dbUtils'
 
 export interface OnboardingDiagnosticReport {
   indexedDBState: {

@@ -5,14 +5,14 @@ import { PlanCustomizationDashboard } from '../components/plan-customization-das
 import { RaceGoalModal } from '../components/race-goal-modal';
 import { RaceGoalsScreen } from '../components/race-goals-screen';
 import { PeriodizationEngine } from '../lib/periodization';
-import { dbUtils } from '../lib/dbUtils';
+import { dbUtils } from '@/lib/dbUtils';
 
 // Mock global fetch
 global.fetch = vi.fn();
 global.window = { dispatchEvent: vi.fn() } as any;
 
 // Mock dependencies
-vi.mock('../lib/dbUtils', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getRaceGoalsByUser: vi.fn(),
     createRaceGoal: vi.fn(),
