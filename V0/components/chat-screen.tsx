@@ -27,6 +27,7 @@ import { CoachingPreferencesSettings } from "@/components/coaching-preferences-s
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { EnhancedAICoach, type AICoachResponse } from "@/components/enhanced-ai-coach"
 import { planAdaptationEngine } from "@/lib/planAdaptationEngine"
+import type { ChatMessageDTO } from "@/lib/models/chat"
 
 interface ChatMessage {
   id: string
@@ -38,6 +39,16 @@ interface ChatMessage {
   adaptations?: string[]
   confidence?: number
   requestFeedback?: boolean
+}
+
+const buildAuthHeaders = (userId?: number | null): HeadersInit => {
+  if (!userId) {
+    return {}
+  }
+
+  return {
+    Authorization: `Bearer user-${userId}`,
+  }
 }
 
 
@@ -96,25 +107,30 @@ export function ChatScreen() {
     try {
       setIsLoadingHistory(true)
       console.log('📚 Loading chat history for user:', user.id)
-      
-      // Load existing chat messages from database
-      const existingMessages = await dbUtils.getChatMessages(user.id, conversationId)
+
+      const response = await fetch(`/api/chat?userId=${user.id}&conversationId=${conversationId}`, {
+        headers: buildAuthHeaders(user?.id),
+      })
+      if (!response.ok) {
+        throw new Error(`Failed to load chat history: ${response.status}`)
+      }
+
+      const data = await response.json() as { messages?: ChatMessageDTO[] }
+      const existingMessages: ChatMessageDTO[] = Array.isArray(data.messages) ? data.messages : []
       console.log(`📨 Loaded ${existingMessages.length} existing messages`)
-      
+
       if (existingMessages.length > 0) {
-        // Convert database messages to ChatMessage format
-        const chatMessages: ChatMessage[] = existingMessages.map(msg => ({
-          id: msg.id?.toString() || `msg-${Date.now()}-${Math.random()}`,
+        const chatMessages: ChatMessage[] = existingMessages.map((msg) => ({
+          id: msg.id,
           role: msg.role,
           content: msg.content,
           timestamp: new Date(msg.timestamp),
           tokenCount: msg.tokenCount,
         }))
-        
+
         setMessages(chatMessages)
         console.log('✅ Chat history loaded successfully')
       } else {
-        // Show welcome message for new conversations
         const welcomeMessage: ChatMessage = {
           id: `welcome-${Date.now()}`,
           role: 'assistant',
@@ -173,21 +189,35 @@ export function ChatScreen() {
     try {
       // Prepare context from user profile and recent runs
       const context = await buildUserContext()
-      
-             const response = await fetch('/api/chat', {
-         method: 'POST',
-         headers: {
-           'Content-Type': 'application/json',
-         },
-         body: JSON.stringify({
-           messages: [
-             ...messages.map(msg => ({ role: msg.role, content: msg.content })),
-             { role: 'user', content: content.trim() }
-           ],
-           userId: user?.id?.toString(),
-           userContext: context
-         }),
-       })
+      const userProfilePayload = user?.id ? {
+        id: user.id,
+        name: user.name,
+        goal: user.goal,
+        experience: user.experience,
+        preferredTimes: user.preferredTimes,
+        daysPerWeek: user.daysPerWeek,
+        onboardingComplete: user.onboardingComplete,
+        createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : undefined,
+        updatedAt: user.updatedAt ? new Date(user.updatedAt).toISOString() : undefined,
+      } : undefined
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildAuthHeaders(user?.id),
+        },
+        body: JSON.stringify({
+          messages: [
+            ...messages.map(msg => ({ role: msg.role, content: msg.content })),
+            { role: 'user', content: content.trim() }
+          ],
+          userId: user?.id?.toString(),
+          userContext: context,
+          conversationId,
+          userProfile: userProfilePayload,
+        }),
+      })
 
       if (!response.ok) {
         // Try to get error details from response
@@ -289,35 +319,6 @@ export function ChatScreen() {
               : msg
           )
         )
-      }
-      
-      // Save messages to database
-      if (user?.id) {
-        try {
-          console.log('💾 Saving user and assistant messages to database...')
-          
-          // Save the user message
-          await dbUtils.createChatMessage({
-            userId: user.id,
-            role: 'user',
-            content: userMessage.content,
-            conversationId: conversationId,
-          })
-          
-          // Save the assistant message
-          await dbUtils.createChatMessage({
-            userId: user.id,
-            role: 'assistant', 
-            content: aiContent,
-            conversationId: conversationId,
-            tokenCount: Math.ceil(aiContent.length / 4), // Rough token estimation
-          })
-          
-          console.log('✅ Messages saved successfully to database')
-        } catch (saveError) {
-          console.error('❌ Failed to save messages to database:', saveError)
-          // Don't show error to user - message saving failure shouldn't disrupt chat
-        }
       }
       
     } catch (error) {

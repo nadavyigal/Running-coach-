@@ -96,7 +96,10 @@ describe('ChatScreen', () => {
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('/api/chat', expect.objectContaining({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer user-1'
+        }),
         body: expect.stringContaining('"Test message"')
       }))
     })
@@ -140,6 +143,7 @@ describe('ChatScreen', () => {
     
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('/api/chat', expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer user-1' }),
         body: expect.stringContaining('"userContext"')
       }))
     })
