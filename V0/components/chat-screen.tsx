@@ -41,6 +41,16 @@ interface ChatMessage {
   requestFeedback?: boolean
 }
 
+const buildAuthHeaders = (userId?: number | null): HeadersInit => {
+  if (!userId) {
+    return {}
+  }
+
+  return {
+    Authorization: `Bearer user-${userId}`,
+  }
+}
+
 
 
 export function ChatScreen() {
@@ -98,7 +108,9 @@ export function ChatScreen() {
       setIsLoadingHistory(true)
       console.log('📚 Loading chat history for user:', user.id)
 
-      const response = await fetch(`/api/chat?userId=${user.id}&conversationId=${conversationId}`)
+      const response = await fetch(`/api/chat?userId=${user.id}&conversationId=${conversationId}`, {
+        headers: buildAuthHeaders(user?.id),
+      })
       if (!response.ok) {
         throw new Error(`Failed to load chat history: ${response.status}`)
       }
@@ -193,6 +205,7 @@ export function ChatScreen() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...buildAuthHeaders(user?.id),
         },
         body: JSON.stringify({
           messages: [

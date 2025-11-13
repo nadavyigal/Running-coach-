@@ -439,6 +439,49 @@ async function chatHandler(req: ApiRequest) {
 // Export the secured handler
 export const POST = withChatSecurity(chatHandler);
 
+function extractUserIdFromString(value: string | undefined | null): number | null {
+  if (!value) {
+    return null
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const numericMatch = trimmed.match(/^(?:user-)?(\d+)$/i)
+  const valueToParse = numericMatch ? numericMatch[1] : trimmed
+  const parsed = Number.parseInt(valueToParse, 10)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+function getAuthenticatedUserId(req: ApiRequest): number | null {
+  const headerUserId = extractUserIdFromString(req.headers.get('x-user-id'))
+  if (headerUserId != null) {
+    return headerUserId
+  }
+
+  const authHeader = req.headers.get('authorization')
+  if (authHeader) {
+    const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i)
+    const token = bearerMatch ? bearerMatch[1] : authHeader
+    const parsedAuth = extractUserIdFromString(token)
+    if (parsedAuth != null) {
+      return parsedAuth
+    }
+  }
+
+  const sessionCookie = req.cookies.get('session')
+  if (sessionCookie) {
+    const parsedCookie = extractUserIdFromString(sessionCookie.value)
+    if (parsedCookie != null) {
+      return parsedCookie
+    }
+  }
+
+  return null
+}
+
 async function chatHistoryHandler(req: ApiRequest): Promise<NextResponse> {
   try {
     const requestUrl = new URL(req.url);
@@ -452,6 +495,15 @@ async function chatHistoryHandler(req: ApiRequest): Promise<NextResponse> {
     const parsedUserId = Number.parseInt(userIdParam, 10);
     if (Number.isNaN(parsedUserId)) {
       return NextResponse.json({ error: 'Invalid userId query parameter' }, { status: 400 });
+    }
+
+    const authenticatedUserId = getAuthenticatedUserId(req)
+    if (authenticatedUserId == null) {
+      return NextResponse.json({ error: 'Authentication required to access chat history' }, { status: 401 });
+    }
+
+    if (authenticatedUserId !== parsedUserId) {
+      return NextResponse.json({ error: 'Forbidden: cannot access chat history for another user' }, { status: 403 });
     }
 
     const [user, messages] = await Promise.all([
