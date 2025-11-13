@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { dbUtils } from '../../../lib/dbUtils';
+import { dbUtils } from '@/lib/dbUtils';
 
 export async function POST(request: Request) {
   try {

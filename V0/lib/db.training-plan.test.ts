@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { db } from './db'
-import { dbUtils } from './dbUtils'
+import { dbUtils } from '@/lib/dbUtils'
 import FDBFactory from 'fake-indexeddb/lib/FDBFactory'
 
 // Mock IndexedDB

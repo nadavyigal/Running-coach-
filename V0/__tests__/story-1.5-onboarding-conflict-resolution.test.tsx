@@ -3,11 +3,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { OnboardingScreen } from '../components/onboarding-screen';
 import { OnboardingChatOverlay } from '../components/onboarding-chat-overlay';
 import { OnboardingManager } from '../lib/onboardingManager';
-import { dbUtils } from '../lib/dbUtils';
+import { dbUtils } from '@/lib/dbUtils';
 import { generatePlan, generateFallbackPlan } from '../lib/planGenerator';
 
 // Mock dependencies
-vi.mock('../lib/dbUtils', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getCurrentUser: vi.fn(),
     createUser: vi.fn(),

@@ -1085,6 +1085,10 @@ export const db = new Proxy({} as RunSmartDB, {
   }
 });
 
+// Lazily expose dbUtils to maintain backwards compatibility for modules
+// importing from '@/lib/db' while avoiding eager Dexie initialization.
+export { dbUtils } from './dbUtils';
+
 // Database availability check
 export function isDatabaseAvailable(): boolean {
   if (typeof window === 'undefined') {
