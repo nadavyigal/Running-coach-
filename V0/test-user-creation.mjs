@@ -13,7 +13,7 @@ if (typeof window === 'undefined') {
 const testUserCreation = async () => {
   try {
     // Import the database utilities
-    const { dbUtils } = await import('./lib/db.js');
+    const { dbUtils } = await import('./lib/dbUtils.js');
     
     console.log('🧹 Clearing database...');
     await dbUtils.clearDatabase();

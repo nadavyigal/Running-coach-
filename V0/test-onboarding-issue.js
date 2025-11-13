@@ -1,5 +1,5 @@
 // Test script to reproduce onboarding issue
-import { dbUtils } from './lib/db.js';
+import { dbUtils } from './lib/dbUtils.js';
 
 async function testOnboardingIssue() {
   console.log('🔍 Testing onboarding issue...');

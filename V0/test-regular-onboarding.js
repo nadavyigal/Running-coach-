@@ -1,5 +1,5 @@
 // Test script to verify regular onboarding screen works correctly
-import { dbUtils } from './lib/db.js';
+import { dbUtils } from './lib/dbUtils.js';
 
 async function testRegularOnboarding() {
   console.log('🔍 Testing regular onboarding screen...');

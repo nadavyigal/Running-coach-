@@ -4,7 +4,7 @@ console.log('🧪 Testing database connection...');
 async function testDatabase() {
   try {
     // Import the database
-    const { dbUtils } = await import('./lib/db.js');
+    const { dbUtils } = await import('./lib/dbUtils.js');
     
     console.log('✅ Database imported successfully');
     
