@@ -1,6 +1,6 @@
 import { streamText, generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
-import { dbUtils } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 
 // ============================================================================
 // TYPES AND INTERFACES

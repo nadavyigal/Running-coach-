@@ -23,7 +23,7 @@ import { AddShoesModal } from "@/components/add-shoes-modal"
 import { ReminderSettings } from "@/components/reminder-settings"
 import { useState, useEffect } from "react"
 import { BadgeCabinet } from "@/components/badge-cabinet";
-import { dbUtils } from "@/lib/db";
+import { dbUtils } from "@/lib/dbUtils";
 import { useToast } from "@/components/ui/use-toast";
 import { ShareBadgeModal } from "@/components/share-badge-modal";
 import { Share2, Users } from "lucide-react";

@@ -13,6 +13,7 @@ import {
   Loader2,
   RefreshCw
 } from "lucide-react"
+import { dbUtils } from '@/lib/dbUtils'
 import { useToast } from "@/hooks/use-toast"
 
 interface WearableDevice {

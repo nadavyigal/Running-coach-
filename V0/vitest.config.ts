@@ -36,7 +36,7 @@ export default defineConfig({
     hookTimeout: 3000,
     teardownTimeout: 3000,
     silent: false,
-    reporter: 'default',
+    reporters: ['default'],
     logHeapUsage: true,
     isolate: false,
     passWithNoTests: true,

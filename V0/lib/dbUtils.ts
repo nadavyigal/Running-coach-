@@ -21,8 +21,17 @@ import type {
   DataFusionRule,
   FusedDataPoint,
   DataConflict,
-  DataSource
+  DataSource,
+  RaceGoal
 } from './db';
+import { 
+  nowUTC, 
+  addDaysUTC, 
+  addWeeksUTC,
+  getUserTimezone,
+  startOfDayUTC,
+  migrateLocalDateToUTC
+} from './timezone-utils';
 
 /**
  * Database Utilities - Comprehensive database operations with error handling
@@ -381,8 +390,8 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
           userId,
           title: 'Default Running Plan',
           description: 'A basic running plan to get you started',
-          startDate: new Date(),
-          endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          startDate: nowUTC(),
+          endDate: addDaysUTC(30),
           totalWeeks: 4,
           isActive: true,
           planType: 'basic',
@@ -390,8 +399,9 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
           peakWeeklyVolume: 20,
           complexityScore: 25,
           complexityLevel: 'basic',
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdInTimezone: getUserTimezone(),
+          createdAt: nowUTC(),
+          updatedAt: nowUTC(),
         } as any;
         validatePlanContract(planData);
         planId = (await database.plans.add(planData)) as number;
@@ -409,9 +419,9 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
               duration: 30,
               intensity: 'easy',
               completed: false,
-              scheduledDate: new Date(Date.now() + (week - 1) * 7 * 24 * 60 * 60 * 1000),
-              createdAt: new Date(),
-              updatedAt: new Date(),
+              scheduledDate: addDaysUTC((week - 1) * 7),
+              createdAt: nowUTC(),
+              updatedAt: nowUTC(),
             } as Omit<Workout, 'id'>);
           }
         }
@@ -1031,8 +1041,8 @@ export async function createPlan(planData: Omit<Plan, 'id' | 'createdAt' | 'upda
     
     const id = await db.plans.add({
       ...planData,
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: nowUTC(),
+      updatedAt: nowUTC()
     });
     console.log('✅ Plan created successfully:', id);
     return id as number;
@@ -1111,7 +1121,7 @@ export async function ensureUserHasActivePlan(userId: number): Promise<Plan> {
         if (inactivePlan) {
           await database.plans.update(inactivePlan.id!, { 
             isActive: true, 
-            updatedAt: new Date() 
+            updatedAt: nowUTC() 
           });
           const reactivatedPlan = await database.plans.get(inactivePlan.id!) as Plan;
           console.log(`♻️ Reactivated existing plan for userId=${userId}, planId=${reactivatedPlan.id}`);
@@ -1123,15 +1133,16 @@ export async function ensureUserHasActivePlan(userId: number): Promise<Plan> {
           userId,
           title: 'Default Running Plan',
           description: 'A basic running plan to get you started',
-          startDate: new Date(),
-          endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+          startDate: nowUTC(),
+          endDate: addDaysUTC(30), // 30 days from now in UTC
           totalWeeks: 4,
           isActive: true,
           planType: 'basic',
           trainingDaysPerWeek: user.daysPerWeek || 3,
           peakWeeklyVolume: 20, // km
           complexityScore: 25,
-          complexityLevel: 'basic'
+          complexityLevel: 'basic',
+          createdInTimezone: user.timezone || getUserTimezone()
         };
         
         const planId = await createPlan(planData);
@@ -1151,7 +1162,7 @@ export async function ensureUserHasActivePlan(userId: number): Promise<Plan> {
               duration: 30, // 30 minutes
               intensity: 'easy',
               completed: false,
-              scheduledDate: new Date(Date.now() + (week - 1) * 7 * 24 * 60 * 60 * 1000) // Spread across weeks
+              scheduledDate: addDaysUTC((week - 1) * 7) // Spread across weeks in UTC
             };
             
             await createWorkout(workoutData);
@@ -1286,10 +1297,8 @@ export async function getTodaysWorkout(userId: number): Promise<Workout | null> 
   return safeDbOperation(async () => {
     if (!db) return null;
     
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
+    const today = startOfDayUTC(nowUTC());
+    const tomorrow = addDaysUTC(1, today);
     
     // Get all plans for the user
     const plans = await db.plans.where('userId').equals(userId).toArray();
@@ -1638,6 +1647,182 @@ export async function createRunAndUpdateProgress(
 }
 
 // ============================================================================
+// RACE GOAL MANAGEMENT UTILITIES
+// ============================================================================
+
+/**
+ * Get race goals for user
+ */
+export async function getRaceGoalsByUser(userId: number): Promise<RaceGoal[]> {
+  return safeDbOperation(async () => {
+    if (db) {
+      return await db.raceGoals.where('userId').equals(userId).toArray();
+    }
+    return [];
+  }, 'getRaceGoalsByUser', []);
+}
+
+/**
+ * Create race goal
+ */
+export async function createRaceGoal(goalData: Omit<RaceGoal, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+    
+    const id = await db.raceGoals.add({
+      ...goalData,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+    console.log('✅ Race goal created successfully:', id);
+    return id as number;
+  }, 'createRaceGoal');
+}
+
+/**
+ * Update race goal
+ */
+export async function updateRaceGoal(goalId: number, updates: Partial<RaceGoal>): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+    
+    await db.raceGoals.update(goalId, {
+      ...updates,
+      updatedAt: new Date()
+    });
+    console.log('✅ Race goal updated successfully:', goalId);
+  }, 'updateRaceGoal');
+}
+
+/**
+ * Delete race goal
+ */
+export async function deleteRaceGoal(goalId: number): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+    
+    await db.raceGoals.delete(goalId);
+    console.log('✅ Race goal deleted successfully:', goalId);
+  }, 'deleteRaceGoal');
+}
+
+/**
+ * Get race goal by ID
+ */
+export async function getRaceGoalById(goalId: number): Promise<RaceGoal | null> {
+  return safeDbOperation(async () => {
+    if (db) {
+      return await db.raceGoals.get(goalId) || null;
+    }
+    return null;
+  }, 'getRaceGoalById', null);
+}
+
+/**
+ * Get workouts by plan ID
+ */
+export async function getWorkoutsByPlan(planId: number): Promise<Workout[]> {
+  return safeDbOperation(async () => {
+    if (db) {
+      return await db.workouts.where('planId').equals(planId).toArray();
+    }
+    return [];
+  }, 'getWorkoutsByPlan', []);
+}
+
+/**
+ * Update workout
+ */
+export async function updateWorkout(workoutId: number, updates: Partial<Workout>): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+    
+    await db.workouts.update(workoutId, {
+      ...updates,
+      updatedAt: new Date()
+    });
+    console.log('✅ Workout updated successfully:', workoutId);
+  }, 'updateWorkout');
+}
+
+/**
+ * Delete workout
+ */
+export async function deleteWorkout(workoutId: number): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+    
+    await db.workouts.delete(workoutId);
+    console.log('✅ Workout deleted successfully:', workoutId);
+  }, 'deleteWorkout');
+}
+
+/**
+ * Assess fitness level for user
+ */
+export async function assessFitnessLevel(userId: number): Promise<{ level: string; score: number } | null> {
+  return safeDbOperation(async () => {
+    if (!db) return null;
+    
+    // Get recent runs to assess fitness
+    const recentRuns = await db.runs
+      .where('userId').equals(userId)
+      .and(run => run.completedAt >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
+      .toArray();
+    
+    if (recentRuns.length === 0) {
+      return { level: 'beginner', score: 0 };
+    }
+    
+    // Calculate average pace and distance
+    const avgDistance = recentRuns.reduce((sum, run) => sum + run.distance, 0) / recentRuns.length;
+    const avgPace = recentRuns.reduce((sum, run) => sum + (run.duration / run.distance), 0) / recentRuns.length;
+    
+    // Simple fitness scoring based on distance and pace
+    let score = 0;
+    if (avgDistance >= 10) score += 40;
+    else if (avgDistance >= 5) score += 20;
+    else if (avgDistance >= 3) score += 10;
+    
+    if (avgPace <= 4) score += 40; // sub 4 min/km
+    else if (avgPace <= 5) score += 30; // sub 5 min/km
+    else if (avgPace <= 6) score += 20; // sub 6 min/km
+    else if (avgPace <= 7) score += 10; // sub 7 min/km
+    
+    // Frequency bonus
+    if (recentRuns.length >= 12) score += 20; // 3+ runs per week
+    else if (recentRuns.length >= 8) score += 15; // 2+ runs per week
+    else if (recentRuns.length >= 4) score += 10; // 1+ runs per week
+    
+    let level = 'beginner';
+    if (score >= 80) level = 'advanced';
+    else if (score >= 50) level = 'intermediate';
+    
+    return { level, score };
+  }, 'assessFitnessLevel', null);
+}
+
+/**
+ * Calculate target paces for race goal
+ */
+export async function calculateTargetPaces(raceGoal: RaceGoal): Promise<{ easy: number; tempo: number; threshold: number; interval: number } | null> {
+  return safeDbOperation(async () => {
+    if (!raceGoal.targetTime || !raceGoal.distance) return null;
+    
+    // Calculate race pace (minutes per km)
+    const racePaceMinPerKm = (raceGoal.targetTime / 60) / raceGoal.distance;
+    
+    // Calculate training paces based on Jack Daniels' Running Formula
+    const easy = racePaceMinPerKm + 1.5; // Easy pace: race pace + 1.5 min/km
+    const tempo = racePaceMinPerKm + 0.5; // Tempo pace: race pace + 0.5 min/km
+    const threshold = racePaceMinPerKm + 0.3; // Threshold: race pace + 0.3 min/km
+    const interval = racePaceMinPerKm - 0.2; // Interval: race pace - 0.2 min/km
+    
+    return { easy, tempo, threshold, interval };
+  }, 'calculateTargetPaces', null);
+}
+
+// ============================================================================
 // DATA FUSION UTILITIES
 // ============================================================================
 
@@ -1950,6 +2135,91 @@ export async function migrateDatabase(): Promise<boolean> {
   }
 }
 
+/**
+ * Migrate existing plans and workouts from local timezone to UTC
+ * This should be run once to migrate existing data
+ */
+export async function migrateExistingPlansToUTC(): Promise<{ success: boolean; migratedPlans: number; migratedWorkouts: number; error?: any }> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    
+    let migratedPlans = 0;
+    let migratedWorkouts = 0;
+    
+    console.log('🔄 Starting UTC migration for existing plans and workouts...');
+    
+    // Get all plans that don't have timezone info (need migration)
+    const plansToMigrate = await database.plans
+      .where('createdInTimezone')
+      .equals(undefined as any)
+      .toArray();
+    
+    console.log(`📋 Found ${plansToMigrate.length} plans to migrate`);
+    
+    for (const plan of plansToMigrate) {
+      try {
+        // Assume the plan was created in the user's current timezone if unknown
+        const userTimezone = getUserTimezone();
+        
+        // Migrate plan dates
+        const migratedStartDate = migrateLocalDateToUTC(plan.startDate, userTimezone);
+        const migratedEndDate = migrateLocalDateToUTC(plan.endDate, userTimezone);
+        
+        await database.plans.update(plan.id!, {
+          startDate: migratedStartDate,
+          endDate: migratedEndDate,
+          createdInTimezone: userTimezone,
+          updatedAt: nowUTC()
+        });
+        
+        migratedPlans++;
+        console.log(`✅ Migrated plan ${plan.id} (${plan.title}) to UTC`);
+        
+        // Migrate associated workouts
+        const workouts = await database.workouts.where('planId').equals(plan.id!).toArray();
+        
+        for (const workout of workouts) {
+          const migratedScheduledDate = migrateLocalDateToUTC(workout.scheduledDate, userTimezone);
+          
+          await database.workouts.update(workout.id!, {
+            scheduledDate: migratedScheduledDate,
+            updatedAt: nowUTC()
+          });
+          
+          migratedWorkouts++;
+        }
+        
+        console.log(`📅 Migrated ${workouts.length} workouts for plan ${plan.id}`);
+        
+      } catch (error) {
+        console.error(`❌ Failed to migrate plan ${plan.id}:`, error);
+        // Continue with other plans even if one fails
+      }
+    }
+    
+    // Update user timezone if not set
+    const users = await database.users.where('timezone').equals(undefined as any).toArray();
+    for (const user of users) {
+      if (user.id) {
+        await database.users.update(user.id, {
+          timezone: getUserTimezone(),
+          updatedAt: nowUTC()
+        });
+      }
+    }
+    
+    console.log(`✅ UTC migration complete: ${migratedPlans} plans, ${migratedWorkouts} workouts`);
+    
+    return { 
+      success: true, 
+      migratedPlans, 
+      migratedWorkouts 
+    };
+    
+  }, 'migrateExistingPlansToUTC', { success: false, migratedPlans: 0, migratedWorkouts: 0 });
+}
+
 // ============================================================================
 // EXPORT ALL UTILITIES
 // ============================================================================
@@ -2000,6 +2270,15 @@ export const dbUtils = {
   getUserGoals,
   getGoalWithMilestones,
   
+  // Race goal management
+  getRaceGoalsByUser,
+  createRaceGoal,
+  updateRaceGoal,
+  deleteRaceGoal,
+  getRaceGoalById,
+  assessFitnessLevel,
+  calculateTargetPaces,
+  
   // Plan management
   createPlan,
   updatePlan,
@@ -2015,6 +2294,9 @@ export const dbUtils = {
   getWorkoutsForDateRange,
   getTodaysWorkout,
   markWorkoutCompleted,
+  getWorkoutsByPlan,
+  updateWorkout,
+  deleteWorkout,
   
   // Run tracking
   recordRun,
@@ -2040,7 +2322,10 @@ export const dbUtils = {
   handleDatabaseError,
   
   // Plan-specific error handling (backward compatibility)
-  handlePlanError: handleDatabaseError
+  handlePlanError: handleDatabaseError,
+  
+  // UTC Migration
+  migrateExistingPlansToUTC
 };
 
 export default dbUtils; 

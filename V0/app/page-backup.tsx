@@ -11,7 +11,7 @@ const ProfileScreen = dynamic(() => import("@/components/profile-screen").then(m
 const PerformanceAnalyticsDashboard = dynamic(() => import("@/components/performance-analytics-dashboard").then(m => m.PerformanceAnalyticsDashboard), { ssr: false })
 const BottomNavigation = dynamic(() => import("@/components/bottom-navigation").then(m => m.BottomNavigation), { ssr: false })
 const OnboardingDebugPanel = dynamic(() => import("@/components/onboarding-debug-panel").then(m => m.OnboardingDebugPanel), { ssr: false })
-import { dbUtils } from "@/lib/db"
+import { dbUtils } from "@/lib/dbUtils"
 // import { planAdjustmentService } from "@/lib/planAdjustmentService"
 // import { onboardingManager } from "@/lib/onboardingManager"
 import { useChunkErrorHandler } from "@/components/chunk-error-boundary"

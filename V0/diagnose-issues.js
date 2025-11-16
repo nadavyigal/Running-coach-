@@ -46,7 +46,8 @@ async function runDiagnostics() {
     
     try {
       // Import database utilities
-      const { dbUtils, db } = await import('./lib/db.js');
+      const { db } = await import('./lib/db.js');
+      const { dbUtils } = await import('./lib/dbUtils.js');
       
       console.log('✅ Database module loaded successfully');
       

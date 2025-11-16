@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { dbUtils, type CoachingProfile } from '@/lib/db';
+import { type CoachingProfile } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 
 const ProfileQuerySchema = z.object({
   userId: z.string().transform(Number).optional(),

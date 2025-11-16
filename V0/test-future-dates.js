@@ -1,5 +1,5 @@
 // Test script to verify API accepts future dates
-import { dbUtils } from './lib/db.js';
+import { dbUtils } from './lib/dbUtils.js';
 
 async function testFutureDates() {
   console.log('🧪 Testing API with future dates...');

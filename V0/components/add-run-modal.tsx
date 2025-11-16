@@ -200,7 +200,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
   // Load plan data for calendar validation
   const loadPlanData = async () => {
     try {
-      const { dbUtils } = await import('@/lib/db')
+      const { dbUtils } = await import('@/lib/dbUtils')
       const user = await dbUtils.getCurrentUser()
       if (user && user.id) {
         await dbUtils.ensureUserHasActivePlan(user.id)
@@ -386,7 +386,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
 
     try {
       // Import database utilities
-      const { dbUtils } = await import('@/lib/db')
+      const { dbUtils } = await import('@/lib/dbUtils')
       
       // Get current user
       const user = await dbUtils.getCurrentUser()

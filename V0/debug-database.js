@@ -6,7 +6,8 @@ async function debugDatabase() {
   
   try {
     // Import database
-    const { db, dbUtils } = await import('./lib/db.js');
+    const { db } = await import('./lib/db.js');
+    const { dbUtils } = await import('./lib/dbUtils.js');
     
     console.log('📊 Database Info:');
     console.log('- Name:', db.name);

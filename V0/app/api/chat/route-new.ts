@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { chatDriver, ChatRequest } from '@/lib/chatDriver';
-import { dbUtils } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 
 export async function POST(req: Request) {
   const requestId = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;

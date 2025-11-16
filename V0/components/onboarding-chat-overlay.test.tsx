@@ -14,7 +14,7 @@ vi.mock('@/lib/analytics', () => ({
 }))
 
 // Mock the database utilities
-vi.mock('@/lib/db', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getCurrentUser: vi.fn().mockResolvedValue({
       id: 1,

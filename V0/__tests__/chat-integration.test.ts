@@ -310,7 +310,7 @@ describe('Chat Integration Tests', () => {
       process.env.OPENAI_API_KEY = 'sk-test-key';
       
       const { generateText } = await import('ai');
-      const { dbUtils } = await import('../lib/db');
+      const { dbUtils } = await import('@/lib/dbUtils');
       
       vi.mocked(dbUtils.getCurrentUser).mockResolvedValue({
         id: 1,

@@ -2,7 +2,7 @@ import React from 'react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { AddRunModal } from '@/components/add-run-modal'
-import { dbUtils } from '@/lib/db'
+import { dbUtils } from '@/lib/dbUtils'
 
 // Mock the AI SDK
 vi.mock('ai', () => ({
@@ -34,7 +34,7 @@ vi.mock('@ai-sdk/openai', () => ({
 }))
 
 // Mock the database utilities
-vi.mock('@/lib/db', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getCurrentUser: vi.fn().mockResolvedValue({
       id: 1,

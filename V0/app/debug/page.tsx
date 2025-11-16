@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from 'react'
-import { dbUtils } from '@/lib/db'
+import { dbUtils } from '@/lib/dbUtils'
 
 export default function DebugPage() {
   const [logs, setLogs] = useState<string[]>([])

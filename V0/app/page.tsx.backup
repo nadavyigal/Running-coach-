@@ -9,7 +9,7 @@ import { ChatScreen } from "@/components/chat-screen"
 import { ProfileScreen } from "@/components/profile-screen"
 import { PerformanceAnalyticsDashboard } from "@/components/performance-analytics-dashboard"
 import { BottomNavigation } from "@/components/bottom-navigation"
-import { dbUtils } from "@/lib/db"
+import { dbUtils } from "@/lib/dbUtils"
 import { planAdjustmentService } from "@/lib/planAdjustmentService"
 
 export default function RunSmartApp() {

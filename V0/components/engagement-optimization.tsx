@@ -19,7 +19,8 @@ import {
   Heart
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { dbUtils, type User } from '@/lib/db';
+import { type User } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 import { engagementOptimizationService } from '@/lib/engagement-optimization';
 
 interface NotificationPreferences {

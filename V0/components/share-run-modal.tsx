@@ -16,7 +16,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Copy, Share2, MessageCircle, Facebook, Linkedin, Twitter } from "lucide-react";
 import { useState, useEffect } from "react";
-import { dbUtils } from "@/lib/db";
+import { dbUtils } from "@/lib/dbUtils";
 import { useToast } from "@/hooks/use-toast";
 
 interface ShareRunModalProps {

@@ -18,7 +18,8 @@ import {
   Lightbulb,
   BarChart3
 } from 'lucide-react';
-import { dbUtils, type User, type Run } from '@/lib/db';
+import { type User, type Run } from '@/lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 import { adaptiveCoachingEngine, type UserContext, type AdaptiveRecommendation } from '@/lib/adaptiveCoachingEngine';
 
 // Performance trend analysis interfaces

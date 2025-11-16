@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
-import { dbUtils, type Workout } from "@/lib/db"
+import { type Workout } from "@/lib/db"
+import { dbUtils } from "@/lib/dbUtils"
 
 export function MonthlyCalendarView() {
   const [currentDate, setCurrentDate] = useState(new Date())

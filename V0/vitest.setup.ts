@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom';
-import { configure, screen } from '@testing-library/react';
+import { configure } from '@testing-library/react';
 import { vi } from 'vitest';
 import { ErrorBoundaryAssertions } from './lib/test-utils';
 
@@ -20,9 +20,7 @@ global.URL = class MockURL extends OriginalURL {
 // Configure React Testing Library for fast testing
 configure({ 
   testIdAttribute: 'data-testid',
-  asyncUtilTimeout: 2000,
-  // This suppresses the act warnings - we handle async properly in our tests
-  suppressHydrationWarnings: true
+  asyncUtilTimeout: 2000
 });
 
 // Mock global fetch to handle API calls in tests
@@ -479,6 +477,7 @@ vi.mock("@/lib/errorHandling", () => ({
   DatabaseError: class MockDatabaseError extends Error {
     statusCode = 500;
     code = 'DATABASE_ERROR';
+    details: Record<string, unknown>;
     constructor(operation: string, originalError?: Error) {
       super(`Database ${operation} failed`);
       this.name = 'DatabaseError';
@@ -715,7 +714,7 @@ afterEach(() => {
 vi.useFakeTimers();
 
 // Make error boundary assertions globally available
-global.ErrorBoundaryAssertions = ErrorBoundaryAssertions;
+(global as any).ErrorBoundaryAssertions = ErrorBoundaryAssertions;
 
 // Enhanced error handling for uncaught errors in tests
 process.on('unhandledRejection', (reason, promise) => {

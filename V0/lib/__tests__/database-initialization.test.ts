@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { isDatabaseAvailable, safeDbOperation, getDatabase } from '../db';
-import { initializeDatabase, getCurrentUser, upsertUser } from '../dbUtils';
+import { initializeDatabase, getCurrentUser, upsertUser } from '@/lib/dbUtils';
 
 // Mock window for testing
 Object.defineProperty(globalThis, 'window', {

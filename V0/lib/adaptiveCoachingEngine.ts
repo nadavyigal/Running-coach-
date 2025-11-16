@@ -1,7 +1,8 @@
 import { openai } from '@ai-sdk/openai';
 import { generateObject, generateText } from 'ai';
 import { z } from 'zod';
-import { dbUtils, CoachingProfile, CoachingInteraction, CoachingFeedback } from './db';
+import { CoachingProfile, CoachingInteraction, CoachingFeedback } from './db';
+import { dbUtils } from '@/lib/dbUtils';
 
 // Context interfaces
 export interface UserContext {

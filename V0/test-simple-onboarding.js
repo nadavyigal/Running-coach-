@@ -1,5 +1,5 @@
 // Simple test to verify onboarding completion
-const { dbUtils } = require('./lib/db.js');
+const { dbUtils } = require('./lib/dbUtils.js');
 
 async function testSimpleOnboarding() {
   console.log('🔍 Testing simple onboarding completion...');
