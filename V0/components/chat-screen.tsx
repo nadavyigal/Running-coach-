@@ -1,18 +1,16 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Send,
   Bot,
   User,
   Loader2,
-  RefreshCw,
   ThumbsUp,
   ThumbsDown,
   Settings,
@@ -129,7 +127,7 @@ export function ChatScreen() {
         }))
 
         setMessages(chatMessages)
-        console.log('✅ Chat history loaded successfully')
+        console.log('?£ו Chat history loaded successfully')
       } else {
         const welcomeMessage: ChatMessage = {
           id: `welcome-${Date.now()}`,
@@ -138,10 +136,10 @@ export function ChatScreen() {
           timestamp: new Date(),
         }
         setMessages([welcomeMessage])
-        console.log('👋 No existing history, showing welcome message')
+        console.log('?ƒסכ No existing history, showing welcome message')
       }
     } catch (error) {
-      console.error('❌ Failed to load chat history:', error)
+      console.error('?¥ל Failed to load chat history:', error)
       toast({
         title: "Chat History Error",
         description: "Failed to load previous messages. Starting fresh conversation.",
@@ -245,8 +243,8 @@ export function ChatScreen() {
       }
 
       // Enhanced stream debugging implementation
-      console.log('🔥 Stream Response Status:', response.status);
-      console.log('🔥 Stream Headers:', Object.fromEntries(response.headers.entries()));
+      console.log('?ƒפ? Stream Response Status:', response.status);
+      console.log('?ƒפ? Stream Headers:', Object.fromEntries(response.headers.entries()));
       
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
@@ -256,17 +254,18 @@ export function ChatScreen() {
       // Extract coaching metadata from headers
       const coachingInteractionId = response.headers.get('X-Coaching-Interaction-Id')
       const adaptations = response.headers.get('X-Coaching-Adaptations')?.split(', ').filter(Boolean)
-      const confidence = parseFloat(response.headers.get('X-Coaching-Confidence') || '0')
-      
+      const confidenceHeader = response.headers.get('X-Coaching-Confidence')
+      const confidence = confidenceHeader ? parseFloat(confidenceHeader) : undefined
+
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: "",
         timestamp: new Date(),
-        coachingInteractionId: coachingInteractionId || undefined,
         adaptations: adaptations || [],
-        confidence: confidence || undefined,
-        requestFeedback: confidence > 0 && confidence < 0.8, // Request feedback for lower confidence responses
+        coachingInteractionId: coachingInteractionId || undefined,
+        confidence,
+        requestFeedback: typeof confidence === 'number' && confidence > 0 && confidence < 0.8, // Request feedback for lower confidence responses
       }
 
       setMessages(prev => [...prev, assistantMessage])
@@ -274,12 +273,12 @@ export function ChatScreen() {
       while (reader) {
         const { done, value } = await reader.read()
         if (done) {
-          console.log('✅ Stream complete. Total updates:', updateCount);
+          console.log('?£ו Stream complete. Total updates:', updateCount);
           break
         }
 
         const chunk = decoder.decode(value)
-        console.log('📦 Chunk received:', chunk.length, 'chars');
+        console.log('?ƒף? Chunk received:', chunk.length, 'chars');
         
         const lines = chunk.split('\n').filter(line => line.trim());
         
@@ -291,7 +290,7 @@ export function ChatScreen() {
                 aiContent += data.textDelta
                 updateCount++;
                 
-                console.log('🔄 UI Update #', updateCount, 'Content length:', aiContent.length);
+                console.log('?ƒפה UI Update #', updateCount, 'Content length:', aiContent.length);
                 
                 setMessages(prev => {
                   const updated = prev.map(msg => 
@@ -299,12 +298,12 @@ export function ChatScreen() {
                       ? { ...msg, content: aiContent }
                       : msg
                   );
-                  console.log('🎯 Messages array updated:', updated.length, 'messages');
+                  console.log('?ƒמ» Messages array updated:', updated.length, 'messages');
                   return updated;
                 });
               }
             } catch (parseError) {
-              console.error('❌ JSON Parse Error:', parseError, 'Line:', line);
+              console.error('?¥ל JSON Parse Error:', parseError, 'Line:', line);
             }
           }
         }
@@ -622,7 +621,7 @@ export function ChatScreen() {
                 size="sm"
                 onClick={() => setShowCoachingPreferences(false)}
               >
-                ×
+                ?ק
               </Button>
             </div>
             <div className="p-4">

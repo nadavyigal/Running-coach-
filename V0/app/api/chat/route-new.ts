@@ -101,13 +101,16 @@ export async function POST(req: Request) {
     }
     
     // Prepare chat request
-    const chatRequest: ChatRequest = {
+    const baseRequest: ChatRequest = {
       messages,
-      userId: resolvedUserId ? parseInt(resolvedUserId) : undefined,
       streaming,
       maxTokens,
       model,
     };
+    const chatRequest: ChatRequest =
+      typeof resolvedUserId === 'number'
+        ? { ...baseRequest, userId: resolvedUserId }
+        : baseRequest;
     
     console.log(`[chat:api] requestId=${requestId} Sending to ChatDriver, streaming=${streaming}`);
     

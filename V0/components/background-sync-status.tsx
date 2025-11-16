@@ -11,7 +11,7 @@ import {
   CheckCircle, 
   XCircle, 
   Clock, 
-  Play, 
+  // Play, 
   Pause,
   AlertTriangle,
   Activity,
@@ -70,11 +70,11 @@ export function BackgroundSyncStatus({
 
   useEffect(() => {
     loadSyncJobs()
-    
+    let interval: ReturnType<typeof setInterval> | null = null
     if (autoRefresh) {
-      const interval = setInterval(loadSyncJobs, 10000) // Refresh every 10 seconds
-      return () => clearInterval(interval)
+      interval = setInterval(loadSyncJobs, 10000) // Refresh every 10 seconds
     }
+    return () => { if (interval) clearInterval(interval) }
   }, [userId, deviceId, autoRefresh])
 
   const loadSyncJobs = async () => {
@@ -478,4 +478,81 @@ export function BackgroundSyncStatus({
       </CardContent>
     </Card>
   )
+}
+
+// Helpers
+export function getSyncTypeLabel(type: SyncJob['type']): string {
+  switch (type) {
+    case 'activities': return 'Activities';
+    case 'heart_rate': return 'Heart Rate';
+    case 'metrics': return 'Metrics';
+    case 'full_sync': return 'Full Sync';
+    default: return 'Sync';
+  }
+}
+
+export function getSyncTypeIcon(type: SyncJob['type']) {
+  switch (type) {
+    case 'activities': return Activity;
+    case 'heart_rate': return Heart;
+    case 'metrics': return BarChart3;
+    case 'full_sync': return Download;
+    default: return RefreshCw;
+  }
+}
+
+export function getStatusIcon(status: SyncJob['status']) {
+  switch (status) {
+    case 'completed': return CheckCircle;
+    case 'failed': return XCircle;
+    case 'running': return RefreshCw;
+    case 'pending': return Clock;
+    case 'cancelled': return XCircle;
+    default: return RefreshCw;
+  }
+}
+
+export function getStatusColor(status: SyncJob['status']): string {
+  switch (status) {
+    case 'completed': return 'text-green-600';
+    case 'failed': return 'text-red-600';
+    case 'running': return 'text-blue-600';
+    case 'pending': return 'text-gray-500';
+    case 'cancelled': return 'text-gray-400';
+    default: return '';
+  }
+}
+
+export function getStatusBadgeColor(status: SyncJob['status']): string {
+  switch (status) {
+    case 'completed': return 'bg-green-100 text-green-800';
+    case 'failed': return 'bg-red-100 text-red-800';
+    case 'running': return 'bg-blue-100 text-blue-800';
+    case 'pending': return 'bg-gray-100 text-gray-800';
+    case 'cancelled': return 'bg-gray-100 text-gray-600';
+    default: return '';
+  }
+}
+
+export function getPriorityColor(priority: SyncJob['priority']): string {
+  switch (priority) {
+    case 'high': return 'bg-red-100 text-red-800';
+    case 'normal': return 'bg-blue-100 text-blue-800';
+    case 'low': return 'bg-gray-100 text-gray-800';
+    default: return '';
+  }
+}
+
+export function formatRelativeTime(iso: string): string {
+  const date = new Date(iso);
+  const diff = Date.now() - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins === 1) return '1 min ago';
+  if (mins < 60) return `${mins} mins ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours === 1) return '1 hour ago';
+  if (hours < 24) return `${hours} hours ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? '1 day ago' : `${days} days ago`;
 }

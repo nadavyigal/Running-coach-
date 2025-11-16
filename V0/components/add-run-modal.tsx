@@ -180,7 +180,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
   const [selectedDifficulty, setSelectedDifficulty] = useState("open")
   const [generatedWorkout, setGeneratedWorkout] = useState<any>(null)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [planEndDate, setPlanEndDate] = useState<Date | null>(null)
+  // Removed unused planEndDate state to satisfy strict TS rules
   const { toast } = useToast()
 
   // Debug logging for date picker
@@ -203,9 +203,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
       const { dbUtils } = await import('@/lib/dbUtils')
       const user = await dbUtils.getCurrentUser()
       if (user && user.id) {
-        const activePlan = await dbUtils.ensureUserHasActivePlan(user.id)
-        setPlanEndDate(new Date(activePlan.endDate))
-        console.log("📋 Plan end date set for calendar:", activePlan.endDate.toISOString())
+        await dbUtils.ensureUserHasActivePlan(user.id)
       }
     } catch (error) {
       console.error("Failed to load plan data for calendar:", error)
@@ -416,7 +414,6 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
         })
         
         // Set plan end date for calendar validation
-        setPlanEndDate(new Date(activePlan.endDate))
         
         // Check if this was a recovered/created plan
         const wasRecovered = activePlan.title.includes("Recovery") || activePlan.title.includes("Quick Start")
@@ -477,19 +474,22 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
       }
 
       // Get day of week
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-      const dayOfWeek = dayNames[selectedDateTime.getDay()]
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
+      const idx = selectedDateTime.getDay()
+      const dayOfWeek: string = dayNames[idx] ?? 'Mon'
 
-      const workoutData = {
+      const workoutData: any = {
         planId: activePlan.id!,
         week: weekNumber,
         day: dayOfWeek,
         type: selectedWorkout.id as any,
         distance: selectedGoal === 'distance' ? Number.parseFloat(targetValue) : 0,
-        duration: selectedGoal === 'duration' ? Number.parseFloat(targetValue) : undefined,
         notes: notes || generatedWorkout?.description || selectedWorkout.description,
         completed: false,
         scheduledDate: selectedDateTime
+      }
+      if (selectedGoal === 'duration') {
+        workoutData.duration = Number.parseFloat(targetValue)
       }
 
       console.log("Saving workout to database:", workoutData)

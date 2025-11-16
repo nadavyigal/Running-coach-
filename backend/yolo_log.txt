@@ -1,0 +1,3 @@
+2025-11-04T13:12:20.9436151+02:00 - [YOLO] AI Chat Fallback smoke test starting
+2025-11-04T13:12:20.9436151+02:00 - [YOLO] Started dev server job Id=1 with OPENAI_API_KEY cleared
+2025-11-04T13:12:20.9436151+02:00 - [YOLO] Invoking POST /api/onboarding/chat for fallback test

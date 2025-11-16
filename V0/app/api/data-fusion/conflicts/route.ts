@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DataFusionEngine } from '../../../../lib/dataFusionEngine';
 import { db } from '../../../../lib/db';
-
-const fusionEngine = new DataFusionEngine();
 
 // GET /api/data-fusion/conflicts - Get unresolved data conflicts
 export async function GET(request: NextRequest) {
@@ -14,19 +11,19 @@ export async function GET(request: NextRequest) {
     
     let conflicts;
     
-    if (status === 'unresolved') {
-      conflicts = await db.dataConflicts
-        .where('manuallyResolved')
-        .equals(false)
-        .limit(limit)
-        .toArray();
-    } else {
-      conflicts = await db.dataConflicts
-        .orderBy('createdAt')
-        .reverse()
-        .limit(limit)
-        .toArray();
-    }
+    // Filter by user when possible; Dexie only allows a single indexed where,
+    // so we filter by userId first and refine in memory for status.
+    const baseByUser = await db.dataConflicts
+      .where('userId')
+      .equals(userId)
+      .toArray();
+
+    conflicts = (status === 'unresolved')
+      ? baseByUser.filter(c => c.manuallyResolved === false)
+      : baseByUser.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Apply limit after filtering/sorting
+    conflicts = conflicts.slice(0, limit);
     
     // Enhance conflicts with source information
     const enhancedConflicts = await Promise.all(
@@ -64,9 +61,9 @@ export async function GET(request: NextRequest) {
       data: {
         conflicts: enhancedConflicts,
         totalConflicts: enhancedConflicts.length,
-        unresolvedCount: status === 'all' ? 
-          await db.dataConflicts.where('manuallyResolved').equals(false).count() : 
-          enhancedConflicts.length
+        unresolvedCount: status === 'all'
+          ? baseByUser.filter(c => c.manuallyResolved === false).length
+          : enhancedConflicts.length
       }
     });
     
@@ -145,7 +142,8 @@ export async function POST(request: NextRequest) {
         await db.fusedDataPoints.update(conflict.fusedDataPointId, {
           value: resolvedValue,
           fusionMethod: 'manual_resolution',
-          confidence: this.calculatePostResolutionConfidence(conflict, resolution)
+          // call helper directly (no `this` in module scope)
+          confidence: calculatePostResolutionConfidence(conflict as any, resolution)
         });
       }
       

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -10,10 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { 
   AlertTriangle, 
   CheckCircle, 
-  XCircle, 
   RefreshCw,
   TrendingUp,
-  TrendingDown,
   Activity,
   Clock,
   Zap
@@ -182,15 +180,15 @@ export function ConflictResolutionCenter({ userId = 1, onConflictResolved }: Con
       case 'apple_watch':
       case 'garmin':
       case 'fitbit':
-        return '⌚';
+        return 'ג';
       case 'phone':
-        return '📱';
+        return 'נ“±';
       case 'ring':
-        return '💍';
+        return 'נ’';
       case 'scale':
-        return '⚖️';
+        return 'ג–ן¸';
       default:
-        return '📊';
+        return 'נ“';
     }
   };
 
