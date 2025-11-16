@@ -224,15 +224,18 @@ export function ChatScreen() {
       // Extract coaching metadata from headers
       const coachingInteractionId = response.headers.get('X-Coaching-Interaction-Id')
       const adaptations = response.headers.get('X-Coaching-Adaptations')?.split(', ').filter(Boolean)
-      const confidence = parseFloat(response.headers.get('X-Coaching-Confidence') || '0')
-      
+      const confidenceHeader = response.headers.get('X-Coaching-Confidence')
+      const confidence = confidenceHeader ? parseFloat(confidenceHeader) : undefined
+
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: "",
         timestamp: new Date(),
         adaptations: adaptations || [],
-        requestFeedback: confidence > 0 && confidence < 0.8, // Request feedback for lower confidence responses
+        coachingInteractionId: coachingInteractionId || undefined,
+        confidence,
+        requestFeedback: typeof confidence === 'number' && confidence > 0 && confidence < 0.8, // Request feedback for lower confidence responses
       }
 
       setMessages(prev => [...prev, assistantMessage])
