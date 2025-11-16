@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -219,7 +219,7 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
                           </div>
                           <div className="flex-1">
                             <p className="font-medium">{step.description}</p>
-                            {step.detail && <p className="text-sm text-gray-600 mt-1">{step.detail}</p>}
+                            {("detail" in step) && step.detail && <p className="text-sm text-gray-600 mt-1">{step.detail}</p>}
                           </div>
                           <Badge variant="outline" className="text-xs">
                             <Play className="h-3 w-3 mr-1" />

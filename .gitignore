@@ -1,0 +1,33 @@
+# Root-level ignores
+
+# Next.js build outputs
+/.next/
+/out/
+/build/
+
+# nested node_modules anywhere
+**/node_modules/
+
+# playwright artifacts
+.playwright-mcp/
+
+# accidental nested V0 directory
+V0/V0/
+
+# Dependencies
+/node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Env files (do not commit secrets)
+.env*
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+*.tsbuildinfo

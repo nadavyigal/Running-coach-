@@ -1,18 +1,16 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Send,
   Bot,
   User,
   Loader2,
-  RefreshCw,
   ThumbsUp,
   ThumbsDown,
   Settings,
@@ -25,7 +23,6 @@ import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { EnhancedAICoach, type AICoachResponse } from "@/components/enhanced-ai-coach"
-import { planAdaptationEngine } from "@/lib/planAdaptationEngine"
 
 interface ChatMessage {
   id: string
@@ -94,24 +91,26 @@ export function ChatScreen() {
 
     try {
       setIsLoadingHistory(true)
-      console.log('📚 Loading chat history for user:', user.id)
+      console.log('?ƒףת Loading chat history for user:', user.id)
       
       // Load existing chat messages from database
       const existingMessages = await dbUtils.getChatMessages(user.id, conversationId)
-      console.log(`📨 Loaded ${existingMessages.length} existing messages`)
+      console.log(`?ƒף¿ Loaded ${existingMessages.length} existing messages`)
       
       if (existingMessages.length > 0) {
         // Convert database messages to ChatMessage format
-        const chatMessages: ChatMessage[] = existingMessages.map(msg => ({
-          id: msg.id?.toString() || `msg-${Date.now()}-${Math.random()}`,
-          role: msg.role,
-          content: msg.content,
-          timestamp: new Date(msg.timestamp),
-          tokenCount: msg.tokenCount,
-        }))
+        const chatMessages: ChatMessage[] = existingMessages.map((msg: any) => {
+          const base: ChatMessage = {
+            id: msg.id?.toString() || `msg-${Date.now()}-${Math.random()}`,
+            role: msg.role,
+            content: msg.content,
+            timestamp: new Date(msg.timestamp),
+          }
+          return typeof msg.tokenCount === 'number' ? { ...base, tokenCount: msg.tokenCount } : base
+        })
         
         setMessages(chatMessages)
-        console.log('✅ Chat history loaded successfully')
+        console.log('?£ו Chat history loaded successfully')
       } else {
         // Show welcome message for new conversations
         const welcomeMessage: ChatMessage = {
@@ -121,10 +120,10 @@ export function ChatScreen() {
           timestamp: new Date(),
         }
         setMessages([welcomeMessage])
-        console.log('👋 No existing history, showing welcome message')
+        console.log('?ƒסכ No existing history, showing welcome message')
       }
     } catch (error) {
-      console.error('❌ Failed to load chat history:', error)
+      console.error('?¥ל Failed to load chat history:', error)
       toast({
         title: "Chat History Error",
         description: "Failed to load previous messages. Starting fresh conversation.",
@@ -214,8 +213,8 @@ export function ChatScreen() {
       }
 
       // Enhanced stream debugging implementation
-      console.log('🔥 Stream Response Status:', response.status);
-      console.log('🔥 Stream Headers:', Object.fromEntries(response.headers.entries()));
+      console.log('?ƒפ? Stream Response Status:', response.status);
+      console.log('?ƒפ? Stream Headers:', Object.fromEntries(response.headers.entries()));
       
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
@@ -232,9 +231,7 @@ export function ChatScreen() {
         role: 'assistant',
         content: "",
         timestamp: new Date(),
-        coachingInteractionId: coachingInteractionId || undefined,
         adaptations: adaptations || [],
-        confidence: confidence || undefined,
         requestFeedback: confidence > 0 && confidence < 0.8, // Request feedback for lower confidence responses
       }
 
@@ -243,12 +240,12 @@ export function ChatScreen() {
       while (reader) {
         const { done, value } = await reader.read()
         if (done) {
-          console.log('✅ Stream complete. Total updates:', updateCount);
+          console.log('?£ו Stream complete. Total updates:', updateCount);
           break
         }
 
         const chunk = decoder.decode(value)
-        console.log('📦 Chunk received:', chunk.length, 'chars');
+        console.log('?ƒף? Chunk received:', chunk.length, 'chars');
         
         const lines = chunk.split('\n').filter(line => line.trim());
         
@@ -260,7 +257,7 @@ export function ChatScreen() {
                 aiContent += data.textDelta
                 updateCount++;
                 
-                console.log('🔄 UI Update #', updateCount, 'Content length:', aiContent.length);
+                console.log('?ƒפה UI Update #', updateCount, 'Content length:', aiContent.length);
                 
                 setMessages(prev => {
                   const updated = prev.map(msg => 
@@ -268,12 +265,12 @@ export function ChatScreen() {
                       ? { ...msg, content: aiContent }
                       : msg
                   );
-                  console.log('🎯 Messages array updated:', updated.length, 'messages');
+                  console.log('?ƒמ» Messages array updated:', updated.length, 'messages');
                   return updated;
                 });
               }
             } catch (parseError) {
-              console.error('❌ JSON Parse Error:', parseError, 'Line:', line);
+              console.error('?¥ל JSON Parse Error:', parseError, 'Line:', line);
             }
           }
         }
@@ -293,7 +290,7 @@ export function ChatScreen() {
       // Save messages to database
       if (user?.id) {
         try {
-          console.log('💾 Saving user and assistant messages to database...')
+          console.log('?ƒע? Saving user and assistant messages to database...')
           
           // Save the user message
           await dbUtils.createChatMessage({
@@ -312,9 +309,9 @@ export function ChatScreen() {
             tokenCount: Math.ceil(aiContent.length / 4), // Rough token estimation
           })
           
-          console.log('✅ Messages saved successfully to database')
+          console.log('?£ו Messages saved successfully to database')
         } catch (saveError) {
-          console.error('❌ Failed to save messages to database:', saveError)
+          console.error('?¥ל Failed to save messages to database:', saveError)
           // Don't show error to user - message saving failure shouldn't disrupt chat
         }
       }
@@ -620,7 +617,7 @@ export function ChatScreen() {
                 size="sm"
                 onClick={() => setShowCoachingPreferences(false)}
               >
-                ×
+                ?ק
               </Button>
             </div>
             <div className="p-4">

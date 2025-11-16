@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,11 +15,9 @@ import {
   Activity, 
   Settings, 
   Wifi, 
-  Battery, 
   RefreshCw,
   Heart,
   BarChart3,
-  Calendar,
   Bell,
   Shield,
   Trash2,
@@ -253,7 +251,7 @@ export function DeviceSettingsScreen({ userId, deviceId, onBack }: DeviceSetting
         <div className="flex items-center space-x-3">
           {onBack && (
             <Button variant="ghost" size="sm" onClick={onBack}>
-              ← Back
+              ג† Back
             </Button>
           )}
           <DeviceIcon className="h-6 w-6" />

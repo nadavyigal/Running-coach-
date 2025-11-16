@@ -1,5 +1,12 @@
 import { db, isDatabaseAvailable, safeDbOperation, getDatabase } from './db';
-import type { ChatMessage as ChatMessageEntity } from './db';
+import type {
+  ChatMessage as ChatMessageEntity,
+  CoachingProfile,
+  CoachingFeedback,
+  UserBehaviorPattern,
+  Run,
+  CoachingInteraction,
+} from './db';
 import type { 
   User, 
   Plan, 
@@ -645,6 +652,146 @@ export async function getUserById(userId: number): Promise<User | null> {
     }
     return null;
   }, 'getUserById', null);
+}
+
+/**
+ * Get coaching profile for user
+ */
+export async function getCoachingProfile(userId: number): Promise<CoachingProfile | null> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    const profile = await database.coachingProfiles.where('userId').equals(userId).first();
+    return (profile as CoachingProfile) ?? null;
+  }, 'getCoachingProfile', null as unknown as CoachingProfile | null);
+}
+
+/**
+ * Get behavior patterns for user
+ */
+export async function getBehaviorPatterns(userId: number): Promise<UserBehaviorPattern[]> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    const patterns = await database.userBehaviorPatterns.where('userId').equals(userId).toArray();
+    return patterns as UserBehaviorPattern[];
+  }, 'getBehaviorPatterns', [] as unknown as UserBehaviorPattern[]);
+}
+
+/**
+ * Get coaching feedback for a user, most recent first
+ */
+export async function getCoachingFeedback(userId: number, limit: number = 10): Promise<CoachingFeedback[]> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    const feedback = await database.coachingFeedback
+      .where('userId')
+      .equals(userId)
+      .reverse()
+      .sortBy('createdAt');
+    // sortBy ascending; reverse() above only affects collections. Ensure most recent first:
+    const ordered = feedback.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return ordered.slice(0, limit) as CoachingFeedback[];
+  }, 'getCoachingFeedback', [] as unknown as CoachingFeedback[]);
+}
+
+/**
+ * Get runs by user, most recent first
+ */
+export async function getRunsByUser(userId: number): Promise<Run[]> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    const runs = await database.runs.where('userId').equals(userId).toArray();
+    return (runs as Run[]).sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+  }, 'getRunsByUser', [] as unknown as Run[]);
+}
+
+/**
+ * Get user badges from badges table
+ */
+export async function getUserBadges(userId: number) {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    const items = await database.badges.where('userId').equals(userId).toArray();
+    return items as any[];
+  }, 'getUserBadges', [] as any[]);
+}
+
+/** Ensure coaching-related tables exist in the current schema */
+export async function ensureCoachingTablesExist(): Promise<boolean> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) return false;
+    const tableNames = (database as any).tables?.map((t: any) => t.name) || [];
+    const required = [
+      'coachingProfiles',
+      'coachingFeedback',
+      'coachingInteractions',
+      'userBehaviorPatterns',
+    ];
+    return required.every((t) => tableNames.includes(t));
+  }, 'ensureCoachingTablesExist', false);
+}
+
+/** Create a coaching profile with defaults */
+export async function createCoachingProfile(
+  profile: Omit<CoachingProfile, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<number> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    const id = await database.coachingProfiles.add({
+      ...profile,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Omit<CoachingProfile, 'id'>);
+    return id as number;
+  }, 'createCoachingProfile');
+}
+
+/** Record a coaching feedback entry */
+export async function recordCoachingFeedback(
+  data: Omit<CoachingFeedback, 'id' | 'createdAt'>
+): Promise<number> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    const id = await database.coachingFeedback.add({
+      ...data,
+      createdAt: new Date(),
+    } as Omit<CoachingFeedback, 'id'>);
+    return id as number;
+  }, 'recordCoachingFeedback');
+}
+
+/** Get recent coaching interactions */
+export async function getCoachingInteractions(userId: number, limit: number = 30): Promise<CoachingInteraction[]> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    const items = await database.coachingInteractions.where('userId').equals(userId).toArray();
+    const ordered = (items as CoachingInteraction[]).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    return ordered.slice(0, limit);
+  }, 'getCoachingInteractions', [] as unknown as CoachingInteraction[]);
+}
+
+/**
+ * Update coaching profile fields for a user
+ */
+export async function updateCoachingProfile(userId: number, updates: Partial<CoachingProfile>): Promise<void> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    const existing = await database.coachingProfiles.where('userId').equals(userId).first();
+    if (existing?.id) {
+      await database.coachingProfiles.update(existing.id, { ...updates, updatedAt: new Date() });
+    }
+  }, 'updateCoachingProfile');
 }
 
 /**
@@ -1834,6 +1981,18 @@ export const dbUtils = {
   
   // Chat management
   createChatMessage,
+  getChatMessages,
+
+  // Adaptive coaching helpers
+  getCoachingProfile,
+  getBehaviorPatterns,
+  getCoachingFeedback,
+  getRunsByUser,
+  ensureCoachingTablesExist,
+  createCoachingProfile,
+  recordCoachingFeedback,
+  getCoachingInteractions,
+  updateCoachingProfile,
   
   // Goal management
   createGoal,
@@ -1862,6 +2021,7 @@ export const dbUtils = {
   createRun,
   getUserRuns,
   getRunStats,
+  getUserBadges,
   
   // Recovery & wellness
   saveSleepData,

@@ -1,3 +1,15 @@
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
+const svgrAvailable = (() => {
+  try {
+    require.resolve('@svgr/webpack');
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Remove build error ignoring for proper error handling
@@ -28,12 +40,15 @@ const nextConfig = {
       'recharts'
     ],
     turbo: {
-      rules: {
-        '*.svg': {
-          loaders: ['@svgr/webpack'],
-          as: '*.js',
-        },
-      },
+      // Only add SVGR rule if the loader is available
+      rules: svgrAvailable
+        ? {
+            '*.svg': {
+              loaders: ['@svgr/webpack'],
+              as: '*.js',
+            },
+          }
+        : {},
     },
   },
   

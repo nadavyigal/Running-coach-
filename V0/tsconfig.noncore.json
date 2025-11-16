@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "app/api/devices/**/*",
+    "app/api/data-fusion/**/*",
+    "app/api/recovery/**/*",
+    "app/(experimental)/**/*",
+    "app/devices/**/*",
+    "experimental/**/*",
+    "playground/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
+}
+

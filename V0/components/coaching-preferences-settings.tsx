@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,7 +13,6 @@ import {
   Settings, 
   MessageSquare, 
   Brain, 
-  Volume2, 
   Target, 
   Cloud, 
   Calendar,
@@ -176,7 +175,7 @@ export function CoachingPreferencesSettings({ userId, onClose }: CoachingPrefere
         
         toast({
           variant: "success",
-          title: "Preferences updated! 🎯",
+          title: "Preferences updated! נ¯",
           description: result.adaptations?.length > 0 
             ? `${result.adaptations.length} coaching adaptations applied.`
             : "Your coaching experience will adapt to these preferences.",
@@ -411,7 +410,7 @@ export function CoachingPreferencesSettings({ userId, onClose }: CoachingPrefere
                   </Badge>
                 </div>
                 <Slider
-                  value={[preferences.behavioralPatterns.contextualPatterns.weatherSensitivity]}
+                  value={[preferences.behavioralPatterns.contextualPatterns.weatherSensitivity ?? 0]}
                   onValueChange={(value) => updateContextualPattern('weatherSensitivity', value[0])}
                   max={10}
                   min={1}
@@ -434,7 +433,7 @@ export function CoachingPreferencesSettings({ userId, onClose }: CoachingPrefere
                   </Badge>
                 </div>
                 <Slider
-                  value={[preferences.behavioralPatterns.contextualPatterns.scheduleFlexibility]}
+                  value={[preferences.behavioralPatterns.contextualPatterns.scheduleFlexibility ?? 0]}
                   onValueChange={(value) => updateContextualPattern('scheduleFlexibility', value[0])}
                   max={10}
                   min={1}
@@ -474,14 +473,14 @@ export function CoachingPreferencesSettings({ userId, onClose }: CoachingPrefere
                   </Badge>
                 </div>
                 <Slider
-                  value={[preferences.behavioralPatterns.workoutPreferences.difficultyPreference]}
+                  value={[preferences.behavioralPatterns.workoutPreferences.difficultyPreference ?? 0]}
                   onValueChange={(value) => setPreferences(prev => ({
                     ...prev,
                     behavioralPatterns: {
                       ...prev.behavioralPatterns,
                       workoutPreferences: {
                         ...prev.behavioralPatterns.workoutPreferences,
-                        difficultyPreference: value[0]
+                        difficultyPreference: (value?.[0] ?? 0)
                       }
                     }
                   }))}

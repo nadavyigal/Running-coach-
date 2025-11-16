@@ -31,7 +31,7 @@ const FeedbackSchema = z.object({
 const FeedbackQuerySchema = z.object({
   userId: z.string().transform(Number).optional(),
   interactionType: z.string().optional(),
-  limit: z.string().transform(Number).optional().default(50),
+  limit: z.coerce.number().optional().default(50),
 });
 
 export async function POST(request: NextRequest) {
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
         newPatterns,
         improvementAreas: feedbackData.aspects ? 
           Object.entries(feedbackData.aspects)
-            .filter(([, score]) => score < 3)
+            .filter(([, score]) => (score ?? 0) < 3)
             .map(([aspect]) => aspect) : [],
       },
       coachingResponse: coachingResponse ? {

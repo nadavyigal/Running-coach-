@@ -1,0 +1,32 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "app/**/*",
+    "components/**/*",
+    "lib/**/*",
+    "hooks/**/*",
+    "app.d.ts",
+    "next-env.d.ts",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next",
+    "e2e",
+    "tests",
+    "__tests__",
+    "playwright-report",
+    "coverage",
+    "reports",
+    // Non-core advanced areas (warn-only)
+    "app/api/devices/**",
+    "app/api/data-fusion/**",
+    "app/api/recovery/**",
+    "app/(experimental)/**",
+    "app/devices/**",
+    "experimental/**",
+    "playground/**",
+    "scripts/**"
+  ]
+}
+

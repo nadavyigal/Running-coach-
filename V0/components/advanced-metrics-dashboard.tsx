@@ -14,18 +14,19 @@ import {
   Zap, 
   Timer,
   BarChart3,
-  LineChart,
-  Calendar,
+  // LineChart, // unused
+  // Calendar, // unused
   Award,
   RefreshCw
 } from "lucide-react"
 import { db } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 
+// Align with DB types; deviceId is string in db.AdvancedMetrics
 interface AdvancedMetrics {
   id?: number
   runId: number
-  deviceId: number
+  deviceId: string
   vo2Max?: number
   lactateThresholdHR?: number
   lactateThresholdPace?: number
@@ -44,10 +45,11 @@ interface AdvancedMetrics {
   updatedAt: Date
 }
 
+// Align with DB RunningDynamicsData; deviceId is string
 interface RunningDynamics {
   id?: number
   runId: number
-  deviceId: number
+  deviceId: string
   averageCadence?: number
   maxCadence?: number
   averageGroundContactTime?: number
@@ -96,7 +98,7 @@ export function AdvancedMetricsDashboard({
           .equals(runId)
           .toArray()
 
-        setMetrics(runMetrics)
+        setMetrics(runMetrics.map(normalizeAdvancedMetrics))
         setDynamics(runDynamics)
       } else {
         // Load all metrics for user within time period
@@ -117,7 +119,7 @@ export function AdvancedMetricsDashboard({
           .and(dynamic => !cutoffDate || (dynamic.createdAt && dynamic.createdAt >= cutoffDate))
           .toArray()
 
-        setMetrics(allMetrics)
+        setMetrics(allMetrics.map(normalizeAdvancedMetrics))
         setDynamics(allDynamics)
       }
     } catch (error) {
@@ -130,6 +132,42 @@ export function AdvancedMetricsDashboard({
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Normalize DB AdvancedMetrics into the shape this component expects
+  function normalizeAdvancedMetrics(m: any): AdvancedMetrics {
+    let rp = m.racePredictor;
+    let rpObj: any = undefined;
+    if (Array.isArray(rp)) {
+      const byDist: Record<number, number> = {};
+      for (const e of rp) {
+        if (e && typeof e.distance === 'number' && typeof e.predictedTime === 'number') {
+          byDist[Math.round(e.distance * 1000) / 1000] = e.predictedTime;
+        }
+      }
+      rpObj = {
+        fiveK: byDist[5] ?? undefined,
+        tenK: byDist[10] ?? undefined,
+        halfMarathon: byDist[21.098] ?? byDist[21.097] ?? byDist[21.0975] ?? undefined,
+        marathon: byDist[42.195] ?? byDist[42.196] ?? undefined,
+      };
+    }
+    return {
+      id: m.id,
+      runId: m.runId,
+      deviceId: m.deviceId,
+      vo2Max: m.vo2Max,
+      lactateThresholdHR: m.lactateThresholdHR,
+      lactateThresholdPace: m.lactateThresholdPace,
+      trainingStressScore: m.trainingStressScore,
+      intensityFactor: m.intensityFactor,
+      trainingLoad: m.trainingLoad,
+      recoveryTime: m.recoveryTime,
+      performanceCondition: m.performanceCondition,
+      racePredictor: rpObj,
+      createdAt: m.createdAt,
+      updatedAt: m.updatedAt,
+    } as AdvancedMetrics;
   }
 
   const getCutoffDate = (period: string): Date | null => {
@@ -194,7 +232,7 @@ export function AdvancedMetricsDashboard({
     const latest = metrics
       .filter(m => m[field] !== undefined && m[field] !== null)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
-    return latest?.[field]
+    return latest?.[field] as any
   }
 
   const getAverageMetric = (field: keyof AdvancedMetrics) => {
@@ -391,7 +429,7 @@ export function AdvancedMetricsDashboard({
                 <div className="flex justify-between items-center">
                   <span>Training Stress Score</span>
                   <span className="font-bold">
-                    {getLatestMetric('trainingStressScore') || 'No data'}
+                    {(() => { const v = getLatestMetric('trainingStressScore') as number | null; return v ?? 'No data'; })()}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">

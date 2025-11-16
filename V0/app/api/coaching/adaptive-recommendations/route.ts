@@ -22,7 +22,7 @@ const RecommendationsQuerySchema = z.object({
       flexibility: z.enum(['high', 'medium', 'low']),
     }).optional(),
   }).optional().default({}),
-  includeAnalysis: z.string().transform(val => val === 'true').optional().default(false),
+  includeAnalysis: z.coerce.boolean().optional().default(false),
 });
 
 export async function GET(request: NextRequest) {
@@ -37,14 +37,34 @@ export async function GET(request: NextRequest) {
     const userId = params.userId || 1;
     
     // Build user context
+    const weather = params.context.weather
+      ? {
+          condition: params.context.weather.condition,
+          temperature: params.context.weather.temperature,
+          ...(typeof params.context.weather.humidity === 'number'
+            ? { humidity: params.context.weather.humidity }
+            : {}),
+        }
+      : undefined;
+
+    const schedule = params.context.schedule
+      ? {
+          hasTime: params.context.schedule.hasTime,
+          ...(typeof params.context.schedule.preferredDuration === 'number'
+            ? { preferredDuration: params.context.schedule.preferredDuration }
+            : {}),
+          flexibility: params.context.schedule.flexibility,
+        }
+      : undefined;
+
     const userContext: UserContext = {
       currentGoals: params.context.goals || ['improve fitness', 'stay consistent'],
       recentActivity: params.context.recentActivity || 'Regular training',
-      mood: params.context.mood,
-      environment: params.context.environment,
-      timeConstraints: params.context.timeConstraints,
-      weather: params.context.weather,
-      schedule: params.context.schedule,
+      ...(params.context.mood ? { mood: params.context.mood } : {}),
+      ...(params.context.environment ? { environment: params.context.environment } : {}),
+      ...(params.context.timeConstraints ? { timeConstraints: params.context.timeConstraints } : {}),
+      ...(weather ? { weather } : {}),
+      ...(schedule ? { schedule } : {}),
     };
 
     // Get adaptive recommendations
@@ -70,13 +90,13 @@ export async function GET(request: NextRequest) {
       } : null;
 
       // Analyze preferences
-      const dayPreferences = recentRunsLimited.reduce((acc, run) => {
+      const dayPreferences = recentRunsLimited.reduce((acc: Record<string, number>, run: { completedAt: Date }) => {
         const day = new Date(run.completedAt).toLocaleDateString('en', { weekday: 'long' });
         acc[day] = (acc[day] || 0) + 1;
         return acc;
       }, {} as Record<string, number>);
 
-      const typePreferences = recentRunsLimited.reduce((acc, run) => {
+      const typePreferences = recentRunsLimited.reduce((acc: Record<string, number>, run: { type: string }) => {
         acc[run.type] = (acc[run.type] || 0) + 1;
         return acc;
       }, {} as Record<string, number>);
@@ -90,20 +110,20 @@ export async function GET(request: NextRequest) {
         })),
         workoutAnalysis: workoutCompletion,
         preferences: {
-          bestDays: Object.entries(dayPreferences)
-            .sort(([, a], [, b]) => b - a)
+          bestDays: (Object.entries(dayPreferences) as Array<[string, number]>)
+            .sort(([, a], [, b]) => (b as number) - (a as number))
             .slice(0, 3)
             .map(([day, count]) => ({ day, count })),
-          favoriteTypes: Object.entries(typePreferences)
-            .sort(([, a], [, b]) => b - a)
+          favoriteTypes: (Object.entries(typePreferences) as Array<[string, number]>)
+            .sort(([, a], [, b]) => (b as number) - (a as number))
             .slice(0, 3)
             .map(([type, count]) => ({ type, count })),
         },
         coachingEffectiveness: {
           score: profile?.coachingEffectivenessScore || 50,
           trend: recentFeedback.length > 5 ? 
-            (recentFeedback.slice(0, 3).reduce((sum, f) => sum + (f.rating || 3), 0) / 3) -
-            (recentFeedback.slice(3, 6).reduce((sum, f) => sum + (f.rating || 3), 0) / 3) : 0,
+            (recentFeedback.slice(0, 3).reduce((sum: number, f: { rating?: number }) => sum + (f.rating || 3), 0) / 3) -
+            (recentFeedback.slice(3, 6).reduce((sum: number, f: { rating?: number }) => sum + (f.rating || 3), 0) / 3) : 0,
           totalFeedback: recentFeedback.length,
         },
       };
@@ -130,7 +150,7 @@ export async function GET(request: NextRequest) {
       contextualFactors.push('Low energy detected - recovery-focused recommendations');
     }
 
-    if (profile?.behavioralPatterns.workoutPreferences.preferredDays.length > 0) {
+    if (profile?.behavioralPatterns?.workoutPreferences?.preferredDays?.length && profile.behavioralPatterns.workoutPreferences.preferredDays.length > 0) {
       const today = new Date().toLocaleDateString('en', { weekday: 'long' });
       if (profile.behavioralPatterns.workoutPreferences.preferredDays.includes(today)) {
         contextualFactors.push('Today matches your preferred workout days');
@@ -239,7 +259,7 @@ export async function POST(request: NextRequest) {
     );
 
     // Also generate specific recommendations if requested
-    let recommendations = [];
+    let recommendations: Awaited<ReturnType<typeof adaptiveCoachingEngine.generateAdaptiveRecommendations>> = [] as any;
     if (query.toLowerCase().includes('recommend') || query.toLowerCase().includes('suggest')) {
       recommendations = await adaptiveCoachingEngine.generateAdaptiveRecommendations(userId, userContext);
     }

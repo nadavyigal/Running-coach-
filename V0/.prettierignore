@@ -1,0 +1,9 @@
+.next
+node_modules
+e2e
+tests
+__tests__
+playwright-report
+coverage
+reports
+

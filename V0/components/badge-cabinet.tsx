@@ -53,13 +53,13 @@ export function BadgeCabinet({ userId }: { userId: number }) {
         ) : (
           <div className="grid grid-cols-3 gap-4">
             {badges.map(badge => (
-              <div key={badge.id} className="relative group">
-                <BadgeCard {...badge} />
+              <div key={(badge.id ?? `${badge.type}-${badge.milestone}-${badge.unlockedAt}`)} className="relative group">
+                <BadgeCard type={badge.type as any} milestone={badge.milestone as any} unlockedAt={badge.unlockedAt as any} streakValueAchieved={(badge as any).streakValueAchieved} />
                 <Button
                   variant="outline"
                   size="icon"
                   className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => handleShareClick(badge.id.toString(), badge.name)}
+                  onClick={() => handleShareClick((badge.id ?? `${badge.type}-${badge.milestone}`).toString(), `${String(badge.type).toUpperCase()} ${badge.milestone}-day`)}
                 >
                   <Share2 className="h-4 w-4" />
                 </Button>

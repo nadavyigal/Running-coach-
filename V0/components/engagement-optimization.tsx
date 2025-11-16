@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,10 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { 
   Bell, 
   Clock, 
-  TrendingUp, 
-  Target, 
-  Zap,
-  Settings,
+  TrendingUp,
   Activity,
   Star,
   Award,
@@ -127,9 +124,9 @@ export function EngagementOptimization({ user: propUser, onPreferencesChange }: 
       if (!user) return;
 
       // Calculate engagement score based on user activity patterns
-      const runs = await dbUtils.getRuns(user.id!);
+      const runs = await dbUtils.getUserRuns(user.id!);
       const recentRuns = runs.filter(run => {
-        const runDate = new Date(run.date);
+        const runDate = new Date(run.completedAt);
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
         return runDate > thirtyDaysAgo;
@@ -144,7 +141,7 @@ export function EngagementOptimization({ user: propUser, onPreferencesChange }: 
       
       // Calculate optimal timing based on user patterns
       if (recentRuns.length > 0) {
-        const runTimes = recentRuns.map(run => new Date(run.date).getHours());
+        const runTimes = recentRuns.map(run => new Date(run.completedAt).getHours());
         const avgHour = runTimes.reduce((sum, hour) => sum + hour, 0) / runTimes.length;
         const optimalHour = Math.round(avgHour);
         setOptimalTiming(`${optimalHour.toString().padStart(2, '0')}:30`);
@@ -406,9 +403,9 @@ export function EngagementOptimization({ user: propUser, onPreferencesChange }: 
           <div className="space-y-2">
             <Label>Engagement Insights</Label>
             <div className="space-y-2 text-sm text-gray-600">
-              <p>• You're most active in the mornings</p>
-              <p>• Your consistency is improving</p>
-              <p>• Consider increasing frequency during peak times</p>
+              <p>ג€¢ You're most active in the mornings</p>
+              <p>ג€¢ Your consistency is improving</p>
+              <p>ג€¢ Consider increasing frequency during peak times</p>
             </div>
           </div>
         </CardContent>

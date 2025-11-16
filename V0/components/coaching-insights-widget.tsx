@@ -13,7 +13,6 @@ import {
   Settings,
   Lightbulb,
   CheckCircle,
-  Clock,
   BarChart3
 } from 'lucide-react';
 
@@ -171,7 +170,7 @@ export function CoachingInsightsWidget({
         .slice(0, 10);
 
       // Get behavior patterns
-      let patterns = [];
+      let patterns: any[] = [];
       try {
         patterns = await dbUtils.getBehaviorPatterns(userId);
       } catch (error) {
@@ -180,7 +179,7 @@ export function CoachingInsightsWidget({
       }
       
       // Get recent feedback
-      let recentFeedback = [];
+      let recentFeedback: any[] = [];
       try {
         recentFeedback = await dbUtils.getCoachingFeedback(userId, 20);
       } catch (error) {
@@ -193,7 +192,7 @@ export function CoachingInsightsWidget({
         : 3.5;
 
       // Get coaching interactions
-      let recentInteractions = [];
+      let recentInteractions: any[] = [];
       try {
         recentInteractions = await dbUtils.getCoachingInteractions(userId, 30);
       } catch (error) {
