@@ -7,7 +7,8 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 import { Switch } from "@/components/ui/switch"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Flame } from "lucide-react"
-import { dbUtils, User } from "@/lib/db"
+import { User } from "@/lib/db"
+import { dbUtils } from "@/lib/dbUtils"
 
 export interface StreakIndicatorProps {
   userId?: number

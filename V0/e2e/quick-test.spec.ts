@@ -63,7 +63,7 @@ test.describe('Quick Onboarding Test', () => {
         // Let's test the database directly
         const dbTest = await page.evaluate(async () => {
           try {
-            const dbModule = await import('/lib/db.js');
+            const dbModule = await import('/lib/dbUtils.js');
             const { dbUtils } = dbModule;
             
             // Clear and test

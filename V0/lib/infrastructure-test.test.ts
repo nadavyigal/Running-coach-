@@ -13,7 +13,8 @@ import {
   NetworkError,
   formatErrorResponse 
 } from '@/lib/errorHandling'
-import { dbUtils, db } from '@/lib/db'
+import { db } from '@/lib/db'
+import { dbUtils } from '@/lib/dbUtils'
 import { 
   createTestUser, 
   createTestWorkout, 

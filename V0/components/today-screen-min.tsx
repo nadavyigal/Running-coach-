@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { dbUtils, type Plan, type Workout, type User } from "@/lib/db";
+import { type Plan, type Workout, type User } from "@/lib/db";
+import { dbUtils } from "@/lib/dbUtils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 

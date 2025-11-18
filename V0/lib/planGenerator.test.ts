@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { db, dbUtils } from './db'
+import { db } from './db'
+import { dbUtils } from '@/lib/dbUtils'
 import { planAdjustmentService } from './planAdjustmentService'
 import { generateFallbackPlan } from './planGenerator'
 import posthog from 'posthog-js'

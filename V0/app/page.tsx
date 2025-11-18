@@ -85,8 +85,8 @@ const OnboardingDebugPanel = dynamic(() => import("@/components/onboarding-debug
 // Import database utilities with better error handling
 let dbUtils: any = null;
 try {
-  const dbModule = require("@/lib/db");
-  dbUtils = dbModule.dbUtils;
+  const dbModule = require("@/lib/dbUtils");
+  dbUtils = dbModule.dbUtils ?? dbModule.default;
 } catch (dbError) {
   console.error('Failed to load database utilities:', dbError);
   // Create mock dbUtils for graceful degradation

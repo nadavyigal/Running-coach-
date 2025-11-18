@@ -7,7 +7,7 @@ vi.mock('../lib/db', () => ({
   safeDbOperation: vi.fn()
 }))
 
-import { ensureUserReady, getCurrentUser, performStartupMigration } from '../lib/dbUtils'
+import { ensureUserReady, getCurrentUser, performStartupMigration } from '@/lib/dbUtils'
 import { getDatabase } from '../lib/db'
 
 describe('User Identity Resolution - ensureUserReady', () => {
@@ -182,7 +182,7 @@ describe('getCurrentUser - enhanced with ensureUserReady', () => {
     }
 
     // Mock the entire dbUtils module
-    vi.doMock('../lib/dbUtils', () => ({
+    vi.doMock('@/lib/dbUtils', () => ({
       ensureUserReady: vi.fn().mockResolvedValue(mockUser),
       getCurrentUser: vi.fn().mockResolvedValue(mockUser)
     }))

@@ -195,7 +195,7 @@ async function handleEnhancedPlanRequest(body: any) {
   // Verify user exists if userId is provided
   if (requestData.userId) {
     try {
-      const { dbUtils } = await import('@/lib/db');
+      const { dbUtils } = await import('@/lib/dbUtils');
       const user = await dbUtils.getUserById(requestData.userId);
       if (!user) {
         return NextResponse.json(

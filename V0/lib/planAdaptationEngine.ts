@@ -1,4 +1,5 @@
-import { dbUtils, type User, type Plan, type Run, type Goal } from './db';
+import { type User, type Plan, type Run, type Goal } from './db';
+import { dbUtils } from '@/lib/dbUtils';
 
 export interface UserContext {
   goal: 'habit' | 'distance' | 'speed';

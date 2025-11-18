@@ -1,4 +1,4 @@
-import { getCurrentUser, getUserRuns, getPlanWorkouts } from './dbUtils';
+import { getCurrentUser, getUserRuns, getPlanWorkouts } from '@/lib/dbUtils';
 import { type Plan, type User, type Run, type Workout, type AdaptationFactor } from './db';
 export interface PlanComplexityEngine {
   userExperience: 'beginner' | 'intermediate' | 'advanced';

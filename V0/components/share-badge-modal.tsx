@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/use-toast";
 import { Copy, Share2, Twitter, Facebook } from "lucide-react";
 import { useState, useEffect } from "react";
-import { dbUtils } from "@/lib/db";
+import { dbUtils } from "@/lib/dbUtils";
 
 interface ShareBadgeModalProps {
   badgeId: string;

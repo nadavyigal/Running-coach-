@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import React from 'react'
 import { OnboardingScreen } from '@/components/onboarding-screen'
-import * as dbMod from '@/lib/db'
+import * as dbMod from '@/lib/dbUtils'
 
 // Use fake indexeddb to avoid real browser DB
 import 'fake-indexeddb/auto'

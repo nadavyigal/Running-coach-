@@ -111,7 +111,7 @@ export function CoachingFeedbackModal({
             console.log('Feedback triggered plan adaptation:', adaptationAssessment.reason);
             
             // Get current active plan
-            const { dbUtils } = await import('@/lib/db');
+            const { dbUtils } = await import('@/lib/dbUtils');
             const currentPlan = await dbUtils.getActivePlan(userId);
             if (currentPlan) {
               // Adapt the plan
@@ -195,7 +195,7 @@ export function CoachingFeedbackModal({
             console.log('Detailed feedback triggered plan adaptation:', adaptationAssessment.reason);
             
             // Get current active plan
-            const { dbUtils } = await import('@/lib/db');
+            const { dbUtils } = await import('@/lib/dbUtils');
             const currentPlan = await dbUtils.getActivePlan(userId);
             if (currentPlan) {
               // Adapt the plan

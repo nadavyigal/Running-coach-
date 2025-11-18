@@ -1,7 +1,9 @@
 import { streamText } from "ai"
 import { openai } from "@ai-sdk/openai"
+import { NextResponse } from "next/server"
 import { adaptiveCoachingEngine, UserContext } from '@/lib/adaptiveCoachingEngine'
-import { dbUtils } from '@/lib/db'
+import { chatRepository } from '@/lib/server/chatRepository'
+import type { ChatUserProfile } from '@/lib/models/chat'
 import { withChatSecurity, validateAndSanitizeInput, ApiRequest } from '@/lib/security.middleware'
 // Error handling is managed by the secure wrapper and middleware
 import { withSecureOpenAI } from '@/lib/apiKeyManager'
@@ -61,8 +63,26 @@ async function chatHandler(req: ApiRequest) {
     const body = validation.sanitized || await req.json();
     console.log('📝 Request body keys:', Object.keys(body));
     console.log('👤 User ID:', body.userId);
-    
+
     const { messages, userId, userContext } = body;
+    const conversationId = typeof body.conversationId === 'string' && body.conversationId.trim()
+      ? body.conversationId.trim()
+      : 'default';
+    const userProfile = body.userProfile as ChatUserProfile | undefined;
+
+    const rawUserId = typeof userId === 'string' || typeof userId === 'number' ? userId : undefined;
+    const parsedUserId = typeof rawUserId === 'string' ? Number.parseInt(rawUserId, 10) : rawUserId;
+    const hasValidUserId = typeof parsedUserId === 'number' && !Number.isNaN(parsedUserId);
+    const normalizedUserId = hasValidUserId ? parsedUserId : undefined;
+    const userIdKey = normalizedUserId ? normalizedUserId.toString() : rawUserId ? String(rawUserId) : undefined;
+
+    if (rawUserId && !hasValidUserId) {
+      console.error('❌ Invalid userId provided to chat route:', rawUserId);
+      return new Response(JSON.stringify({ error: 'Invalid user identifier provided' }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
 
     // Validate input
     console.log('🔍 Validating input...');
@@ -75,11 +95,33 @@ async function chatHandler(req: ApiRequest) {
     }
     
     console.log(`📨 Received ${messages.length} messages`);
-    console.log('📨 Latest message:', messages[messages.length - 1]);
+    const latestMessage = messages[messages.length - 1];
+    console.log('📨 Latest message:', latestMessage);
+
+    const userMessageContent = latestMessage?.content || '';
+
+    let userMessageStored = false;
+    const persistUserMessage = async () => {
+      if (!normalizedUserId || !userMessageContent || userMessageStored) {
+        return;
+      }
+
+      try {
+        await chatRepository.createChatMessage({
+          userId: normalizedUserId,
+          role: 'user',
+          content: userMessageContent,
+          conversationId,
+        });
+        userMessageStored = true;
+      } catch (storageError) {
+        console.error('❌ Failed to persist user message:', storageError);
+      }
+    };
 
     // Rate limiting
     console.log('🔍 Checking rate limits...');
-    if (userId && !checkRateLimit(userId)) {
+    if (userIdKey && !checkRateLimit(userIdKey)) {
       console.warn(`⚠️ Rate limit exceeded for user ${userId}`);
       return new Response(JSON.stringify({ 
         error: "Rate limit exceeded. Please try again later." 
@@ -95,7 +137,7 @@ async function chatHandler(req: ApiRequest) {
     
     console.log(`📊 Estimated tokens: ${estimatedTokens}`);
 
-    if (userId && !trackTokenUsage(userId, estimatedTokens)) {
+    if (userIdKey && !trackTokenUsage(userIdKey, estimatedTokens)) {
       console.warn(`⚠️ Token budget exceeded for user ${userId}`);
       return new Response(JSON.stringify({ 
         error: "Monthly token budget exceeded. Please try again next month." 
@@ -117,18 +159,22 @@ async function chatHandler(req: ApiRequest) {
     }
 
     // Check if we should use adaptive coaching
-    const useAdaptiveCoaching = validUserId !== null;
-    console.log(`🤖 Use adaptive coaching: ${useAdaptiveCoaching} (userId: ${validUserId})`);
-
+    const useAdaptiveCoaching = normalizedUserId !== undefined && normalizedUserId > 0;
+    console.log(`🤖 Use adaptive coaching: ${useAdaptiveCoaching} (userId: ${userId})`);
+    
     // If userId is provided, verify user exists
-    if (validUserId !== null) {
+    if (normalizedUserId && normalizedUserId > 0) {
       try {
-        const user = await dbUtils.getUserById(validUserId);
+        if (userProfile && userProfile.id === normalizedUserId) {
+          await chatRepository.saveUserProfile({ ...userProfile, id: normalizedUserId });
+        }
+
+        const user = await chatRepository.getUserById(normalizedUserId);
         if (!user) {
-          console.warn(`⚠️ User ${validUserId} not found, proceeding with anonymous chat`);
+          console.warn(`⚠️ User ${normalizedUserId} not found, proceeding with anonymous chat`);
           // Don't fail the request, just proceed without user-specific features
         } else {
-          console.log(`✅ User ${validUserId} found and verified`);
+          console.log(`✅ User ${normalizedUserId} found and verified`);
         }
       } catch (userCheckError) {
         console.warn('⚠️ User verification failed, proceeding with anonymous chat:', userCheckError);
@@ -181,20 +227,18 @@ async function chatHandler(req: ApiRequest) {
         // Store the conversation in database
         console.log('💾 Storing conversation messages...');
         try {
-          await dbUtils.createChatMessage({
-            userId: validUserId!,
-            role: 'user',
-            content: userMessage,
-            conversationId: userContext?.conversationId || 'default'
-          });
+          await persistUserMessage();
 
-          await dbUtils.createChatMessage({
-            userId: validUserId!,
-            role: 'assistant',
-            content: coachingResponse.response,
-            conversationId: userContext?.conversationId || 'default'
-          });
-          
+          if (normalizedUserId) {
+            await chatRepository.createChatMessage({
+              userId: normalizedUserId,
+              role: 'assistant',
+              content: coachingResponse.response,
+              conversationId,
+              tokenCount: Math.ceil(coachingResponse.response.length / 4),
+            });
+          }
+
           console.log('✅ Chat messages stored successfully');
         } catch (storageError) {
           console.error('❌ Failed to store chat messages:', storageError);
@@ -262,6 +306,8 @@ async function chatHandler(req: ApiRequest) {
     console.log('⚙️ Using model: gpt-4o, maxTokens: 500, temperature: 0.7');
 
     // Use secure OpenAI wrapper for stream generation
+    await persistUserMessage();
+
     const result = await withSecureOpenAI(
       async () => {
         console.log('🔄 Calling OpenAI streamText...');
@@ -309,6 +355,7 @@ async function chatHandler(req: ApiRequest) {
       async start(controller) {
         const encoder = new TextEncoder();
         const decoder = new TextDecoder();
+        let aggregatedContent = '';
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -319,9 +366,31 @@ async function chatHandler(req: ApiRequest) {
             // If already in the expected format, pass through
             if (line.startsWith('0:')) {
               controller.enqueue(encoder.encode(line + '\n'));
+              try {
+                const data = JSON.parse(line.slice(2));
+                if (typeof data.textDelta === 'string') {
+                  aggregatedContent += data.textDelta;
+                }
+              } catch (parseError) {
+                console.error('❌ Failed to parse streamed chat chunk:', parseError);
+              }
             } else {
+              aggregatedContent += line;
               controller.enqueue(encoder.encode(`0:${JSON.stringify({ textDelta: line })}\n`));
             }
+          }
+        }
+        if (normalizedUserId && aggregatedContent) {
+          try {
+            await chatRepository.createChatMessage({
+              userId: normalizedUserId,
+              role: 'assistant',
+              content: aggregatedContent,
+              conversationId,
+              tokenCount: Math.ceil(aggregatedContent.length / 4),
+            });
+          } catch (storageError) {
+            console.error('❌ Failed to store assistant message from stream:', storageError);
           }
         }
         controller.close();
@@ -393,4 +462,88 @@ async function chatHandler(req: ApiRequest) {
 
 // Export the secured handler
 export const POST = withChatSecurity(chatHandler);
-export { chatHandler };
+
+function extractUserIdFromString(value: string | undefined | null): number | null {
+  if (!value) {
+    return null
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const numericMatch = trimmed.match(/^(?:user-)?(\d+)$/i)
+  const valueToParse = numericMatch ? numericMatch[1] : trimmed
+  const parsed = Number.parseInt(valueToParse, 10)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+function getAuthenticatedUserId(req: ApiRequest): number | null {
+  const headerUserId = extractUserIdFromString(req.headers.get('x-user-id'))
+  if (headerUserId != null) {
+    return headerUserId
+  }
+
+  const authHeader = req.headers.get('authorization')
+  if (authHeader) {
+    const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i)
+    const token = bearerMatch ? bearerMatch[1] : authHeader
+    const parsedAuth = extractUserIdFromString(token)
+    if (parsedAuth != null) {
+      return parsedAuth
+    }
+  }
+
+  const sessionCookie = req.cookies.get('session')
+  if (sessionCookie) {
+    const parsedCookie = extractUserIdFromString(sessionCookie.value)
+    if (parsedCookie != null) {
+      return parsedCookie
+    }
+  }
+
+  return null
+}
+
+async function chatHistoryHandler(req: ApiRequest): Promise<NextResponse> {
+  try {
+    const requestUrl = new URL(req.url);
+    const userIdParam = requestUrl.searchParams.get('userId');
+    const conversationId = requestUrl.searchParams.get('conversationId')?.trim() || 'default';
+
+    if (!userIdParam) {
+      return NextResponse.json({ error: 'Missing userId query parameter' }, { status: 400 });
+    }
+
+    const parsedUserId = Number.parseInt(userIdParam, 10);
+    if (Number.isNaN(parsedUserId)) {
+      return NextResponse.json({ error: 'Invalid userId query parameter' }, { status: 400 });
+    }
+
+    const authenticatedUserId = getAuthenticatedUserId(req)
+    if (authenticatedUserId == null) {
+      return NextResponse.json({ error: 'Authentication required to access chat history' }, { status: 401 });
+    }
+
+    if (authenticatedUserId !== parsedUserId) {
+      return NextResponse.json({ error: 'Forbidden: cannot access chat history for another user' }, { status: 403 });
+    }
+
+    const [user, messages] = await Promise.all([
+      chatRepository.getUserById(parsedUserId),
+      chatRepository.getChatHistory(parsedUserId, conversationId),
+    ]);
+
+    return NextResponse.json({
+      user,
+      messages,
+      conversationId,
+    });
+  } catch (error) {
+    console.error('❌ Failed to load chat history:', error);
+    return NextResponse.json({ error: 'Failed to load chat history' }, { status: 500 });
+  }
+}
+
+export const GET = withChatSecurity(chatHistoryHandler);

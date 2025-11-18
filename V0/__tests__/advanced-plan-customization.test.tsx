@@ -5,14 +5,14 @@ import { PlanCustomizationDashboard } from '../components/plan-customization-das
 import { RaceGoalModal } from '../components/race-goal-modal';
 import { RaceGoalsScreen } from '../components/race-goals-screen';
 import { PeriodizationEngine } from '../lib/periodization';
-import { dbUtils } from '../lib/db';
+import { dbUtils } from '@/lib/dbUtils';
 
 // Mock global fetch
 global.fetch = vi.fn();
 global.window = { dispatchEvent: vi.fn() } as any;
 
 // Mock dependencies
-vi.mock('../lib/db', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getRaceGoalsByUser: vi.fn(),
     createRaceGoal: vi.fn(),
@@ -200,7 +200,7 @@ describe('Advanced Plan Customization', () => {
         title: 'Marathon Training Plan',
         totalWeeks: 16,
         trainingDaysPerWeek: 5,
-        fitnessLevel: 'intermediate',
+        fitnessLevel: 'intermediate' as const,
         peakWeeklyVolume: 60,
         periodization: [
           {
@@ -309,8 +309,9 @@ describe('Advanced Plan Customization', () => {
       });
 
       await waitFor(() => {
-        const editButton = screen.getAllByRole('button', { name: /edit/i })[0];
-        fireEvent.click(editButton);
+        const editButtons = screen.getAllByRole('button', { name: /edit/i });
+        expect(editButtons.length).toBeGreaterThan(0);
+        fireEvent.click(editButtons[0]);
       });
 
       // Should open workout editor
@@ -412,18 +413,22 @@ describe('Advanced Plan Customization', () => {
     it('generates periodized training plan', () => {
       const mockRaceGoal = {
         id: 1,
+        userId: 1,
         raceName: 'Boston Marathon',
-        raceDate: '2024-04-15',
+        raceDate: new Date('2024-04-15'),
         distance: 42.2,
         targetTime: 10800,
-        priority: 'A'
+        priority: 'A' as const,
+        raceType: 'road' as const,
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       const mockConfig = {
         totalWeeks: 16,
         raceDate: new Date('2024-04-15'),
         trainingDaysPerWeek: 5,
-        fitnessLevel: 'intermediate',
+        fitnessLevel: 'intermediate' as const,
         targetDistance: 42.2,
         targetTime: 10800
       };
@@ -456,9 +461,11 @@ describe('Advanced Plan Customization', () => {
       const result = PeriodizationEngine.generatePeriodizedPlan(1, 1, mockRaceGoal, mockConfig);
 
       expect(result).toBeDefined();
-      expect(result.phases).toHaveLength(1);
-      expect(result.workouts).toHaveLength(1);
-      expect(result.phases[0].phase).toBe('base');
+      if (result) {
+        expect(result.phases).toHaveLength(1);
+        expect(result.workouts).toHaveLength(1);
+        expect(result.phases[0]?.phase).toBe('base');
+      }
     });
   });
 
@@ -531,7 +538,7 @@ describe('Advanced Plan Customization', () => {
           success: true,
           preview: {
             totalWeeks: 16,
-            fitnessLevel: 'intermediate',
+            fitnessLevel: 'intermediate' as const,
             summary: { totalDistance: 800, totalWorkouts: 80 },
             phaseBreakdown: [
               { phase: 'base', duration: 8, focus: 'Aerobic base building' }

@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from "react";
-import { dbUtils, Badge } from "@/lib/db";
+import { Badge } from "@/lib/db";
+import { dbUtils } from "@/lib/dbUtils";
 import { BadgeCard } from "@/components/badge-card";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ShareBadgeModal } from "@/components/share-badge-modal";

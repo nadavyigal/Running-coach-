@@ -7,7 +7,7 @@ vi.mock('../lib/db', () => ({
   safeDbOperation: vi.fn()
 }))
 
-import { performStartupMigration } from '../lib/dbUtils'
+import { performStartupMigration } from '@/lib/dbUtils'
 import { getDatabase } from '../lib/db'
 
 describe('Startup Migration', () => {

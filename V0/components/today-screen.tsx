@@ -1,45 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { dbUtils, type Plan, type Workout, type User } from "@/lib/db";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Sun,
-  Clock,
-  CalendarPlus,
-  Plus,
-  MapPin,
-  Trash2,
-  Music,
-  Play,
-  ChevronDown,
-  ChevronUp,
-  Zap,
-  StretchHorizontal,
-  Link,
-  Loader2,
-  Flame,
-  BarChart3,
-} from "lucide-react";
-import { AddRunModal } from "@/components/add-run-modal";
-import { AddActivityModal } from "@/components/add-activity-modal";
-import { RouteSelectorModal } from "@/components/route-selector-modal";
-import { RescheduleModal } from "@/components/reschedule-modal";
-import { DateWorkoutModal } from "@/components/date-workout-modal";
-import { useToast } from "@/hooks/use-toast";
-import { StreakIndicator } from "@/components/streak-indicator";
-import { CommunityStatsWidget } from "@/components/community-stats-widget";
-import { CoachingInsightsWidget } from "@/components/coaching-insights-widget";
-import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
-import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal";
-import { GoalRecommendations } from "@/components/goal-recommendations";
-import RecoveryRecommendations from "@/components/recovery-recommendations";
-import { HabitAnalyticsWidget } from "@/components/habit-analytics-widget";
+import { type Plan, type Workout, type User } from "@/lib/db";
+import { dbUtils } from "@/lib/dbUtils";
+import { Card, CardContent } from "@/components/ui/card";
+import { Loader2 } from "lucide-react";
 
-// Minimal version kept for reference; main export is the richer TodayScreen below.
-function TodayScreenMinimal() {
+export function TodayScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -125,7 +92,84 @@ function TodayScreenMinimal() {
   );
 }
 
-// Main TodayScreen component
+"use client";
+
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import {
+  Sun,
+  Clock,
+  CalendarPlus,
+  Plus,
+  MapPin,
+  Trash2,
+  Music,
+  Play,
+  ChevronDown,
+  ChevronUp,
+  Zap,
+  StretchHorizontal,
+  Link,
+  Loader2,
+  Flame,
+  BarChart3,
+} from "lucide-react"
+import { AddRunModal } from "@/components/add-run-modal"
+import { AddActivityModal } from "@/components/add-activity-modal"
+import { RouteSelectorModal } from "@/components/route-selector-modal"
+import { RescheduleModal } from "@/components/reschedule-modal"
+import { DateWorkoutModal } from "@/components/date-workout-modal"
+import { type Workout } from "@/lib/db"
+import { useToast } from "@/hooks/use-toast"
+import { StreakIndicator } from "@/components/streak-indicator"
+import { CommunityStatsWidget } from "@/components/community-stats-widget"
+import { CoachingInsightsWidget } from "@/components/coaching-insights-widget"
+import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
+import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
+import { GoalRecommendations } from "@/components/goal-recommendations"
+import RecoveryRecommendations from "@/components/recovery-recommendations"
+import { HabitAnalyticsWidget } from "@/components/habit-analytics-widget"
+
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import {
+  Sun,
+  Clock,
+  CalendarPlus,
+  Plus,
+  MapPin,
+  Trash2,
+  Music,
+  Play,
+  ChevronDown,
+  ChevronUp,
+  Zap,
+  StretchHorizontal,
+  Link,
+  Loader2,
+  Flame,
+  BarChart3,
+} from "lucide-react"
+import { AddRunModal } from "@/components/add-run-modal"
+import { AddActivityModal } from "@/components/add-activity-modal"
+import { RouteSelectorModal } from "@/components/route-selector-modal"
+import { RescheduleModal } from "@/components/reschedule-modal"
+import { DateWorkoutModal } from "@/components/date-workout-modal"
+import { type Workout } from "@/lib/db"
+import { useToast } from "@/hooks/use-toast"
+import { StreakIndicator } from "@/components/streak-indicator"
+import { CommunityStatsWidget } from "@/components/community-stats-widget"
+import { CoachingInsightsWidget } from "@/components/coaching-insights-widget"
+import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
+import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
+import { GoalRecommendations } from "@/components/goal-recommendations"
+import RecoveryRecommendations from "@/components/recovery-recommendations"
+import { HabitAnalyticsWidget } from "@/components/habit-analytics-widget"
+
 export function TodayScreen() {
   const [dailyTip, setDailyTip] = useState(
     "Focus on your breathing rhythm today. Try the 3:2 pattern - inhale for 3 steps, exhale for 2 steps. This will help you maintain a steady pace!",

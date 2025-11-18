@@ -1,10 +1,10 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ChatScreen } from './chat-screen'
-import { dbUtils } from '@/lib/db'
+import { dbUtils } from '@/lib/dbUtils'
 
 // Mock the database utilities
-vi.mock('@/lib/db', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getCurrentUser: vi.fn().mockResolvedValue({
       id: 1,
@@ -96,7 +96,10 @@ describe('ChatScreen', () => {
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('/api/chat', expect.objectContaining({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer user-1'
+        }),
         body: expect.stringContaining('"Test message"')
       }))
     })
@@ -140,6 +143,7 @@ describe('ChatScreen', () => {
     
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('/api/chat', expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer user-1' }),
         body: expect.stringContaining('"userContext"')
       }))
     })

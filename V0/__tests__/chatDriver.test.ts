@@ -12,7 +12,7 @@ vi.mock('@ai-sdk/openai', () => ({
 }));
 
 // Mock the database utilities
-vi.mock('../lib/db', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getCurrentUser: vi.fn(),
   },
@@ -136,7 +136,7 @@ describe('ChatDriver', () => {
 
     it('should handle non-streaming request', async () => {
       const { generateText } = await import('ai');
-      const { dbUtils } = await import('../lib/db');
+      const { dbUtils } = await import('@/lib/dbUtils');
       
       vi.mocked(generateText).mockResolvedValue({
         text: 'Hello! How can I help you?',
@@ -269,7 +269,7 @@ describe('ChatDriver', () => {
 
     it('should include user profile in system message', async () => {
       const { generateText } = await import('ai');
-      const { dbUtils } = await import('../lib/db');
+      const { dbUtils } = await import('@/lib/dbUtils');
       
       vi.mocked(dbUtils.getCurrentUser).mockResolvedValue({
         id: 1,

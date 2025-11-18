@@ -73,7 +73,7 @@
             try {
                 // Import the database utilities dynamically
                 log('📦 Loading database utilities...', 'log');
-                const dbModule = await import('./lib/db.js');
+                const dbModule = await import('./lib/dbUtils.js');
                 const { dbUtils } = dbModule;
                 
                 log('🧹 Clearing database...', 'log');

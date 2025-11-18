@@ -220,6 +220,8 @@ export interface User {
     lastEngagement: Date;
     engagementScore: number;
   };
+  // Timezone handling for UTC plan activation
+  timezone?: string; // User's timezone (e.g., "America/New_York", "Europe/London")
 }
 
 export interface OnboardingSession {
@@ -632,6 +634,8 @@ export interface Plan {
   lastComplexityUpdate?: Date;
   adaptationFactors?: AdaptationFactor[];
   userFeedback?: PlanFeedback[];
+  // Timezone handling for UTC plan activation
+  createdInTimezone?: string; // Timezone where plan was originally created
   createdAt: Date;
   updatedAt: Date;
 }
@@ -1097,6 +1101,10 @@ export const db = new Proxy({} as RunSmartDB, {
   }
 });
 
+// Lazily expose dbUtils to maintain backwards compatibility for modules
+// importing from '@/lib/db' while avoiding eager Dexie initialization.
+export { dbUtils } from './dbUtils';
+
 // Database availability check
 export function isDatabaseAvailable(): boolean {
   if (typeof window === 'undefined') {
@@ -1249,7 +1257,4 @@ export const badgeTypes: { [key: number]: 'bronze' | 'silver' | 'gold' } = {
   7: 'silver',
   30: 'gold',
 };
-
-// Re-export the complete dbUtils from dbUtils.ts for backward compatibility
-export { dbUtils } from './dbUtils';
 

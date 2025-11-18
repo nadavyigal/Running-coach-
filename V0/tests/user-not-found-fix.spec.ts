@@ -41,7 +41,7 @@ test.describe('User Not Found Bug Fix', () => {
         console.log('✅ localStorage cleared');
         
         // Import database
-        const dbModule = await import('/lib/db.js');
+        const dbModule = await import('/lib/dbUtils.js');
         const { dbUtils } = dbModule;
         console.log('📦 Database module loaded');
         

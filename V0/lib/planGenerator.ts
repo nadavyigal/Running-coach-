@@ -1,4 +1,5 @@
-import { db, dbUtils, type User, type Plan, type Workout } from './db';
+import { db, type User, type Plan, type Workout } from './db';
+import { dbUtils } from '@/lib/dbUtils';
 
 export interface GeneratePlanOptions {
   user: User;

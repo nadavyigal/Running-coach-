@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { planComplexityEngine, PlanComplexityEngineService } from '../lib/plan-complexity-engine';
-import { getCurrentUser, getUserRuns, getPlanWorkouts } from '../lib/dbUtils';
+import { getCurrentUser, getUserRuns, getPlanWorkouts } from '@/lib/dbUtils';
 import type { AdaptationFactor } from '../lib/db';
 
 // Mock the database utilities
-vi.mock('../lib/dbUtils', () => ({
+vi.mock('@/lib/dbUtils', () => ({
   getCurrentUser: vi.fn(),
   getUserRuns: vi.fn(),
   getPlanWorkouts: vi.fn(),
