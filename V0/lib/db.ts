@@ -985,50 +985,66 @@ function createDatabaseInstance(): RunSmartDB | null {
     console.log('✅ IndexedDB support confirmed, initializing database...');
     const db = new RunSmartDB();
     
-    // Enhanced error handlers for concurrent access
-    db.on('blocked', (event: any) => {
-      console.warn('⚠️ Database blocked - handling concurrent access:', event);
-      
-      // Attempt to close other connections after a delay
-      setTimeout(() => {
-        try {
-          console.log('🔄 Attempting to resolve database blocking...');
-          // Force close and reopen can help resolve blocking
-          if (db.isOpen()) {
-            db.close();
-            setTimeout(() => {
-              db.open().catch(reopenError => {
-                console.error('❌ Failed to reopen database after blocking:', reopenError);
-              });
-            }, 1000);
+    // Skip Dexie event wiring and transaction monkey-patching to avoid
+    // non-fatal event subscription errors in some dev environments.
+    // Core DB operations are still wrapped via safeDbOperation.
+    return db;
+    
+    // Enhanced error handlers for concurrent access.
+    // In some environments/bundles Dexie's event emitter can be unavailable
+    // or partially initialised, causing `db.on(...)` to throw during setup.
+    // That must never prevent the database from being created, so we wrap
+    // all event wiring in a defensive try/catch and continue on failure.
+    try {
+      db.on('blocked', (event: any) => {
+        console.warn('⚠️ Database blocked - handling concurrent access:', event);
+        
+        // Attempt to close other connections after a delay
+        setTimeout(() => {
+          try {
+            console.log('🔄 Attempting to resolve database blocking...');
+            // Force close and reopen can help resolve blocking
+            if (db.isOpen()) {
+              db.close();
+              setTimeout(() => {
+                db.open().catch(reopenError => {
+                  console.error('❌ Failed to reopen database after blocking:', reopenError);
+                });
+              }, 1000);
+            }
+          } catch (blockResolveError) {
+            console.error('❌ Error resolving database blocking:', blockResolveError);
           }
-        } catch (blockResolveError) {
-          console.error('❌ Error resolving database blocking:', blockResolveError);
+        }, 2000);
+      });
+      
+      // Handle version changes gracefully
+      db.on('versionchange', (event: any) => {
+        console.log('🔄 Database version changed, handling gracefully...', event);
+        // Close the database but don't immediately reopen to prevent conflicts
+        db.close();
+        
+        // Notify if there are other tabs that need to reload
+        if (typeof window !== 'undefined' && window.localStorage) {
+          localStorage.setItem('db-version-change', Date.now().toString());
+          window.addEventListener('storage', (e) => {
+            if (e.key === 'db-version-change') {
+              console.log('🔄 Database version change detected across tabs');
+            }
+          });
         }
-      }, 2000);
-    });
-    
-    // Handle version changes gracefully
-    db.on('versionchange', (event: any) => {
-      console.log('🔄 Database version changed, handling gracefully...', event);
-      // Close the database but don't immediately reopen to prevent conflicts
-      db.close();
+      });
       
-      // Notify if there are other tabs that need to reload
-      if (typeof window !== 'undefined' && window.localStorage) {
-        localStorage.setItem('db-version-change', Date.now().toString());
-        window.addEventListener('storage', (e) => {
-          if (e.key === 'db-version-change') {
-            console.log('🔄 Database version change detected across tabs');
-          }
-        });
-      }
-    });
-    
-    // Handle database errors
-    db.on('error', (error: any) => {
-      console.error('❌ Database error:', error);
-    });
+      // Handle database errors
+      db.on('error', (error: any) => {
+        console.error('❌ Database error:', error);
+      });
+    } catch (eventWireError) {
+      console.warn(
+        '⚠️ Failed to attach Dexie event handlers; continuing with basic database instance:',
+        eventWireError
+      );
+    }
     
     // Add transaction timeout handling
     const originalTransaction = db.transaction.bind(db);

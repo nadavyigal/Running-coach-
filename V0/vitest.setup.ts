@@ -407,20 +407,6 @@ vi.mock("@/lib/errorHandling", () => ({
     return errorObj.name === 'NetworkError' || errorObj.message?.includes('network') || false;
   }),
   
-  // Response formatting
-  formatErrorResponse: vi.fn().mockImplementation((error: any) => {
-    const status = error?.statusCode || 500;
-    const message = error?.message || 'Internal server error';
-    return new Response(JSON.stringify({ 
-      success: false, 
-      error: message,
-      code: error?.code || 'INTERNAL_ERROR'
-    }), { status, headers: { 'Content-Type': 'application/json' } });
-  }),
-  
-  // Error handling wrapper
-  withErrorHandling: vi.fn().mockImplementation((handler) => handler),
-  
   // Error classes
   ValidationError: class MockValidationError extends Error {
     statusCode = 400;
@@ -577,6 +563,20 @@ vi.mock("@/lib/errorHandling", () => ({
   getRecoveryActions: vi.fn().mockReturnValue([
     { label: 'Try Again', action: vi.fn(), primary: true }
   ])
+}));
+
+// Server-only error handling utilities mock
+vi.mock("@/lib/serverErrorHandling", () => ({
+  formatErrorResponse: vi.fn().mockImplementation((error: any) => {
+    const status = error?.statusCode || 500;
+    const message = error?.message || 'Internal server error';
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: message,
+      code: error?.code || 'INTERNAL_ERROR'
+    }), { status, headers: { 'Content-Type': 'application/json' } });
+  }),
+  withErrorHandling: vi.fn().mockImplementation((handler: any) => handler),
 }));
 
 // Database Mock Configuration - Enhanced with comprehensive mocking

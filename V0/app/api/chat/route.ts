@@ -105,19 +105,30 @@ async function chatHandler(req: ApiRequest) {
       })
     }
 
+    // Validate userId
+    let validUserId: number | null = null;
+    if (userId) {
+      const parsed = parseInt(userId);
+      if (!isNaN(parsed) && parsed > 0) {
+        validUserId = parsed;
+      } else {
+        console.warn(`⚠️ Invalid userId provided: ${userId}`);
+      }
+    }
+
     // Check if we should use adaptive coaching
-    const useAdaptiveCoaching = userId && parseInt(userId) > 0;
-    console.log(`🤖 Use adaptive coaching: ${useAdaptiveCoaching} (userId: ${userId})`);
-    
+    const useAdaptiveCoaching = validUserId !== null;
+    console.log(`🤖 Use adaptive coaching: ${useAdaptiveCoaching} (userId: ${validUserId})`);
+
     // If userId is provided, verify user exists
-    if (userId && parseInt(userId) > 0) {
+    if (validUserId !== null) {
       try {
-        const user = await dbUtils.getUserById(parseInt(userId));
+        const user = await dbUtils.getUserById(validUserId);
         if (!user) {
-          console.warn(`⚠️ User ${userId} not found, proceeding with anonymous chat`);
+          console.warn(`⚠️ User ${validUserId} not found, proceeding with anonymous chat`);
           // Don't fail the request, just proceed without user-specific features
         } else {
-          console.log(`✅ User ${userId} found and verified`);
+          console.log(`✅ User ${validUserId} found and verified`);
         }
       } catch (userCheckError) {
         console.warn('⚠️ User verification failed, proceeding with anonymous chat:', userCheckError);
@@ -156,7 +167,7 @@ async function chatHandler(req: ApiRequest) {
         // Generate adaptive coaching response with timeout
         const coachingResponse = await Promise.race([
           adaptiveCoachingEngine.generatePersonalizedResponse(
-            parseInt(userId),
+            validUserId!,
             userMessage,
             adaptiveContext
           ),
@@ -171,14 +182,14 @@ async function chatHandler(req: ApiRequest) {
         console.log('💾 Storing conversation messages...');
         try {
           await dbUtils.createChatMessage({
-            userId: parseInt(userId),
+            userId: validUserId!,
             role: 'user',
             content: userMessage,
             conversationId: userContext?.conversationId || 'default'
           });
 
           await dbUtils.createChatMessage({
-            userId: parseInt(userId),
+            userId: validUserId!,
             role: 'assistant',
             content: coachingResponse.response,
             conversationId: userContext?.conversationId || 'default'
@@ -271,8 +282,21 @@ async function chatHandler(req: ApiRequest) {
     );
     
     if (!result.success) {
-      return new Response(JSON.stringify(result.error), {
-        status: result.error.status,
+      const apiError = result.error || {};
+      const fallbackRequired = Boolean(apiError.fallbackRequired);
+      const status = typeof apiError.status === 'number' ? apiError.status : 503;
+
+      const payload = {
+        error: apiError.message || 'AI service temporarily unavailable. Please try again later.',
+        errorType: apiError.errorType || 'AI_SERVICE_ERROR',
+        fallback: fallbackRequired,
+        fallbackRequired,
+        redirectToForm: false,
+        message: apiError.message || 'AI service temporarily unavailable. Please try again later.'
+      };
+
+      return new Response(JSON.stringify(payload), {
+        status,
         headers: { "Content-Type": "application/json" }
       });
     }
@@ -369,3 +393,4 @@ async function chatHandler(req: ApiRequest) {
 
 // Export the secured handler
 export const POST = withChatSecurity(chatHandler);
+export { chatHandler };

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
-import { withErrorHandling, ErrorResponses } from '@/lib/errorHandler.middleware';
+import { withErrorHandling } from '@/lib/errorHandler.middleware';
 import { withSecureOpenAI } from '@/lib/apiKeyManager';
 import { withApiSecurity } from '@/lib/security.middleware';
 

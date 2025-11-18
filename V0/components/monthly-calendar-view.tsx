@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, RefreshCw, Lightbulb } from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
 import { dbUtils, type Workout } from "@/lib/db"
@@ -218,9 +218,31 @@ export function MonthlyCalendarView() {
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <h2 className="text-xl font-semibold">
-          {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-        </h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-xl font-semibold">
+            {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
+          </h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              try {
+                const user = await dbUtils.getCurrentUser()
+                if (user && user.id) {
+                  const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+                  const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+                  const monthWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfMonth, endOfMonth)
+                  setWorkouts(monthWorkouts)
+                }
+              } catch (error) {
+                console.error('Failed to refresh workouts:', error)
+              }
+            }}
+            className="hover:scale-105 transition-transform"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
         <Button
           variant="ghost"
           size="sm"
@@ -257,7 +279,7 @@ export function MonthlyCalendarView() {
               return (
                 <div
                   key={index}
-                  className={`h-12 border rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md ${
+                  className={`h-16 border rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md ${
                     today ? "bg-green-100 border-green-300 ring-2 ring-green-200" : "hover:bg-gray-50 border-gray-200"
                   } ${draggedWorkout ? "hover:bg-blue-100 border-blue-300" : ""}`}
                   onClick={() => handleDateClick(date)}
@@ -269,15 +291,16 @@ export function MonthlyCalendarView() {
                   </span>
                   {workout && (
                     <div 
-                      className="flex items-center justify-center mt-1"
+                      className="flex flex-col items-center justify-center mt-1 w-full px-1"
                       draggable
                       onDragStart={(e) => handleDragStart(e, workout, date)}
                       onDragEnd={handleDragEnd}
                       title="Drag to move workout to another day"
                     >
-                      <div
-                        className={`w-2 h-2 rounded-full ${workout.color} ${workout.completed ? "" : "opacity-60"} cursor-move hover:scale-125 transition-transform`}
-                      />
+                      <div className={`w-full h-1 rounded-full ${workout.color} ${workout.completed ? "" : "opacity-60"} mb-1`} />
+                      <span className={`text-xs font-medium ${workout.completed ? "text-gray-800" : "text-gray-600"}`}>
+                        {workout.type}
+                      </span>
                     </div>
                   )}
                   {draggedWorkout && !workout && (
@@ -292,24 +315,24 @@ export function MonthlyCalendarView() {
 
       {/* Monthly Stats */}
       <div className="grid grid-cols-3 gap-4">
-        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+        <Card className="bg-green-50 border-green-200 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-green-500">{workouts.length}</div>
-            <div className="text-xs text-gray-600">Planned Runs</div>
+            <div className="text-2xl font-bold text-green-700">{workouts.length}</div>
+            <div className="text-xs text-green-600 font-medium">Planned Runs</div>
           </CardContent>
         </Card>
-        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+        <Card className="bg-blue-50 border-blue-200 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-blue-500">{workouts.filter(w => w.completed).length}</div>
-            <div className="text-xs text-gray-600">Completed</div>
+            <div className="text-2xl font-bold text-blue-700">{workouts.filter(w => w.completed).length}</div>
+            <div className="text-xs text-blue-600 font-medium">Completed</div>
           </CardContent>
         </Card>
-        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+        <Card className="bg-pink-50 border-pink-200 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-purple-500">
+            <div className="text-2xl font-bold text-pink-700">
               {workouts.length > 0 ? Math.round((workouts.filter(w => w.completed).length / workouts.length) * 100) : 0}%
             </div>
-            <div className="text-xs text-gray-600">Success Rate</div>
+            <div className="text-xs text-pink-600 font-medium">Success Rate</div>
           </CardContent>
         </Card>
       </div>
@@ -320,25 +343,37 @@ export function MonthlyCalendarView() {
           <h3 className="font-medium mb-3">Upcoming This Week</h3>
           <div className="space-y-2">
             {Object.entries(workoutData)
-              .filter(([_, workout]) => !workout.completed)
+              .filter(([dateStr, workout]) => {
+                const workoutDate = new Date(dateStr)
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                workoutDate.setHours(0, 0, 0, 0)
+                return !workout.completed && workoutDate >= today
+              })
+              .sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime())
               .slice(0, 3)
-              .map(([date, workout], index) => (
-                <div
-                  key={date}
-                  className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full ${workout.color}`} />
-                    <div>
-                      <span className="font-medium capitalize">{workout.type} Run</span>
-                      <span className="text-gray-600 ml-2">{workout.distance}</span>
+              .map(([date, workout], index) => {
+                const workoutDate = new Date(date)
+                const dayName = workoutDate.toLocaleDateString("en-US", { weekday: "short" })
+                const dayNum = workoutDate.getDate()
+                return (
+                  <div
+                    key={date}
+                    className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${workout.color}`} />
+                      <div>
+                        <span className="font-medium capitalize">{workout.type} Run</span>
+                        <span className="text-gray-600 ml-2">{workout.distance}</span>
+                      </div>
                     </div>
+                    <Badge variant="outline" className="text-xs">
+                      {dayNum} {dayName}
+                    </Badge>
                   </div>
-                  <Badge variant="outline" className="text-xs">
-                    {new Date(date).toLocaleDateString("en-US", { weekday: "short", day: "numeric" })}
-                  </Badge>
-                </div>
-              ))}
+                )
+              })}
           </div>
         </CardContent>
       </Card>
@@ -352,6 +387,49 @@ export function MonthlyCalendarView() {
           }}
         />
       )}
+      {/* Workout Types Legend */}
+      <Card className="bg-gray-50 border-gray-200">
+        <CardContent className="p-4">
+          <h3 className="font-medium mb-3">Workout Types</h3>
+          <div className="grid grid-cols-4 gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-green-500" />
+              <span className="text-xs text-gray-700">Easy Run</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-purple-500" />
+              <span className="text-xs text-gray-700">Intervals</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-pink-500" />
+              <span className="text-xs text-gray-700">Hill Run</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-gray-400" />
+              <span className="text-xs text-gray-700">Recovery</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-orange-500" />
+              <span className="text-xs text-gray-700">Tempo Run</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-blue-500" />
+              <span className="text-xs text-gray-700">Long Run</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-red-500" />
+              <span className="text-xs text-gray-700">Race</span>
+            </div>
+          </div>
+          <div className="flex items-start gap-2 p-2 bg-yellow-50 rounded-lg border border-yellow-200">
+            <Lightbulb className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+            <span className="text-xs text-yellow-800">
+              Tip: Drag workouts to different dates to reschedule them
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
       {showDateWorkoutModal && (
         <DateWorkoutModal
           isOpen={showDateWorkoutModal}

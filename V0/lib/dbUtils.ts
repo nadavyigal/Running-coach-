@@ -116,8 +116,9 @@ export async function ensureUserReady(): Promise<User> {
     try {
       // Phase 1: Check for existing completed user
       console.log(`[${phase}:phase1] traceId=${traceId} Checking for completed users...`);
+      // Avoid IndexedDB key range issues on boolean indexes by filtering in JS
       const completedUsers = await database.users
-        .where('onboardingComplete').equals(true as any)
+        .filter((u) => Boolean(u.onboardingComplete))
         .toArray();
       
       console.log(`[${phase}:phase1] traceId=${traceId} Found ${completedUsers.length} completed users`);
@@ -132,7 +133,9 @@ export async function ensureUserReady(): Promise<User> {
 
       // Phase 2: Check for any user (even incomplete onboarding)
       console.log(`[${phase}:phase2] traceId=${traceId} No completed users, checking for any users...`);
-      const allUsers = await database.users.orderBy('updatedAt').reverse().toArray();
+      // Avoid using orderBy on non-indexed fields to prevent IDBKeyRange errors
+      const allUsers = await database.users.toArray();
+      allUsers.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
       console.log(`[${phase}:phase2] traceId=${traceId} Found ${allUsers.length} total users`);
       
       if (allUsers.length > 0) {
@@ -236,7 +239,7 @@ export async function performStartupMigration(): Promise<boolean> {
       
       // Check for orphaned draft profiles and promote them
       const draftUsers = await database.users
-        .where('onboardingComplete').equals(false as any)
+        .filter((u) => !u.onboardingComplete)
         .toArray();
       
       if (draftUsers.length > 0) {
@@ -263,8 +266,8 @@ export async function performStartupMigration(): Promise<boolean> {
           
           // Clean up other drafts
           const otherDraftIds = draftUsers
-            .filter(u => u.id !== latestDraft.id && u.id)
-            .map(u => u.id!);
+            .filter(u => typeof u.id === 'number' && u.id !== latestDraft.id)
+            .map(u => u.id as number);
             
           if (otherDraftIds.length > 0) {
             await database.users.where('id').anyOf(otherDraftIds).delete();
@@ -353,7 +356,10 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
 
     const result = await database.transaction('rw', [database.users, database.plans, database.workouts], async () => {
       // Idempotency: if a completed user exists, reuse it and ensure a plan
-      const existingCompleted = await database.users.where('onboardingComplete').equals(true as any).first();
+      const existingCompleted = (await database.users
+        .filter((u) => Boolean(u.onboardingComplete))
+        .toArray())
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
       let userId: number;
       if (existingCompleted && existingCompleted.id) {
         userId = existingCompleted.id;
@@ -424,7 +430,7 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
 
     console.log(`[onboarding:commit] traceId=${traceId} userId=${result.userId} planId=${result.planId}`);
     return result;
-  }, 'completeOnboardingAtomic');
+  }, 'completeOnboardingAtomic', { userId: -1, planId: -1 });
 }
 
 /**
@@ -432,17 +438,36 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
  */
 export async function waitForProfileReady(timeoutMs: number = 10000): Promise<User | null> {
   const start = Date.now();
+  let dexieErrorSeen = false;
+
   while (Date.now() - start < timeoutMs) {
     try {
       const database = getDatabase();
       if (!database) return null;
-      const user = await database.users.where('onboardingComplete').equals(true as any).first();
-      if (user && user.id) {
-        const hasActivePlan = await database.plans.where('userId').equals(user.id).and(p => p.isActive).first();
-        if (hasActivePlan) return user as User;
+      const completedUsers = await database.users
+        .filter((u) => Boolean(u.onboardingComplete))
+        .toArray();
+      if (completedUsers.length) {
+        const user = completedUsers
+          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+        if (user && user.id) {
+          const hasActivePlan = await database.plans.where('userId').equals(user.id).and(p => p.isActive).first();
+          if (hasActivePlan) return user as User;
+        }
+      }      
+    } catch (error) {
+      // If Dexie is throwing DataError/IDBKeyRange issues, don't spam the console
+      // or keep hammering IndexedDB in a tight loop. Mark once and break to let
+      // the caller fall back to localStorage or other strategies.
+      if (!dexieErrorSeen && error && typeof error === 'object') {
+        const name = (error as any).name;
+        if (name === 'DexieError' || name === 'DataError') {
+          dexieErrorSeen = true;
+        }
       }
-    } catch (_) {
-      // ignore and retry
+      if (dexieErrorSeen) {
+        break;
+      }
     }
     await sleep(100);
   }
@@ -509,7 +534,8 @@ export async function getUsersByOnboardingStatus(completed: boolean): Promise<Us
   return safeDbOperation(async () => {
     const database = getDatabase();
     if (database) {
-      return await database.users.where('onboardingComplete').equals(completed as any).toArray();
+      const allUsers = await database.users.toArray();
+      return allUsers.filter((u) => Boolean(u.onboardingComplete) === completed);
     }
     return [];
   }, 'getUsersByOnboardingStatus', []);
@@ -583,7 +609,9 @@ export async function createUser(userData: Partial<User>): Promise<number> {
         console.error('❌ User creation failed in transaction:', addError);
         
         // Check if another user was created concurrently
-        const concurrentUser = await database.users.orderBy('createdAt').last();
+        const concurrentUser = (await database.users.toArray())
+          .filter(u => u.createdAt && u.createdAt > recentThreshold)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
         if (concurrentUser && concurrentUser.createdAt > recentThreshold) {
           console.log('⚠️ Concurrent user creation detected, using existing:', concurrentUser.id);
           return concurrentUser.id!;
@@ -912,8 +940,11 @@ export async function migrateFromLocalStorage(): Promise<void> {
       return;
     }
 
-    // Create default user if none exists
-    const existingUser = await database.users.orderBy('createdAt').first();
+    // Create default user if none exists - avoid orderBy on non-indexed fields
+    const allUsers = await database.users.toArray();
+    const existingUser = allUsers
+      .filter(u => u.createdAt)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0];
     if (!existingUser) {
       const defaultUser: Omit<User, 'id'> = {
         goal: 'habit',
@@ -1180,7 +1211,16 @@ export async function getPlanWithWorkouts(planId: number): Promise<{ plan: Plan 
     if (db) {
       const plan = await db.plans.get(planId);
       const workouts = await db.workouts.where('planId').equals(planId).toArray();
-      return { plan: plan || null, workouts };
+      // Normalize scheduledDate for all workouts
+      const normalizedWorkouts = workouts.map(workout => {
+        const normalizedScheduledDate = normalizeDate(workout.scheduledDate);
+        if (!normalizedScheduledDate) {
+          console.warn(`Workout ${workout.id} has invalid scheduledDate:`, workout.scheduledDate);
+          return { ...workout, scheduledDate: new Date() };
+        }
+        return { ...workout, scheduledDate: normalizedScheduledDate };
+      });
+      return { plan: plan || null, workouts: normalizedWorkouts };
     }
     return { plan: null, workouts: [] };
   }, 'getPlanWithWorkouts', { plan: null, workouts: [] });
@@ -1191,14 +1231,42 @@ export async function getPlanWithWorkouts(planId: number): Promise<{ plan: Plan 
 // ============================================================================
 
 /**
+ * Normalize a date value - converts strings or Date objects to proper Date instances
+ * This must be defined before functions that use it
+ */
+function normalizeDate(dateValue: any): Date | null {
+  if (!dateValue) return null;
+  if (dateValue instanceof Date) {
+    // Check if it's a valid date
+    return isNaN(dateValue.getTime()) ? null : dateValue;
+  }
+  if (typeof dateValue === 'string') {
+    const parsed = new Date(dateValue);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+  if (typeof dateValue === 'number') {
+    const parsed = new Date(dateValue);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
+/**
  * Create workout with validation
  */
 export async function createWorkout(workoutData: Omit<Workout, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
   return safeDbOperation(async () => {
     if (!db) throw new Error('Database not available');
     
+    // Ensure scheduledDate is a valid Date object
+    const normalizedScheduledDate = normalizeDate(workoutData.scheduledDate);
+    if (!normalizedScheduledDate) {
+      throw new Error(`Invalid scheduledDate provided: ${workoutData.scheduledDate}`);
+    }
+    
     const id = await db.workouts.add({
       ...workoutData,
+      scheduledDate: normalizedScheduledDate,
       createdAt: new Date(),
       updatedAt: new Date()
     });
@@ -1248,7 +1316,17 @@ export async function getPlanWorkouts(planId: number, completed?: boolean): Prom
       if (completed !== undefined) {
         query = query.and(workout => workout.completed === completed);
       }
-      return await query.toArray();
+      const workouts = await query.toArray();
+      // Normalize scheduledDate for all workouts
+      return workouts.map(workout => {
+        const normalizedScheduledDate = normalizeDate(workout.scheduledDate);
+        if (!normalizedScheduledDate) {
+          console.warn(`Workout ${workout.id} has invalid scheduledDate:`, workout.scheduledDate);
+          // Return workout with a fallback date (today) to prevent errors
+          return { ...workout, scheduledDate: new Date() };
+        }
+        return { ...workout, scheduledDate: normalizedScheduledDate };
+      });
     }
     return [];
   }, 'getPlanWorkouts', []);
@@ -1261,6 +1339,15 @@ export async function getWorkoutsForDateRange(userId: number, startDate: Date, e
   return safeDbOperation(async () => {
     if (!db) return [];
     
+    // Normalize input dates
+    const normalizedStart = normalizeDate(startDate);
+    const normalizedEnd = normalizeDate(endDate);
+    
+    if (!normalizedStart || !normalizedEnd) {
+      console.warn('Invalid date range provided to getWorkoutsForDateRange');
+      return [];
+    }
+    
     // Get all plans for the user
     const plans = await db.plans.where('userId').equals(userId).toArray();
     const planIds = plans.map(p => p.id!);
@@ -1269,11 +1356,22 @@ export async function getWorkoutsForDateRange(userId: number, startDate: Date, e
     
     // Get workouts within date range for all user's plans
     const allWorkouts = await db.workouts.toArray();
-    const workouts = allWorkouts.filter(workout => 
-      planIds.includes(workout.planId) &&
-      workout.scheduledDate >= startDate && 
-      workout.scheduledDate <= endDate
-    );
+    const workouts = allWorkouts
+      .map(workout => {
+        // Normalize scheduledDate
+        const normalizedScheduledDate = normalizeDate(workout.scheduledDate);
+        if (!normalizedScheduledDate) {
+          console.warn(`Workout ${workout.id} has invalid scheduledDate:`, workout.scheduledDate);
+          return null;
+        }
+        return { ...workout, scheduledDate: normalizedScheduledDate };
+      })
+      .filter((workout): workout is Workout => 
+        workout !== null &&
+        planIds.includes(workout.planId) &&
+        workout.scheduledDate >= normalizedStart && 
+        workout.scheduledDate <= normalizedEnd
+      );
     
     return workouts;
   }, 'getWorkoutsForDateRange', []);
@@ -1298,14 +1396,45 @@ export async function getTodaysWorkout(userId: number): Promise<Workout | null> 
     if (planIds.length === 0) return null;
     
     const allWorkouts = await db.workouts.toArray();
-    const todaysWorkout = allWorkouts.find(workout => 
-      planIds.includes(workout.planId) &&
-      workout.scheduledDate >= today && 
-      workout.scheduledDate < tomorrow
-    );
+    const todaysWorkout = allWorkouts
+      .map(workout => {
+        // Normalize scheduledDate
+        const normalizedScheduledDate = normalizeDate(workout.scheduledDate);
+        if (!normalizedScheduledDate) {
+          return null;
+        }
+        return { ...workout, scheduledDate: normalizedScheduledDate };
+      })
+      .find(workout => 
+        workout !== null &&
+        planIds.includes(workout.planId) &&
+        workout.scheduledDate >= today && 
+        workout.scheduledDate < tomorrow
+      );
     
     return todaysWorkout || null;
   }, 'getTodaysWorkout', null);
+}
+
+/**
+ * Update workout with validation
+ */
+export async function updateWorkout(workoutId: number, updates: Partial<Omit<Workout, 'id' | 'createdAt'>>): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+    
+    // Normalize scheduledDate if provided
+    const updateData: any = { ...updates, updatedAt: new Date() };
+    if (updates.scheduledDate !== undefined) {
+      const normalizedScheduledDate = normalizeDate(updates.scheduledDate);
+      if (!normalizedScheduledDate) {
+        throw new Error(`Invalid scheduledDate provided: ${updates.scheduledDate}`);
+      }
+      updateData.scheduledDate = normalizedScheduledDate;
+    }
+    
+    await db.workouts.update(workoutId, updateData);
+  }, 'updateWorkout');
 }
 
 /**
@@ -2010,6 +2139,7 @@ export const dbUtils = {
   
   // Workout management
   createWorkout,
+  updateWorkout,
   completeWorkout,
   getPlanWorkouts,
   getWorkoutsForDateRange,

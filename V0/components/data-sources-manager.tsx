@@ -338,8 +338,8 @@ export function DataSourcesManager({ userId = 1, onSourceUpdate }: DataSourcesMa
                       {/* Stats */}
                       <div className="text-sm text-muted-foreground space-y-1">
                         <div>Last sync: {new Date(source.lastSync).toLocaleDateString()}</div>
-                        <div>Recent data points: {source.recentDataCount || 0}</div>
-                        <div>Data freshness: {source.dataFreshness || 0}%</div>
+                        <div>Recent data points: {source.recentDataCount ?? 0}</div>
+                        <div>Data freshness: {source.dataFreshness ?? 0}%</div>
                       </div>
                     </div>
                   </div>
@@ -359,11 +359,11 @@ export function DataSourcesManager({ userId = 1, onSourceUpdate }: DataSourcesMa
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium">Priority</span>
-                        <span className="text-sm text-muted-foreground">{source.priority}/10</span>
+                        <span className="text-sm text-muted-foreground">{source.priority ?? 0}/10</span>
                       </div>
                       <Slider
-                        value={[source.priority]}
-                        onValueChange={([value]) => updateSourcePriority(source.deviceId, value)}
+                        value={[source.priority ?? 0]}
+                        onValueChange={([value]) => updateSourcePriority(source.deviceId, value ?? 0)}
                         max={10}
                         min={1}
                         step={1}
@@ -376,11 +376,11 @@ export function DataSourcesManager({ userId = 1, onSourceUpdate }: DataSourcesMa
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span>Accuracy:</span>
-                        <span className="font-medium">{source.accuracy}%</span>
+                        <span className="font-medium">{source.accuracy ?? 0}%</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Reliability:</span>
-                        <span className="font-medium">{source.reliability}%</span>
+                        <span className="font-medium">{source.reliability ?? 0}%</span>
                       </div>
                     </div>
                   </div>

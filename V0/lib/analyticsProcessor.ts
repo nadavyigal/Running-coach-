@@ -124,8 +124,10 @@ export class OnboardingAnalyticsProcessor {
       const dateStr = date.toISOString().split('T')[0]
       
       // In a real implementation, this would query actual completion events
-      // For now, we'll simulate based on user creation dates
-      const users = await db.users.where('createdAt').below(date).toArray()
+      // For now, we'll simulate based on user creation dates. We avoid using
+      // a non-indexed 'createdAt' field in Dexie queries to prevent
+      // IDBKeyRange errors by filtering in JavaScript instead.
+      const users = (await db.users.toArray()).filter(u => u.createdAt < date)
       const completed = users.filter(u => u.onboardingComplete && u.updatedAt <= date)
       const rate = users.length > 0 ? completed.length / users.length : 0
       

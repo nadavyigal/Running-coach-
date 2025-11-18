@@ -1,5 +1,3 @@
-import { NextResponse } from 'next/server';
-
 export interface ApiError extends Error {
   statusCode?: number;
   code?: string;
@@ -106,63 +104,6 @@ export class AIServiceError extends Error implements ApiError {
     super(message);
     this.name = 'AIServiceError';
   }
-}
-
-// Error response formatter
-export function formatErrorResponse(error: ApiError | Error): NextResponse {
-  const isDevelopment = process.env.NODE_ENV === 'development';
-  
-  let statusCode = 500;
-  let code = 'INTERNAL_ERROR';
-  let message = 'An unexpected error occurred';
-  let details: Record<string, unknown> | undefined;
-
-  if (error instanceof ValidationError || 
-      error instanceof NotFoundError || 
-      error instanceof UnauthorizedError ||
-      error instanceof ConflictError ||
-      error instanceof ExternalServiceError ||
-      error instanceof RateLimitError ||
-      error instanceof DatabaseError) {
-    statusCode = error.statusCode!;
-    code = error.code!;
-    message = error.message;
-    details = error.details;
-  } else {
-    // Log unexpected errors
-    console.error('Unexpected error:', error);
-  }
-
-  const response: Record<string, unknown> = {
-    success: false,
-    error: message,
-    code
-  };
-
-  // Include details in development or for client-safe errors
-  if (details && (isDevelopment || statusCode < 500)) {
-    response.details = details;
-  }
-
-  // Include stack trace in development
-  if (isDevelopment && error.stack) {
-    response.stack = error.stack;
-  }
-
-  return NextResponse.json(response, { status: statusCode });
-}
-
-// API error handler decorator
-export function withErrorHandling<T extends unknown[], R>(
-  handler: (...args: T) => Promise<R>
-) {
-  return async (...args: T): Promise<R | NextResponse> => {
-    try {
-      return await handler(...args);
-    } catch (error) {
-      return formatErrorResponse(error as ApiError);
-    }
-  };
 }
 
 // Validation helpers

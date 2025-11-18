@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { backgroundSync } from '@/lib/backgroundSync';
 import { 
-  withErrorHandling, 
   validateRequired, 
   validateEnum, 
   NotFoundError, 
@@ -10,6 +9,7 @@ import {
   safeDbOperation,
   logRequest
 } from '@/lib/errorHandling';
+import { withErrorHandling } from '@/lib/serverErrorHandling';
 
 // GET - Get sync jobs for a user
 export const GET = withErrorHandling(async (req: Request) => {

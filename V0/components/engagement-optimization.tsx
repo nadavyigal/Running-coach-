@@ -9,14 +9,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { 
-  Bell, 
-  Clock, 
+import {
+  Bell,
+  Clock,
   TrendingUp,
   Activity,
   Star,
   Award,
-  Heart
+  Heart,
+  Zap
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { dbUtils, type User } from '@/lib/db';

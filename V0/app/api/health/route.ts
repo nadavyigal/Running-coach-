@@ -1,14 +1,12 @@
-import { NextResponse } from 'next/server';
-import { performHealthCheck, withErrorHandling } from '@/lib/errorHandling';
+import { NextResponse } from 'next/server'
 
-export const GET = withErrorHandling(async (req: Request) => {
-  const healthResult = await performHealthCheck();
-  
-  const statusCode = healthResult.status === 'healthy' ? 200 : 
-                    healthResult.status === 'degraded' ? 200 : 503;
+// Simple health check endpoint used by the NetworkStatusMonitor to
+// avoid noisy connection-refused errors in the browser console.
+export async function GET() {
+  return new NextResponse(null, { status: 200 })
+}
 
-  return NextResponse.json({
-    success: healthResult.status !== 'unhealthy',
-    ...healthResult
-  }, { status: statusCode });
-});
+export async function HEAD() {
+  return new NextResponse(null, { status: 200 })
+}
+

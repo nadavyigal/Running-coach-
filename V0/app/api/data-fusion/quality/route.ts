@@ -241,7 +241,7 @@ function findDataGaps(points: any[], startDate: Date, endDate: Date) {
 }
 
 // Determine sync status
-function determineSyncStatus(lastSync: Date): 'online' | 'syncing' | 'offline' | 'error' {
+function _determineSyncStatus(lastSync: Date): 'online' | 'syncing' | 'offline' | 'error' {
   const now = new Date();
   const timeDiff = now.getTime() - lastSync.getTime();
   const hoursDiff = timeDiff / (1000 * 60 * 60);

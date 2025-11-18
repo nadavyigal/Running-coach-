@@ -85,8 +85,8 @@ class EngagementOptimizationService {
       const user = await dbUtils.getCurrentUser();
       if (!user) return 0;
 
-      const runs = await dbUtils.getRuns(userId);
-      const goals = await dbUtils.getGoals(userId);
+      const runs: Run[] = await dbUtils.getUserRuns(userId);
+      const goals: Goal[] = await dbUtils.getGoals(userId);
       
       // Calculate various engagement factors
       const activityScore = this.calculateActivityScore(runs);
@@ -112,7 +112,7 @@ class EngagementOptimizationService {
   private calculateActivityScore(runs: Run[]): number {
     if (runs.length === 0) return 0;
 
-    const recentRuns = runs.filter(run => {
+    const recentRuns = runs.filter((run: Run) => {
       const runDate = new Date(run.completedAt);
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -154,7 +154,7 @@ class EngagementOptimizationService {
 
   async determineOptimalTiming(userId: number): Promise<OptimalTiming> {
     try {
-      const runs = await dbUtils.getRuns(userId);
+      const runs: Run[] = await dbUtils.getUserRuns(userId);
       const user = await dbUtils.getCurrentUser();
       
       if (!user || runs.length === 0) {
@@ -167,7 +167,7 @@ class EngagementOptimizationService {
       }
 
       // Analyze run times to find optimal timing
-      const runTimes = runs.map(run => new Date(run.completedAt).getHours());
+      const runTimes = runs.map((run: Run) => new Date(run.completedAt).getHours());
       const timeDistribution = this.analyzeTimeDistribution(runTimes);
       const bestHour = this.findPeakHour(timeDistribution);
       
@@ -247,8 +247,8 @@ class EngagementOptimizationService {
       }
 
       // Achievement-based triggers
-      const badges = await dbUtils.getBadges(userId);
-      const recentBadges = badges.filter(badge => {
+      const badges: Badge[] = await dbUtils.getBadges(userId);
+      const recentBadges = badges.filter((badge: Badge) => {
         const badgeDate = new Date(badge.unlockedAt);
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -267,10 +267,10 @@ class EngagementOptimizationService {
       }
 
       // Goal progress triggers
-      const goals = await dbUtils.getGoals(userId);
-      const activeGoals = goals.filter(goal => goal.status === 'active');
+      const goals: Goal[] = await dbUtils.getGoals(userId);
+      const activeGoals = goals.filter((goal: Goal) => goal.status === 'active');
       
-      activeGoals.forEach(goal => {
+      activeGoals.forEach((goal: Goal) => {
         const progress = (goal.currentValue / goal.targetValue) * 100;
         if (progress >= 50 && progress < 100) {
           triggers.push({
@@ -329,7 +329,7 @@ class EngagementOptimizationService {
       const user = await dbUtils.getCurrentUser();
       if (!user) return {};
 
-      const runs = await dbUtils.getRuns(userId);
+      const runs: Run[] = await dbUtils.getUserRuns(userId);
       const recentRuns = runs.slice(-5); // Last 5 runs
 
       const personalization: NotificationPersonalization = {

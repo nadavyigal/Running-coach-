@@ -1,5 +1,5 @@
 import React from 'react';
-import { analyzeError, type ClientErrorInfo } from '@/lib/errorHandling';
+import { analyzeError } from '@/lib/errorHandling';
 
 // Error logging interface
 interface ErrorLogData {
@@ -90,7 +90,7 @@ export const logComponentError = async (errorData: {
 
 // Error Fallback Components
 interface ErrorFallbackProps {
-  error?: Error;
+  error: Error | undefined;
   onRetry: () => void;
 }
 
@@ -175,11 +175,11 @@ export class GlobalErrorBoundary extends React.Component<
   }
 
   handleRetry = () => {
-    this.setState({ hasError: false, error: undefined, errorId: undefined });
+    this.setState({ hasError: false });
   };
 
   render() {
-    if (this.state.hasError) {
+    if (this.state.hasError && this.state.error) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50">
           <div className="max-w-md w-full mx-4">
@@ -209,7 +209,7 @@ export class GlobalErrorBoundary extends React.Component<
 // Component-specific Error Boundary
 interface ComponentErrorBoundaryProps {
   children: React.ReactNode;
-  fallback?: React.ComponentType<{ error?: Error; onRetry: () => void }>;
+  fallback?: React.ComponentType<{ error: Error | undefined; onRetry: () => void }>;
   componentName?: string;
 }
 
@@ -241,7 +241,7 @@ export class ComponentErrorBoundary extends React.Component<
   }
 
   handleRetry = () => {
-    this.setState({ hasError: false, error: undefined });
+    this.setState({ hasError: false });
   };
 
   render() {
@@ -275,7 +275,7 @@ export const useErrorHandler = () => {
 // Higher-order component for adding error boundaries
 export function withErrorBoundary<P extends object>(
   Component: React.ComponentType<P>,
-  fallback?: React.ComponentType<{ error?: Error; onRetry: () => void }>
+  fallback?: React.ComponentType<{ error: Error | undefined; onRetry: () => void }>
 ) {
   const WrappedComponent = React.forwardRef<any, P>((props, ref) => (
     <ComponentErrorBoundary 

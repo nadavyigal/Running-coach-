@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import dynamic from 'next/dynamic'
 
 // Safer dynamic imports with comprehensive error handling
@@ -47,7 +47,7 @@ const OnboardingScreen = dynamic(
 );
 
 const TodayScreen = dynamic(
-  () => import("@/components/today-screen-min").then((module) => {
+  () => import("@/components/today-screen").then((module) => {
     console.log('📦 TodayScreen module loaded:', { exports: Object.keys(module) });
     if (!module.TodayScreen) {
       throw new Error(`TodayScreen export not found. Available: ${Object.keys(module).join(', ')}`);
@@ -115,17 +115,23 @@ export default function RunSmartApp() {
   const [showDebugPanel, setShowDebugPanel] = useState(false)
   const [safeMode, setSafeMode] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  
+  // Ref to prevent double initialization in React Strict Mode
+  const initRef = useRef(false)
 
-  // Add chunk error handler with fallback
-  try {
-    useChunkErrorHandler()
-  } catch (error) {
-    console.warn('Chunk error handler not available:', error);
-  }
+  // Call chunk error handler hook unconditionally (hooks must be called at top level)
+  useChunkErrorHandler()
 
   console.log('🚀 RunSmartApp component rendering...')
 
   useEffect(() => {
+    // Prevent double initialization in React Strict Mode
+    if (initRef.current) {
+      console.log('🔍 Skipping duplicate initialization (React Strict Mode)')
+      return
+    }
+    initRef.current = true
+    
     console.log('🔍 RunSmartApp useEffect running...')
     
     // Global error handler
@@ -298,8 +304,9 @@ export default function RunSmartApp() {
       window.removeEventListener("navigate-to-analytics", handleNavigateToAnalytics)
       window.removeEventListener("navigate-to-chat", handleNavigateToChat)
       window.removeEventListener("keydown", handleKeyDown)
+      initRef.current = false
     }
-  }, [showDebugPanel])
+  }, []) // Empty dependency array - event listeners should only be set up once
 
   const handleOnboardingComplete = async (userData?: any) => {
     console.log('✅ Onboarding completed by user with data:', userData)

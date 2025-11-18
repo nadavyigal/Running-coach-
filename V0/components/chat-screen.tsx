@@ -44,7 +44,7 @@ export function ChatScreen() {
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
   const [user, setUser] = useState<UserType | null>(null)
-  const [conversationId, setConversationId] = useState<string>('default')
+  const [conversationId] = useState<string>('default')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
@@ -224,19 +224,30 @@ export function ChatScreen() {
       // Extract coaching metadata from headers
       const coachingInteractionId = response.headers.get('X-Coaching-Interaction-Id')
       const adaptations = response.headers.get('X-Coaching-Adaptations')?.split(', ').filter(Boolean)
-      const confidence = parseFloat(response.headers.get('X-Coaching-Confidence') || '0')
+      const confidenceHeader = response.headers.get('X-Coaching-Confidence') || '0'
+      const parsedConfidence = parseFloat(confidenceHeader)
+      const normalizedConfidence = Number.isFinite(parsedConfidence) ? parsedConfidence : 0
       
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: "",
         timestamp: new Date(),
+        ...(coachingInteractionId ? { coachingInteractionId } : {}),
+        ...(normalizedConfidence ? { confidence: normalizedConfidence } : {}),
         adaptations: adaptations || [],
-        requestFeedback: confidence > 0 && confidence < 0.8, // Request feedback for lower confidence responses
+        requestFeedback: normalizedConfidence > 0 && normalizedConfidence < 0.8, // Request feedback for lower confidence responses
       }
 
       setMessages(prev => [...prev, assistantMessage])
 
+      const STREAM_TIMEOUT_MS = 30000;
+      const streamTimeout = setTimeout(() => {
+        reader?.cancel();
+        throw new Error('Streaming response timeout');
+      }, STREAM_TIMEOUT_MS);
+
+      try {
       while (reader) {
         const { done, value } = await reader.read()
         if (done) {
@@ -274,6 +285,9 @@ export function ChatScreen() {
             }
           }
         }
+      }
+      } finally {
+        clearTimeout(streamTimeout);
       }
 
       // Update final message with feedback request if needed
@@ -360,10 +374,6 @@ export function ChatScreen() {
       console.error('Failed to build context:', error)
       return "Unable to load user context."
     }
-  }
-
-  const handleSuggestedQuestion = (question: string) => {
-    handleSendMessage(question)
   }
 
   const handleInputSubmit = (e: React.FormEvent) => {
@@ -597,7 +607,9 @@ export function ChatScreen() {
           }}
           interactionType="chat_response"
           userId={user.id!}
-          interactionId={selectedMessageForFeedback.coachingInteractionId}
+          {...(selectedMessageForFeedback.coachingInteractionId
+            ? { interactionId: selectedMessageForFeedback.coachingInteractionId }
+            : {})}
           initialContext={{
             timeOfDay: new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening',
             userMood: 'neutral',
