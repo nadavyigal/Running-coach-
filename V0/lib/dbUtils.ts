@@ -430,7 +430,7 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
 
     console.log(`[onboarding:commit] traceId=${traceId} userId=${result.userId} planId=${result.planId}`);
     return result;
-  }, 'completeOnboardingAtomic', { userId: -1, planId: -1 });
+  }, 'completeOnboardingAtomic');
 }
 
 /**

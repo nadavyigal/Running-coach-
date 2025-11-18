@@ -242,14 +242,25 @@ export function ChatScreen() {
       setMessages(prev => [...prev, assistantMessage])
 
       const STREAM_TIMEOUT_MS = 30000;
+      let streamTimeoutError: Error | null = null;
       const streamTimeout = setTimeout(() => {
-        reader?.cancel();
-        throw new Error('Streaming response timeout');
+        streamTimeoutError = new Error('Streaming response timeout');
+        reader?.cancel('timeout');
       }, STREAM_TIMEOUT_MS);
 
       try {
       while (reader) {
-        const { done, value } = await reader.read()
+        if (streamTimeoutError) {
+          throw streamTimeoutError;
+        }
+
+        const readResult = await reader.read().catch(err => {
+          if (streamTimeoutError) {
+            throw streamTimeoutError;
+          }
+          throw err;
+        });
+        const { done, value } = readResult;
         if (done) {
           console.log('?£ו Stream complete. Total updates:', updateCount);
           break
@@ -285,6 +296,9 @@ export function ChatScreen() {
             }
           }
         }
+      }
+      if (streamTimeoutError) {
+        throw streamTimeoutError;
       }
       } finally {
         clearTimeout(streamTimeout);
