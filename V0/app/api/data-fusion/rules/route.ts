@@ -109,7 +109,7 @@ export async function PUT(request: NextRequest) {
 }
 
 // Helper function to get default rules
-function getDefaultRules(userId: number, dataSources: any[]) {
+function _getDefaultRules(userId: number, dataSources: any[]) {
   const dataTypes = ['heart_rate', 'steps', 'calories', 'distance', 'pace', 'sleep'];
   
   return dataTypes.map(dataType => {

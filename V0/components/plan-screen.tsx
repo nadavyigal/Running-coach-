@@ -23,6 +23,26 @@ export function PlanScreen() {
   const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
 
+  // Calculate challenge day progress
+  const calculateChallengeProgress = () => {
+    if (!plan || !plan.startDate) {
+      return { currentDay: 0, totalDays: 21 }
+    }
+    
+    const startDate = new Date(plan.startDate)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    startDate.setHours(0, 0, 0, 0)
+    
+    const daysDiff = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+    const totalDays = plan.totalWeeks ? plan.totalWeeks * 7 : 21
+    const currentDay = Math.max(1, Math.min(daysDiff + 1, totalDays))
+    
+    return { currentDay, totalDays }
+  }
+
+  const challengeProgress = calculateChallengeProgress()
+
   const workoutTypes = {
     easy: { color: "bg-green-500", label: "Easy Run" },
     tempo: { color: "bg-orange-500", label: "Tempo" },
@@ -350,9 +370,9 @@ export function PlanScreen() {
         <div>
           <h1 className="text-2xl font-bold">Training Plan</h1>
           <div className="text-sm text-gray-600">
-            <span className="font-medium">21-Day Rookie Challenge</span>
+            <span className="font-medium">{plan?.title || "21-Day Rookie Challenge"}</span>
             <span className="mx-2">•</span>
-            <span>Day 5 of 21</span>
+            <span>Day {challengeProgress.currentDay} of {challengeProgress.totalDays}</span>
           </div>
         </div>
         <Button

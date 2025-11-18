@@ -61,6 +61,20 @@ export function EnhancedAICoach({ user, onResponse, className = '' }: EnhancedAI
   const [loading, setLoading] = useState(true);
   const [context, setContext] = useState<AICoachContext | null>(null);
 
+  const mapCoachingStyle = (
+    style: User['coachingStyle'] | undefined
+  ): AICoachContext['coachingStyle'] => {
+    const mapping: Record<NonNullable<User['coachingStyle']>, AICoachContext['coachingStyle']> = {
+      supportive: 'encouraging',
+      challenging: 'motivational',
+      analytical: 'technical',
+      encouraging: 'encouraging',
+    }
+
+    if (!style) return 'encouraging'
+    return mapping[style] ?? 'encouraging'
+  }
+
   useEffect(() => {
     loadPerformanceData();
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -74,10 +88,11 @@ export function EnhancedAICoach({ user, onResponse, className = '' }: EnhancedAI
       const performanceTrends = await analyzePerformanceTrends(recentRuns);
       
       // Build user context for AI coaching
+      const lastRun = recentRuns.length > 0 ? recentRuns[recentRuns.length - 1] : null;
       const userContext: UserContext = {
-        currentGoals: [user.goal],
-        recentActivity: recentRuns.length > 0 ? 
-          `Last run: ${recentRuns[recentRuns.length - 1].distance}km` : 
+        currentGoals: user.goal ? [user.goal] : [],
+        recentActivity: lastRun ?
+          `Last run: ${lastRun.distance}km` :
           'No recent activity',
         mood: 'neutral',
         environment: 'outdoor'
@@ -91,6 +106,8 @@ export function EnhancedAICoach({ user, onResponse, className = '' }: EnhancedAI
 
       setPerformanceTrends(performanceTrends);
       setRecommendations(adaptiveRecommendations);
+
+      const coachingStyle = mapCoachingStyle(user.coachingStyle);
       
       // Set AI coach context
       const aiContext: AICoachContext = {
@@ -99,9 +116,9 @@ export function EnhancedAICoach({ user, onResponse, className = '' }: EnhancedAI
         currentPlan: null, // Would be loaded from active plan
         performanceTrends,
         userPreferences: {
-          coachingStyle: user.coachingStyle || 'encouraging'
+          coachingStyle,
         },
-        coachingStyle: user.coachingStyle || 'encouraging'
+        coachingStyle,
       };
       setContext(aiContext);
 
@@ -230,7 +247,7 @@ export function EnhancedAICoach({ user, onResponse, className = '' }: EnhancedAI
 
     try {
       const userContext: UserContext = {
-        currentGoals: [user.goal],
+        currentGoals: user.goal ? [user.goal] : [],
         recentActivity: context.recentRuns.length > 0 ? 
           `Recent performance trends: ${performanceTrends.map(t => `${t.metric} ${t.trend}`).join(', ')}` : 
           'No recent activity',

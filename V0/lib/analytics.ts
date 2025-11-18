@@ -1,10 +1,12 @@
 import posthog from 'posthog-js'
-import { db } from './db'
+import { safeDbOperation } from './db'
+import { getCurrentUser } from './dbUtils'
 
 // Get current user context for analytics
 const getUserContext = async () => {
-  const users = await db.users.toArray()
-  const user = users[0] // Single user app
+  // Prefer the high-level resolver which already handles Dexie fallbacks.
+  const user = await safeDbOperation(getCurrentUser, 'analytics_getCurrentUser', null)
+
   return {
     user_id: user?.id,
     user_experience: user?.experience,

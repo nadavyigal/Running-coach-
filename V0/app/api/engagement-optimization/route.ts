@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbUtils } from '@/lib/dbUtils';
 import { engagementOptimizationService } from '@/lib/engagement-optimization';
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const user = await dbUtils.getCurrentUser();
     if (!user) {

@@ -218,17 +218,27 @@ export function CoachingPreferencesSettings({ userId, onClose }: CoachingPrefere
     }));
   };
 
-  const updateContextualPattern = (key: string, value: number | string) => {
-    setPreferences(prev => ({
-      ...prev,
-      behavioralPatterns: {
-        ...prev.behavioralPatterns,
-        contextualPatterns: {
-          ...prev.behavioralPatterns.contextualPatterns,
-          [key]: value
-        }
+  const updateContextualPattern = (
+    key: keyof CoachingPreferences['behavioralPatterns']['contextualPatterns'],
+    value: number | string
+  ) => {
+    setPreferences(prev => {
+      const nextValue =
+        typeof value === 'number'
+          ? (Number.isFinite(value) ? value : 0)
+          : value
+
+      return {
+        ...prev,
+        behavioralPatterns: {
+          ...prev.behavioralPatterns,
+          contextualPatterns: {
+            ...prev.behavioralPatterns.contextualPatterns,
+            [key]: nextValue,
+          },
+        },
       }
-    }));
+    });
   };
 
   if (loading) {
@@ -411,7 +421,7 @@ export function CoachingPreferencesSettings({ userId, onClose }: CoachingPrefere
                 </div>
                 <Slider
                   value={[preferences.behavioralPatterns.contextualPatterns.weatherSensitivity ?? 0]}
-                  onValueChange={(value) => updateContextualPattern('weatherSensitivity', value[0])}
+                  onValueChange={(value) => updateContextualPattern('weatherSensitivity', value[0] ?? 0)}
                   max={10}
                   min={1}
                   step={1}
@@ -434,7 +444,7 @@ export function CoachingPreferencesSettings({ userId, onClose }: CoachingPrefere
                 </div>
                 <Slider
                   value={[preferences.behavioralPatterns.contextualPatterns.scheduleFlexibility ?? 0]}
-                  onValueChange={(value) => updateContextualPattern('scheduleFlexibility', value[0])}
+                  onValueChange={(value) => updateContextualPattern('scheduleFlexibility', value[0] ?? 0)}
                   max={10}
                   min={1}
                   step={1}

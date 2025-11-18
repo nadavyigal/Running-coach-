@@ -57,7 +57,7 @@ export function ChatScreen() {
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
   const [user, setUser] = useState<UserType | null>(null)
-  const [conversationId, setConversationId] = useState<string>('default')
+  const [conversationId] = useState<string>('default')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
@@ -262,6 +262,8 @@ export function ChatScreen() {
         role: 'assistant',
         content: "",
         timestamp: new Date(),
+        ...(coachingInteractionId ? { coachingInteractionId } : {}),
+        ...(normalizedConfidence ? { confidence: normalizedConfidence } : {}),
         adaptations: adaptations || [],
         coachingInteractionId: coachingInteractionId || undefined,
         confidence,
@@ -270,8 +272,26 @@ export function ChatScreen() {
 
       setMessages(prev => [...prev, assistantMessage])
 
+      const STREAM_TIMEOUT_MS = 30000;
+      let streamTimeoutError: Error | null = null;
+      const streamTimeout = setTimeout(() => {
+        streamTimeoutError = new Error('Streaming response timeout');
+        reader?.cancel('timeout');
+      }, STREAM_TIMEOUT_MS);
+
+      try {
       while (reader) {
-        const { done, value } = await reader.read()
+        if (streamTimeoutError) {
+          throw streamTimeoutError;
+        }
+
+        const readResult = await reader.read().catch(err => {
+          if (streamTimeoutError) {
+            throw streamTimeoutError;
+          }
+          throw err;
+        });
+        const { done, value } = readResult;
         if (done) {
           console.log('?£ו Stream complete. Total updates:', updateCount);
           break
@@ -307,6 +327,12 @@ export function ChatScreen() {
             }
           }
         }
+      }
+      if (streamTimeoutError) {
+        throw streamTimeoutError;
+      }
+      } finally {
+        clearTimeout(streamTimeout);
       }
 
       // Update final message with feedback request if needed
@@ -364,10 +390,6 @@ export function ChatScreen() {
       console.error('Failed to build context:', error)
       return "Unable to load user context."
     }
-  }
-
-  const handleSuggestedQuestion = (question: string) => {
-    handleSendMessage(question)
   }
 
   const handleInputSubmit = (e: React.FormEvent) => {
@@ -601,7 +623,9 @@ export function ChatScreen() {
           }}
           interactionType="chat_response"
           userId={user.id!}
-          interactionId={selectedMessageForFeedback.coachingInteractionId}
+          {...(selectedMessageForFeedback.coachingInteractionId
+            ? { interactionId: selectedMessageForFeedback.coachingInteractionId }
+            : {})}
           initialContext={{
             timeOfDay: new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening',
             userMood: 'neutral',

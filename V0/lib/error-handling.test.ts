@@ -6,7 +6,6 @@ import {
   DatabaseError, 
   AIServiceError, 
   OfflineError,
-  formatErrorResponse,
   validateRequired,
   validateEnum,
   validateRange,
@@ -16,6 +15,7 @@ import {
   safeExternalCall,
   checkRateLimit
 } from './errorHandling';
+import { formatErrorResponse } from './serverErrorHandling';
 
 describe('Error Handling - Null Safety', () => {
   describe('analyzeError', () => {

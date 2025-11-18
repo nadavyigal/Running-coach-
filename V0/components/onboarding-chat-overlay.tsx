@@ -448,7 +448,9 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete }: Onboardin
 
       const coachingInteractionId = response.headers.get('X-Coaching-Interaction-Id')
       const adaptations = response.headers.get('X-Coaching-Adaptations')?.split(', ').filter(Boolean)
-      const confidence = parseFloat(response.headers.get('X-Coaching-Confidence') || '0')
+      const confidenceHeader = response.headers.get('X-Coaching-Confidence') || '0'
+      const parsedConfidence = parseFloat(confidenceHeader)
+      const confidence = Number.isFinite(parsedConfidence) ? parsedConfidence : 0
       const nextPhase = response.headers.get('X-Onboarding-Next-Phase') as OnboardingPhase || currentPhase; // Get next phase from header
 
       const assistantMessage: ChatMessage = {
@@ -1064,7 +1066,9 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete }: Onboardin
           }}
           interactionType="chat_response"
           userId={user.id!}
-          interactionId={selectedMessageForFeedback.coachingInteractionId}
+          {...(selectedMessageForFeedback.coachingInteractionId
+            ? { interactionId: selectedMessageForFeedback.coachingInteractionId }
+            : {})}
           initialContext={{
             timeOfDay: new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening',
             userMood: 'neutral',

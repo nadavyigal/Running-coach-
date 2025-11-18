@@ -72,7 +72,7 @@ export function DeviceSettingsScreen({ userId, deviceId, onBack }: DeviceSetting
     try {
       const deviceData = await db.wearableDevices.get(deviceId)
       if (deviceData) {
-        setDevice(deviceData)
+        setDevice(deviceData as WearableDevice)
         setLocalSettings(deviceData.settings || {})
       }
     } catch (error) {

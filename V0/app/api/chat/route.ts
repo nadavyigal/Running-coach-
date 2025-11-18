@@ -147,6 +147,17 @@ async function chatHandler(req: ApiRequest) {
       })
     }
 
+    // Validate userId
+    let validUserId: number | null = null;
+    if (userId) {
+      const parsed = parseInt(userId);
+      if (!isNaN(parsed) && parsed > 0) {
+        validUserId = parsed;
+      } else {
+        console.warn(`⚠️ Invalid userId provided: ${userId}`);
+      }
+    }
+
     // Check if we should use adaptive coaching
     const useAdaptiveCoaching = normalizedUserId !== undefined && normalizedUserId > 0;
     console.log(`🤖 Use adaptive coaching: ${useAdaptiveCoaching} (userId: ${userId})`);
@@ -202,7 +213,7 @@ async function chatHandler(req: ApiRequest) {
         // Generate adaptive coaching response with timeout
         const coachingResponse = await Promise.race([
           adaptiveCoachingEngine.generatePersonalizedResponse(
-            parseInt(userId),
+            validUserId!,
             userMessage,
             adaptiveContext
           ),
@@ -317,8 +328,21 @@ async function chatHandler(req: ApiRequest) {
     );
     
     if (!result.success) {
-      return new Response(JSON.stringify(result.error), {
-        status: result.error.status,
+      const apiError = result.error || {};
+      const fallbackRequired = Boolean(apiError.fallbackRequired);
+      const status = typeof apiError.status === 'number' ? apiError.status : 503;
+
+      const payload = {
+        error: apiError.message || 'AI service temporarily unavailable. Please try again later.',
+        errorType: apiError.errorType || 'AI_SERVICE_ERROR',
+        fallback: fallbackRequired,
+        fallbackRequired,
+        redirectToForm: false,
+        message: apiError.message || 'AI service temporarily unavailable. Please try again later.'
+      };
+
+      return new Response(JSON.stringify(payload), {
+        status,
         headers: { "Content-Type": "application/json" }
       });
     }
