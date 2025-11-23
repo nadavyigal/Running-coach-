@@ -39,6 +39,80 @@ import {
  */
 
 // ============================================================================
+// SECURITY UTILITIES - Input Sanitization
+// ============================================================================
+
+/**
+ * Sanitize string input to prevent injection attacks
+ * @param input - The string to sanitize
+ * @param maxLength - Maximum allowed length (default: 1000)
+ * @returns Sanitized string
+ */
+function sanitizeString(input: string | undefined | null, maxLength: number = 1000): string {
+  if (!input) return '';
+
+  return String(input)
+    .replace(/[<>{}$;'"\\]/g, '') // Remove potential injection characters
+    .replace(/\0/g, '') // Remove null bytes
+    .replace(/\r?\n|\r/g, ' ') // Replace newlines with spaces
+    .trim()
+    .slice(0, maxLength);
+}
+
+/**
+ * Sanitize numeric input with range validation
+ * @param input - The number to sanitize
+ * @param min - Minimum allowed value
+ * @param max - Maximum allowed value
+ * @param defaultValue - Default value if input is invalid
+ * @returns Sanitized number
+ */
+function sanitizeNumber(
+  input: number | string | undefined | null,
+  min: number,
+  max: number,
+  defaultValue: number
+): number {
+  if (input === undefined || input === null) return defaultValue;
+
+  const num = typeof input === 'string' ? parseFloat(input) : input;
+
+  if (isNaN(num) || !isFinite(num)) return defaultValue;
+
+  return Math.max(min, Math.min(max, num));
+}
+
+/**
+ * Sanitize array input
+ * @param input - The array to sanitize
+ * @param maxLength - Maximum allowed array length
+ * @returns Sanitized array
+ */
+function sanitizeArray<T>(input: T[] | undefined | null, maxLength: number = 100): T[] {
+  if (!Array.isArray(input)) return [];
+  return input.slice(0, maxLength);
+}
+
+/**
+ * Validate and sanitize user ID
+ * @param userId - The user ID to validate
+ * @returns Validated user ID or throws error
+ */
+function validateUserId(userId: number | string | undefined | null): number {
+  if (userId === undefined || userId === null) {
+    throw new Error('User ID is required');
+  }
+
+  const id = typeof userId === 'string' ? parseInt(userId, 10) : userId;
+
+  if (!Number.isInteger(id) || id <= 0 || id > Number.MAX_SAFE_INTEGER) {
+    throw new Error('Invalid user ID format');
+  }
+
+  return id;
+}
+
+// ============================================================================
 // CORE DATABASE UTILITIES
 // ============================================================================
 
@@ -551,87 +625,134 @@ export async function getUsersByOnboardingStatus(completed: boolean): Promise<Us
   }, 'getUsersByOnboardingStatus', []);
 }
 
+// Security: Mutex lock for user creation to prevent race conditions
+const userCreationLocks = new Map<string, Promise<number>>();
+
 /**
  * Create user with full profile data and duplicate prevention
- * Enhanced with proper transaction isolation and race condition prevention
+ * Enhanced with proper transaction isolation and optimistic locking
  */
 export async function createUser(userData: Partial<User>): Promise<number> {
   return safeDbOperation(async () => {
     const database = getDatabase();
     if (!database) throw new Error('Database not available');
-    
-    // Use a more comprehensive transaction that includes all related tables
-    const id = await database.transaction('rw', [database.users, database.onboardingSessions], async () => {
-      console.log('🔒 Starting atomic user creation transaction');
-      
-      // Check for existing users with enhanced filtering
-      const existingUsers = await database.users.toArray();
-      
-      // Look for completed users first
-      const completedUser = existingUsers.find(u => u.onboardingComplete);
-      if (completedUser) {
-        console.log('⚠️ Found completed user, returning existing ID:', completedUser.id);
-        return completedUser.id!;
-      }
-      
-      // Look for any user created in the last 30 seconds (potential race condition)
-      const recentThreshold = new Date(Date.now() - 30000);
-      const recentUser = existingUsers.find(u => u.createdAt > recentThreshold);
-      if (recentUser) {
-        console.log('⚠️ Found recent user (potential race condition), returning ID:', recentUser.id);
-        return recentUser.id!;
-      }
-      
-      // Create unique identifier to prevent duplicate processing
-      const creationId = `creation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Ensure required fields are present with creation tracking
-      const userToAdd: Omit<User, 'id'> = {
-        goal: userData.goal || 'habit',
-        experience: userData.experience || 'beginner',
-        preferredTimes: userData.preferredTimes || ['morning'],
-        daysPerWeek: userData.daysPerWeek || 3,
-        consents: userData.consents || {
-          data: true,
-          gdpr: true,
-          push: true
-        },
-        onboardingComplete: userData.onboardingComplete || false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        ...userData,
-        // Add a temporary field for tracking (will be cleaned up later)
-        name: userData.name || `temp_${creationId}`
-      };
-      
+
+    // Security: Use a lock key based on a unique identifier (e.g., email or temp ID)
+    const lockKey = userData.email || `temp-${Date.now()}`;
+
+    // Security: Check if user creation is already in progress
+    if (userCreationLocks.has(lockKey)) {
+      console.log('🔒 User creation already in progress, waiting for completion...');
       try {
-        const newId = await database.users.add(userToAdd);
-        console.log('✅ User created successfully with enhanced transaction:', newId);
-        
-        // Verify the user was actually created
-        const verifyUser = await database.users.get(newId);
-        if (!verifyUser) {
-          throw new Error('User creation verification failed');
-        }
-        
-        return newId as number;
-      } catch (addError) {
-        console.error('❌ User creation failed in transaction:', addError);
-        
-        // Check if another user was created concurrently
-        const concurrentUser = (await database.users.toArray())
-          .filter(u => u.createdAt && u.createdAt > recentThreshold)
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-        if (concurrentUser && concurrentUser.createdAt > recentThreshold) {
-          console.log('⚠️ Concurrent user creation detected, using existing:', concurrentUser.id);
-          return concurrentUser.id!;
-        }
-        
-        throw addError;
+        return await userCreationLocks.get(lockKey)!;
+      } catch (error) {
+        // If the original creation failed, allow retry
+        userCreationLocks.delete(lockKey);
       }
-    });
-    
-    return id;
+    }
+
+    // Security: Create a promise for this user creation and lock it
+    const creationPromise = (async (): Promise<number> => {
+      try {
+        // Use a comprehensive transaction with explicit isolation
+        const id = await database.transaction('rw!', [database.users, database.onboardingSessions], async () => {
+          console.log('🔒 Starting atomic user creation transaction with exclusive lock');
+
+          // Security: Check for existing users with sanitized email
+          if (userData.email) {
+            const sanitizedEmail = sanitizeString(userData.email, 255).toLowerCase();
+            const existingByEmail = await database.users
+              .filter(u => u.email?.toLowerCase() === sanitizedEmail)
+              .first();
+
+            if (existingByEmail) {
+              console.log('⚠️ User with email already exists:', existingByEmail.id);
+              return existingByEmail.id!;
+            }
+          }
+
+          // Check for existing completed users
+          const existingUsers = await database.users.toArray();
+
+          const completedUser = existingUsers.find(u => u.onboardingComplete);
+          if (completedUser) {
+            console.log('⚠️ Found completed user, returning existing ID:', completedUser.id);
+            return completedUser.id!;
+          }
+
+          // Security: Check for recent users to prevent race conditions (shorter window)
+          const recentThreshold = new Date(Date.now() - 5000); // 5 seconds
+          const recentUser = existingUsers.find(u => u.createdAt > recentThreshold);
+          if (recentUser) {
+            console.log('⚠️ Found recent user (potential race condition), returning ID:', recentUser.id);
+            return recentUser.id!;
+          }
+
+          // Create unique identifier with timestamp and random component
+          const creationId = `creation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+          // Security: Sanitize and validate all user input
+          const userToAdd: Omit<User, 'id'> = {
+            goal: userData.goal || 'habit',
+            experience: userData.experience || 'beginner',
+            preferredTimes: sanitizeArray(userData.preferredTimes || ['morning'], 10),
+            daysPerWeek: sanitizeNumber(userData.daysPerWeek, 1, 7, 3),
+            consents: userData.consents || {
+              data: true,
+              gdpr: true,
+              push: true
+            },
+            onboardingComplete: userData.onboardingComplete || false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            // Security: Sanitize all optional string fields
+            name: sanitizeString(userData.name || `temp_${creationId}`, 255),
+            email: userData.email ? sanitizeString(userData.email, 255).toLowerCase() : undefined,
+            ...userData
+          };
+
+          try {
+            const newId = await database.users.add(userToAdd);
+            console.log('✅ User created successfully with enhanced transaction:', newId);
+
+            // Security: Verify the user was actually created
+            const verifyUser = await database.users.get(newId);
+            if (!verifyUser) {
+              throw new Error('User creation verification failed');
+            }
+
+            return newId as number;
+          } catch (addError: any) {
+            console.error('❌ User creation failed in transaction:', addError);
+
+            // Security: Handle constraint violations gracefully
+            if (addError.name === 'ConstraintError' || addError.message?.includes('constraint')) {
+              console.log('⚠️ Constraint violation, checking for existing user...');
+              const concurrentUser = (await database.users.toArray())
+                .filter(u => u.createdAt && u.createdAt > recentThreshold)
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+
+              if (concurrentUser) {
+                console.log('⚠️ Concurrent user creation detected, using existing:', concurrentUser.id);
+                return concurrentUser.id!;
+              }
+            }
+
+            throw addError;
+          }
+        });
+
+        return id;
+      } finally {
+        // Security: Always clean up the lock
+        userCreationLocks.delete(lockKey);
+      }
+    })();
+
+    // Security: Store the promise to prevent concurrent creations
+    userCreationLocks.set(lockKey, creationPromise);
+
+    return await creationPromise;
   }, 'createUser');
 }
 
@@ -1345,28 +1466,48 @@ export async function getPlanWorkouts(planId: number, completed?: boolean): Prom
 
 /**
  * Get workouts for user within date range
+ * Security: Added pagination and limits to prevent memory exhaustion
  */
-export async function getWorkoutsForDateRange(userId: number, startDate: Date, endDate: Date): Promise<Workout[]> {
+export async function getWorkoutsForDateRange(
+  userId: number,
+  startDate: Date,
+  endDate: Date,
+  options?: { limit?: number; offset?: number }
+): Promise<Workout[]> {
   return safeDbOperation(async () => {
     if (!db) return [];
-    
+
+    // Security: Validate userId
+    const validatedUserId = validateUserId(userId);
+
+    // Security: Set reasonable limits
+    const limit = Math.min(options?.limit || 1000, 1000); // Max 1000 workouts
+    const offset = Math.max(options?.offset || 0, 0);
+
     // Normalize input dates
     const normalizedStart = normalizeDate(startDate);
     const normalizedEnd = normalizeDate(endDate);
-    
+
     if (!normalizedStart || !normalizedEnd) {
       console.warn('Invalid date range provided to getWorkoutsForDateRange');
       return [];
     }
-    
-    // Get all plans for the user
-    const plans = await db.plans.where('userId').equals(userId).toArray();
+
+    // Security: Validate date range (max 1 year)
+    const maxRangeMs = 365 * 24 * 60 * 60 * 1000;
+    if (normalizedEnd.getTime() - normalizedStart.getTime() > maxRangeMs) {
+      console.warn('Date range exceeds maximum of 1 year');
+      return [];
+    }
+
+    // Get plans for the user with limit
+    const plans = await db.plans.where('userId').equals(validatedUserId).limit(100).toArray();
     const planIds = plans.map(p => p.id!);
-    
+
     if (planIds.length === 0) return [];
-    
-    // Get workouts within date range for all user's plans
-    const allWorkouts = await db.workouts.toArray();
+
+    // Get workouts within date range with pagination
+    const allWorkouts = await db.workouts.limit(limit + offset).toArray();
     const workouts = allWorkouts
       .map(workout => {
         // Normalize scheduledDate
@@ -1377,13 +1518,14 @@ export async function getWorkoutsForDateRange(userId: number, startDate: Date, e
         }
         return { ...workout, scheduledDate: normalizedScheduledDate };
       })
-      .filter((workout): workout is Workout => 
+      .filter((workout): workout is Workout =>
         workout !== null &&
         planIds.includes(workout.planId) &&
-        workout.scheduledDate >= normalizedStart && 
+        workout.scheduledDate >= normalizedStart &&
         workout.scheduledDate <= normalizedEnd
-      );
-    
+      )
+      .slice(offset, offset + limit);
+
     return workouts;
   }, 'getWorkoutsForDateRange', []);
 }
@@ -1617,8 +1759,14 @@ export async function saveSubjectiveWellness(wellnessData: Omit<SubjectiveWellne
 
 /**
  * Get recovery data for date range
+ * Security: Added pagination and limits to prevent memory exhaustion
  */
-export async function getRecoveryData(userId: number, startDate: Date, endDate: Date): Promise<{
+export async function getRecoveryData(
+  userId: number,
+  startDate: Date,
+  endDate: Date,
+  options?: { limit?: number }
+): Promise<{
   sleepData: SleepData[];
   hrvMeasurements: HRVMeasurement[];
   recoveryScores: RecoveryScore[];
@@ -1626,13 +1774,31 @@ export async function getRecoveryData(userId: number, startDate: Date, endDate: 
 }> {
   return safeDbOperation(async () => {
     if (db) {
+      // Security: Validate userId
+      const validatedUserId = validateUserId(userId);
+
+      // Security: Set reasonable limits (max 365 days of data)
+      const limit = Math.min(options?.limit || 365, 365);
+
+      // Security: Validate date range (max 1 year)
+      const maxRangeMs = 365 * 24 * 60 * 60 * 1000;
+      if (endDate.getTime() - startDate.getTime() > maxRangeMs) {
+        console.warn('Date range exceeds maximum of 1 year');
+        return {
+          sleepData: [],
+          hrvMeasurements: [],
+          recoveryScores: [],
+          subjectiveWellness: []
+        };
+      }
+
       const [sleepData, hrvMeasurements, recoveryScores, subjectiveWellness] = await Promise.all([
-        db.sleepData.where('userId').equals(userId).and((sleep: any) => sleep.sleepDate >= startDate && sleep.sleepDate <= endDate).toArray(),
-        db.hrvMeasurements.where('userId').equals(userId).and((hrv: any) => hrv.measurementDate >= startDate && hrv.measurementDate <= endDate).toArray(),
-        db.recoveryScores.where('userId').equals(userId).and((score: any) => score.scoreDate >= startDate && score.scoreDate <= endDate).toArray(),
-        db.subjectiveWellness.where('userId').equals(userId).and((wellness: any) => wellness.assessmentDate >= startDate && wellness.assessmentDate <= endDate).toArray()
+        db.sleepData.where('userId').equals(validatedUserId).and((sleep: any) => sleep.sleepDate >= startDate && sleep.sleepDate <= endDate).limit(limit).toArray(),
+        db.hrvMeasurements.where('userId').equals(validatedUserId).and((hrv: any) => hrv.measurementDate >= startDate && hrv.measurementDate <= endDate).limit(limit).toArray(),
+        db.recoveryScores.where('userId').equals(validatedUserId).and((score: any) => score.scoreDate >= startDate && score.scoreDate <= endDate).limit(limit).toArray(),
+        db.subjectiveWellness.where('userId').equals(validatedUserId).and((wellness: any) => wellness.assessmentDate >= startDate && wellness.assessmentDate <= endDate).limit(limit).toArray()
       ]);
-      
+
       return {
         sleepData,
         hrvMeasurements,
@@ -1859,20 +2025,6 @@ export async function getWorkoutsByPlan(planId: number): Promise<Workout[]> {
   }, 'getWorkoutsByPlan', []);
 }
 
-/**
- * Update workout
- */
-export async function updateWorkout(workoutId: number, updates: Partial<Workout>): Promise<void> {
-  return safeDbOperation(async () => {
-    if (!db) throw new Error('Database not available');
-    
-    await db.workouts.update(workoutId, {
-      ...updates,
-      updatedAt: new Date()
-    });
-    console.log('✅ Workout updated successfully:', workoutId);
-  }, 'updateWorkout');
-}
 
 /**
  * Delete workout

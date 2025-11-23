@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { decryptToken } from '../token-crypto';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -43,13 +44,26 @@ export async function GET(req: Request) {
       baseUrl: 'https://connect.garmin.com'
     };
 
+    let accessToken: string;
+
+    try {
+      accessToken = decryptToken(garminDevice.authTokens.accessToken);
+    } catch (tokenError) {
+      console.error('Failed to decrypt Garmin access token', tokenError);
+      return NextResponse.json({
+        success: false,
+        error: 'Garmin device authentication invalid, please reconnect',
+        needsReauth: true
+      }, { status: 401 });
+    }
+
     try {
       // Fetch activities from Garmin Connect
       const activitiesResponse = await fetch(
         `${garminConfig.baseUrl}/activitylist-service/activities/search/activities?start=${start}&limit=${limit}`,
         {
           headers: {
-            'Authorization': `Bearer ${garminDevice.authTokens.accessToken}`
+            'Authorization': `Bearer ${accessToken}`
           }
         }
       );

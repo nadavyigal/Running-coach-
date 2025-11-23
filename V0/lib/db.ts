@@ -893,55 +893,149 @@ export class RunSmartDB extends Dexie {
 
   constructor() {
     super('RunSmartDB');
-    
-    // Consolidated schema - Single stable version
+
+    // Consolidated schema - Single stable version with optimized compound indexes
+    // Compound indexes format: [field1+field2] for multi-column queries
     this.version(1).stores({
-      users: '++id, name, goal, experience, onboardingComplete',
-      plans: '++id, userId, isActive, startDate, endDate',
-      workouts: '++id, planId, week, day, type, completed, scheduledDate',
-      runs: '++id, userId, type, distance, duration, completedAt',
-      shoes: '++id, userId, name, brand, model, isActive',
-      chatMessages: '++id, userId, role, timestamp',
-      badges: '++id, userId, type, milestone, unlockedAt',
-      planFeedback: '++id, planId, userId, feedbackType, rating, createdAt',
+      // Users: Optimized for onboarding status queries
+      users: '++id, name, goal, experience, onboardingComplete, [goal+experience], [onboardingComplete+updatedAt]',
+
+      // Plans: Optimized for user-specific active plan lookups
+      plans: '++id, userId, isActive, startDate, endDate, [userId+isActive], [userId+startDate]',
+
+      // Workouts: Optimized for date range and status queries
+      workouts: '++id, planId, week, day, type, completed, scheduledDate, [planId+scheduledDate], [planId+completed], [userId+scheduledDate]',
+
+      // Runs: Optimized for user timeline and type filtering
+      runs: '++id, userId, type, distance, duration, completedAt, [userId+completedAt], [userId+type]',
+
+      // Shoes: Optimized for active shoe lookups
+      shoes: '++id, userId, name, brand, model, isActive, [userId+isActive]',
+
+      // Chat Messages: Optimized for conversation retrieval
+      chatMessages: '++id, userId, role, timestamp, conversationId, [userId+timestamp], [conversationId+timestamp]',
+
+      // Badges: Optimized for user badge lookups
+      badges: '++id, userId, type, milestone, unlockedAt, [userId+type]',
+
+      // Plan Feedback: Optimized for plan-specific feedback
+      planFeedback: '++id, planId, userId, feedbackType, rating, createdAt, [planId+createdAt], [userId+feedbackType]',
+
+      // Cohorts: Simple index structure
       cohorts: '++id, name, inviteCode',
-      cohortMembers: '++id, userId, cohortId',
-      performanceMetrics: '++id, userId, date, createdAt',
-      personalRecords: '++id, userId, recordType, achievedAt, createdAt',
-      performanceInsights: '++id, userId, type, priority, createdAt, validUntil',
-      raceGoals: '++id, userId, raceDate, priority, createdAt',
-      workoutTemplates: '++id, workoutType, trainingPhase, intensityZone, createdAt',
+
+      // Cohort Members: Optimized for membership lookups
+      cohortMembers: '++id, userId, cohortId, [userId+cohortId]',
+
+      // Performance Metrics: Optimized for time-series queries
+      performanceMetrics: '++id, userId, date, createdAt, [userId+date]',
+
+      // Personal Records: Optimized for record type lookups
+      personalRecords: '++id, userId, recordType, achievedAt, createdAt, [userId+recordType], [userId+achievedAt]',
+
+      // Performance Insights: Optimized for priority and validity
+      performanceInsights: '++id, userId, type, priority, createdAt, validUntil, [userId+priority], [userId+validUntil]',
+
+      // Race Goals: Optimized for date and priority queries
+      raceGoals: '++id, userId, raceDate, priority, createdAt, [userId+raceDate], [userId+priority]',
+
+      // Workout Templates: Optimized for template searches
+      workoutTemplates: '++id, workoutType, trainingPhase, intensityZone, createdAt, [workoutType+trainingPhase]',
+
+      // Coaching Profiles: User-specific lookups
       coachingProfiles: '++id, userId, coachingEffectivenessScore, lastAdaptationDate, createdAt',
-      coachingFeedback: '++id, userId, interactionType, feedbackType, rating, createdAt',
-      coachingInteractions: '++id, userId, interactionId, interactionType, createdAt',
-      userBehaviorPatterns: '++id, userId, patternType, confidenceScore, lastObserved, createdAt',
-      goals: '++id, userId, goalType, status, priority, createdAt, updatedAt',
-      goalMilestones: '++id, goalId, milestoneOrder, status, targetDate, createdAt',
-      goalProgressHistory: '++id, goalId, progressValue, recordedAt, createdAt',
-      goalRecommendations: '++id, userId, recommendationType, priority, validUntil, createdAt',
-      wearableDevices: '++id, userId, type, isActive, lastSyncAt, createdAt',
-      heartRateData: '++id, userId, deviceId, timestamp, heartRate, context, createdAt',
-      heartRateZones: '++id, userId, zoneName, minBpm, maxBpm, targetPercentage, actualPercentage, createdAt',
+
+      // Coaching Feedback: Optimized for interaction analysis
+      coachingFeedback: '++id, userId, interactionType, feedbackType, rating, createdAt, [userId+interactionType], [userId+createdAt]',
+
+      // Coaching Interactions: Optimized for tracking
+      coachingInteractions: '++id, userId, interactionId, interactionType, createdAt, [userId+interactionType], [userId+createdAt]',
+
+      // User Behavior Patterns: Optimized for pattern analysis
+      userBehaviorPatterns: '++id, userId, patternType, confidenceScore, lastObserved, createdAt, [userId+patternType], [userId+confidenceScore]',
+
+      // Goals: Optimized for status and priority filtering
+      goals: '++id, userId, goalType, status, priority, createdAt, updatedAt, [userId+status], [userId+priority], [userId+goalType]',
+
+      // Goal Milestones: Optimized for goal-specific queries
+      goalMilestones: '++id, goalId, milestoneOrder, status, targetDate, createdAt, [goalId+status], [goalId+targetDate]',
+
+      // Goal Progress History: Optimized for progress tracking
+      goalProgressHistory: '++id, goalId, progressValue, recordedAt, createdAt, [goalId+recordedAt]',
+
+      // Goal Recommendations: Optimized for validity and priority
+      goalRecommendations: '++id, userId, recommendationType, priority, validUntil, createdAt, [userId+priority], [userId+validUntil]',
+
+      // Wearable Devices: Optimized for active device queries
+      wearableDevices: '++id, userId, type, isActive, lastSyncAt, createdAt, [userId+isActive], [userId+type]',
+
+      // Heart Rate Data: Optimized for time-series device data
+      heartRateData: '++id, userId, deviceId, timestamp, heartRate, context, createdAt, [userId+timestamp], [deviceId+timestamp]',
+
+      // Heart Rate Zones: User-specific zone lookups
+      heartRateZones: '++id, userId, zoneName, minBpm, maxBpm, targetPercentage, actualPercentage, createdAt, [userId+zoneName]',
+
+      // Heart Rate Zone Settings: Simple user lookup
       heartRateZoneSettings: '++id, userId, maxHeartRate, restingHeartRate, calculationMethod, createdAt',
-      zoneDistributions: '++id, userId, runId, createdAt',
-      advancedMetrics: '++id, userId, runId, createdAt',
-      runningDynamicsData: '++id, userId, deviceId, timestamp, createdAt',
-      syncJobs: '++id, userId, deviceType, status, priority, createdAt',
-      onboardingSessions: '++id, userId, conversationId, goalDiscoveryPhase, isCompleted, createdAt',
-      conversationMessages: '++id, sessionId, conversationId, role, content, timestamp, createdAt',
-      sleepData: '++id, userId, deviceId, sleepDate, createdAt',
-      hrvMeasurements: '++id, userId, deviceId, measurementDate, createdAt',
-      recoveryScores: '++id, userId, scoreDate, overallScore, createdAt',
-      subjectiveWellness: '++id, userId, assessmentDate, createdAt',
-      dataFusionRules: '++id, name, priority, isActive, createdAt',
-      fusedDataPoints: '++id, userId, dataType, timestamp, createdAt',
-      dataConflicts: '++id, userId, dataType, conflictType, detectedAt, createdAt',
-      dataSources: '++id, name, type, priority, isActive, createdAt',
-      habitAnalyticsSnapshots: '++id, userId, snapshotDate, riskLevel, consistencyTrend, createdAt',
-      habitInsights: '++id, userId, insightType, priority, isRead, validUntil, createdAt',
-      habitPatterns: '++id, userId, patternType, confidence, lastObserved, createdAt',
-      routes: '++id, name, distance, difficulty, createdAt',
-      routeRecommendations: '++id, userId, routeId, createdAt',
+
+      // Zone Distributions: Optimized for run analysis
+      zoneDistributions: '++id, userId, runId, createdAt, [userId+runId]',
+
+      // Advanced Metrics: Optimized for run metrics
+      advancedMetrics: '++id, userId, runId, createdAt, [userId+runId]',
+
+      // Running Dynamics: Optimized for device time-series
+      runningDynamicsData: '++id, userId, deviceId, timestamp, createdAt, [userId+timestamp], [deviceId+timestamp]',
+
+      // Sync Jobs: Optimized for status and priority queries
+      syncJobs: '++id, userId, deviceType, status, priority, createdAt, [userId+status], [status+priority]',
+
+      // Onboarding Sessions: Optimized for conversation tracking
+      onboardingSessions: '++id, userId, conversationId, goalDiscoveryPhase, isCompleted, createdAt, [userId+isCompleted], [conversationId+goalDiscoveryPhase]',
+
+      // Conversation Messages: Optimized for session and conversation queries
+      conversationMessages: '++id, sessionId, conversationId, role, content, timestamp, createdAt, [sessionId+timestamp], [conversationId+timestamp]',
+
+      // Sleep Data: Optimized for date-based queries
+      sleepData: '++id, userId, deviceId, sleepDate, createdAt, [userId+sleepDate], [deviceId+sleepDate]',
+
+      // HRV Measurements: Optimized for date-based queries
+      hrvMeasurements: '++id, userId, deviceId, measurementDate, createdAt, [userId+measurementDate], [deviceId+measurementDate]',
+
+      // Recovery Scores: Optimized for date and score queries
+      recoveryScores: '++id, userId, scoreDate, overallScore, createdAt, [userId+scoreDate], [userId+overallScore]',
+
+      // Subjective Wellness: Optimized for date queries
+      subjectiveWellness: '++id, userId, assessmentDate, createdAt, [userId+assessmentDate]',
+
+      // Data Fusion Rules: Optimized for active rules
+      dataFusionRules: '++id, name, priority, isActive, createdAt, [isActive+priority]',
+
+      // Fused Data Points: Optimized for time-series data type queries
+      fusedDataPoints: '++id, userId, dataType, timestamp, createdAt, [userId+dataType], [userId+timestamp]',
+
+      // Data Conflicts: Optimized for conflict resolution
+      dataConflicts: '++id, userId, dataType, conflictType, detectedAt, createdAt, [userId+conflictType], [dataType+detectedAt]',
+
+      // Data Sources: Optimized for active sources
+      dataSources: '++id, name, type, priority, isActive, createdAt, [isActive+priority], [type+isActive]',
+
+      // Habit Analytics: Optimized for risk and trend analysis
+      habitAnalyticsSnapshots: '++id, userId, snapshotDate, riskLevel, consistencyTrend, createdAt, [userId+snapshotDate], [userId+riskLevel]',
+
+      // Habit Insights: Optimized for priority and read status
+      habitInsights: '++id, userId, insightType, priority, isRead, validUntil, createdAt, [userId+priority], [userId+isRead], [userId+validUntil]',
+
+      // Habit Patterns: Optimized for pattern analysis
+      habitPatterns: '++id, userId, patternType, confidence, lastObserved, createdAt, [userId+patternType], [userId+confidence]',
+
+      // Routes: Optimized for difficulty filtering
+      routes: '++id, name, distance, difficulty, createdAt, [difficulty+distance]',
+
+      // Route Recommendations: Optimized for user route lookups
+      routeRecommendations: '++id, userId, routeId, createdAt, [userId+routeId]',
+
+      // User Route Preferences: Simple user lookup
       userRoutePreferences: '++id, userId, maxDistance, preferredDifficulty, createdAt',
     });
   }

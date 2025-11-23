@@ -83,7 +83,7 @@ export const logComponentError = async (errorData: {
   await logError({
     error: errorData.error,
     errorInfo: errorData.errorInfo,
-    componentStack: errorData.errorInfo.componentStack,
+    componentStack: errorData.errorInfo.componentStack ?? undefined,
     timestamp: new Date().toISOString()
   });
 };
@@ -169,7 +169,7 @@ export class GlobalErrorBoundary extends React.Component<
     logError({
       error,
       errorInfo,
-      componentStack: errorInfo.componentStack,
+      componentStack: errorInfo.componentStack ?? undefined,
       timestamp: new Date().toISOString()
     });
   }
@@ -279,10 +279,10 @@ export function withErrorBoundary<P extends object>(
 ) {
   const WrappedComponent = React.forwardRef<any, P>((props, ref) => (
     <ComponentErrorBoundary 
-      fallback={fallback}
+      {...(fallback ? { fallback } : {})}
       componentName={Component.displayName || Component.name}
     >
-      <Component {...props} ref={ref} />
+      <Component {...props} />
     </ComponentErrorBoundary>
   ));
 

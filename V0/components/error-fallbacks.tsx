@@ -1,5 +1,5 @@
 import React from 'react';
-import { analyzeError, getRecoveryActions, type ClientErrorInfo } from '@/lib/errorHandling';
+import { analyzeError, getRecoveryActions } from '@/lib/errorHandling';
 
 interface ErrorFallbackProps {
   error?: Error;
@@ -8,9 +8,8 @@ interface ErrorFallbackProps {
 }
 
 // Network Error Fallback
-export const NetworkErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onRetry, onAction }) => {
+export const NetworkErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onRetry }) => {
   const errorInfo = error ? analyzeError(error) : null;
-  const recoveryActions = errorInfo ? getRecoveryActions(errorInfo) : [];
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[300px] p-6 bg-orange-50 border border-orange-200 rounded-lg">
@@ -50,7 +49,7 @@ export const NetworkErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onRe
 };
 
 // Database Error Fallback
-export const DatabaseErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onRetry }) => {
+export const DatabaseErrorFallback: React.FC<ErrorFallbackProps> = ({ onRetry }) => {
   return (
     <div className="flex flex-col items-center justify-center min-h-[300px] p-6 bg-blue-50 border border-blue-200 rounded-lg">
       <div className="text-blue-600 mb-4">
@@ -86,7 +85,7 @@ export const DatabaseErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onR
 };
 
 // AI Service Error Fallback
-export const AIServiceErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onRetry }) => {
+export const AIServiceErrorFallback: React.FC<ErrorFallbackProps> = ({ onRetry }) => {
   return (
     <div className="flex flex-col items-center justify-center min-h-[300px] p-6 bg-purple-50 border border-purple-200 rounded-lg">
       <div className="text-purple-600 mb-4">
@@ -147,7 +146,7 @@ export const ValidationErrorFallback: React.FC<ErrorFallbackProps> = ({ error, o
 };
 
 // Offline Error Fallback
-export const OfflineErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onRetry }) => {
+export const OfflineErrorFallback: React.FC<ErrorFallbackProps> = ({ onRetry }) => {
   return (
     <div className="flex flex-col items-center justify-center min-h-[300px] p-6 bg-gray-50 border border-gray-200 rounded-lg">
       <div className="text-gray-600 mb-4">
@@ -183,7 +182,7 @@ export const OfflineErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onRe
 };
 
 // Generic Loading Error Fallback
-export const LoadingErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onRetry }) => {
+export const LoadingErrorFallback: React.FC<ErrorFallbackProps> = ({ onRetry }) => {
   return (
     <div className="flex flex-col items-center justify-center min-h-[200px] p-6">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>

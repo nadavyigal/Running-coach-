@@ -9,9 +9,7 @@ import {
   Bot, 
   RefreshCw, 
   X,
-  CheckCircle,
-  AlertTriangle,
-  Info
+  AlertTriangle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -30,7 +28,6 @@ export interface ErrorToastProps {
   onDismiss?: () => void
   onFallback?: () => void
   showActions?: boolean
-  autoRetry?: boolean
   retryCount?: number
   maxRetries?: number
 }
@@ -47,12 +44,10 @@ export function ErrorToast({
   onDismiss, 
   onFallback,
   showActions = true,
-  autoRetry = false,
   retryCount = 0,
   maxRetries = 3
 }: ErrorToastProps) {
   const errorInfo = analyzeError(error)
-  const recoveryActions = getRecoveryActions(errorInfo)
   const { variant, icon } = getToastVariant(errorInfo.errorType)
 
   return (
@@ -222,7 +217,6 @@ export function useErrorToast() {
     options: {
       onRetry?: () => void
       onFallback?: () => void
-      autoRetry?: boolean
       retryCount?: number
       maxRetries?: number
     } = {}
