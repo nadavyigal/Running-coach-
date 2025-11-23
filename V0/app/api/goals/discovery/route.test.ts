@@ -23,7 +23,7 @@ describe('Goal Discovery API', () => {
   let mockRequest: NextRequest;
   let mockUserProfile: any;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockUserProfile = {
       experience: 'beginner',
       currentFitnessLevel: 5,
@@ -46,7 +46,7 @@ describe('Goal Discovery API', () => {
     };
 
     // Mock the goal discovery engine response
-    const { goalDiscoveryEngine } = require('@/lib/goalDiscoveryEngine');
+    const { goalDiscoveryEngine } = await import('@/lib/goalDiscoveryEngine');
     goalDiscoveryEngine.discoverGoals.mockResolvedValue({
       discoveredGoals: [
         {
@@ -220,7 +220,7 @@ describe('Goal Discovery API', () => {
 
     it('should limit goals to maxGoals parameter', async () => {
       // Mock multiple goals
-      const { goalDiscoveryEngine } = require('@/lib/goalDiscoveryEngine');
+    const { goalDiscoveryEngine } = require('../../../../lib/goalDiscoveryEngine');
       goalDiscoveryEngine.discoverGoals.mockResolvedValue({
         discoveredGoals: [
           { id: 'goal-1', title: 'Goal 1', category: 'consistency' },
@@ -266,7 +266,7 @@ describe('Goal Discovery API', () => {
     });
 
     it('should handle goal discovery engine errors gracefully', async () => {
-      const { goalDiscoveryEngine } = require('@/lib/goalDiscoveryEngine');
+      const { goalDiscoveryEngine } = await import('@/lib/goalDiscoveryEngine');
       goalDiscoveryEngine.discoverGoals.mockRejectedValue(new Error('Discovery failed'));
 
       const requestBody = {
@@ -344,7 +344,7 @@ describe('Goal Discovery API', () => {
       
       expect(response.status).toBe(200);
       
-      const { goalDiscoveryEngine } = require('@/lib/goalDiscoveryEngine');
+      const { goalDiscoveryEngine } = await import('@/lib/goalDiscoveryEngine');
       expect(goalDiscoveryEngine.discoverGoals).toHaveBeenCalledWith(
         mockUserProfile,
         expect.objectContaining({

@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { goalDiscoveryEngine, type UserProfile, type GoalAnalysisContext } from '@/lib/goalDiscoveryEngine';
 import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
+
+// Use a relative import to avoid alias resolution issues in test runners
+import {
+  goalDiscoveryEngine,
+  type UserProfile,
+  type GoalAnalysisContext
+} from '@/lib/goalDiscoveryEngine';
 
 // Validation schemas
 const UserProfileSchema = z.object({
