@@ -1,35 +1,8 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { withAuthSecurity, ApiRequest } from '@/lib/security.middleware';
-import { createHmac } from 'crypto';
-
-// Security: Server-side OAuth state storage with encryption
-const oauthStateStorage = new Map<string, {
-  userId: number;
-  state: string;
-  redirectUri: string;
-  createdAt: Date;
-  expiresAt: Date;
-  codeVerifier?: string; // For PKCE
-}>();
-
-// Cleanup expired states periodically
-setInterval(() => {
-  const now = new Date();
-  for (const [key, value] of oauthStateStorage.entries()) {
-    if (now > value.expiresAt) {
-      oauthStateStorage.delete(key);
-    }
-  }
-}, 5 * 60 * 1000); // Cleanup every 5 minutes
-
-// Security: Encrypt sensitive tokens before storage
-function encryptToken(token: string): string {
-  const key = process.env.ENCRYPTION_KEY || 'dev-encryption-key-change-in-production';
-  const hmac = createHmac('sha256', key);
-  hmac.update(token);
-  return hmac.digest('hex');
-}
+import { encryptToken } from '../token-crypto';
+import { verifyAndParseState } from '../oauth-state';
 
 // POST - Handle Garmin OAuth callback (SECURED)
 async function handleGarminCallback(req: ApiRequest) {
@@ -51,28 +24,19 @@ async function handleGarminCallback(req: ApiRequest) {
       }, { status: 400 });
     }
 
-    if (!state || typeof state !== 'string' || state.length > 256) {
+    if (!state || typeof state !== 'string' || state.length > 512) {
       return NextResponse.json({
         success: false,
         error: 'Invalid state parameter format'
       }, { status: 400 });
     }
 
-    // Security: Retrieve OAuth state from secure server-side storage
-    const storedState = oauthStateStorage.get(state);
+    // Security: Retrieve OAuth state from signed payload rather than in-memory storage
+    const storedState = verifyAndParseState(state);
     if (!storedState) {
       return NextResponse.json({
         success: false,
-        error: 'OAuth state not found or expired'
-      }, { status: 400 });
-    }
-
-    // Security: Verify state hasn't expired
-    if (new Date() > storedState.expiresAt) {
-      oauthStateStorage.delete(state);
-      return NextResponse.json({
-        success: false,
-        error: 'OAuth state expired'
+        error: 'OAuth state not found or expired',
       }, { status: 400 });
     }
 
@@ -84,7 +48,7 @@ async function handleGarminCallback(req: ApiRequest) {
     if (authUserId && parseInt(authUserId) !== userId) {
       return NextResponse.json({
         success: false,
-        error: 'User mismatch in OAuth flow'
+        error: 'User mismatch in OAuth flow',
       }, { status: 403 });
     }
 
@@ -126,9 +90,6 @@ async function handleGarminCallback(req: ApiRequest) {
 
       const tokenData = await tokenResponse.json();
 
-      // Security: Clear the OAuth state after successful exchange
-      oauthStateStorage.delete(state);
-
       // Get user profile from Garmin
       const profileResponse = await fetch(`${garminConfig.baseUrl}/userprofile-service/userprofile`, {
         headers: {
@@ -148,7 +109,7 @@ async function handleGarminCallback(req: ApiRequest) {
         name: userProfile?.displayName || 'Garmin Device',
         connectionStatus: 'connected' as const,
         lastSync: new Date(),
-        // Security: Encrypt tokens before storage
+        // Security: Encrypt tokens before storage (reversible for API usage)
         authTokens: {
           accessToken: encryptToken(tokenData.access_token),
           refreshToken: encryptToken(tokenData.refresh_token),
@@ -297,6 +258,3 @@ async function performGarminSync(deviceId: number, userId: number) {
     updatedAt: new Date()
   });
 }
-
-// Export OAuth state storage for use in connect route
-export { oauthStateStorage };

@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withAuthSecurity, ApiRequest } from '@/lib/security.middleware';
-import { randomBytes } from 'crypto';
-
-// Import the secure OAuth state storage from callback route
-import { oauthStateStorage } from '../callback/route';
+import { generateSignedState } from '../oauth-state';
 
 // POST - Initiate Garmin OAuth flow (SECURED)
 async function handleGarminConnect(req: ApiRequest) {
@@ -52,17 +49,8 @@ async function handleGarminConnect(req: ApiRequest) {
       }, { status: 503 });
     }
 
-    // Security: Generate cryptographically secure random state
-    const state = randomBytes(32).toString('hex');
-
-    // Security: Store state in server-side storage (not client-side IndexedDB)
-    oauthStateStorage.set(state, {
-      userId,
-      state,
-      redirectUri: garminConfig.redirectUri,
-      createdAt: new Date(),
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
-    });
+    // Security: Generate cryptographically secure signed state (stateless verification)
+    const state = generateSignedState(userId, garminConfig.redirectUri);
 
     // Generate OAuth authorization URL
     const authUrl = new URL(`${garminConfig.baseUrl}/oauth-service/oauth/preauthorized`);
