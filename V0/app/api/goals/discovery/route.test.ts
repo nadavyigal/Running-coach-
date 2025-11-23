@@ -220,7 +220,7 @@ describe('Goal Discovery API', () => {
 
     it('should limit goals to maxGoals parameter', async () => {
       // Mock multiple goals
-    const { goalDiscoveryEngine } = require('../../../../lib/goalDiscoveryEngine');
+      const { goalDiscoveryEngine } = await import('@/lib/goalDiscoveryEngine');
       goalDiscoveryEngine.discoverGoals.mockResolvedValue({
         discoveredGoals: [
           { id: 'goal-1', title: 'Goal 1', category: 'consistency' },
