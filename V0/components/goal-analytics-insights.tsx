@@ -6,14 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { 
   TrendingUp, 
   TrendingDown, 
   BarChart3,
   Target,
   Clock,
-  Calendar,
   Award,
   Zap,
   Activity,
@@ -22,7 +21,6 @@ import {
   Brain,
   Lightbulb,
   Download,
-  Share2,
   RefreshCw
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
@@ -240,7 +238,7 @@ export function GoalAnalyticsInsights({
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Select value={selectedTimeRange} onValueChange={setSelectedTimeRange}>
+              <Select value={selectedTimeRange} onValueChange={(value) => setSelectedTimeRange(value as typeof selectedTimeRange)}>
                 <SelectTrigger className="w-32">
                   <SelectValue />
                 </SelectTrigger>
@@ -361,7 +359,7 @@ export function GoalAnalyticsInsights({
                             fill="#8884d8"
                             dataKey="count"
                           >
-                            {analytics.categoryBreakdown.map((entry, index) => (
+                            {analytics.categoryBreakdown.map((_, index) => (
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                           </Pie>

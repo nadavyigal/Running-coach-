@@ -466,7 +466,6 @@ export function SimpleEnhancedAICoach({ user, onResponse }: { user: User; onResp
     if (!text.trim() || isLoading) return
     setIsLoading(true)
     try {
-      const runs = await dbUtils.getRunsByUser(user.id!)
       // Simplified fallback for compatibility
       const fallback = {
         response: `Hi ${user.name}, I understand you want to know about: ${text}`,

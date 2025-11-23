@@ -24,7 +24,6 @@ import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { EnhancedAICoach, type AICoachResponse } from "@/components/enhanced-ai-coach"
-import { planAdaptationEngine } from "@/lib/planAdaptationEngine"
 import type { ChatMessageDTO } from "@/lib/models/chat"
 
 interface ChatMessage {
@@ -123,7 +122,7 @@ export function ChatScreen() {
           role: msg.role,
           content: msg.content,
           timestamp: new Date(msg.timestamp),
-          tokenCount: msg.tokenCount,
+          ...(msg.tokenCount !== undefined ? { tokenCount: msg.tokenCount } : {}),
         }))
 
         setMessages(chatMessages)
@@ -262,11 +261,9 @@ export function ChatScreen() {
         role: 'assistant',
         content: "",
         timestamp: new Date(),
-        ...(coachingInteractionId ? { coachingInteractionId } : {}),
-        ...(normalizedConfidence ? { confidence: normalizedConfidence } : {}),
         adaptations: adaptations || [],
-        coachingInteractionId: coachingInteractionId || undefined,
-        confidence,
+        ...(coachingInteractionId ? { coachingInteractionId } : {}),
+        ...(confidence !== undefined ? { confidence } : {}),
         requestFeedback: typeof confidence === 'number' && confidence > 0 && confidence < 0.8, // Request feedback for lower confidence responses
       }
 
