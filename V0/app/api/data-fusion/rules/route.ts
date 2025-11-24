@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/data-fusion/rules - Get fusion rules for user
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
+    const searchParams = request.nextUrl.searchParams;
     const userId = parseInt(searchParams.get('userId') || '1');
     
     const rules = await db.dataFusionRules

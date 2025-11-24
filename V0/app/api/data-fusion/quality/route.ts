@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/data-fusion/quality - Get data quality metrics
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
+    const searchParams = request.nextUrl.searchParams;
     const userId = parseInt(searchParams.get('userId') || '1');
     const days = parseInt(searchParams.get('days') || '7');
     
