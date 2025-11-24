@@ -37,7 +37,11 @@ const nextConfig = {
       '@radix-ui/react-icons',
       'lucide-react',
       'date-fns',
-      'recharts'
+      'recharts',
+      '@radix-ui/react-dialog',
+      '@radix-ui/react-popover',
+      '@radix-ui/react-tooltip',
+      'react-hook-form'
     ],
     turbo: {
       // Only add SVGR rule if the loader is available
@@ -107,6 +111,18 @@ const nextConfig = {
       config.optimization.splitChunks = {
         chunks: 'all',
         cacheGroups: {
+          recharts: {
+            test: /[\\/]node_modules[\\/](recharts|d3-*)[\\/]/,
+            name: 'recharts',
+            chunks: 'async',
+            priority: 20,
+          },
+          radixui: {
+            test: /[\\/]node_modules[\\/]@radix-ui[\\/]/,
+            name: 'radix-ui',
+            chunks: 'all',
+            priority: 15,
+          },
           vendor: {
             test: /[\\/]node_modules[\\/]/,
             name: 'vendors',
@@ -121,10 +137,13 @@ const nextConfig = {
           },
         },
       };
-      
+
       // Tree shaking optimization
       config.optimization.usedExports = true;
       config.optimization.sideEffects = false;
+
+      // Additional minification for production
+      config.optimization.minimize = true;
     }
     
     // Development optimizations
