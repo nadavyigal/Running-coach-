@@ -36,7 +36,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // Validate modifications
-    const validatedMods = this.validateModifications(modifications);
+    const validatedMods = validateModifications(modifications);
     if (validatedMods.errors.length > 0) {
       return NextResponse.json({
         error: 'Invalid modifications',
@@ -45,7 +45,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // Check for safety violations
-    const safetyCheck = await this.checkSafetyViolations(
+    const safetyCheck = await checkSafetyViolations(
       userId,
       planId,
       workoutId,

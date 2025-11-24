@@ -30,8 +30,8 @@ export async function GET(request: NextRequest) {
         return {
           ...source,
           recentDataCount,
-          syncStatus: this.determineSyncStatus(source.lastSync),
-          dataFreshness: this.calculateDataFreshness(source.lastSync)
+          syncStatus: _determineSyncStatus(source.lastSync),
+          dataFreshness: _calculateDataFreshness(source.lastSync)
         };
       })
     );
@@ -84,11 +84,11 @@ export async function POST(request: NextRequest) {
       deviceType,
       dataTypes: JSON.stringify(dataTypes || []),
       priority,
-      accuracy: this.getDefaultAccuracy(deviceType),
+      accuracy: _getDefaultAccuracy(deviceType),
       reliability: 100, // Start with full reliability
       lastSync: new Date(),
       isActive: true,
-      capabilities: JSON.stringify(this.getDeviceCapabilities(deviceType)),
+      capabilities: JSON.stringify(_getDeviceCapabilities(deviceType)),
       updatedAt: new Date()
     };
     

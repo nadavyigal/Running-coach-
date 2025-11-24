@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       data: {
         rules,
         dataSources,
-        defaultRules: this.getDefaultRules(userId, dataSources)
+        defaultRules: _getDefaultRules(userId, dataSources)
       }
     });
     

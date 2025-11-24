@@ -201,7 +201,7 @@ async function calculateReliabilityTrends(dataSources: any[], fusedPoints: any[]
       avgQuality,
       trend,
       lastSync: source.lastSync,
-      status: this.determineSyncStatus(source.lastSync)
+      status: _determineSyncStatus(source.lastSync)
     };
   }
   
