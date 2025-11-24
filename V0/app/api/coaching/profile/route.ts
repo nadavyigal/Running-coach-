@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { type CoachingProfile } from '@/lib/db';
 import { dbUtils } from '@/lib/dbUtils';
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
+
 const ProfileQuerySchema = z.object({
   userId: z.string().transform(Number).optional(),
 });

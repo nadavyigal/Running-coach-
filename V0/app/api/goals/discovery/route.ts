@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
+
 // Use a relative import to avoid alias resolution issues in test runners
 import {
   goalDiscoveryEngine,

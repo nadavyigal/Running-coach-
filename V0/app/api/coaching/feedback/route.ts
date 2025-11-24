@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
 import { adaptiveCoachingEngine } from '@/lib/adaptiveCoachingEngine';
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
+
 const FeedbackSchema = z.object({
   userId: z.number(),
   interactionId: z.string().optional(),

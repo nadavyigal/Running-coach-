@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
+
 const MilestonesQuerySchema = z.object({
   goalId: z.string().transform(Number),
   status: z.enum(['pending', 'active', 'achieved', 'missed']).optional(),

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DataFusionEngine } from '../../../../lib/dataFusionEngine';
 import { db } from '../../../../lib/db';
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
+
 const fusionEngine = new DataFusionEngine();
 
 // GET /api/data-fusion/sources - List all connected data sources

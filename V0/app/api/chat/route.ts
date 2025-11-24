@@ -474,7 +474,7 @@ function extractUserIdFromString(value: string | undefined | null): number | nul
   }
 
   const numericMatch = trimmed.match(/^(?:user-)?(\d+)$/i)
-  const valueToParse = numericMatch ? numericMatch[1] : trimmed
+  const valueToParse = numericMatch ? (numericMatch[1] || trimmed) : trimmed
   const parsed = Number.parseInt(valueToParse, 10)
   return Number.isNaN(parsed) ? null : parsed
 }

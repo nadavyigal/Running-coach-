@@ -4,6 +4,10 @@ import { GoalRecommendation } from '@/lib/db';
 import { dbUtils } from '@/lib/dbUtils';
 import { goalProgressEngine } from '@/lib/goalProgressEngine';
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
+
 const RecommendationsQuerySchema = z.object({
   userId: z.string().transform(Number),
   type: z.enum(['new_goal', 'adjustment', 'milestone', 'motivation', 'priority_change']).nullable().optional(),

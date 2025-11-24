@@ -4,6 +4,9 @@ import { db } from '../../../../lib/db';
 
 const fusionEngine = new DataFusionEngine();
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
 // GET /api/data-fusion/rules - Get fusion rules for user
 export async function GET(request: NextRequest) {
   try {

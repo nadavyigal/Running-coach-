@@ -5,6 +5,10 @@ import { dbUtils } from '@/lib/dbUtils';
 import { goalProgressEngine } from '@/lib/goalProgressEngine';
 import { planAdaptationEngine } from '@/lib/planAdaptationEngine';
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
+
 // Validation schemas
 const CreateGoalSchema = z.object({
   userId: z.number(),

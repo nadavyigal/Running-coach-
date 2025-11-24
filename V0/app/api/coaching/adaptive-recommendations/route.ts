@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
 import { adaptiveCoachingEngine, UserContext } from '@/lib/adaptiveCoachingEngine';
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
+
 const RecommendationsQuerySchema = z.object({
   userId: z.string().transform(Number).optional(),
   context: z.object({

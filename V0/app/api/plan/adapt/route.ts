@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
 import { planAdaptationEngine } from '@/lib/planAdaptationEngine';
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
+
 // Validation schema for manual adaptation requests
 const ManualAdaptationRequestSchema = z.object({
   userId: z.number(),

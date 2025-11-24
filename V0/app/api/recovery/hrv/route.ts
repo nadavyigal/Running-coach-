@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, HRVMeasurement } from '../../../../lib/db';
 import { RecoveryEngine } from '../../../../lib/recoveryEngine';
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);

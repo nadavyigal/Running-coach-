@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
 import { goalProgressEngine } from '@/lib/goalProgressEngine';
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
+
 const ProgressQuerySchema = z.object({
   goalId: z.string().nullable().transform(val => val ? Number(val) : undefined).optional(),
   userId: z.string().nullable().transform(val => val ? Number(val) : undefined).optional(),
