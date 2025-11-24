@@ -1038,6 +1038,24 @@ export class RunSmartDB extends Dexie {
       // User Route Preferences: Simple user lookup
       userRoutePreferences: '++id, userId, maxDistance, preferredDifficulty, createdAt',
     });
+
+    // Version 2: Reset onboarding for existing users to fix production issue
+    this.version(2).stores({}).upgrade(async (trans) => {
+      console.log('🔄 Upgrading database to version 2: Resetting onboarding for all users');
+
+      // Reset onboardingComplete for all existing users
+      const users = await trans.table('users').toArray();
+
+      for (const user of users) {
+        await trans.table('users').update(user.id!, {
+          onboardingComplete: false,
+          updatedAt: new Date()
+        });
+        console.log(`✓ Reset onboarding for user ${user.id}`);
+      }
+
+      console.log(`✓ Database upgrade complete: Reset onboarding for ${users.length} users`);
+    });
   }
 }
 

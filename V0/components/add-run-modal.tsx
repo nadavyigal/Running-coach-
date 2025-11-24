@@ -450,18 +450,6 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
         isWithinPlanRange: selectedDateTime >= planStartDate && selectedDateTime <= activePlan.endDate
       })
 
-      // Validate that selected date is within plan range
-      const planEndDate = new Date(activePlan.endDate)
-
-      if (selectedDateTime > planEndDate) {
-        toast({
-          variant: "destructive",
-          title: "Date Outside Plan Range",
-          description: `Please select a date within your training plan (up to ${planEndDate.toLocaleDateString()}).`,
-        })
-        return
-      }
-
       // Get day of week
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
       const idx = selectedDateTime.getDay()

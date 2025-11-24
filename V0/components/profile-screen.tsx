@@ -20,6 +20,8 @@ import {
   ChevronRight,
   Loader2,
   AlertCircle,
+  Trash2,
+  Database,
 } from "lucide-react"
 import { AddShoesModal } from "@/components/add-shoes-modal"
 import { ReminderSettings } from "@/components/reminder-settings"
@@ -365,6 +367,49 @@ export function ProfileScreen() {
               </div>
             );
           })}
+        </CardContent>
+      </Card>
+
+      {/* Developer/Testing Tools */}
+      <Card className="border-red-200 bg-red-50/50">
+        <CardHeader>
+          <CardTitle className="text-red-900 flex items-center gap-2">
+            <Database className="h-5 w-5" />
+            Developer Tools
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="p-4 bg-white rounded-lg border border-red-200">
+            <div className="flex items-start justify-between mb-2">
+              <div>
+                <div className="font-medium text-red-900">Reset App Data</div>
+                <div className="text-sm text-red-700 mt-1">
+                  Clear all local data including user profile, workouts, and cached data.
+                  This will reset the app to its initial state.
+                </div>
+              </div>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="mt-3 w-full"
+              onClick={() => {
+                if (confirm('Are you sure you want to reset all app data? This cannot be undone.')) {
+                  // Clear IndexedDB
+                  indexedDB.deleteDatabase('RunSmartDB');
+                  // Clear localStorage
+                  localStorage.clear();
+                  // Clear sessionStorage
+                  sessionStorage.clear();
+                  // Reload page
+                  window.location.reload();
+                }
+              }}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Reset All Data
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
