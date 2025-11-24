@@ -229,7 +229,7 @@ export function GoalRecommendations({ userId, className = '' }: GoalRecommendati
     return type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
-  const allRecommendations = [...recommendations.stored, ...recommendations.dynamic]
+  const allRecommendations = [...(recommendations.stored || []), ...(recommendations.dynamic || [])]
     .filter(r => r.status !== 'dismissed' && r.status !== 'accepted')
     .sort((a, b) => (b.confidenceScore || 0) - (a.confidenceScore || 0));
 

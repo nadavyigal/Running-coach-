@@ -24,7 +24,7 @@ test.describe('Comprehensive Error Fix and Flow Test', () => {
     });
     
     // Navigate to app
-    await page.goto('http://localhost:3004');
+    await page.goto('http://localhost:3000');
     
     // Clear storage to ensure fresh start
     await page.evaluate(() => {
@@ -44,8 +44,8 @@ test.describe('Comprehensive Error Fix and Flow Test', () => {
     const pageContent = await page.evaluate(() => {
       const body = document.body;
       return {
-        hasOnboarding: !!document.querySelector('h1:contains("Welcome")') || body.textContent?.includes('Welcome'),
-        hasToday: !!document.querySelector('h1:contains("Today")') || body.textContent?.includes('Today'),
+        hasOnboarding: body.textContent?.includes('Welcome'),
+        hasToday: body.textContent?.includes('Today'),
         hasLoading: body.textContent?.includes('Loading'),
         hasError: body.textContent?.includes('Error') || body.textContent?.includes('user not found'),
         visibleText: body.textContent?.slice(0, 500)

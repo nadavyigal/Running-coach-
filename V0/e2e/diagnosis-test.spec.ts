@@ -4,7 +4,7 @@ test.describe('Running Coach Application Diagnosis', () => {
   test.beforeEach(async ({ page, context }) => {
     // Clear all storage before each test
     await context.clearCookies();
-    await page.goto('http://localhost:3004');
+    await page.goto('http://localhost:3000');
     await page.evaluate(() => {
       localStorage.clear();
       sessionStorage.clear();
@@ -33,7 +33,7 @@ test.describe('Running Coach Application Diagnosis', () => {
     });
     
     // Load the page and wait for network idle
-    await page.goto('http://localhost:3004');
+    await page.goto('http://localhost:3000');
     await page.waitForLoadState('networkidle');
     
     // Wait a bit more to capture any delayed errors
@@ -53,7 +53,7 @@ test.describe('Running Coach Application Diagnosis', () => {
   test('2. Verify onboarding elements and goal wizard', async ({ page }) => {
     console.log('🔍 Testing onboarding elements...');
     
-    await page.goto('http://localhost:3004');
+    await page.goto('http://localhost:3000');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
@@ -85,7 +85,7 @@ test.describe('Running Coach Application Diagnosis', () => {
   test('3. Test Start my journey button functionality', async ({ page }) => {
     console.log('🔍 Testing Start my journey button...');
     
-    await page.goto('http://localhost:3004');
+    await page.goto('http://localhost:3000');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
@@ -130,7 +130,7 @@ test.describe('Running Coach Application Diagnosis', () => {
   test('4. Test AI coach chat functionality', async ({ page }) => {
     console.log('🔍 Testing AI coach chat...');
     
-    await page.goto('http://localhost:3004');
+    await page.goto('http://localhost:3000');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
@@ -145,7 +145,7 @@ test.describe('Running Coach Application Diagnosis', () => {
     console.log('💬 Chat input exists:', chatInputExists);
     
     // Look for AI coach elements
-    const coachElements = await page.locator('text*="AI Coach", text*="coach", .coach').count();
+    const coachElements = await page.locator('text="AI Coach"').or(page.locator('text="coach"')).or(page.locator('.coach')).count();
     console.log('🤖 AI Coach elements found:', coachElements);
     
     if (chatExists) {
@@ -174,7 +174,7 @@ test.describe('Running Coach Application Diagnosis', () => {
   test('5. Test navigation between main screens', async ({ page }) => {
     console.log('🔍 Testing main screen navigation...');
     
-    await page.goto('http://localhost:3004');
+    await page.goto('http://localhost:3000');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
@@ -230,7 +230,7 @@ test.describe('Running Coach Application Diagnosis', () => {
   test('6. Check for missing UI elements and functionality', async ({ page }) => {
     console.log('🔍 Checking for missing UI elements...');
     
-    await page.goto('http://localhost:3004');
+    await page.goto('http://localhost:3000');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
@@ -259,7 +259,7 @@ test.describe('Running Coach Application Diagnosis', () => {
     // Check for error states
     const errorElements = {
       errorMessages: await page.locator('.error, [role="alert"], .alert-error').count(),
-      notFound: await page.locator('text*="not found", text*="404"').count(),
+      notFound: await page.locator('text="not found"').or(page.locator('text="404"')).count(),
       loading: await page.locator('.loading, .spinner, [data-testid="loading"]').count()
     };
     
@@ -286,7 +286,7 @@ test.describe('Running Coach Application Diagnosis', () => {
   test('7. Test full onboarding to main app flow', async ({ page }) => {
     console.log('🔍 Testing complete user flow...');
     
-    await page.goto('http://localhost:3004');
+    await page.goto('http://localhost:3000');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     

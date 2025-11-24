@@ -4,7 +4,7 @@ test.describe('Onboarding Flow', () => {
   test.beforeEach(async ({ page, context }) => {
     // Clear localStorage before each test
     await context.clearCookies();
-    await page.goto('http://localhost:3002'); // Using port 3002 where our app is running
+    await page.goto('http://localhost:3000'); // Using port 3000 where our app is running
     await page.evaluate(() => {
       localStorage.clear();
     });

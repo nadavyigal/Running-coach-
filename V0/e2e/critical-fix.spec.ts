@@ -5,7 +5,7 @@ test.describe('Critical Database Schema Fix', () => {
     console.log('🔍 Testing critical database schema fix...');
     
     // Navigate to the app
-    await page.goto('http://localhost:3002');
+    await page.goto('http://localhost:3000');
     
     // Clear storage first
     await page.evaluate(() => {

@@ -163,13 +163,13 @@ export const CommunityStatsWidget: React.FC<CommunityStatsWidgetProps> = ({ user
               <div className="text-xs text-muted-foreground">Total Runs</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary">{stats.totalDistance.toFixed(1)}</div>
+              <div className="text-2xl font-bold text-primary">{(Number(stats.totalDistance) || 0).toFixed(1)}</div>
               <div className="text-xs text-muted-foreground">Total km</div>
             </div>
           </div>
           <div className="text-center pt-2">
             <div className="text-lg font-semibold text-muted-foreground">
-              {stats.avgDistance.toFixed(1)} km avg
+              {(Number(stats.avgDistance) || 0).toFixed(1)} km avg
             </div>
             <div className="text-xs text-muted-foreground">Average per run</div>
           </div>
