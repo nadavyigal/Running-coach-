@@ -88,12 +88,15 @@ export function TodayScreen() {
         const allWorkouts = await dbUtils.getWorkoutsForDateRange(user.id!, startOfWeek, endOfWeek)
         setWeeklyWorkouts(allWorkouts)
 
-        const todays = allWorkouts.find(
-          (w) =>
-            w.scheduledDate.getDate() === new Date().getDate() &&
-            w.scheduledDate.getMonth() === new Date().getMonth() &&
-            w.scheduledDate.getFullYear() === new Date().getFullYear(),
-        )
+        // Normalize today's date to midnight for reliable comparison
+        const todayNormalized = new Date(today)
+        todayNormalized.setHours(0, 0, 0, 0)
+
+        const todays = allWorkouts.find((w) => {
+          const workoutDateNormalized = new Date(w.scheduledDate)
+          workoutDateNormalized.setHours(0, 0, 0, 0)
+          return workoutDateNormalized.getTime() === todayNormalized.getTime()
+        })
         setTodaysWorkout(todays || null)
       } else {
         setUserId(null)

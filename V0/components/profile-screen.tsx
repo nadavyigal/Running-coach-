@@ -18,6 +18,8 @@ import {
   Shield,
   HelpCircle,
   ChevronRight,
+  Loader2,
+  AlertCircle,
 } from "lucide-react"
 import { AddShoesModal } from "@/components/add-shoes-modal"
 import { ReminderSettings } from "@/components/reminder-settings"
@@ -39,6 +41,8 @@ export function ProfileScreen() {
   const [showAddShoesModal, setShowAddShoesModal] = useState(false)
   const [runningShoes, setRunningShoes] = useState<any[]>([])
   const [userId, setUserId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [selectedBadge, setSelectedBadge] = useState<{ id: string; name: string } | null>(null);
@@ -62,22 +66,43 @@ export function ProfileScreen() {
   }, [])
 
   useEffect(() => {
-    dbUtils.getCurrentUser().then(async user => {
-      if (user) {
-        setUserId(user.id!);
-        // Check for new badge unlocks after streak update
-        const unlocked = await dbUtils.checkAndUnlockBadges(user.id!);
-        if (unlocked && unlocked.length > 0) {
-          unlocked.forEach(badge => {
-            toast({
-              title: `🏅 Badge Unlocked!`,
-              description: `You earned the ${badge.type} badge for a ${badge.milestone}-day streak!`,
+    const loadUserData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        const user = await dbUtils.getCurrentUser();
+
+        if (user) {
+          setUserId(user.id!);
+          // Check for new badge unlocks after streak update
+          const unlocked = await dbUtils.checkAndUnlockBadges(user.id!);
+          if (unlocked && unlocked.length > 0) {
+            unlocked.forEach(badge => {
+              toast({
+                title: `🏅 Badge Unlocked!`,
+                description: `You earned the ${badge.type} badge for a ${badge.milestone}-day streak!`,
+              });
             });
-          });
+          }
+        } else {
+          setError("Unable to load user data. Please try refreshing the page.");
         }
+      } catch (err) {
+        console.error("Failed to load user data:", err);
+        setError("Failed to load profile data. Please try again later.");
+        toast({
+          title: "Error",
+          description: "Failed to load profile data",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
       }
-    });
-  }, []);
+    };
+
+    loadUserData();
+  }, [toast]);
 
   const connections = [
     { icon: Footprints, name: "Add Shoes", desc: "Track your running shoes mileage" },
@@ -106,6 +131,37 @@ export function ProfileScreen() {
           <Settings className="h-5 w-5" />
         </Button>
       </div>
+
+      {/* Loading State */}
+      {isLoading && (
+        <Card>
+          <CardContent className="p-8 flex flex-col items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-gray-700 mb-4" />
+            <p className="text-gray-600">Loading profile data...</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Error State */}
+      {error && !isLoading && (
+        <Card className="border-red-200">
+          <CardContent className="p-6 flex flex-col items-center text-center">
+            <AlertCircle className="h-8 w-8 text-red-500 mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Unable to Load Profile</h3>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button
+              onClick={() => window.location.reload()}
+              variant="outline"
+            >
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Show content only when not loading and no error */}
+      {!isLoading && !error && (
+        <>
 
       {/* User Info */}
       <Card>
@@ -361,6 +417,8 @@ export function ProfileScreen() {
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   )

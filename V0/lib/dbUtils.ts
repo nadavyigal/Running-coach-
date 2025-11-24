@@ -249,7 +249,7 @@ export async function ensureUserReady(): Promise<User> {
         preferredTimes: ['morning'],
         daysPerWeek: 3,
         consents: { data: true, gdpr: true, push: false },
-        onboardingComplete: true,
+        onboardingComplete: false,
         createdAt: new Date(),
         updatedAt: new Date()
       };

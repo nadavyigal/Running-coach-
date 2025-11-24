@@ -22,7 +22,6 @@ import { useToast } from "@/hooks/use-toast"
 import { trackChatMessageSent } from "@/lib/analytics"
 import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
-import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { EnhancedAICoach, type AICoachResponse } from "@/components/enhanced-ai-coach"
 import type { ChatMessageDTO } from "@/lib/models/chat"
 
@@ -568,20 +567,6 @@ export function ChatScreen() {
                 </div>
               )}
 
-              {/* Recovery Status Widget */}
-              {user && (
-                <div className="mt-4">
-                  <RecoveryRecommendations
-                    userId={user.id!}
-                    date={new Date()}
-                    showBreakdown={false}
-                    onRefresh={() => {
-                      console.log('Refreshing recovery data for chat...');
-                    }}
-                  />
-                </div>
-              )}
-              
               <div ref={messagesEndRef} />
             </>
           )}

@@ -451,19 +451,8 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
       })
 
       // Validate that selected date is within plan range
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
       const planEndDate = new Date(activePlan.endDate)
-      
-      if (selectedDateTime < today) {
-        toast({
-          variant: "destructive",
-          title: "Invalid Date",
-          description: "Please select today or a future date for your workout.",
-        })
-        return
-      }
-      
+
       if (selectedDateTime > planEndDate) {
         toast({
           variant: "destructive",
