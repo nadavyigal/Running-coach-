@@ -150,10 +150,34 @@ export default function RunSmartApp() {
     window.addEventListener('error', handleGlobalError);
     window.addEventListener('unhandledrejection', handleUnhandledRejection);
 
-    // Safe mode to bypass dynamic imports if needed: add ?safe=1 to URL
+    // Check for special URL parameters
     try {
       if (typeof window !== 'undefined') {
         const usp = new URLSearchParams(window.location.search)
+
+        // Reset mode: add ?reset=1 to URL to clear all data and restart onboarding
+        if (usp.get('reset') === '1') {
+          console.warn('[app:reset] Reset mode enabled via ?reset=1 - clearing all data')
+
+          // Clear localStorage
+          localStorage.clear()
+          console.log('[app:reset] ✅ localStorage cleared')
+
+          // Clear IndexedDB (using deleteDatabase directly, no need to enumerate)
+          indexedDB.deleteDatabase('running-coach-db')
+          console.log('[app:reset] ✅ Deleted database: running-coach-db')
+
+          // Remove ?reset=1 from URL and reload
+          window.history.replaceState({}, '', window.location.pathname)
+
+          // Delay reload slightly to ensure database deletion completes
+          setTimeout(() => {
+            window.location.reload()
+          }, 100)
+          return
+        }
+
+        // Safe mode to bypass dynamic imports if needed: add ?safe=1 to URL
         if (usp.get('safe') === '1') {
           console.warn('[app:safe] Safe mode enabled via ?safe=1')
           setSafeMode(true)
