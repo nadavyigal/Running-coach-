@@ -85,6 +85,9 @@ export function TodayScreen() {
     // Clear localStorage
     localStorage.clear()
 
+    // Clear plan creation locks
+    dbUtils.clearPlanCreationLocks()
+
     // Delete IndexedDB
     indexedDB.deleteDatabase('running-coach-db')
 
@@ -99,8 +102,8 @@ export function TodayScreen() {
 
     // Reload page after brief delay to allow DB deletion to complete
     setTimeout(() => {
-      // Force hard reload to clear any cached state
-      window.location.href = window.location.origin + window.location.pathname
+      // Use the built-in reset handler with ?reset=1 parameter
+      window.location.href = window.location.origin + window.location.pathname + '?reset=1'
     }, 800)
   }
 
@@ -111,12 +114,12 @@ export function TodayScreen() {
       if (user) {
         setUserId(user.id || null)
         
-        // Load plan
+        // Load plan - only create if user has completed onboarding
         let activePlan = await dbUtils.getActivePlan(user.id!)
-        if (!activePlan) {
+        if (!activePlan && user.onboardingComplete) {
           activePlan = await dbUtils.ensureUserHasActivePlan(user.id!)
         }
-        setPlan(activePlan)
+        setPlan(activePlan || null)
         
         const today = new Date()
         const startOfWeek = new Date(today)

@@ -239,22 +239,11 @@ export async function ensureUserReady(): Promise<User> {
       
       if (allUsers.length > 0) {
         const anyUser = allUsers[0]; // Most recent
-        console.log(`[${phase}:promote] traceId=${traceId} Promoting incomplete user: id=${anyUser.id} onboarding=${anyUser.onboardingComplete}`);
-        
-        // Promote the user to completed status with minimal required data
-        const updateData = {
-          goal: anyUser.goal || 'habit',
-          experience: anyUser.experience || 'beginner', 
-          preferredTimes: anyUser.preferredTimes || ['morning'],
-          daysPerWeek: anyUser.daysPerWeek || 3,
-          consents: anyUser.consents || { data: true, gdpr: true, push: false },
-          onboardingComplete: true,
-          updatedAt: new Date()
-        };
-        
-        await database.users.update(anyUser.id!, updateData);
-        console.log(`[${phase}:promoted] traceId=${traceId} User ${anyUser.id} promoted to completed`);
-        return { ...anyUser, ...updateData } as User;
+        console.log(`[${phase}:found] traceId=${traceId} Returning existing user AS-IS: id=${anyUser.id} onboarding=${anyUser.onboardingComplete}`);
+
+        // Return the user as-is without promotion
+        // This ensures incomplete users stay incomplete and will see onboarding
+        return anyUser as User;
       }
 
       // Phase 3: No user exists - create a stub user atomically
@@ -1323,6 +1312,14 @@ export async function getActivePlan(userId: number): Promise<Plan | null> {
 
 // Race condition prevention for concurrent plan creation
 const activePlanCreationLocks = new Map<number, Promise<Plan>>();
+
+/**
+ * Clear all plan creation locks - used during reset/cleanup
+ */
+export function clearPlanCreationLocks(): void {
+  activePlanCreationLocks.clear();
+  console.log('✅ Plan creation locks cleared');
+}
 
 /**
  * Ensure user has an active plan - create one if they don't
