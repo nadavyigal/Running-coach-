@@ -1,7 +1,7 @@
 {
-  "buildCommand": "cd V0 && npm ci && npm run build",
-  "outputDirectory": "V0/.next",
+  "buildCommand": "cd v0 && npm ci && npm run build",
+  "outputDirectory": "v0/.next",
   "framework": "nextjs",
-  "installCommand": "cd V0 && npm ci"
+  "installCommand": "cd v0 && npm ci"
 }
 
