@@ -21,6 +21,7 @@ import {
   Loader2,
   Flame,
   BarChart3,
+  RefreshCw,
 } from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
 import { AddActivityModal } from "@/components/add-activity-modal"
@@ -38,6 +39,16 @@ import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
 import { GoalRecommendations } from "@/components/goal-recommendations"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { HabitAnalyticsWidget } from "@/components/habit-analytics-widget"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 export function TodayScreen() {
   const [dailyTip, setDailyTip] = useState(
@@ -50,6 +61,7 @@ export function TodayScreen() {
   const [weeklyWorkouts, setWeeklyWorkouts] = useState<Workout[]>([])
   const [userId, setUserId] = useState<number | null>(null)
   const [plan, setPlan] = useState<Plan | null>(null)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
   const { toast } = useToast()
 
   const tips = [
@@ -63,6 +75,29 @@ export function TodayScreen() {
     const currentIndex = tips.indexOf(dailyTip)
     const nextIndex = (currentIndex + 1) % tips.length
     setDailyTip(tips[nextIndex])
+  }
+
+  const handleRestartOnboarding = () => {
+    setShowResetConfirm(true)
+  }
+
+  const confirmReset = () => {
+    // Clear localStorage
+    localStorage.clear()
+
+    // Delete IndexedDB
+    indexedDB.deleteDatabase('running-coach-db')
+
+    // Show toast notification
+    toast({
+      title: "Restarting...",
+      description: "Your data has been cleared. Reloading to start onboarding...",
+    })
+
+    // Reload page after brief delay
+    setTimeout(() => {
+      window.location.reload()
+    }, 500)
   }
 
   const refreshWorkouts = async () => {
@@ -312,8 +347,19 @@ export function TodayScreen() {
         </div>
       </div>
 
-      {/* Streak Indicator */}
-      <StreakIndicator />
+      {/* Streak Indicator and Restart Button */}
+      <div className="flex items-center gap-2 justify-between">
+        <StreakIndicator />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRestartOnboarding}
+          className="gap-2 text-xs"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Restart Onboarding
+        </Button>
+      </div>
 
       {/* Calendar Strip */}
       <div className="flex gap-2 overflow-x-auto pb-2 animate-in slide-in-from-left duration-500">
@@ -722,6 +768,31 @@ export function TodayScreen() {
           }}
         />
       )}
+
+      {/* Restart Onboarding Confirmation Dialog */}
+      <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restart Onboarding?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>This will permanently delete all your data including:</p>
+              <ul className="list-disc pl-6 space-y-1">
+                <li>Your current training plan</li>
+                <li>All recorded runs and activities</li>
+                <li>Profile settings and preferences</li>
+                <li>Streak progress and achievements</li>
+              </ul>
+              <p className="font-semibold pt-2">This action cannot be undone. You'll start fresh with a new onboarding experience and AI-generated training plan.</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmReset} className="bg-destructive hover:bg-destructive/90">
+              Yes, Reset Everything
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
