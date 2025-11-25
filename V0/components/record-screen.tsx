@@ -149,16 +149,36 @@ export function RecordScreen() {
         return
       }
 
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setGpsPermission('granted')
-          setGpsAccuracy(position.coords.accuracy)
-          resolve(true)
-        },
-        (error) => {
-          console.error('GPS permission denied:', error)
+      let resolved = false
+
+      // Manual timeout as a fallback
+      const timeoutId = setTimeout(() => {
+        if (!resolved) {
+          resolved = true
+          console.error('GPS permission request timeout after 15s')
           setGpsPermission('denied')
           resolve(false)
+        }
+      }, 15000)
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          if (!resolved) {
+            resolved = true
+            clearTimeout(timeoutId)
+            setGpsPermission('granted')
+            setGpsAccuracy(position.coords.accuracy)
+            resolve(true)
+          }
+        },
+        (error) => {
+          if (!resolved) {
+            resolved = true
+            clearTimeout(timeoutId)
+            console.error('GPS permission denied:', error)
+            setGpsPermission('denied')
+            resolve(false)
+          }
         },
         {
           enableHighAccuracy: true,

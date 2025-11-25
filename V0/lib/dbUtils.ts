@@ -976,13 +976,62 @@ export async function updatePlan(planId: number, updates: Partial<Plan>): Promis
   return safeDbOperation(async () => {
     const database = getDatabase();
     if (!database) throw new Error('Database not available');
-    
+
     await database.plans.update(planId, {
       ...updates,
       updatedAt: new Date()
     });
     console.log('✅ Plan updated successfully:', planId);
   }, 'updatePlan');
+}
+
+/**
+ * Update plan with AI-generated workouts
+ */
+export async function updatePlanWithAIWorkouts(planId: number, aiPlan: any): Promise<void> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+
+    // Update plan metadata
+    await database.plans.update(planId, {
+      title: aiPlan.title || 'AI-Generated Running Plan',
+      description: aiPlan.description || 'Personalized training plan',
+      totalWeeks: aiPlan.totalWeeks || 4,
+      updatedAt: new Date()
+    });
+
+    // Delete existing workouts for this plan
+    await database.workouts.where('planId').equals(planId).delete();
+
+    // Add AI-generated workouts
+    if (aiPlan.workouts && Array.isArray(aiPlan.workouts)) {
+      for (const aiWorkout of aiPlan.workouts) {
+        // Calculate scheduled date based on week and day
+        const weekOffset = (aiWorkout.week - 1) * 7;
+        const dayMap: Record<string, number> = {
+          'Mon': 0, 'Tue': 1, 'Wed': 2, 'Thu': 3, 'Fri': 4, 'Sat': 5, 'Sun': 6
+        };
+        const dayOffset = dayMap[aiWorkout.day] || 0;
+        const scheduledDate = addDaysUTC(weekOffset + dayOffset);
+
+        await database.workouts.add({
+          planId,
+          type: aiWorkout.type,
+          distance: aiWorkout.distance,
+          duration: aiWorkout.duration,
+          notes: aiWorkout.notes,
+          intensity: aiWorkout.type === 'easy' ? 'easy' : aiWorkout.type === 'tempo' ? 'moderate' : 'hard',
+          completed: false,
+          scheduledDate,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+      }
+    }
+
+    console.log('✅ Plan updated with AI workouts:', planId);
+  }, 'updatePlanWithAIWorkouts');
 }
 
 /**
@@ -2563,6 +2612,7 @@ export const dbUtils = {
   // Plan management
   createPlan,
   updatePlan,
+  updatePlanWithAIWorkouts,
   getActivePlan,
   ensureUserHasActivePlan,
   getPlanWithWorkouts,

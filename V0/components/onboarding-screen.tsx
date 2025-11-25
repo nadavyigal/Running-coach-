@@ -403,6 +403,41 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           privacySettings: formData.privacySettings
         }, { artificialDelayMs: 300 })
         console.log('✅ Atomic commit complete:', { userId, planId })
+
+        // Generate AI-powered training plan
+        console.log('🤖 Generating personalized training plan...')
+        try {
+          const planResponse = await fetch('/api/generate-plan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user: {
+                experience: formData.experience,
+                goal: formData.goal,
+                daysPerWeek: formData.daysPerWeek,
+                preferredTimes: formData.selectedTimes,
+                age: formData.age
+              }
+            })
+          })
+
+          if (planResponse.ok) {
+            const planData = await planResponse.json()
+            console.log('✅ AI plan generated successfully:', planData)
+
+            // Update the plan with AI-generated workouts
+            if (planData.plan && planData.plan.workouts) {
+              await dbUtils.updatePlanWithAIWorkouts(planId, planData.plan)
+              console.log('✅ Plan updated with AI workouts')
+            }
+          } else {
+            console.warn('⚠️ AI plan generation failed, using default plan')
+          }
+        } catch (planError) {
+          console.warn('⚠️ AI plan generation error, using default plan:', planError)
+          // Continue with default plan - not a critical error
+        }
+
         return true
         
       } catch (error) {

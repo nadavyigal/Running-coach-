@@ -68,7 +68,9 @@ export function ProfileScreen() {
   }, [])
 
   useEffect(() => {
-    const loadUserData = async () => {
+    const loadUserData = async (retryCount = 0) => {
+      const maxRetries = 3;
+
       try {
         setIsLoading(true);
         setError(null);
@@ -88,10 +90,26 @@ export function ProfileScreen() {
             });
           }
         } else {
+          // User not found - retry with exponential backoff
+          if (retryCount < maxRetries) {
+            const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+            console.log(`Retrying user load in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+            setTimeout(() => loadUserData(retryCount + 1), delay);
+            return;
+          }
           setError("Unable to load user data. Please try refreshing the page.");
         }
       } catch (err) {
         console.error("Failed to load user data:", err);
+
+        // Retry on error with exponential backoff
+        if (retryCount < maxRetries) {
+          const delay = Math.pow(2, retryCount) * 1000;
+          console.log(`Retrying after error in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+          setTimeout(() => loadUserData(retryCount + 1), delay);
+          return;
+        }
+
         setError("Failed to load profile data. Please try again later.");
         toast({
           title: "Error",
@@ -99,7 +117,9 @@ export function ProfileScreen() {
           variant: "destructive",
         });
       } finally {
-        setIsLoading(false);
+        if (retryCount >= maxRetries || userId) {
+          setIsLoading(false);
+        }
       }
     };
 

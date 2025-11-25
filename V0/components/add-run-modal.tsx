@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
-import { format } from "date-fns"
+import { format, addDays } from "date-fns"
 import {
   FootprintsIcon as Walking,
   Zap,
@@ -224,37 +224,32 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
   const isDateDisabled = (date: Date) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     const normalizedDate = new Date(date);
     normalizedDate.setHours(0, 0, 0, 0);
-    
-    // Allow past dates for manual run logging (up to 30 days)
-    const thirtyDaysAgo = new Date(today);
-    thirtyDaysAgo.setDate(today.getDate() - 30);
-    
-    // Allow future dates for scheduling (up to 90 days)
-    const ninetyDaysFromNow = new Date(today);
-    ninetyDaysFromNow.setDate(today.getDate() + 90);
-    
+
+    // Allow dates from today up to 14 days in the future
+    const fourteenDaysFromNow = new Date(today);
+    fourteenDaysFromNow.setDate(today.getDate() + 14);
+
     // Debug logging for date validation
     console.log("🔍 Date validation:", {
       inputDate: date.toISOString(),
       normalizedDate: normalizedDate.toISOString(),
       today: today.toISOString(),
-      thirtyDaysAgo: thirtyDaysAgo.toISOString(),
-      ninetyDaysFromNow: ninetyDaysFromNow.toISOString(),
-      isBeforeThirtyDays: normalizedDate < thirtyDaysAgo,
-      isAfterNinetyDays: normalizedDate > ninetyDaysFromNow
+      fourteenDaysFromNow: fourteenDaysFromNow.toISOString(),
+      isBeforeToday: normalizedDate < today,
+      isAfterFourteenDays: normalizedDate > fourteenDaysFromNow
     })
-    
-    const isDisabled = normalizedDate < thirtyDaysAgo || normalizedDate > ninetyDaysFromNow;
-    
+
+    const isDisabled = normalizedDate < today || normalizedDate > fourteenDaysFromNow;
+
     if (isDisabled) {
-      console.log("❌ Date disabled: outside 30-day past to 90-day future range")
+      console.log("❌ Date disabled: outside today to 14-day future range")
     } else {
       console.log("✅ Date allowed")
     }
-    
+
     return isDisabled;
   }
 
@@ -739,6 +734,8 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
                     onSelect={handleDateSelect}
                     initialFocus
                     disabled={isDateDisabled}
+                    fromDate={new Date()}
+                    toDate={addDays(new Date(), 14)}
                   />
                 </PopoverContent>
               </Popover>

@@ -108,7 +108,7 @@ try {
 }
 
 export default function RunSmartApp() {
-  const [currentScreen, setCurrentScreen] = useState<string>("today")
+  const [currentScreen, setCurrentScreen] = useState<string>("onboarding")
   const [isOnboardingComplete, setIsOnboardingComplete] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
