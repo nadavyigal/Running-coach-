@@ -445,6 +445,13 @@ export function RecordScreen() {
     return 'text-yellow-600'
   }
 
+  const getGpsStatusText = () => {
+    if (gpsPermission === 'granted') return 'GPS Ready'
+    if (gpsPermission === 'denied') return 'GPS Access Denied'
+    if (gpsPermission === 'unsupported') return 'GPS Unavailable'
+    return 'Requesting GPS Access...'
+  }
+
   const handleRouteSelected = (route: Route) => {
     setSelectedRoute(route)
     toast({

@@ -385,8 +385,6 @@ export function PlanScreen() {
         </Button>
       </div>
 
-      {plan && <PlanComplexityIndicator plan={plan} />}
-
       {/* View Toggle */}
       <div className="flex bg-gray-100 rounded-lg p-1">
         {[
@@ -409,21 +407,19 @@ export function PlanScreen() {
         ))}
       </div>
 
-      {/* Plan Complexity Indicator */}
-      {plan && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <PlanComplexityIndicator 
-            plan={plan} 
-            userId={plan.userId} 
-            className="h-fit"
-          />
-        </div>
-      )}
-
       {/* Content */}
       {currentView === "monthly" && <MonthlyCalendarView />}
       {currentView === "biweekly" && renderBiweeklyView()}
       {currentView === "progress" && renderProgressView()}
+
+      {/* Plan Complexity Indicator */}
+      {plan && (
+        <PlanComplexityIndicator
+          plan={plan}
+          userId={plan.userId}
+          className="h-fit"
+        />
+      )}
 
       {/* Recovery Status */}
       <RecoveryRecommendations

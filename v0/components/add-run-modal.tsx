@@ -183,19 +183,12 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
   // Removed unused planEndDate state to satisfy strict TS rules
   const { toast } = useToast()
 
-  // Debug logging for date picker
+  // Load plan data for calendar validation when modal opens
   useEffect(() => {
     if (isOpen && step === "configure") {
-      console.log("🔍 AddRunModal Debug - Modal opened in configure step")
-      console.log("📅 Selected date:", selectedDate)
-      console.log("📅 Selected date string:", selectedDate.toISOString())
-      console.log("📅 Today:", new Date().toISOString())
-      console.log("📅 Is selected date in future:", selectedDate > new Date())
-      
-      // Load plan data for calendar validation
       loadPlanData()
     }
-  }, [isOpen, step, selectedDate])
+  }, [isOpen, step])
 
   // Load plan data for calendar validation
   const loadPlanData = async () => {
@@ -210,12 +203,9 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
     }
   }
 
-  // Debug logging for date selection
+  // Handle date selection
   const handleDateSelect = (date: Date | undefined) => {
-    console.log("🔍 DatePicker onSelect called with:", date)
     if (date) {
-      console.log("📅 New selected date:", date.toISOString())
-      console.log("📅 Is future date:", date > new Date())
       setSelectedDate(date)
     }
   }
@@ -228,29 +218,8 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
     const normalizedDate = new Date(date);
     normalizedDate.setHours(0, 0, 0, 0);
 
-    // Allow dates from today up to 14 days in the future
-    const fourteenDaysFromNow = new Date(today);
-    fourteenDaysFromNow.setDate(today.getDate() + 14);
-
-    // Debug logging for date validation
-    console.log("🔍 Date validation:", {
-      inputDate: date.toISOString(),
-      normalizedDate: normalizedDate.toISOString(),
-      today: today.toISOString(),
-      fourteenDaysFromNow: fourteenDaysFromNow.toISOString(),
-      isBeforeToday: normalizedDate < today,
-      isAfterFourteenDays: normalizedDate > fourteenDaysFromNow
-    })
-
-    const isDisabled = normalizedDate < today || normalizedDate > fourteenDaysFromNow;
-
-    if (isDisabled) {
-      console.log("❌ Date disabled: outside today to 14-day future range")
-    } else {
-      console.log("✅ Date allowed")
-    }
-
-    return isDisabled;
+    // Disable dates before today (past dates)
+    return normalizedDate < today;
   }
 
   const presetDistances = [
@@ -464,12 +433,8 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
         workoutData.duration = Number.parseFloat(targetValue)
       }
 
-      console.log("Saving workout to database:", workoutData)
-      
       // Save workout to database
       const workoutId = await dbUtils.createWorkout(workoutData)
-      
-      console.log("Workout saved successfully with ID:", workoutId)
 
       toast({
         title: "Workout Scheduled! \ud83c\udf89",
@@ -735,7 +700,6 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
                     initialFocus
                     disabled={isDateDisabled}
                     fromDate={new Date()}
-                    toDate={addDays(new Date(), 14)}
                   />
                 </PopoverContent>
               </Popover>

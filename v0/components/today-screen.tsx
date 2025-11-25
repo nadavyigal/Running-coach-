@@ -94,10 +94,14 @@ export function TodayScreen() {
       description: "Your data has been cleared. Reloading to start onboarding...",
     })
 
-    // Reload page after brief delay
+    // Close the confirmation dialog
+    setShowResetConfirm(false)
+
+    // Reload page after brief delay to allow DB deletion to complete
     setTimeout(() => {
-      window.location.reload()
-    }, 500)
+      // Force hard reload to clear any cached state
+      window.location.href = window.location.origin + window.location.pathname
+    }, 800)
   }
 
   const refreshWorkouts = async () => {
@@ -347,19 +351,21 @@ export function TodayScreen() {
         </div>
       </div>
 
-      {/* Streak Indicator and Restart Button */}
-      <div className="flex items-center gap-2 justify-between">
-        <StreakIndicator />
+      {/* Restart Button */}
+      <div className="flex justify-end">
         <Button
-          variant="outline"
-          size="sm"
+          variant="ghost"
+          size="xs"
           onClick={handleRestartOnboarding}
-          className="gap-2 text-xs"
+          className="gap-1.5 text-xs text-gray-500 hover:text-gray-700"
         >
-          <RefreshCw className="h-3.5 w-3.5" />
+          <RefreshCw className="h-3 w-3" />
           Restart Onboarding
         </Button>
       </div>
+
+      {/* Streak Indicator */}
+      <StreakIndicator />
 
       {/* Calendar Strip */}
       <div className="flex gap-2 overflow-x-auto pb-2 animate-in slide-in-from-left duration-500">
