@@ -2655,6 +2655,7 @@ export const dbUtils = {
   updatePlanWithAIWorkouts,
   getActivePlan,
   ensureUserHasActivePlan,
+  clearPlanCreationLocks,
   getPlanWithWorkouts,
   deactivateAllUserPlans,
   
