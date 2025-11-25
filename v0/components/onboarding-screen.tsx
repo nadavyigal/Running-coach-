@@ -296,13 +296,17 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       title: "Perfect Goals Discovered!",
       description: `Found ${discoveryResult.discoveredGoals.length} personalized goals with ${Math.round(discoveryResult.estimatedSuccessProbability * 100)}% success probability.`,
     })
-    
-    console.log('🎯 Goal discovery complete, directly completing onboarding...')
-    // DIRECTLY COMPLETE ONBOARDING after goal discovery
-    setTimeout(() => {
-      console.log('🚀 Auto-completing onboarding after goal discovery...')
-      handleComplete() // Directly call the completion handler
-    }, 1500) // Small delay to let user see the success message
+
+    console.log('🎯 Goal discovery complete')
+
+    // Show success message and guide user to complete remaining steps
+    toast({
+      title: "Goals Set!",
+      description: "Please complete the remaining onboarding steps.",
+    })
+
+    // Jump to summary step (step 9) to review and complete
+    setCurrentStep(9)
   }
 
   const canProceed = () => {
@@ -546,20 +550,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       })
 
       setIsGeneratingPlan(false)
-      
-      // Reset onboarding state and complete
-      onboardingManager.resetOnboardingState()
-      
-      try {
-        onComplete()
-      } catch (completionError) {
-        console.error('❌ Even fallback completion failed:', completionError)
-        
-        // Last resort - reload the page
-        if (typeof window !== 'undefined') {
-          window.location.reload()
-        }
-      }
+
+      // Do NOT call onComplete() on error - keep user on onboarding screen
+      // User can retry by clicking "Start My Journey" again
     }
   }
       
@@ -924,36 +917,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 'Start My Journey'
               )}
             </Button>
-            
-            {/* Emergency fallback button in case of persistent errors */}
-            {isGeneratingPlan && (
-              <Button 
-                onClick={async () => {
-                  try {
-                    // Reset onboarding state first
-                    onboardingManager.resetOnboardingState();
-                    
-                    setIsGeneratingPlan(false);
-                    localStorage.setItem("onboarding-complete", "true");
-                    
-                    toast({
-                      title: "Continuing without full setup",
-                      description: "You can complete your profile later from settings.",
-                      variant: "default"
-                    });
-                    
-                    onComplete();
-                  } catch (error) {
-                    console.error('Fallback completion failed:', error);
-                    setIsGeneratingPlan(false);
-                  }
-                }} 
-                variant="outline" 
-                className="w-full mt-2 text-sm"
-              >
-                Skip Plan Generation & Continue
-              </Button>
-            )}
           </div>
         )
       default:
