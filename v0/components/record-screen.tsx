@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -439,30 +439,6 @@ export function RecordScreen() {
   }
 
   const getGpsStatusColor = () => {
-    switch (gpsPermission) {
-      case 'granted': return gpsAccuracy < 10 ? 'text-green-500' : 'text-yellow-500'
-      case 'denied': return 'text-red-500'
-      case 'unsupported': return 'text-gray-500'
-      default: return 'text-gray-400'
-    }
-  }
-
-  const getGpsStatusText = () => {
-    if (gpsPermission === 'granted') return 'GPS Active'
-    if (gpsPermission === 'denied') return 'GPS Denied - Allow in browser settings'
-    if (gpsPermission === 'unsupported') {
-      // Check if it's an HTTPS issue
-      const isSecure = typeof window !== 'undefined' && 
-        (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
-      if (!isSecure) {
-        return 'GPS requires HTTPS'
-      }
-      return 'GPS Unsupported'
-    }
-    return 'GPS Pending - Tap to enable'
-  }
-
-  const getGpsStatusColor = () => {
     if (gpsPermission === 'granted') return 'text-green-600'
     if (gpsPermission === 'denied') return 'text-red-600'
     if (gpsPermission === 'unsupported') return 'text-gray-500'
@@ -507,7 +483,7 @@ export function RecordScreen() {
               <div>
                 <h3 className="font-medium text-green-900">{selectedRoute.name}</h3>
                 <p className="text-sm text-green-700">
-                  {selectedRoute.distance}km • {selectedRoute.safetyScore}% safe • {selectedRoute.difficulty}
+                  {selectedRoute.distance}km ג€¢ {selectedRoute.safetyScore}% safe ג€¢ {selectedRoute.difficulty}
                 </p>
               </div>
               <Button 
@@ -661,7 +637,7 @@ export function RecordScreen() {
           <CardContent className="p-4">
             <div className="text-center">
               <h3 className="font-medium text-blue-900 mb-2">
-                {isPaused ? 'Take your time! ⏸️' : 'Keep it up! 🏃‍♂️'}
+                {isPaused ? 'Take your time! ג¸ן¸' : 'Keep it up! נƒג€ג™‚ן¸'}
               </h3>
               <p className="text-sm text-blue-800">
                 {isPaused 
@@ -767,3 +743,4 @@ function RouteVisualization({ gpsPath, currentPosition }: {
     </svg>
   )
 }
+
