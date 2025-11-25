@@ -111,20 +111,33 @@ export function RecordScreen() {
   }
 
   const checkGpsSupport = async () => {
+    // Check if running on HTTPS (required for GPS in production)
+    const isSecure = typeof window !== 'undefined' && 
+      (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
+    
+    if (!isSecure) {
+      console.warn('[GPS] Not running on HTTPS - GPS may not work');
+      setGpsPermission('unsupported')
+      return
+    }
+
     if (!navigator.geolocation) {
+      console.warn('[GPS] Geolocation API not available');
       setGpsPermission('unsupported')
       return
     }
 
     try {
       const permission = await navigator.permissions.query({ name: 'geolocation' as PermissionName })
+      console.log('[GPS] Permission state:', permission.state);
       setGpsPermission(permission.state)
       
       permission.onchange = () => {
+        console.log('[GPS] Permission changed to:', permission.state);
         setGpsPermission(permission.state)
       }
     } catch (error) {
-      console.error('Error checking GPS permission:', error)
+      console.error('[GPS] Error checking GPS permission:', error)
       setGpsPermission('prompt')
     }
   }
@@ -436,9 +449,24 @@ export function RecordScreen() {
 
   const getGpsStatusText = () => {
     if (gpsPermission === 'granted') return 'GPS Active'
-    if (gpsPermission === 'denied') return 'GPS Denied'
-    if (gpsPermission === 'unsupported') return 'GPS Unsupported'
-    return 'GPS Pending'
+    if (gpsPermission === 'denied') return 'GPS Denied - Allow in browser settings'
+    if (gpsPermission === 'unsupported') {
+      // Check if it's an HTTPS issue
+      const isSecure = typeof window !== 'undefined' && 
+        (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
+      if (!isSecure) {
+        return 'GPS requires HTTPS'
+      }
+      return 'GPS Unsupported'
+    }
+    return 'GPS Pending - Tap to enable'
+  }
+
+  const getGpsStatusColor = () => {
+    if (gpsPermission === 'granted') return 'text-green-600'
+    if (gpsPermission === 'denied') return 'text-red-600'
+    if (gpsPermission === 'unsupported') return 'text-gray-500'
+    return 'text-yellow-600'
   }
 
   const handleRouteSelected = (route: Route) => {

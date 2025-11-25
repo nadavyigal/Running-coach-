@@ -80,9 +80,27 @@ export function ProfileScreen() {
 
         console.log(`[ProfileScreen] Loading user data (attempt ${retryCount + 1}/${maxRetries})...`);
 
-        // First, wait a bit on initial load for database to initialize
-        if (retryCount === 0 && isProduction) {
-          await new Promise(r => setTimeout(r, 500));
+        // First, ensure database is initialized before querying
+        if (retryCount === 0) {
+          console.log('[ProfileScreen] Ensuring database is initialized...');
+          try {
+            const dbReady = await dbUtils.initializeDatabase();
+            if (!dbReady) {
+              console.warn('[ProfileScreen] Database initialization returned false');
+            }
+            // Wait a bit more in production for database to stabilize
+            if (isProduction) {
+              await new Promise(r => setTimeout(r, 800));
+            }
+          } catch (dbInitError) {
+            console.warn('[ProfileScreen] Database init check failed:', dbInitError);
+            // Continue anyway - might still work
+          }
+        } else {
+          // On retry, wait with exponential backoff
+          const waitTime = baseDelay * Math.pow(1.5, retryCount - 1);
+          console.log(`[ProfileScreen] Waiting ${waitTime}ms before retry...`);
+          await new Promise(r => setTimeout(r, waitTime));
         }
 
         const user = await dbUtils.getCurrentUser();
@@ -189,6 +207,13 @@ export function ProfileScreen() {
             <AlertCircle className="h-8 w-8 text-red-500 mb-4" />
             <h3 className="text-lg font-semibold mb-2">Unable to Load Profile</h3>
             <p className="text-gray-600 mb-4">{error}</p>
+            
+            {/* Database Status Indicator */}
+            <div className="flex items-center gap-2 text-xs text-gray-500 mb-4 bg-gray-50 px-3 py-2 rounded-lg">
+              <Database className="h-3 w-3" />
+              <span>Database: {typeof indexedDB !== 'undefined' ? 'Available' : 'Not Available'}</span>
+            </div>
+            
             <div className="flex flex-col gap-2 w-full max-w-xs">
               <Button
                 onClick={() => {
@@ -227,6 +252,23 @@ export function ProfileScreen() {
                 variant="outline"
               >
                 Retry Without Refresh
+              </Button>
+              <Button
+                onClick={() => {
+                  // Clear all data and restart
+                  localStorage.clear();
+                  indexedDB.deleteDatabase('running-coach-db');
+                  toast({
+                    title: "Data Cleared",
+                    description: "Restarting with fresh data...",
+                  });
+                  setTimeout(() => window.location.reload(), 500);
+                }}
+                variant="ghost"
+                className="text-red-500 hover:text-red-600"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Clear Data & Restart
               </Button>
             </div>
             <p className="text-xs text-gray-500 mt-4">

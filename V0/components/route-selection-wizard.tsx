@@ -208,6 +208,16 @@ export function RouteSelectionWizard({
   }, [isOpen, locationStatus]);
 
   const requestLocation = () => {
+    // Check if running on HTTPS (required for GPS in production)
+    const isSecure = typeof window !== 'undefined' && 
+      (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
+    
+    if (!isSecure) {
+      console.warn('[RouteSelectionWizard] Not running on HTTPS - GPS unavailable');
+      setLocationStatus('unavailable');
+      return;
+    }
+
     if (!navigator.geolocation) {
       setLocationStatus('unavailable');
       console.log('[RouteSelectionWizard] Geolocation not supported');

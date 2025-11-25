@@ -135,6 +135,16 @@ export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps)
   }, [userLocation])
 
   const requestLocation = () => {
+    // Check if running on HTTPS (required for GPS in production)
+    const isSecure = typeof window !== 'undefined' && 
+      (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
+    
+    if (!isSecure) {
+      console.warn('[RouteSelectorModal] Not running on HTTPS - GPS unavailable')
+      setLocationStatus('unavailable')
+      return
+    }
+
     if (!navigator.geolocation) {
       setLocationStatus('unavailable')
       console.log('[RouteSelectorModal] Geolocation not supported')

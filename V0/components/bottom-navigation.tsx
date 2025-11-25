@@ -3,6 +3,9 @@
 import { Button } from "@/components/ui/button"
 import { Home, Calendar, Play, MessageCircle, User, BarChart3 } from "lucide-react"
 
+// Version tracking for deployment verification
+const APP_VERSION = 'v1.1.0';
+
 interface BottomNavigationProps {
   currentScreen: string
   onScreenChange: (screen: string) => void
@@ -42,6 +45,10 @@ export function BottomNavigation({ currentScreen, onScreenChange }: BottomNaviga
             {!item.isSpecial && <span className="text-xs font-medium">{item.label}</span>}
           </Button>
         ))}
+      </div>
+      {/* Version indicator - helps verify deployment */}
+      <div className="absolute bottom-0.5 right-2 text-[8px] text-gray-300 select-none">
+        {APP_VERSION}
       </div>
     </nav>
   )

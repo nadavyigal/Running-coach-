@@ -113,6 +113,19 @@ try {
   // Diagnostics not available - use no-ops
 }
 
+// Import version tracking
+let logVersionInfo: any = () => {};
+let checkVersionAndClearCache: any = () => false;
+let getShortVersion: any = () => 'v1.0.0';
+try {
+  const versionModule = require("@/lib/version");
+  logVersionInfo = versionModule.logVersionInfo;
+  checkVersionAndClearCache = versionModule.checkVersionAndClearCache;
+  getShortVersion = versionModule.getShortVersion;
+} catch {
+  // Version module not available
+}
+
 // Import chunk error handler with fallback
 let useChunkErrorHandler: any = () => {};
 try {
@@ -210,6 +223,15 @@ export default function RunSmartApp() {
       
       if (typeof window !== 'undefined') {
         try {
+          // Log version info first thing
+          logVersionInfo();
+          
+          // Check for version changes and clear stale cache
+          const versionChanged = checkVersionAndClearCache();
+          if (versionChanged) {
+            console.log('[app:init:version] Version changed - cache cleared');
+          }
+          
           console.log('[app:init:start] Starting enhanced application initialization...')
           logDiagnostic('database', 'App initialization started');
           
