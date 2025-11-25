@@ -96,6 +96,7 @@
     "@vitejs/plugin-react": "^4.6.0",
     "audit-ci": "^7.1.0",
     "bundlesize": "^0.18.2",
+    "cssnano": "^7.1.2",
     "eslint": "^8.57.1",
     "eslint-config-next": "15.3.5",
     "eslint-plugin-security": "^3.0.1",

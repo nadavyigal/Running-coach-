@@ -1,0 +1,43 @@
+# Page snapshot
+
+```yaml
+- link "Skip to content":
+  - /url: "#geist-skip-nav"
+- banner:
+  - link "Vercel logo":
+    - /url: /home
+    - button "Vercel Logo":
+      - img "Vercel Logo"
+  - navigation:
+    - navigation:
+      - link "Sign Up":
+        - /url: /signup?next=%2Fsso-api%3Furl%3Dhttps%253A%252F%252Frunning-coach-fhmqamnqd-nadavyigal-gmailcoms-projects.vercel.app%252F%26nonce%3Da8a7a8dbd1194ad68347594345e00a5f45a240357d744351ca47ef21c775ce0c
+        - paragraph: Sign Up
+- heading "Log in to Vercel" [level=1]
+- textbox "Email Address"
+- button "Continue with Email"
+- button "Continue with Google":
+  - img
+  - text: Continue with Google
+- button "Continue with GitHub":
+  - img
+  - text: Continue with GitHub
+- button "Continue with SAML SSO":
+  - img
+  - text: Continue with SAML SSO
+- button "Continue with Passkey":
+  - img
+  - text: Continue with Passkey
+- button "Show other options"
+- paragraph:
+  - text: Don't have an account?
+  - link "Sign Up":
+    - /url: /signup?next=%2Fsso-api%3Furl%3Dhttps%3A%2F%2Frunning-coach-fhmqamnqd-nadavyigal-gmailcoms-projects.vercel.app%2F%26nonce%3Da8a7a8dbd1194ad68347594345e00a5f45a240357d744351ca47ef21c775ce0c
+- contentinfo:
+  - link "Terms":
+    - /url: /legal/terms
+  - link "Privacy Policy":
+    - /url: /legal/privacy-policy
+- alert
+- img
+```

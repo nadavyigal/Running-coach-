@@ -1,0 +1,35 @@
+[33mcommit b21eac04fb4502db368e9442f1b092a3c7cb95a0[m
+Author: nadavyigal <nadavyigal@gmail.com>
+Date:   Tue Nov 25 12:03:52 2025 +0200
+
+    feat: add Restart Onboarding button to Today screen
+    
+    Added a user-friendly "Restart Onboarding" button next to the streak indicator
+    that allows existing users to reset all data and start fresh with a new
+    AI-generated training plan.
+    
+    Features:
+    - Button placed next to streak indicator in Today screen header
+    - Confirmation dialog with detailed warning about data loss
+    - Lists all data that will be deleted (plan, runs, profile, streak)
+    - Clears localStorage and deletes IndexedDB database
+    - Shows toast notification before reload
+    - Reloads page to trigger onboarding flow
+    
+    This solves the issue where existing users who completed onboarding before
+    the AI plan generation feature can now regenerate their plan without manual
+    URL parameters.
+    
+    User experience:
+    1. Click "Restart Onboarding" button
+    2. Read warning in confirmation dialog
+    3. Confirm or cancel
+    4. If confirmed: data cleared → page reloads → onboarding starts
+    5. Complete onboarding → AI plan generated
+    
+    🤖 Generated with [Claude Code](https://claude.com/claude-code)
+    
+    Co-Authored-By: Claude <noreply@anthropic.com>
+
+ V0/components/today-screen.tsx | 75 [32m++++++++++++++++++++++++++++++++++++++++[m[31m--[m
+ 1 file changed, 73 insertions(+), 2 deletions(-)

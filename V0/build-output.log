@@ -1,0 +1,145 @@
+
+> my-v0-project@0.1.0 build
+> next build
+
+  ▲ Next.js 14.2.30
+  - Environments: .env.local
+  - Experiments (use with caution):
+    · turbo
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Skipping validation of types
+   Skipping linting
+   Collecting page data ...
+   Generating static pages (0/54) ...
+Error getting fusion rules: B [Error]: Dynamic server usage: Route /api/data-fusion/rules couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at V (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:21778)
+    at Object.get (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29465)
+    at d (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\.next\server\app\api\data-fusion\rules\route.js:1:580)
+    at C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:38417
+    at C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\next\dist\server\lib\trace\tracer.js:140:36
+    at NoopContextManager.with (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\@opentelemetry\api\build\src\context\NoopContextManager.js:25:19)
+    at ContextAPI.with (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\@opentelemetry\api\build\src\api\context.js:60:46)
+    at NoopTracer.startActiveSpan (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\@opentelemetry\api\build\src\trace\NoopTracer.js:65:31)
+    at ProxyTracer.startActiveSpan (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\@opentelemetry\api\build\src\trace\ProxyTracer.js:36:24)
+    at C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\next\dist\server\lib\trace\tracer.js:122:103 {
+  description: "Route /api/data-fusion/rules couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+   Generating static pages (13/54) 
+Error getting data quality metrics: B [Error]: Dynamic server usage: Route /api/data-fusion/quality couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at V (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:21778)
+    at Object.get (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29465)
+    at d (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\.next\server\app\api\data-fusion\quality\route.js:1:567)
+    at C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:38417
+    at C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\next\dist\server\lib\trace\tracer.js:140:36
+    at NoopContextManager.with (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\@opentelemetry\api\build\src\context\NoopContextManager.js:25:19)
+    at ContextAPI.with (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\@opentelemetry\api\build\src\api\context.js:60:46)
+    at NoopTracer.startActiveSpan (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\@opentelemetry\api\build\src\trace\NoopTracer.js:65:31)
+    at ProxyTracer.startActiveSpan (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\@opentelemetry\api\build\src\trace\ProxyTracer.js:36:24)
+    at C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\next\dist\server\lib\trace\tracer.js:122:103 {
+  description: "Route /api/data-fusion/quality couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+   Generating static pages (26/54) 
+Error getting recovery trends: B [Error]: Dynamic server usage: Route /api/recovery/trends couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at V (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:21778)
+    at Object.get (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29465)
+    at d (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\.next\server\app\api\recovery\trends\route.js:1:552)
+    at C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:38417
+    at C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\next\dist\server\lib\trace\tracer.js:140:36
+    at NoopContextManager.with (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\@opentelemetry\api\build\src\context\NoopContextManager.js:25:19)
+    at ContextAPI.with (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\@opentelemetry\api\build\src\api\context.js:60:46)
+    at NoopTracer.startActiveSpan (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\@opentelemetry\api\build\src\trace\NoopTracer.js:65:31)
+    at ProxyTracer.startActiveSpan (C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\@opentelemetry\api\build\src\trace\ProxyTracer.js:36:24)
+    at C:\Users\nadav\OneDrive\מסמכים\AI\cursor\cursor playground\Running coach\Running-coach-\V0\node_modules\next\dist\server\lib\trace\tracer.js:122:103 {
+  description: "Route /api/recovery/trends couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+   Generating static pages (40/54) 
+🚀 RunSmartApp component rendering...
+🎭 Current screen: today Onboarding complete: false Loading: true Error: false
+⏳ Showing loading state...
+ ✓ Generating static pages (54/54)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                   Size     First Load JS
+┌ ○ /                                         3.73 kB         461 kB
+├ ○ /_not-found                               187 B           413 kB
+├ ƒ /api/chat                                 0 B                0 B
+├ ƒ /api/chat/ping                            0 B                0 B
+├ ƒ /api/coaching/adaptive-recommendations    0 B                0 B
+├ ƒ /api/coaching/feedback                    0 B                0 B
+├ ƒ /api/coaching/profile                     0 B                0 B
+├ ƒ /api/cohort/join                          0 B                0 B
+├ ƒ /api/cohort/stats                         0 B                0 B
+├ ƒ /api/data-fusion/conflicts                0 B                0 B
+├ ƒ /api/data-fusion/conflicts/[id]/resolve   0 B                0 B
+├ ƒ /api/data-fusion/quality                  0 B                0 B
+├ ƒ /api/data-fusion/rules                    0 B                0 B
+├ ƒ /api/data-fusion/sources                  0 B                0 B
+├ ƒ /api/data-fusion/sync                     0 B                0 B
+├ ƒ /api/devices                              0 B                0 B
+├ ƒ /api/devices/[deviceId]                   0 B                0 B
+├ ƒ /api/devices/[deviceId]/sync              0 B                0 B
+├ ƒ /api/devices/connect                      0 B                0 B
+├ ƒ /api/devices/garmin/activities            0 B                0 B
+├ ƒ /api/devices/garmin/callback              0 B                0 B
+├ ƒ /api/devices/garmin/connect               0 B                0 B
+├ ƒ /api/engagement-optimization              0 B                0 B
+├ ƒ /api/generate-plan                        0 B                0 B
+├ ƒ /api/goals                                0 B                0 B
+├ ƒ /api/goals/analytics                      0 B                0 B
+├ ƒ /api/goals/discovery                      0 B                0 B
+├ ƒ /api/goals/milestones                     0 B                0 B
+├ ƒ /api/goals/milestones/achieve             0 B                0 B
+├ ƒ /api/goals/progress                       0 B                0 B
+├ ƒ /api/goals/recommendations                0 B                0 B
+├ ○ /api/health                               0 B                0 B
+├ ƒ /api/heart-rate/[runId]                   0 B                0 B
+├ ƒ /api/heart-rate/zones                     0 B                0 B
+├ ƒ /api/heart-rate/zones/distribution        0 B                0 B
+├ ƒ /api/metrics/advanced/[runId]             0 B                0 B
+├ ƒ /api/metrics/running-dynamics/[runId]     0 B                0 B
+├ ƒ /api/monitoring/metrics                   0 B                0 B
+├ ƒ /api/monitoring/performance-alert         0 B                0 B
+├ ƒ /api/onboarding/chat                      0 B                0 B
+├ ƒ /api/onboarding/goalWizard                0 B                0 B
+├ ƒ /api/performance/analytics                0 B                0 B
+├ ƒ /api/performance/export                   0 B                0 B
+├ ƒ /api/performance/records                  0 B                0 B
+├ ƒ /api/plan/adapt                           0 B                0 B
+├ ƒ /api/recovery/hrv                         0 B                0 B
+├ ƒ /api/recovery/recommendations             0 B                0 B
+├ ƒ /api/recovery/score                       0 B                0 B
+├ ƒ /api/recovery/sleep                       0 B                0 B
+├ ƒ /api/recovery/trends                      0 B                0 B
+├ ƒ /api/recovery/wellness                    0 B                0 B
+├ ƒ /api/security/alert                       0 B                0 B
+├ ƒ /api/security/csp-violation               0 B                0 B
+├ ƒ /api/security/event                       0 B                0 B
+├ ƒ /api/share-badge                          0 B                0 B
+├ ƒ /api/share-run                            0 B                0 B
+├ ƒ /api/sync/jobs                            0 B                0 B
+├ ƒ /api/test-chat                            0 B                0 B
+├ ƒ /api/test-onboarding-chat                 0 B                0 B
+├ ƒ /api/training-plan/customize              0 B                0 B
+├ ƒ /api/training-plan/customize/[workoutId]  0 B                0 B
+├ ƒ /api/training-plan/generate-advanced      0 B                0 B
+├ ƒ /api/training-plan/preview                0 B                0 B
+├ ƒ /api/training-plan/race-goal              0 B                0 B
+├ ƒ /api/training-plan/workouts               0 B                0 B
+├ ƒ /api/workouts/zone-based                  0 B                0 B
+├ ○ /debug                                    1.8 kB          459 kB
+├ ○ /manifest.webmanifest                     0 B                0 B
+└ ○ /test-db                                  1.72 kB         459 kB
++ First Load JS shared by all                 412 kB
+  └ chunks/vendors-c102c729514a53b7.js        410 kB
+  └ other shared chunks (total)               2.3 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

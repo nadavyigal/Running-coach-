@@ -23,7 +23,8 @@
       "Bash(git commit:*)",
       "Bash(rm:*)",
       "Bash(cp:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(NODE_ENV=production npm run build:*)"
     ],
     "deny": []
   }
