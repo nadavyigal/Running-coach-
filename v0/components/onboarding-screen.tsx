@@ -538,16 +538,13 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       
     } catch (error) {
       console.error('❌ Critical onboarding failure:', error)
-      
-      // Absolute fallback - just complete with localStorage
-      localStorage.setItem("onboarding-complete", "true")
-      
+
       toast({
-        title: "Starting Your Journey",
-        description: "Beginning with basic setup. You can complete your profile later.",
-        variant: "default"
+        title: "Setup Error",
+        description: "Failed to complete onboarding. Please try again.",
+        variant: "destructive"
       })
-      
+
       setIsGeneratingPlan(false)
       
       // Reset onboarding state and complete

@@ -123,7 +123,6 @@ export class SessionManager {
         session = await db.onboardingSessions
           .where('userId')
           .equals(userId)
-          .orderBy('createdAt')
           .reverse()
           .first() || null
       }
