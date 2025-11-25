@@ -69,57 +69,75 @@ export function ProfileScreen() {
 
   useEffect(() => {
     const loadUserData = async (retryCount = 0) => {
-      const maxRetries = 3;
+      // Production-aware settings
+      const isProduction = process.env.NODE_ENV === 'production';
+      const maxRetries = isProduction ? 5 : 3;
+      const baseDelay = isProduction ? 1500 : 1000;
 
       try {
         setIsLoading(true);
         setError(null);
 
+        console.log(`[ProfileScreen] Loading user data (attempt ${retryCount + 1}/${maxRetries})...`);
+
+        // First, wait a bit on initial load for database to initialize
+        if (retryCount === 0 && isProduction) {
+          await new Promise(r => setTimeout(r, 500));
+        }
+
         const user = await dbUtils.getCurrentUser();
 
         if (user) {
+          console.log(`[ProfileScreen] ✅ User loaded: id=${user.id}`);
           setUserId(user.id!);
+          setError(null);
+          setIsLoading(false);
+          
           // Check for new badge unlocks after streak update
-          const unlocked = await dbUtils.checkAndUnlockBadges(user.id!);
-          if (unlocked && unlocked.length > 0) {
-            unlocked.forEach(badge => {
-              toast({
-                title: `🏅 Badge Unlocked!`,
-                description: `You earned the ${badge.type} badge for a ${badge.milestone}-day streak!`,
+          try {
+            const unlocked = await dbUtils.checkAndUnlockBadges(user.id!);
+            if (unlocked && unlocked.length > 0) {
+              unlocked.forEach(badge => {
+                toast({
+                  title: `🏅 Badge Unlocked!`,
+                  description: `You earned the ${badge.type} badge for a ${badge.milestone}-day streak!`,
+                });
               });
-            });
+            }
+          } catch (badgeError) {
+            console.warn('[ProfileScreen] Badge check failed:', badgeError);
+            // Don't fail the whole load for badge check
           }
         } else {
           // User not found - retry with exponential backoff
           if (retryCount < maxRetries) {
-            const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
-            console.log(`Retrying user load in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+            const delay = Math.min(baseDelay * Math.pow(1.5, retryCount), 8000);
+            console.log(`[ProfileScreen] User not found, retrying in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
             setTimeout(() => loadUserData(retryCount + 1), delay);
             return;
           }
-          setError("Unable to load user data. Please try refreshing the page.");
+          console.error('[ProfileScreen] ❌ All retry attempts exhausted');
+          setError("Unable to load profile. The database may still be initializing. Please wait a moment and try refreshing.");
+          setIsLoading(false);
         }
       } catch (err) {
-        console.error("Failed to load user data:", err);
+        console.error(`[ProfileScreen] Error loading user data (attempt ${retryCount + 1}):`, err);
 
         // Retry on error with exponential backoff
         if (retryCount < maxRetries) {
-          const delay = Math.pow(2, retryCount) * 1000;
-          console.log(`Retrying after error in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+          const delay = Math.min(baseDelay * Math.pow(1.5, retryCount), 8000);
+          console.log(`[ProfileScreen] Retrying after error in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
           setTimeout(() => loadUserData(retryCount + 1), delay);
           return;
         }
 
-        setError("Failed to load profile data. Please try again later.");
+        setError("Failed to load profile data. Please try again in a few moments.");
+        setIsLoading(false);
         toast({
           title: "Error",
-          description: "Failed to load profile data",
+          description: "Failed to load profile data. Please try refreshing the page.",
           variant: "destructive",
         });
-      } finally {
-        if (retryCount >= maxRetries || userId) {
-          setIsLoading(false);
-        }
       }
     };
 
@@ -171,12 +189,49 @@ export function ProfileScreen() {
             <AlertCircle className="h-8 w-8 text-red-500 mb-4" />
             <h3 className="text-lg font-semibold mb-2">Unable to Load Profile</h3>
             <p className="text-gray-600 mb-4">{error}</p>
-            <Button
-              onClick={() => window.location.reload()}
-              variant="outline"
-            >
-              Retry
-            </Button>
+            <div className="flex flex-col gap-2 w-full max-w-xs">
+              <Button
+                onClick={() => {
+                  setError(null);
+                  setIsLoading(true);
+                  // Trigger re-mount by updating a key or reloading
+                  window.location.reload();
+                }}
+                variant="default"
+              >
+                Refresh Page
+              </Button>
+              <Button
+                onClick={() => {
+                  // Try to re-initialize the database
+                  setError(null);
+                  setIsLoading(true);
+                  dbUtils.initializeDatabase().then(() => {
+                    dbUtils.getCurrentUser().then((user: any) => {
+                      if (user) {
+                        setUserId(user.id!);
+                        setError(null);
+                      } else {
+                        setError("Still unable to load profile. Please try again.");
+                      }
+                      setIsLoading(false);
+                    }).catch(() => {
+                      setError("Failed to load user data.");
+                      setIsLoading(false);
+                    });
+                  }).catch(() => {
+                    setError("Database initialization failed.");
+                    setIsLoading(false);
+                  });
+                }}
+                variant="outline"
+              >
+                Retry Without Refresh
+              </Button>
+            </div>
+            <p className="text-xs text-gray-500 mt-4">
+              If this persists, try clearing your browser cache or using incognito mode.
+            </p>
           </CardContent>
         </Card>
       )}

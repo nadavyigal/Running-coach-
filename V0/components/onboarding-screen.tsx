@@ -404,9 +404,15 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         }, { artificialDelayMs: 300 })
         console.log('✅ Atomic commit complete:', { userId, planId })
 
-        // Generate AI-powered training plan
+        // Generate AI-powered training plan with enhanced error handling
         console.log('🤖 Generating personalized training plan...')
+        let aiPlanGenerated = false;
+        
         try {
+          // Set a reasonable timeout for AI generation
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+          
           const planResponse = await fetch('/api/generate-plan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -418,24 +424,57 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 preferredTimes: formData.selectedTimes,
                 age: formData.age
               }
-            })
-          })
+            }),
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
 
           if (planResponse.ok) {
-            const planData = await planResponse.json()
-            console.log('✅ AI plan generated successfully:', planData)
+            const planData = await planResponse.json();
+            console.log('✅ AI plan generated successfully:', planData);
 
             // Update the plan with AI-generated workouts
             if (planData.plan && planData.plan.workouts) {
-              await dbUtils.updatePlanWithAIWorkouts(planId, planData.plan)
-              console.log('✅ Plan updated with AI workouts')
+              await dbUtils.updatePlanWithAIWorkouts(planId, planData.plan);
+              console.log('✅ Plan updated with AI workouts');
+              aiPlanGenerated = true;
             }
           } else {
-            console.warn('⚠️ AI plan generation failed, using default plan')
+            const errorData = await planResponse.json().catch(() => ({}));
+            console.warn('⚠️ AI plan generation failed:', {
+              status: planResponse.status,
+              error: errorData
+            });
+            
+            // Check if it's an API key issue
+            if (planResponse.status === 503 || errorData.fallbackRequired) {
+              console.log('📋 AI service unavailable - using default plan template');
+              toast({
+                title: "Using Default Plan",
+                description: "AI coach is currently unavailable. We've created a great starter plan for you!",
+                variant: "default"
+              });
+            }
           }
-        } catch (planError) {
-          console.warn('⚠️ AI plan generation error, using default plan:', planError)
+        } catch (planError: any) {
+          // Handle specific error types
+          if (planError.name === 'AbortError') {
+            console.warn('⚠️ AI plan generation timed out, using default plan');
+            toast({
+              title: "Plan Generation Timeout",
+              description: "AI took too long to respond. Using a pre-built plan instead.",
+              variant: "default"
+            });
+          } else {
+            console.warn('⚠️ AI plan generation error:', planError.message || planError);
+          }
           // Continue with default plan - not a critical error
+        }
+        
+        // Show appropriate success message based on AI availability
+        if (!aiPlanGenerated) {
+          console.log('📋 Using default plan template (AI unavailable)');
         }
 
         return true
@@ -476,10 +515,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       }
       
       if (success) {
-        // Success path
+        // Success path - customize message based on AI availability
         toast({
-          title: "Success!",
-          description: "Your running profile has been created successfully!",
+          title: "Welcome to Run-Smart! 🏃",
+          description: "Your personalized running journey begins now!",
         })
         
         console.log('🎉 Onboarding completed successfully!')

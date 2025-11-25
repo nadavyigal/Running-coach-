@@ -104,6 +104,73 @@ const PlanSchema = z.object({
 });
 
 /**
+ * Generate a fallback plan when AI is unavailable
+ * Creates a reasonable beginner-friendly plan based on user preferences
+ */
+function generateFallbackPlan(user: any): z.infer<typeof PlanSchema> {
+  const experience = user?.experience || 'beginner';
+  const goal = user?.goal || 'habit';
+  const daysPerWeek = Math.min(Math.max(user?.daysPerWeek || 3, 2), 6);
+  
+  const totalWeeks = experience === 'beginner' ? 4 : experience === 'intermediate' ? 6 : 8;
+  
+  // Define workout days based on daysPerWeek
+  const dayOptions = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
+  const selectedDays = daysPerWeek === 3 ? ['Mon', 'Wed', 'Fri'] :
+                       daysPerWeek === 4 ? ['Mon', 'Wed', 'Fri', 'Sun'] :
+                       daysPerWeek === 5 ? ['Mon', 'Tue', 'Thu', 'Fri', 'Sun'] :
+                       daysPerWeek === 2 ? ['Wed', 'Sat'] :
+                       ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  
+  const workouts: z.infer<typeof WorkoutSchema>[] = [];
+  
+  for (let week = 1; week <= totalWeeks; week++) {
+    const baseDistance = experience === 'beginner' ? 2 + (week * 0.5) :
+                        experience === 'intermediate' ? 4 + (week * 0.5) : 6 + (week * 0.5);
+    
+    selectedDays.forEach((day, idx) => {
+      // Mix workout types
+      let type: 'easy' | 'tempo' | 'intervals' | 'long' | 'rest' = 'easy';
+      let distance = baseDistance;
+      let duration = Math.round(baseDistance * 6); // ~6 min/km for beginners
+      
+      if (idx === selectedDays.length - 1) {
+        // Last day of the week is long run
+        type = 'long';
+        distance = baseDistance * 1.5;
+        duration = Math.round(distance * 6.5);
+      } else if (idx === 1 && daysPerWeek >= 3) {
+        // Mid-week tempo or intervals
+        type = week % 2 === 0 ? 'tempo' : 'intervals';
+        distance = baseDistance * 0.8;
+        duration = Math.round(distance * 5.5);
+      }
+      
+      workouts.push({
+        week,
+        day: day as 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun',
+        type,
+        distance: Math.round(distance * 10) / 10,
+        duration,
+        notes: type === 'easy' ? 'Keep a conversational pace' :
+               type === 'long' ? 'Focus on time on feet, not speed' :
+               type === 'tempo' ? 'Comfortably hard pace' :
+               type === 'intervals' ? 'Hard efforts with recovery' : undefined
+      });
+    });
+  }
+  
+  return {
+    title: goal === 'habit' ? 'Build Your Running Habit' :
+           goal === 'distance' ? 'Increase Your Distance' :
+           'Improve Your Speed',
+    description: `A ${totalWeeks}-week plan designed for ${experience} runners focused on ${goal === 'habit' ? 'building consistency' : goal === 'distance' ? 'increasing endurance' : 'improving pace'}.`,
+    totalWeeks,
+    workouts
+  };
+}
+
+/**
  * Generates a personalized training plan using AI based on user preferences and goals.
  * 
  * This endpoint creates customized running training plans by leveraging OpenAI's GPT-4o
@@ -117,7 +184,7 @@ const PlanSchema = z.object({
  * @param req.body.rookie_challenge - Whether to include 14-day rookie challenge
  * 
  * @returns Promise<NextResponse> JSON response containing:
- *   - Success: `{ plan: PlanSchema, source: 'ai' }`
+ *   - Success: `{ plan: PlanSchema, source: 'ai' | 'fallback' }`
  *   - Error: `{ error: string, errorType: string, fallbackRequired: boolean }`
  * 
  * @example
@@ -170,8 +237,17 @@ async function generatePlanHandler(req: NextRequest) {
     }
   );
 
+  // If AI fails, return a fallback plan instead of an error
   if (!result.success) {
-    return NextResponse.json(result.error, { status: result.error.status });
+    console.log('[generate-plan] AI unavailable, using fallback plan generator');
+    
+    const fallbackPlan = generateFallbackPlan(user);
+    
+    return NextResponse.json({ 
+      plan: fallbackPlan,
+      source: 'fallback',
+      message: 'AI coach is temporarily unavailable. Using a pre-built plan template.'
+    });
   }
 
   return NextResponse.json({ 
@@ -228,8 +304,24 @@ async function handleEnhancedPlanRequest(body: any) {
     }
   );
 
+  // If AI fails, return a fallback plan instead of an error
   if (!result.success) {
-    return NextResponse.json(result.error, { status: result.error.status });
+    console.log('[generate-plan:enhanced] AI unavailable, using fallback plan generator');
+    
+    const fallbackPlan = generateFallbackPlan({
+      experience: requestData.userContext.experience,
+      goal: requestData.userContext.goal,
+      daysPerWeek: requestData.userContext.daysPerWeek,
+      preferredTimes: requestData.userContext.preferredTimes
+    });
+    
+    return NextResponse.json({ 
+      plan: fallbackPlan,
+      source: 'fallback',
+      message: 'AI coach is temporarily unavailable. Using a pre-built plan template.',
+      adaptationTrigger: requestData.adaptationTrigger,
+      userContext: requestData.userContext
+    });
   }
 
   return NextResponse.json({ 

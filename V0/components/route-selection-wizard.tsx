@@ -7,8 +7,27 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, TrendingUp, Star, Clock, RouteIcon, Shield, Users, Mountain, Zap, Eye } from "lucide-react";
+import { MapPin, TrendingUp, Star, Clock, RouteIcon, Shield, Users, Mountain, Zap, Eye, Navigation, Loader2, AlertCircle } from "lucide-react";
 import { trackRouteSelected } from "@/lib/analytics";
+
+interface UserLocation {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+}
+
+// Calculate distance between two GPS coordinates (Haversine formula)
+function calculateGPSDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLng/2) * Math.sin(dLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
 
 interface RouteSelectionWizardProps {
   isOpen: boolean;
@@ -33,6 +52,10 @@ interface Route {
   description: string;
   tags: string[];
   matchScore?: number; // How well it matches user preferences
+  // GPS-related fields
+  startLat?: number;
+  startLng?: number;
+  distanceFromUser?: number;
 }
 
 interface UserPreferences {
@@ -60,6 +83,8 @@ const sampleRoutes: Route[] = [
     estimatedTime: 20,
     description: "Flat, scenic loop through the city park with excellent safety",
     tags: ["Popular", "Safe", "Well-lit", "Low traffic"],
+    startLat: 32.0853,
+    startLng: 34.7818,
   },
   {
     id: "2",
@@ -76,6 +101,8 @@ const sampleRoutes: Route[] = [
     estimatedTime: 25,
     description: "Beautiful trail along the river with great views",
     tags: ["Scenic", "Nature", "Peaceful", "Popular"],
+    startLat: 32.0900,
+    startLng: 34.7750,
   },
   {
     id: "3",
@@ -92,6 +119,8 @@ const sampleRoutes: Route[] = [
     estimatedTime: 22,
     description: "Challenging hill workout for strength building",
     tags: ["Hills", "Workout", "Challenging", "Training"],
+    startLat: 32.0750,
+    startLng: 34.7900,
   },
   {
     id: "4",
@@ -108,6 +137,8 @@ const sampleRoutes: Route[] = [
     estimatedTime: 30,
     description: "Urban route through the city center",
     tags: ["Urban", "Busy", "Varied", "City"],
+    startLat: 32.0800,
+    startLng: 34.7850,
   },
   {
     id: "5",
@@ -124,6 +155,8 @@ const sampleRoutes: Route[] = [
     estimatedTime: 40,
     description: "Peaceful forest trail with moderate elevation",
     tags: ["Nature", "Forest", "Peaceful", "Moderate"],
+    startLat: 32.0950,
+    startLng: 34.7700,
   },
   {
     id: "6",
@@ -140,6 +173,8 @@ const sampleRoutes: Route[] = [
     estimatedTime: 15,
     description: "Easy loop around the lake with beautiful views",
     tags: ["Easy", "Scenic", "Safe", "Popular"],
+    startLat: 32.0820,
+    startLng: 34.7880,
   },
 ];
 
@@ -159,15 +194,85 @@ export function RouteSelectionWizard({
     lightingPreference: 'any',
   });
   const [recommendedRoutes, setRecommendedRoutes] = useState<Route[]>([]);
-  const [selectedRoute, setSelectedRoute] = useState<Route | null>(null);
+  const [_selectedRoute, setSelectedRoute] = useState<Route | null>(null);
+  
+  // GPS location state
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'granted' | 'denied' | 'unavailable'>('idle');
 
-  // Calculate route recommendations based on preferences
+  // Request GPS location when modal opens
+  useEffect(() => {
+    if (isOpen && locationStatus === 'idle') {
+      requestLocation();
+    }
+  }, [isOpen, locationStatus]);
+
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus('unavailable');
+      console.log('[RouteSelectionWizard] Geolocation not supported');
+      return;
+    }
+
+    setLocationStatus('loading');
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy
+        });
+        setLocationStatus('granted');
+        console.log('[RouteSelectionWizard] Location obtained:', position.coords.latitude, position.coords.longitude);
+      },
+      (error) => {
+        console.warn('[RouteSelectionWizard] Location error:', error.message);
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocationStatus('denied');
+        } else {
+          setLocationStatus('unavailable');
+        }
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 300000
+      }
+    );
+  };
+
+  // Calculate route recommendations based on preferences and location
   useEffect(() => {
     if (step === 'recommendations') {
       const recommendations = calculateRouteRecommendations(preferences, userExperience);
-      setRecommendedRoutes(recommendations);
+      
+      // Add distance from user if location is available
+      if (userLocation) {
+        const routesWithDistance = recommendations.map(route => ({
+          ...route,
+          distanceFromUser: route.startLat && route.startLng
+            ? calculateGPSDistance(userLocation.latitude, userLocation.longitude, route.startLat, route.startLng)
+            : undefined
+        }));
+        
+        // Sort by match score first, then by distance from user
+        routesWithDistance.sort((a, b) => {
+          const matchDiff = (b.matchScore || 0) - (a.matchScore || 0);
+          if (Math.abs(matchDiff) > 5) return matchDiff; // If match score differs significantly
+          
+          // Otherwise, prefer closer routes
+          const distA = a.distanceFromUser ?? 999;
+          const distB = b.distanceFromUser ?? 999;
+          return distA - distB;
+        });
+        
+        setRecommendedRoutes(routesWithDistance);
+      } else {
+        setRecommendedRoutes(recommendations);
+      }
     }
-  }, [preferences, userExperience, step]);
+  }, [preferences, userExperience, step, userLocation]);
 
   const calculateRouteRecommendations = (
     prefs: UserPreferences, 
@@ -401,6 +506,33 @@ export function RouteSelectionWizard({
         </p>
       </div>
 
+      {/* Location Status */}
+      <div className="mb-2">
+        {locationStatus === 'loading' && (
+          <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 p-2 rounded-lg">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Getting your location...</span>
+          </div>
+        )}
+        {locationStatus === 'granted' && userLocation && (
+          <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-2 rounded-lg">
+            <Navigation className="h-4 w-4" />
+            <span>Routes sorted by distance from you</span>
+          </div>
+        )}
+        {locationStatus === 'denied' && (
+          <div className="flex items-center justify-between text-sm text-amber-600 bg-amber-50 p-2 rounded-lg">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              <span>Location access denied</span>
+            </div>
+            <Button variant="ghost" size="sm" onClick={requestLocation} className="text-xs">
+              Retry
+            </Button>
+          </div>
+        )}
+      </div>
+
       {recommendedRoutes.map((route) => (
         <Card
           key={route.id}
@@ -448,6 +580,18 @@ export function RouteSelectionWizard({
                   <span className="text-sm font-medium">{route.matchScore}% match</span>
                 </div>
               </div>
+
+              {/* Distance from user */}
+              {route.distanceFromUser !== undefined && (
+                <div className="flex items-center gap-1 text-sm text-blue-600">
+                  <Navigation className="h-4 w-4" />
+                  <span>
+                    {route.distanceFromUser < 1 
+                      ? `${Math.round(route.distanceFromUser * 1000)}m away` 
+                      : `${route.distanceFromUser.toFixed(1)} km away`}
+                  </span>
+                </div>
+              )}
 
               {/* Tags and Difficulty */}
               <div className="flex items-center justify-between">

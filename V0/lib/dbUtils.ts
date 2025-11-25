@@ -118,32 +118,48 @@ function validateUserId(userId: number | string | undefined | null): number {
 
 /**
  * Initialize database and verify connectivity
+ * Enhanced with production-resilient retry logic
  */
 export async function initializeDatabase(): Promise<boolean> {
-  try {
-    // Check if we're on the server
-    if (typeof window === 'undefined') {
-      console.log('🔄 Server-side: Database initialization skipped');
-      return true; // Return true for server-side to not block
-    }
-    
-    if (!isDatabaseAvailable()) {
-      console.error('❌ Database not available');
-      return false;
-    }
+  const MAX_RETRIES = process.env.NODE_ENV === 'production' ? 3 : 2;
+  const RETRY_DELAY_BASE = 500; // ms
+  
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // Check if we're on the server
+      if (typeof window === 'undefined') {
+        console.log('🔄 Server-side: Database initialization skipped');
+        return true; // Return true for server-side to not block
+      }
+      
+      if (!isDatabaseAvailable()) {
+        console.error('❌ Database not available');
+        return false;
+      }
 
-    // Test database connection
-    const database = getDatabase();
-    if (database) {
-      await database.open();
-      console.log('✅ Database initialized successfully');
-      return true;
+      // Test database connection
+      const database = getDatabase();
+      if (database) {
+        await database.open();
+        console.log(`✅ Database initialized successfully (attempt ${attempt})`);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`❌ Database initialization attempt ${attempt}/${MAX_RETRIES} failed:`, errorMsg);
+      
+      if (attempt < MAX_RETRIES) {
+        const delay = RETRY_DELAY_BASE * attempt;
+        console.log(`⏳ Retrying database initialization in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        console.error('❌ All database initialization attempts failed');
+        return false;
+      }
     }
-    return false;
-  } catch (error) {
-    console.error('❌ Database initialization failed:', error);
-    return false;
   }
+  return false;
 }
 
 /**
@@ -519,42 +535,69 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
 
 /**
  * Wait until a fully persisted, readable profile (and active plan) exist.
+ * Production-aware with longer timeouts and better error handling.
  */
-export async function waitForProfileReady(timeoutMs: number = 10000): Promise<User | null> {
+export async function waitForProfileReady(timeoutMs?: number): Promise<User | null> {
+  // Use longer timeout in production to handle slower connections
+  const isProduction = typeof process !== 'undefined' && process.env?.NODE_ENV === 'production';
+  const effectiveTimeout = timeoutMs ?? (isProduction ? 15000 : 10000);
+  const pollInterval = isProduction ? 150 : 100; // Slightly slower polling in production
+  
   const start = Date.now();
   let dexieErrorSeen = false;
+  let consecutiveErrors = 0;
+  const MAX_CONSECUTIVE_ERRORS = 3;
 
-  while (Date.now() - start < timeoutMs) {
+  console.log(`[waitForProfileReady] Starting with ${effectiveTimeout}ms timeout (production: ${isProduction})`);
+
+  while (Date.now() - start < effectiveTimeout) {
     try {
       const database = getDatabase();
-      if (!database) return null;
+      if (!database) {
+        console.warn('[waitForProfileReady] Database not available');
+        return null;
+      }
+      
       const completedUsers = await database.users
         .filter((u) => Boolean(u.onboardingComplete))
         .toArray();
+        
       if (completedUsers.length) {
         const user = completedUsers
           .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
         if (user && user.id) {
           const hasActivePlan = await database.plans.where('userId').equals(user.id).and(p => p.isActive).first();
-          if (hasActivePlan) return user as User;
+          if (hasActivePlan) {
+            console.log(`[waitForProfileReady] ✅ Profile ready after ${Date.now() - start}ms`);
+            return user as User;
+          }
         }
-      }      
+      }
+      
+      // Reset consecutive errors on successful poll
+      consecutiveErrors = 0;
     } catch (error) {
+      consecutiveErrors++;
+      
       // If Dexie is throwing DataError/IDBKeyRange issues, don't spam the console
-      // or keep hammering IndexedDB in a tight loop. Mark once and break to let
-      // the caller fall back to localStorage or other strategies.
       if (!dexieErrorSeen && error && typeof error === 'object') {
         const name = (error as any).name;
         if (name === 'DexieError' || name === 'DataError') {
           dexieErrorSeen = true;
+          console.warn('[waitForProfileReady] Dexie error detected, will exit on next error');
         }
       }
-      if (dexieErrorSeen) {
+      
+      // Break if we've seen too many consecutive errors or Dexie errors
+      if (dexieErrorSeen || consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        console.warn(`[waitForProfileReady] Breaking due to ${consecutiveErrors} consecutive errors`);
         break;
       }
     }
-    await sleep(100);
+    await sleep(pollInterval);
   }
+  
+  console.warn(`[waitForProfileReady] Timeout reached after ${Date.now() - start}ms`);
   return null;
 }
 

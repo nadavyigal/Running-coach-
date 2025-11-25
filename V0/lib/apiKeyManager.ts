@@ -207,3 +207,53 @@ export function logConfigurationStatus(): void {
     console.warn('📋 Some features may use fallback behavior');
   }
 }
+
+/**
+ * Check if AI features are available
+ * 
+ * Returns true if OpenAI API is properly configured and available.
+ * Used to determine whether to show AI-dependent features or fallbacks.
+ */
+export function isAIAvailable(): boolean {
+  const validation = validateOpenAIKey();
+  return validation.isValid;
+}
+
+/**
+ * Get environment configuration status for production debugging
+ * 
+ * Returns a safe-to-log status object that doesn't expose sensitive data.
+ */
+export function getEnvironmentStatus(): {
+  openai: 'configured' | 'missing' | 'invalid';
+  posthog: 'configured' | 'missing' | 'invalid';
+  environment: string;
+  isProduction: boolean;
+} {
+  const openaiValidation = validateOpenAIKey();
+  const posthogValidation = validatePostHogKey();
+  
+  return {
+    openai: openaiValidation.isValid ? 'configured' : 
+            openaiValidation.errorCode === 'MISSING' ? 'missing' : 'invalid',
+    posthog: posthogValidation.isValid ? 'configured' : 
+             posthogValidation.errorCode === 'MISSING' ? 'missing' : 'invalid',
+    environment: process.env.NODE_ENV || 'development',
+    isProduction: process.env.NODE_ENV === 'production'
+  };
+}
+
+/**
+ * Get user-friendly message for AI service unavailability
+ * 
+ * Used to display appropriate messages when AI features are not available.
+ */
+export function getAIUnavailableMessage(): string {
+  const validation = validateOpenAIKey();
+  
+  if (validation.errorCode === 'MISSING') {
+    return 'AI coach features are currently unavailable. Your plan will use default templates.';
+  }
+  
+  return 'AI coach is temporarily unavailable. Using default plan templates.';
+}

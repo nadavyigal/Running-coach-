@@ -98,6 +98,21 @@ try {
   };
 }
 
+// Import production diagnostics
+let logDiagnostic: any = () => {};
+let logDatabaseInit: any = () => {};
+let logNavigation: any = () => {};
+let logError: any = () => {};
+try {
+  const diagModule = require("@/lib/productionDiagnostics");
+  logDiagnostic = diagModule.logDiagnostic;
+  logDatabaseInit = diagModule.logDatabaseInit;
+  logNavigation = diagModule.logNavigation;
+  logError = diagModule.logError;
+} catch {
+  // Diagnostics not available - use no-ops
+}
+
 // Import chunk error handler with fallback
 let useChunkErrorHandler: any = () => {};
 try {
@@ -189,80 +204,128 @@ export default function RunSmartApp() {
       console.warn('Safe mode check failed:', safeCheckError);
     }
     
-    // Initialize app state with enhanced error handling
+    // Initialize app state with enhanced error handling and production resilience
     const initializeApp = async () => {
+      const initStartTime = performance.now();
+      
       if (typeof window !== 'undefined') {
         try {
           console.log('[app:init:start] Starting enhanced application initialization...')
+          logDiagnostic('database', 'App initialization started');
           
-          // Step 1: Initialize database with timeout
-          if (dbUtils?.initializeDatabase) {
-            const dbInitTimeout = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Database init timeout (5s)')), 5000)
-            );
-            
-            try {
-              await Promise.race([dbUtils.initializeDatabase(), dbInitTimeout]);
-              console.log('[app:init:db] ✅ Database initialized successfully')
-            } catch (dbError) {
-              console.warn('[app:init:db] ⚠️ Database initialization failed, continuing without database:', dbError);
+          // Production-optimized timeouts (longer for slower connections)
+          const isProduction = process.env.NODE_ENV === 'production';
+          const DB_INIT_TIMEOUT = isProduction ? 10000 : 5000; // 10s in prod, 5s in dev
+          const DB_RETRY_ATTEMPTS = isProduction ? 3 : 2;
+          const DB_RETRY_DELAY = 1000;
+          
+          // Step 1: Initialize database with timeout and retries
+          let dbInitSuccess = false;
+          for (let attempt = 1; attempt <= DB_RETRY_ATTEMPTS && !dbInitSuccess; attempt++) {
+            if (dbUtils?.initializeDatabase) {
+              const dbInitTimeout = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error(`Database init timeout (${DB_INIT_TIMEOUT/1000}s)`)), DB_INIT_TIMEOUT)
+              );
+              
+              try {
+                console.log(`[app:init:db] Attempt ${attempt}/${DB_RETRY_ATTEMPTS} - Initializing database...`)
+                await Promise.race([dbUtils.initializeDatabase(), dbInitTimeout]);
+                dbInitSuccess = true;
+                console.log('[app:init:db] ✅ Database initialized successfully')
+                logDatabaseInit(true, Math.round(performance.now() - initStartTime));
+              } catch (dbError) {
+                const errorMsg = dbError instanceof Error ? dbError.message : 'Unknown error';
+                console.warn(`[app:init:db] ⚠️ Attempt ${attempt} failed:`, errorMsg);
+                
+                if (attempt < DB_RETRY_ATTEMPTS) {
+                  console.log(`[app:init:db] Retrying in ${DB_RETRY_DELAY}ms...`);
+                  await new Promise(r => setTimeout(r, DB_RETRY_DELAY * attempt));
+                } else {
+                  console.warn('[app:init:db] ⚠️ All database init attempts failed, continuing with fallback');
+                  logDatabaseInit(false, Math.round(performance.now() - initStartTime), errorMsg);
+                }
+              }
             }
           }
           
           // Step 2: Perform startup migration with error handling
-          console.log('[app:init:migration] Running startup migration...')
-          try {
-            const migrationSuccess = await dbUtils?.performStartupMigration?.()
-            if (migrationSuccess) {
-              console.log('[app:init:migration] ✅ Startup migration completed')
-            } else {
-              console.warn('[app:init:migration] ⚠️ Startup migration had issues (continuing)')
+          if (dbInitSuccess) {
+            console.log('[app:init:migration] Running startup migration...')
+            try {
+              const migrationSuccess = await dbUtils?.performStartupMigration?.()
+              if (migrationSuccess) {
+                console.log('[app:init:migration] ✅ Startup migration completed')
+              } else {
+                console.warn('[app:init:migration] ⚠️ Startup migration had issues (continuing)')
+              }
+            } catch (migrationError) {
+              console.warn('[app:init:migration] ⚠️ Migration failed, continuing:', migrationError);
             }
-          } catch (migrationError) {
-            console.warn('[app:init:migration] ⚠️ Migration failed, continuing:', migrationError);
           }
           
-          // Step 3: Ensure user is ready with fallback
+          // Step 3: Ensure user is ready with enhanced fallback
           console.log('[app:init:user] Ensuring user identity is ready...')
-          try {
-            const readyUser = await dbUtils?.ensureUserReady?.()
-            if (readyUser) {
-              console.log(`[app:init:user] ✅ User ready: id=${readyUser.id}, onboarding=${readyUser.onboardingComplete}`)
-              
-              if (readyUser.onboardingComplete) {
-                setIsOnboardingComplete(true)
-                setCurrentScreen("today")
-                localStorage.setItem("onboarding-complete", "true")
-                console.log('[app:init:nav] ✅ User ready - navigating to today screen')
-              } else {
-                setIsOnboardingComplete(false)
-                console.log('[app:init:nav] 📝 User needs onboarding - showing onboarding screen')
+          let userResolved = false;
+          
+          if (dbInitSuccess) {
+            try {
+              const readyUser = await dbUtils?.ensureUserReady?.()
+              if (readyUser) {
+                console.log(`[app:init:user] ✅ User ready: id=${readyUser.id}, onboarding=${readyUser.onboardingComplete}`)
+                
+                if (readyUser.onboardingComplete) {
+                  setIsOnboardingComplete(true)
+                  setCurrentScreen("today")
+                  localStorage.setItem("onboarding-complete", "true")
+                  console.log('[app:init:nav] ✅ User ready - navigating to today screen')
+                  logNavigation('init', 'today', 'User onboarding complete');
+                } else {
+                  setIsOnboardingComplete(false)
+                  console.log('[app:init:nav] 📝 User needs onboarding - showing onboarding screen')
+                  logNavigation('init', 'onboarding', 'User needs onboarding');
+                }
+                userResolved = true;
               }
-            } else {
-              throw new Error('Failed to ensure user is ready')
+            } catch (userError) {
+              console.warn('[app:init:user] ⚠️ User ready check failed:', userError);
+              logError('User resolution failed', userError instanceof Error ? userError : String(userError));
             }
-          } catch (userError) {
-            console.warn('[app:init:user] ⚠️ User ready check failed, falling back to localStorage:', userError);
-            
-            // Fallback to localStorage check
+          }
+          
+          // Step 4: Enhanced localStorage fallback if database failed
+          if (!userResolved) {
+            console.log('[app:init:fallback] Using localStorage fallback for user state...');
             try {
               const onboardingComplete = localStorage.getItem("onboarding-complete")
-              if (onboardingComplete === "true") {
+              const userData = localStorage.getItem("user-data")
+              
+              if (onboardingComplete === "true" && userData) {
+                // User has completed onboarding before - try to recover
                 setIsOnboardingComplete(true)
                 setCurrentScreen("today")
                 console.log('[app:init:fallback] ✅ localStorage fallback - navigating to today')
+                logNavigation('init', 'today', 'localStorage fallback');
+              } else if (onboardingComplete === "true") {
+                // Onboarding marked complete but no user data - still show today
+                setIsOnboardingComplete(true)
+                setCurrentScreen("today")
+                console.log('[app:init:fallback] ⚠️ localStorage shows complete but no user data')
               } else {
                 setIsOnboardingComplete(false)
                 console.log('[app:init:fallback] 📝 localStorage fallback - showing onboarding')
+                logNavigation('init', 'onboarding', 'No previous onboarding');
               }
             } catch (fallbackError) {
               console.warn('[app:init:fallback] ⚠️ localStorage fallback failed:', fallbackError)
               setIsOnboardingComplete(false)
+              logNavigation('init', 'onboarding', 'Fallback failed - default to onboarding');
             }
           }
           
         } catch (initErr) {
           console.error('[app:init:error] ❌ Enhanced initialization failed:', initErr)
+          logError('App initialization failed', initErr instanceof Error ? initErr : String(initErr));
+          
           const errorMessage = initErr instanceof Error ? initErr.message : 'Initialization failed';
           setErrorMessage(errorMessage);
           setHasError(true);
@@ -276,7 +339,9 @@ export default function RunSmartApp() {
       }
       
       // CRITICAL: Always set loading to false
-      console.log('[app:init:complete] ✅ App initialization complete, setting loading to false')
+      const totalInitTime = Math.round(performance.now() - initStartTime);
+      console.log(`[app:init:complete] ✅ App initialization complete in ${totalInitTime}ms`)
+      logDiagnostic('database', `App initialization complete`, { duration: totalInitTime });
       setIsLoading(false)
     }
 
