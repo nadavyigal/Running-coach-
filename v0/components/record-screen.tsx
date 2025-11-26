@@ -572,7 +572,7 @@ export function RecordScreen() {
                   onClick={startRun}
                   size="lg"
                   className="bg-green-600 hover:bg-green-700"
-                  disabled={gpsPermission !== 'granted'}
+                  disabled={gpsPermission === 'denied' || gpsPermission === 'unsupported' || isInitializingGps}
                 >
                   <Play className="h-5 w-5 mr-2" />
                   Start Run
