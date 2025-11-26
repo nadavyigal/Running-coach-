@@ -463,9 +463,9 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
         userId = (await database.users.add(toAdd)) as number;
       }
 
-      // Optional artificial delay to expose races during development
-      const delay = typeof options?.artificialDelayMs === 'number' ? options!.artificialDelayMs : 250;
-      if (delay > 0) { await sleep(delay); }
+      // REMOVED: artificial delay (sleep) - causes TransactionInactiveError on mobile
+      // Mobile browsers have strict transaction timeouts (~500ms)
+      // setTimeout/sleep inside transactions is forbidden by Dexie.js
 
       // Ensure one active plan exists
       let activePlan = await database.plans.where('userId').equals(userId).and(p => p.isActive).first();
@@ -492,10 +492,12 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
         planId = (await database.plans.add(planData)) as number;
 
         // Seed a few workouts so Today/Plan screens render content immediately
+        // Use bulkAdd for better performance and faster transaction completion on mobile
         const workoutDays = ['Mon', 'Wed', 'Fri'];
+        const workoutsToAdd: Omit<Workout, 'id'>[] = [];
         for (let week = 1; week <= 4; week++) {
           for (const day of workoutDays.slice(0, planData.trainingDaysPerWeek || 3)) {
-            await database.workouts.add({
+            workoutsToAdd.push({
               planId,
               week,
               day,
@@ -510,6 +512,7 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
             } as Omit<Workout, 'id'>);
           }
         }
+        await database.workouts.bulkAdd(workoutsToAdd);
       } else {
         planId = activePlan.id!;
       }
