@@ -187,12 +187,15 @@ export default function RunSmartApp() {
         if (usp.get('reset') === '1') {
           console.warn('[app:reset] Reset mode enabled via ?reset=1 - clearing all data')
 
-          // Import resetDatabaseInstance to close connection
-          const dbModule = await import('@/lib/db')
-          if (dbModule.resetDatabaseInstance) {
-            dbModule.resetDatabaseInstance()
-            console.log('[app:reset] ✅ Database connection closed')
-          }
+          // Import resetDatabaseInstance to close connection (use .then() since we're not in async function)
+          import('@/lib/db').then((dbModule) => {
+            if (dbModule.resetDatabaseInstance) {
+              dbModule.resetDatabaseInstance()
+              console.log('[app:reset] ✅ Database connection closed')
+            }
+          }).catch((err) => {
+            console.warn('[app:reset] Failed to close database connection:', err)
+          })
 
           // Clear localStorage
           localStorage.clear()
