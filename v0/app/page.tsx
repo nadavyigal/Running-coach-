@@ -187,21 +187,29 @@ export default function RunSmartApp() {
         if (usp.get('reset') === '1') {
           console.warn('[app:reset] Reset mode enabled via ?reset=1 - clearing all data')
 
+          // Import resetDatabaseInstance to close connection
+          const dbModule = await import('@/lib/db')
+          if (dbModule.resetDatabaseInstance) {
+            dbModule.resetDatabaseInstance()
+            console.log('[app:reset] ✅ Database connection closed')
+          }
+
           // Clear localStorage
           localStorage.clear()
           console.log('[app:reset] ✅ localStorage cleared')
 
-          // Clear IndexedDB (using deleteDatabase directly, no need to enumerate)
+          // Clear IndexedDB (connection now closed, will succeed)
           indexedDB.deleteDatabase('running-coach-db')
-          console.log('[app:reset] ✅ Deleted database: running-coach-db')
+          console.log('[app:reset] ✅ Database deletion initiated: running-coach-db')
 
           // Remove ?reset=1 from URL and reload
           window.history.replaceState({}, '', window.location.pathname)
 
-          // Delay reload slightly to ensure database deletion completes
+          // Delay reload to ensure database deletion completes
           setTimeout(() => {
+            console.log('[app:reset] ✅ Reloading page with clean state...')
             window.location.reload()
-          }, 100)
+          }, 200)
           return
         }
 

@@ -1,4 +1,4 @@
-import { db, isDatabaseAvailable, safeDbOperation, getDatabase } from './db';
+import { db, isDatabaseAvailable, safeDbOperation, getDatabase, resetDatabaseInstance } from './db';
 import type {
   ChatMessage as ChatMessageEntity,
   CoachingProfile,
@@ -2602,6 +2602,7 @@ export const dbUtils = {
   initializeDatabase,
   closeDatabase,
   clearDatabase,
+  resetDatabaseInstance,
   checkDatabaseHealth,
   recoverFromDatabaseError,
   validateDatabaseSchema,

@@ -1217,6 +1217,21 @@ export const db = new Proxy({} as RunSmartDB, {
 // importing from '@/lib/db' while avoiding eager Dexie initialization.
 export { dbUtils } from './dbUtils';
 
+// Reset database instance - closes connection and clears cached instance
+export function resetDatabaseInstance(): void {
+  if (dbInstance) {
+    try {
+      console.log('[db:reset] Closing database connection...');
+      dbInstance.close();
+      console.log('[db:reset] Database connection closed');
+    } catch (error) {
+      console.warn('[db:reset] Error closing database:', error);
+    }
+    dbInstance = null;
+    console.log('[db:reset] Database instance cleared');
+  }
+}
+
 // Database availability check
 export function isDatabaseAvailable(): boolean {
   if (typeof window === 'undefined') {

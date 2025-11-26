@@ -82,29 +82,49 @@ export function TodayScreen() {
   }
 
   const confirmReset = () => {
-    // Clear localStorage
-    localStorage.clear()
+    try {
+      console.log('[reset] Starting reset process...');
 
-    // Clear plan creation locks
-    dbUtils.clearPlanCreationLocks()
+      // Step 1: Clear plan creation locks
+      dbUtils.clearPlanCreationLocks()
+      console.log('[reset] Plan locks cleared');
 
-    // Delete IndexedDB
-    indexedDB.deleteDatabase('running-coach-db')
+      // Step 2: Close database connection BEFORE deletion
+      // This is CRITICAL - without closing, the database cannot be deleted
+      dbUtils.resetDatabaseInstance();
+      console.log('[reset] Database connection closed');
 
-    // Show toast notification
-    toast({
-      title: "Restarting...",
-      description: "Your data has been cleared. Reloading to start onboarding...",
-    })
+      // Step 3: Clear localStorage
+      localStorage.clear()
+      console.log('[reset] localStorage cleared');
 
-    // Close the confirmation dialog
-    setShowResetConfirm(false)
+      // Step 4: Delete IndexedDB (connection now closed, will succeed)
+      indexedDB.deleteDatabase('running-coach-db')
+      console.log('[reset] Database deletion initiated');
 
-    // Reload page after brief delay to allow DB deletion to complete
-    setTimeout(() => {
-      // Use the built-in reset handler with ?reset=1 parameter
-      window.location.href = window.location.origin + window.location.pathname + '?reset=1'
-    }, 800)
+      // Show toast notification
+      toast({
+        title: "Restarting...",
+        description: "Your data has been cleared. Reloading to start onboarding...",
+      })
+
+      // Close the confirmation dialog
+      setShowResetConfirm(false)
+
+      // Reload page after brief delay to allow DB deletion to complete
+      setTimeout(() => {
+        console.log('[reset] Redirecting to reset handler...');
+        // Use the built-in reset handler with ?reset=1 parameter
+        window.location.href = window.location.origin + window.location.pathname + '?reset=1'
+      }, 800)
+    } catch (error) {
+      console.error('[reset] Reset failed:', error);
+      toast({
+        title: "Reset Failed",
+        description: "Could not complete reset. Please refresh the page manually.",
+        variant: "destructive",
+      })
+    }
   }
 
   const refreshWorkouts = async () => {
