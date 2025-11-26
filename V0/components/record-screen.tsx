@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertTriangle, Info } from "lucide-react"
+import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertTriangle, Info, Loader2, RefreshCw } from "lucide-react"
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RouteSelectionWizard } from "@/components/route-selection-wizard"
 import { ManualRunModal } from "@/components/manual-run-modal"
@@ -38,6 +38,7 @@ export function RecordScreen() {
   const [isPaused, setIsPaused] = useState(false)
   const [gpsPermission, setGpsPermission] = useState<'prompt' | 'granted' | 'denied' | 'unsupported'>('prompt')
   const [gpsAccuracy, setGpsAccuracy] = useState<number>(0)
+  const [isInitializingGps, setIsInitializingGps] = useState(false)
   const [showRoutesModal, setShowRoutesModal] = useState(false)
   const [showRouteWizard, setShowRouteWizard] = useState(false)
   const [showManualModal, setShowManualModal] = useState(false)
@@ -68,11 +69,45 @@ export function RecordScreen() {
   const { toast } = useToast()
   const router = useRouter()
 
+  // Initialize GPS - proactively request permission on mount
+  const initializeGps = async () => {
+    if (isInitializingGps) return
+    
+    setIsInitializingGps(true)
+    console.log('[GPS] Starting GPS initialization...')
+    
+    try {
+      const granted = await requestGpsPermission()
+      if (granted) {
+        console.log('[GPS] GPS initialized successfully')
+        toast({
+          title: "GPS Ready",
+          description: "Location access granted. You can now start your run.",
+        })
+      } else {
+        console.warn('[GPS] GPS initialization failed')
+      }
+    } catch (error) {
+      console.error('[GPS] Error during GPS initialization:', error)
+    } finally {
+      setIsInitializingGps(false)
+    }
+  }
+
   // Load today's workout and user data on mount
   useEffect(() => {
     loadTodaysWorkout()
     loadCurrentUser()
-    checkGpsSupport()
+    
+    // Check GPS support and then initialize GPS
+    const setupGps = async () => {
+      await checkGpsSupport()
+      // After checking support, proactively request GPS permission
+      if (navigator.geolocation) {
+        initializeGps()
+      }
+    }
+    setupGps()
     
     return () => {
       if (watchIdRef.current) {
@@ -111,20 +146,33 @@ export function RecordScreen() {
   }
 
   const checkGpsSupport = async () => {
+    // Check if running on HTTPS (required for GPS in production)
+    const isSecure = typeof window !== 'undefined' && 
+      (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
+    
+    if (!isSecure) {
+      console.warn('[GPS] Not running on HTTPS - GPS may not work');
+      setGpsPermission('unsupported')
+      return
+    }
+
     if (!navigator.geolocation) {
+      console.warn('[GPS] Geolocation API not available');
       setGpsPermission('unsupported')
       return
     }
 
     try {
       const permission = await navigator.permissions.query({ name: 'geolocation' as PermissionName })
+      console.log('[GPS] Permission state:', permission.state);
       setGpsPermission(permission.state)
       
       permission.onchange = () => {
+        console.log('[GPS] Permission changed to:', permission.state);
         setGpsPermission(permission.state)
       }
     } catch (error) {
-      console.error('Error checking GPS permission:', error)
+      console.error('[GPS] Error checking GPS permission:', error)
       setGpsPermission('prompt')
     }
   }
@@ -416,9 +464,16 @@ export function RecordScreen() {
 
   const getGpsStatusText = () => {
     if (gpsPermission === 'granted') return 'GPS Active'
-    if (gpsPermission === 'denied') return 'GPS Denied'
-    if (gpsPermission === 'unsupported') return 'GPS Unsupported'
-    return 'GPS Pending'
+    if (gpsPermission === 'denied') return 'GPS Denied - Allow in browser settings'
+    if (gpsPermission === 'unsupported') {
+      const isSecure = typeof window !== 'undefined' && 
+        (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
+      if (!isSecure) {
+        return 'GPS requires HTTPS'
+      }
+      return 'GPS Unsupported'
+    }
+    return 'GPS Pending - Tap to enable'
   }
 
   const handleRouteSelected = (route: Route) => {
@@ -476,38 +531,115 @@ export function RecordScreen() {
       )}
 
       {/* GPS Status */}
-      <Card>
+      <Card className={gpsPermission === 'denied' ? 'border-red-200 bg-red-50' : gpsPermission === 'granted' ? 'border-green-200 bg-green-50' : ''}>
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Satellite className={`h-5 w-5 ${getGpsStatusColor()}`} />
+              {isInitializingGps ? (
+                <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
+              ) : (
+                <Satellite className={`h-5 w-5 ${getGpsStatusColor()}`} />
+              )}
               <div>
-                <p className="font-medium">{getGpsStatusText()}</p>
+                <p className="font-medium">{isInitializingGps ? 'Initializing GPS...' : getGpsStatusText()}</p>
                 <p className="text-sm text-gray-600">
-                  Accuracy: {gpsAccuracy > 0 ? `${gpsAccuracy.toFixed(1)}m` : 'Unknown'}
+                  {isInitializingGps 
+                    ? 'Please allow location access when prompted'
+                    : gpsAccuracy > 0 
+                      ? `Accuracy: ${gpsAccuracy.toFixed(1)}m` 
+                      : 'Accuracy: Waiting for signal'
+                  }
                 </p>
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowGPSDetails(!showGPSDetails)}
-            >
-              {showGPSDetails ? 'Hide' : 'Details'}
-            </Button>
+            <div className="flex gap-2">
+              {/* Enable GPS button for prompt state */}
+              {gpsPermission === 'prompt' && !isInitializingGps && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={initializeGps}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  Enable GPS
+                </Button>
+              )}
+              {/* Retry button for denied state */}
+              {gpsPermission === 'denied' && !isInitializingGps && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={initializeGps}
+                  className="border-red-300 text-red-700 hover:bg-red-100"
+                >
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  Retry
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowGPSDetails(!showGPSDetails)}
+              >
+                {showGPSDetails ? 'Hide' : 'Details'}
+              </Button>
+            </div>
           </div>
+
+          {/* GPS Permission Denied Warning */}
+          {gpsPermission === 'denied' && (
+            <div className="mt-3 p-3 bg-red-100 rounded-lg">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-red-800">Location Access Denied</p>
+                  <p className="text-sm text-red-700 mt-1">
+                    To record your run with GPS tracking, please:
+                  </p>
+                  <ol className="text-sm text-red-700 mt-2 list-decimal list-inside space-y-1">
+                    <li>Open your browser settings</li>
+                    <li>Find location/privacy settings</li>
+                    <li>Allow location access for this site</li>
+                    <li>Tap "Retry" above</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* GPS Unsupported Warning */}
+          {gpsPermission === 'unsupported' && (
+            <div className="mt-3 p-3 bg-gray-100 rounded-lg">
+              <div className="flex items-start gap-2">
+                <Info className="h-5 w-5 text-gray-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-gray-800">GPS Unavailable</p>
+                  <p className="text-sm text-gray-700 mt-1">
+                    GPS is not available on this device or browser. You can still use the "Add Manual Run" option below.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* GPS Details */}
           {showGPSDetails && (
             <div className="mt-4 pt-4 border-t">
-              <GPSAccuracyIndicator 
-                currentAccuracy={currentGPSAccuracy}
-                accuracyHistory={gpsAccuracyHistory}
-                onAccuracyUpdate={(data) => {
-                  setCurrentGPSAccuracy(data)
-                  setGpsAccuracyHistory(prev => [...prev.slice(-10), data])
-                }}
-              />
+              {currentGPSAccuracy ? (
+                <GPSAccuracyIndicator 
+                  accuracy={currentGPSAccuracy}
+                  onAccuracyChange={(data: GPSAccuracyData) => {
+                    setCurrentGPSAccuracy(data)
+                    setGpsAccuracyHistory(prev => [...prev.slice(-10), data])
+                  }}
+                  showTroubleshooting={true}
+                />
+              ) : (
+                <div className="text-center py-4 text-gray-500">
+                  <Satellite className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">GPS accuracy data will appear here once tracking starts</p>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -540,10 +672,14 @@ export function RecordScreen() {
                   onClick={startRun}
                   size="lg"
                   className="bg-green-600 hover:bg-green-700"
-                  disabled={gpsPermission !== 'granted'}
+                  disabled={gpsPermission === 'denied' || gpsPermission === 'unsupported' || isInitializingGps}
                 >
-                  <Play className="h-5 w-5 mr-2" />
-                  Start Run
+                  {isInitializingGps ? (
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  ) : (
+                    <Play className="h-5 w-5 mr-2" />
+                  )}
+                  {isInitializingGps ? 'Initializing GPS...' : 'Start Run'}
                 </Button>
               ) : (
                 <>
