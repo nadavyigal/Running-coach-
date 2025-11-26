@@ -1,9 +1,9 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertTriangle, Info } from "lucide-react"
+import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertTriangle, Info, Loader2, RefreshCw } from "lucide-react"
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RouteSelectionWizard } from "@/components/route-selection-wizard"
 import { ManualRunModal } from "@/components/manual-run-modal"
@@ -38,6 +38,7 @@ export function RecordScreen() {
   const [isPaused, setIsPaused] = useState(false)
   const [gpsPermission, setGpsPermission] = useState<'prompt' | 'granted' | 'denied' | 'unsupported'>('prompt')
   const [gpsAccuracy, setGpsAccuracy] = useState<number>(0)
+  const [isInitializingGps, setIsInitializingGps] = useState(false)
   const [showRoutesModal, setShowRoutesModal] = useState(false)
   const [showRouteWizard, setShowRouteWizard] = useState(false)
   const [showManualModal, setShowManualModal] = useState(false)
@@ -490,7 +491,7 @@ export function RecordScreen() {
               <div>
                 <h3 className="font-medium text-green-900">{selectedRoute.name}</h3>
                 <p className="text-sm text-green-700">
-                  {selectedRoute.distance}km ג€¢ {selectedRoute.safetyScore}% safe ג€¢ {selectedRoute.difficulty}
+                  {selectedRoute.distance}km • {selectedRoute.safetyScore}% safe • {selectedRoute.difficulty}
                 </p>
               </div>
               <Button 
@@ -644,7 +645,7 @@ export function RecordScreen() {
           <CardContent className="p-4">
             <div className="text-center">
               <h3 className="font-medium text-blue-900 mb-2">
-                {isPaused ? 'Take your time! ג¸ן¸' : 'Keep it up! נƒג€ג™‚ן¸'}
+                {isPaused ? 'Take your time! ⏸️' : 'Keep it up! 🏃‍♂️'}
               </h3>
               <p className="text-sm text-blue-800">
                 {isPaused 
