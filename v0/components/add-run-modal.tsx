@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
-import { format, addDays } from "date-fns"
+import { format } from "date-fns"
 import {
   FootprintsIcon as Walking,
   Zap,
@@ -180,7 +180,9 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
   const [selectedDifficulty, setSelectedDifficulty] = useState("open")
   const [generatedWorkout, setGeneratedWorkout] = useState<any>(null)
   const [isGenerating, setIsGenerating] = useState(false)
-  // Removed unused planEndDate state to satisfy strict TS rules
+  const [planEndDate, setPlanEndDate] = useState<Date | undefined>(undefined)
+  const [planStartDate, setPlanStartDate] = useState<Date | undefined>(undefined)
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false)
   const { toast } = useToast()
 
   // Load plan data for calendar validation when modal opens
@@ -196,7 +198,11 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
       const { dbUtils } = await import('@/lib/dbUtils')
       const user = await dbUtils.getCurrentUser()
       if (user && user.id) {
-        await dbUtils.ensureUserHasActivePlan(user.id)
+        const plan = await dbUtils.ensureUserHasActivePlan(user.id)
+        if (plan) {
+          setPlanStartDate(new Date(plan.startDate))
+          setPlanEndDate(new Date(plan.endDate))
+        }
       }
     } catch (error) {
       console.error("Failed to load plan data for calendar:", error)
@@ -207,6 +213,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
       setSelectedDate(date)
+      setIsCalendarOpen(false) // Close calendar after selection
     }
   }
 
@@ -219,7 +226,20 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
     normalizedDate.setHours(0, 0, 0, 0);
 
     // Disable dates before today (past dates)
-    return normalizedDate < today;
+    if (normalizedDate < today) {
+      return true;
+    }
+
+    // Disable dates after plan end date if plan is loaded
+    if (planEndDate) {
+      const planEnd = new Date(planEndDate);
+      planEnd.setHours(0, 0, 0, 0);
+      if (normalizedDate > planEnd) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   const presetDistances = [
@@ -685,14 +705,19 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
             {/* Date Selection */}
             <div className="space-y-3">
               <Label className="text-base font-medium">When do you want to run?</Label>
-              <Popover>
+              {planStartDate && planEndDate && (
+                <p className="text-sm text-muted-foreground">
+                  Select a date between {format(planStartDate, "MMM d")} and {format(planEndDate, "MMM d, yyyy")}
+                </p>
+              )}
+              <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {selectedDate ? format(selectedDate, "PPP") : "Pick a date"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
+                <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     mode="single"
                     selected={selectedDate}
@@ -700,6 +725,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
                     initialFocus
                     disabled={isDateDisabled}
                     fromDate={new Date()}
+                    toDate={planEndDate}
                   />
                 </PopoverContent>
               </Popover>
