@@ -94,13 +94,17 @@ export function TodayScreen() {
       dbUtils.resetDatabaseInstance();
       console.log('[reset] Database connection closed');
 
-      // Step 3: Clear localStorage
+      // Step 3: Clear localStorage COMPLETELY
       localStorage.clear()
       console.log('[reset] localStorage cleared');
 
       // Step 4: Delete IndexedDB (connection now closed, will succeed)
       indexedDB.deleteDatabase('running-coach-db')
       console.log('[reset] Database deletion initiated');
+
+      // Step 5: Set force-onboarding flag for after reload
+      sessionStorage.setItem('force-onboarding', 'true')
+      console.log('[reset] Force onboarding flag set');
 
       // Show toast notification
       toast({
@@ -113,10 +117,9 @@ export function TodayScreen() {
 
       // Reload page after brief delay to allow DB deletion to complete
       setTimeout(() => {
-        console.log('[reset] Redirecting to reset handler...');
-        // Use the built-in reset handler with ?reset=1 parameter
-        window.location.href = window.location.origin + window.location.pathname + '?reset=1'
-      }, 800)
+        console.log('[reset] Reloading page...');
+        window.location.reload()
+      }, 500)
     } catch (error) {
       console.error('[reset] Reset failed:', error);
       toast({

@@ -197,13 +197,17 @@ export default function RunSmartApp() {
             console.warn('[app:reset] Failed to close database connection:', err)
           })
 
-          // Clear localStorage
+          // Clear localStorage COMPLETELY
           localStorage.clear()
           console.log('[app:reset] ✅ localStorage cleared')
 
           // Clear IndexedDB (connection now closed, will succeed)
           indexedDB.deleteDatabase('running-coach-db')
           console.log('[app:reset] ✅ Database deletion initiated: running-coach-db')
+
+          // Set a flag to force onboarding after reset
+          sessionStorage.setItem('force-onboarding', 'true')
+          console.log('[app:reset] ✅ Force onboarding flag set')
 
           // Remove ?reset=1 from URL and reload
           window.history.replaceState({}, '', window.location.pathname)
@@ -212,7 +216,7 @@ export default function RunSmartApp() {
           setTimeout(() => {
             console.log('[app:reset] ✅ Reloading page with clean state...')
             window.location.reload()
-          }, 200)
+          }, 300)
           return
         }
 
@@ -245,7 +249,18 @@ export default function RunSmartApp() {
           
           console.log('[app:init:start] Starting enhanced application initialization...')
           logDiagnostic('database', 'App initialization started');
-          
+
+          // Check for force-onboarding flag (set after reset)
+          const forceOnboarding = sessionStorage.getItem('force-onboarding') === 'true'
+          if (forceOnboarding) {
+            console.log('[app:init] 🔄 Force onboarding flag detected - showing onboarding')
+            sessionStorage.removeItem('force-onboarding')
+            setIsOnboardingComplete(false)
+            setCurrentScreen('onboarding')
+            setIsLoading(false)
+            return
+          }
+
           // Production-optimized timeouts (longer for slower connections)
           const isProduction = process.env.NODE_ENV === 'production';
           const DB_INIT_TIMEOUT = isProduction ? 10000 : 5000; // 10s in prod, 5s in dev
@@ -325,34 +340,14 @@ export default function RunSmartApp() {
             }
           }
           
-          // Step 4: Enhanced localStorage fallback if database failed
+          // Step 4: Minimal fallback if database failed completely
           if (!userResolved) {
-            console.log('[app:init:fallback] Using localStorage fallback for user state...');
-            try {
-              const onboardingComplete = localStorage.getItem("onboarding-complete")
-              const userData = localStorage.getItem("user-data")
-              
-              if (onboardingComplete === "true" && userData) {
-                // User has completed onboarding before - try to recover
-                setIsOnboardingComplete(true)
-                setCurrentScreen("today")
-                console.log('[app:init:fallback] ✅ localStorage fallback - navigating to today')
-                logNavigation('init', 'today', 'localStorage fallback');
-              } else if (onboardingComplete === "true") {
-                // Onboarding marked complete but no user data - still show today
-                setIsOnboardingComplete(true)
-                setCurrentScreen("today")
-                console.log('[app:init:fallback] ⚠️ localStorage shows complete but no user data')
-              } else {
-                setIsOnboardingComplete(false)
-                console.log('[app:init:fallback] 📝 localStorage fallback - showing onboarding')
-                logNavigation('init', 'onboarding', 'No previous onboarding');
-              }
-            } catch (fallbackError) {
-              console.warn('[app:init:fallback] ⚠️ localStorage fallback failed:', fallbackError)
-              setIsOnboardingComplete(false)
-              logNavigation('init', 'onboarding', 'Fallback failed - default to onboarding');
-            }
+            console.log('[app:init:fallback] Database failed - defaulting to onboarding');
+            // When database fails, ALWAYS show onboarding to be safe
+            // User can complete onboarding again to recreate their data
+            setIsOnboardingComplete(false)
+            setCurrentScreen('onboarding')
+            logNavigation('init', 'onboarding', 'Database failed - default to onboarding');
           }
           
         } catch (initErr) {
