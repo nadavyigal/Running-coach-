@@ -7,8 +7,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, TrendingUp, Star, Clock, RouteIcon, Shield, Users, Mountain, Zap, Eye, Navigation, Loader2, AlertCircle } from "lucide-react";
-import { trackRouteSelected } from "@/lib/analytics";
+import { RouteMap } from "@/components/maps/RouteMap";
+import { MapPin, TrendingUp, Star, Clock, RouteIcon, Shield, Users, Mountain, Zap, Eye, Navigation, Loader2, AlertCircle, Map, List } from "lucide-react";
+import { trackRouteSelected, trackRouteSelectedFromMap, trackRouteWizardMapToggled } from "@/lib/analytics";
 
 interface UserLocation {
   latitude: number;
@@ -55,6 +56,8 @@ interface Route {
   // GPS-related fields
   startLat?: number;
   startLng?: number;
+  gpsPath?: string;
+  routeType?: 'predefined' | 'custom';
   distanceFromUser?: number;
 }
 
@@ -195,6 +198,7 @@ export function RouteSelectionWizard({
   });
   const [recommendedRoutes, setRecommendedRoutes] = useState<Route[]>([]);
   const [_selectedRoute, setSelectedRoute] = useState<Route | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   
   // GPS location state
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
@@ -351,7 +355,7 @@ export function RouteSelectionWizard({
   const handleRouteSelect = async (route: Route) => {
     setSelectedRoute(route);
     
-    // Track route selection
+    // Track route selection with selection method
     await trackRouteSelected({
       route_id: route.id,
       route_name: route.name,
@@ -361,8 +365,18 @@ export function RouteSelectionWizard({
       estimated_time_minutes: route.estimatedTime,
       safety_score: route.safetyScore,
       match_score: route.matchScore,
-      user_experience: userExperience
+      distance_from_user_km: route.distanceFromUser,
+      user_location_available: !!userLocation,
+      user_experience: userExperience,
+      selection_method: viewMode,
     });
+
+    if (viewMode === 'map') {
+      await trackRouteSelectedFromMap({
+        route_id: route.id,
+        route_name: route.name,
+      });
+    }
     
     onRouteSelected(route);
     onClose();
@@ -509,11 +523,42 @@ export function RouteSelectionWizard({
 
   const renderRecommendationsStep = () => (
     <div className="space-y-4">
-      <div className="text-center">
-        <h3 className="text-lg font-semibold mb-2">Recommended Routes</h3>
-        <p className="text-sm text-gray-600">
-          Based on your preferences and experience level
-        </p>
+      {/* Header with View Toggle */}
+      <div className="flex items-center justify-between">
+        <div className="text-center flex-1">
+          <h3 className="text-lg font-semibold mb-1">Recommended Routes</h3>
+          <p className="text-sm text-gray-600">
+            Based on your preferences and experience level
+          </p>
+        </div>
+
+        {/* View Mode Toggle */}
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+          <Button
+            variant={viewMode === 'list' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => {
+              setViewMode('list');
+              trackRouteWizardMapToggled({ view: 'list' });
+            }}
+            className="gap-1"
+          >
+            <List className="h-4 w-4" />
+            <span className="hidden sm:inline">List</span>
+          </Button>
+          <Button
+            variant={viewMode === 'map' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => {
+              setViewMode('map');
+              trackRouteWizardMapToggled({ view: 'map' });
+            }}
+            className="gap-1"
+          >
+            <Map className="h-4 w-4" />
+            <span className="hidden sm:inline">Map</span>
+          </Button>
+        </div>
       </div>
 
       {/* Location Status */}
@@ -543,103 +588,127 @@ export function RouteSelectionWizard({
         )}
       </div>
 
-      {recommendedRoutes.map((route) => (
-        <Card
-          key={route.id}
-          className="cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => handleRouteSelect(route)}
-        >
-          <CardContent className="p-4">
-            <div className="space-y-3">
-              {/* Route Header */}
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg">{route.name}</h3>
-                  <p className="text-sm text-gray-600">{route.description}</p>
-                </div>
-                <div className="flex items-center gap-1 ml-2">
-                  <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                  <span className="text-sm font-medium">{route.popularity}%</span>
-                </div>
-              </div>
+      {/* Map or List View */}
+      {viewMode === 'map' ? (
+        <div className="space-y-4">
+          <RouteMap
+            routes={recommendedRoutes}
+            userLocation={userLocation ? {
+              lat: userLocation.latitude,
+              lng: userLocation.longitude
+            } : undefined}
+            onRouteClick={handleRouteSelect}
+            selectedRouteId={_selectedRoute ? Number(_selectedRoute.id) : undefined}
+            height="500px"
+            className="rounded-lg border"
+          />
 
-              {/* Route Stats */}
-              <div className="flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-1">
-                  <RouteIcon className="h-4 w-4 text-gray-500" />
-                  <span>{route.distance} km</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Clock className="h-4 w-4 text-gray-500" />
-                  <span>~{route.estimatedTime} min</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Mountain className="h-4 w-4 text-gray-500" />
-                  <span>{route.elevationGain}m gain</span>
-                </div>
-              </div>
+          <p className="text-sm text-center text-gray-600">
+            Showing {recommendedRoutes.length} routes
+            {userLocation && ' sorted by distance from you'}
+          </p>
+        </div>
+      ) : (
+        <>
+          {recommendedRoutes.map((route) => (
+            <Card
+              key={route.id}
+              className="cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => handleRouteSelect(route)}
+            >
+              <CardContent className="p-4">
+                <div className="space-y-3">
+                  {/* Route Header */}
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-lg">{route.name}</h3>
+                      <p className="text-sm text-gray-600">{route.description}</p>
+                    </div>
+                    <div className="flex items-center gap-1 ml-2">
+                      <Star className="h-4 w-4 text-yellow-500 fill-current" />
+                      <span className="text-sm font-medium">{route.popularity}%</span>
+                    </div>
+                  </div>
 
-              {/* Safety and Match Score */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Shield className={`h-4 w-4 ${getSafetyColor(route.safetyScore)}`} />
-                  <span className="text-sm font-medium">{route.safetyScore}% safe</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-blue-500" />
-                  <span className="text-sm font-medium">{route.matchScore}% match</span>
-                </div>
-              </div>
+                  {/* Route Stats */}
+                  <div className="flex items-center gap-4 text-sm">
+                    <div className="flex items-center gap-1">
+                      <RouteIcon className="h-4 w-4 text-gray-500" />
+                      <span>{route.distance} km</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-4 w-4 text-gray-500" />
+                      <span>~{route.estimatedTime} min</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Mountain className="h-4 w-4 text-gray-500" />
+                      <span>{route.elevationGain}m gain</span>
+                    </div>
+                  </div>
 
-              {/* Distance from user */}
-              {route.distanceFromUser !== undefined && (
-                <div className="flex items-center gap-1 text-sm text-blue-600">
-                  <Navigation className="h-4 w-4" />
-                  <span>
-                    {route.distanceFromUser < 1 
-                      ? `${Math.round(route.distanceFromUser * 1000)}m away` 
-                      : `${route.distanceFromUser.toFixed(1)} km away`}
-                  </span>
-                </div>
-              )}
+                  {/* Safety and Match Score */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Shield className={`h-4 w-4 ${getSafetyColor(route.safetyScore)}`} />
+                      <span className="text-sm font-medium">{route.safetyScore}% safe</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Zap className="h-4 w-4 text-blue-500" />
+                      <span className="text-sm font-medium">{route.matchScore}% match</span>
+                    </div>
+                  </div>
 
-              {/* Tags and Difficulty */}
-              <div className="flex items-center justify-between">
-                <div className="flex gap-2">
-                  {route.tags.slice(0, 2).map((tag) => (
-                    <Badge key={tag} variant="secondary" className="text-xs">
-                      {tag}
+                  {/* Distance from user */}
+                  {route.distanceFromUser !== undefined && (
+                    <div className="flex items-center gap-1 text-sm text-blue-600">
+                      <Navigation className="h-4 w-4" />
+                      <span>
+                        {route.distanceFromUser < 1 
+                          ? `${Math.round(route.distanceFromUser * 1000)}m away` 
+                          : `${route.distanceFromUser.toFixed(1)} km away`}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Tags and Difficulty */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-2">
+                      {route.tags.slice(0, 2).map((tag) => (
+                        <Badge key={tag} variant="secondary" className="text-xs">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                    <Badge className={getDifficultyColor(route.difficulty)}>
+                      {route.difficulty}
                     </Badge>
-                  ))}
-                </div>
-                <Badge className={getDifficultyColor(route.difficulty)}>
-                  {route.difficulty}
-                </Badge>
-              </div>
+                  </div>
 
-              {/* Additional Features */}
-              <div className="flex items-center gap-4 text-xs text-gray-500">
-                {route.wellLit && (
-                  <div className="flex items-center gap-1">
-                    <Eye className="h-3 w-3" />
-                    <span>Well-lit</span>
+                  {/* Additional Features */}
+                  <div className="flex items-center gap-4 text-xs text-gray-500">
+                    {route.wellLit && (
+                      <div className="flex items-center gap-1">
+                        <Eye className="h-3 w-3" />
+                        <span>Well-lit</span>
+                      </div>
+                    )}
+                    {route.lowTraffic && (
+                      <div className="flex items-center gap-1">
+                        <Users className="h-3 w-3" />
+                        <span>Low traffic</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3" />
+                      <span>{route.scenicScore}% scenic</span>
+                    </div>
                   </div>
-                )}
-                {route.lowTraffic && (
-                  <div className="flex items-center gap-1">
-                    <Users className="h-3 w-3" />
-                    <span>Low traffic</span>
-                  </div>
-                )}
-                <div className="flex items-center gap-1">
-                  <TrendingUp className="h-3 w-3" />
-                  <span>{route.scenicScore}% scenic</span>
                 </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+              </CardContent>
+            </Card>
+          ))}
+        </>
+      )}
 
       <Button 
         onClick={() => setStep('preferences')} 

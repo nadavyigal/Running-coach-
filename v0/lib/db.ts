@@ -1056,6 +1056,24 @@ export class RunSmartDB extends Dexie {
 
       console.log(`✓ Database upgrade complete: Reset onboarding for ${users.length} users`);
     });
+    // Version 3: Add map-related fields to routes for map visualization
+    this.version(3).stores({}).upgrade(async (trans) => {
+      console.log('🔄 Upgrading database to version 3: Adding map fields to routes');
+
+      // Update existing routes with default map values
+      const routes = await trans.table('routes').toArray();
+
+      for (const route of routes) {
+        await trans.table('routes').update(route.id!, {
+          routeType: 'predefined',
+          createdBy: 'system',
+          updatedAt: new Date()
+        });
+      }
+
+      console.log(`✓ Database upgrade complete: Updated ${routes.length} routes with map fields`);
+    });
+
   }
 }
 
@@ -1345,6 +1363,13 @@ export interface Route {
   tags: string[]; // JSON array of tags
   gpsPath?: string; // JSON string of GPS coordinates
   location?: string; // General location/area
+  // Map-related fields (v3)
+  startLat?: number; // Starting point latitude
+  startLng?: number; // Starting point longitude
+  endLat?: number; // Ending point latitude (for custom routes)
+  endLng?: number; // Ending point longitude (for custom routes)
+  routeType?: 'predefined' | 'custom'; // Route origin
+  createdBy?: 'system' | 'user'; // Who created the route
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;

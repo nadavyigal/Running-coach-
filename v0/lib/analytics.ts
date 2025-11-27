@@ -118,3 +118,44 @@ export const trackOnboardingCompletion = async (properties?: Record<string, any>
 export const trackError = async (properties?: Record<string, any>) => {
   await trackEvent('error_occurred', properties)
 }
+
+// Map-related events
+export const trackMapLoaded = async (properties?: Record<string, any>) => {
+  await trackEvent('map_loaded', properties)
+}
+
+export const trackMapLoadFailed = async (properties?: Record<string, any>) => {
+  await trackEvent('map_load_failed', properties)
+}
+
+export const trackFindMyRouteClicked = async (properties?: Record<string, any>) => {
+  await trackEvent('find_my_route_clicked', properties)
+}
+
+export const trackFindMyRouteSuccess = async (properties?: Record<string, any>) => {
+  await trackEvent('find_my_route_success', properties)
+}
+
+export const trackFindMyRouteFailed = async (properties?: Record<string, any>) => {
+  await trackEvent('find_my_route_failed', properties)
+}
+
+export const trackCustomRouteSaved = async (properties?: Record<string, any>) => {
+  await trackEvent('custom_route_saved', properties)
+}
+
+export const trackCustomRouteSelected = async (properties?: Record<string, any>) => {
+  await trackEvent('custom_route_selected', properties)
+}
+
+export const trackNearbyFilterChanged = async (properties?: Record<string, any>) => {
+  await trackEvent('nearby_filter_changed', properties)
+}
+
+export const trackRouteWizardMapToggled = async (properties?: Record<string, any>) => {
+  await trackEvent('route_wizard_map_toggled', properties)
+}
+
+export const trackRouteSelectedFromMap = async (properties?: Record<string, any>) => {
+  await trackEvent('route_selected_from_map', properties)
+}
