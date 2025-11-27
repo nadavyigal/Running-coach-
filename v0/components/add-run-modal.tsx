@@ -722,10 +722,10 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
                     mode="single"
                     selected={selectedDate}
                     onSelect={handleDateSelect}
-                    initialFocus
+                    autoFocus
                     disabled={isDateDisabled}
-                    fromDate={new Date()}
-                    toDate={planEndDate}
+                    startMonth={new Date()}
+                    endMonth={planEndDate}
                   />
                 </PopoverContent>
               </Popover>
