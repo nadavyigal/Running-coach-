@@ -82,13 +82,15 @@ const PerformanceAnalyticsDashboard = dynamic(() => import("@/components/perform
 const BottomNavigation = dynamic(() => import("@/components/bottom-navigation").then(m => ({ default: m.BottomNavigation })), { ssr: false })
 const OnboardingDebugPanel = dynamic(() => import("@/components/onboarding-debug-panel").then(m => ({ default: m.OnboardingDebugPanel })), { ssr: false })
 
+  console.error('Failed to load database utilities:', dbError);
 // Import database utilities with better error handling
 let dbUtils: any = null;
+let seedDemoRoutes: any = null;
 try {
   const dbModule = require("@/lib/dbUtils");
   dbUtils = dbModule.dbUtils ?? dbModule.default;
+  seedDemoRoutes = dbModule.seedDemoRoutes;
 } catch (dbError) {
-  console.error('Failed to load database utilities:', dbError);
   // Create mock dbUtils for graceful degradation
   dbUtils = {
     initializeDatabase: async () => { console.warn('Database not available - running in degraded mode'); return true; },
@@ -309,6 +311,16 @@ export default function RunSmartApp() {
             } catch (migrationError) {
               console.warn('[app:init:migration] ⚠️ Migration failed, continuing:', migrationError);
             }
+n          // Step 2.5: Seed demo routes if database initialized
+          if (dbInitSuccess && seedDemoRoutes) {
+            console.log('[app:init:routes] Seeding demo routes...')
+            try {
+              await seedDemoRoutes()
+              console.log('[app:init:routes] ✅ Demo routes seeded successfully')
+            } catch (routeError) {
+              console.warn('[app:init:routes] ⚠️ Route seeding failed (continuing):', routeError);
+            }
+          }
           }
           
           // Step 3: Ensure user is ready with enhanced fallback
