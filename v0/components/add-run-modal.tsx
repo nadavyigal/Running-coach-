@@ -466,8 +466,14 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={onClose} modal={true}>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onInteractOutside={(e) => {
+        // Allow interactions with Popover content (calendar)
+        const target = e.target as HTMLElement
+        if (target.closest('[role="dialog"]') || target.closest('[data-radix-popper-content-wrapper]')) {
+          e.preventDefault()
+        }
+      }}>
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle>
@@ -685,23 +691,45 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
                   Select a date between {format(planStartDate, "MMM d")} and {format(planEndDate, "MMM d, yyyy")}
                 </p>
               )}
-              <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+              <Popover open={isCalendarOpen} onOpenChange={(open) => {
+                console.log('📅 Calendar Popover state changing:', open)
+                setIsCalendarOpen(open)
+              }}>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal bg-transparent"
+                    onClick={(e) => {
+                      console.log('📅 Calendar button clicked')
+                      e.stopPropagation()
+                      setIsCalendarOpen(!isCalendarOpen)
+                    }}
+                    type="button"
+                  >
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {selectedDate ? format(selectedDate, "PPP") : "Pick a date"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent
+                  className="w-auto p-0 z-[200]"
+                  align="start"
+                  side="bottom"
+                  sideOffset={4}
+                  onOpenAutoFocus={(e) => e.preventDefault()}
+                  style={{ pointerEvents: 'auto', touchAction: 'auto' }}
+                >
                   <Calendar
                     mode="single"
                     selected={selectedDate}
-                    onSelect={handleDateSelect}
-                    autoFocus
+                    onSelect={(date) => {
+                      console.log('📅 Date selected in Calendar:', date)
+                      handleDateSelect(date)
+                    }}
                     disabled={[
                       { before: new Date() },
                       ...(planEndDate ? [{ after: planEndDate }] : [])
                     ]}
+                    defaultMonth={selectedDate}
                   />
                 </PopoverContent>
               </Popover>

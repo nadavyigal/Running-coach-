@@ -91,4 +91,26 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Ensure proper touch handling for interactive elements */
+  button, [role="button"], [type="button"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Fix for react-day-picker v9 date buttons */
+  .rdp-day {
+    touch-action: manipulation;
+    cursor: pointer;
+  }
+
+  .rdp-day:not(.rdp-day_disabled) {
+    pointer-events: auto;
+  }
+
+  /* Ensure Popover content is interactive */
+  [data-radix-popper-content-wrapper] {
+    pointer-events: auto !important;
+    touch-action: auto !important;
+  }
 }
