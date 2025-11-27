@@ -466,14 +466,8 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose} modal={true}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onInteractOutside={(e) => {
-        // Allow interactions with Popover content (calendar)
-        const target = e.target as HTMLElement
-        if (target.closest('[role="dialog"]') || target.closest('[data-radix-popper-content-wrapper]')) {
-          e.preventDefault()
-        }
-      }}>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle>
@@ -691,19 +685,11 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
                   Select a date between {format(planStartDate, "MMM d")} and {format(planEndDate, "MMM d, yyyy")}
                 </p>
               )}
-              <Popover open={isCalendarOpen} onOpenChange={(open) => {
-                console.log('📅 Calendar Popover state changing:', open)
-                setIsCalendarOpen(open)
-              }}>
+              <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
                     className="w-full justify-start text-left font-normal bg-transparent"
-                    onClick={(e) => {
-                      console.log('📅 Calendar button clicked')
-                      e.stopPropagation()
-                      setIsCalendarOpen(!isCalendarOpen)
-                    }}
                     type="button"
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
@@ -721,12 +707,9 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
                   <Calendar
                     mode="single"
                     selected={selectedDate}
-                    onSelect={(date) => {
-                      console.log('📅 Date selected in Calendar:', date)
-                      handleDateSelect(date)
-                    }}
+                    onSelect={handleDateSelect}
                     disabled={[
-                      { before: new Date() },
+                      { before: new Date(new Date().setHours(0, 0, 0, 0)) },
                       ...(planEndDate ? [{ after: planEndDate }] : [])
                     ]}
                     defaultMonth={selectedDate}
