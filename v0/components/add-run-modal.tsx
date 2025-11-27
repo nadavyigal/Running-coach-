@@ -217,31 +217,6 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
     }
   }
 
-  // Function to check if a date should be disabled in the calendar
-  const isDateDisabled = (date: Date) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const normalizedDate = new Date(date);
-    normalizedDate.setHours(0, 0, 0, 0);
-
-    // Disable dates before today (past dates)
-    if (normalizedDate < today) {
-      return true;
-    }
-
-    // Disable dates after plan end date if plan is loaded
-    if (planEndDate) {
-      const planEnd = new Date(planEndDate);
-      planEnd.setHours(0, 0, 0, 0);
-      if (normalizedDate > planEnd) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
   const presetDistances = [
     { label: "5k", value: "5.0" },
     { label: "10k", value: "10.0" },
@@ -723,9 +698,10 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
                     selected={selectedDate}
                     onSelect={handleDateSelect}
                     autoFocus
-                    disabled={isDateDisabled}
-                    startMonth={new Date()}
-                    endMonth={planEndDate}
+                    disabled={[
+                      { before: new Date() },
+                      ...(planEndDate ? [{ after: planEndDate }] : [])
+                    ]}
                   />
                 </PopoverContent>
               </Popover>
