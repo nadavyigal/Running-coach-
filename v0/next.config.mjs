@@ -35,7 +35,6 @@ const nextConfig = {
     optimizeCss: false, // Disable CSS optimization that uses critters
     optimizePackageImports: [
       '@radix-ui/react-icons',
-      'lucide-react',
       'date-fns',
       'recharts',
       '@radix-ui/react-dialog',
