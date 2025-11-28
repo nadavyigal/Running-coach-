@@ -11,7 +11,7 @@ import type { LatLng } from '@/lib/mapConfig';
 import { MAP_CONFIG, getTileUrl, hasMapTilerToken } from '@/lib/mapConfig';
 import { parseGpsPath, getRouteBounds } from '@/lib/routeUtils';
 import { MapFallback } from './MapFallback';
-import { trackEvent } from '@/lib/analytics';
+import { trackMapLoaded, trackMapLoadFailed, trackRouteSelectedFromMap } from '@/lib/analytics';
 
 // Dynamic import types for MapLibre
 type MapLibreMap = any;
@@ -136,7 +136,7 @@ export function RouteMap({
 
       map.on('load', () => {
         setIsLoading(false);
-        trackEvent('map_loaded', {
+        trackMapLoaded({
           tile_provider: useFallback ? 'osm' : 'maptiler',
           dark_mode: darkMode,
         });
@@ -147,7 +147,7 @@ export function RouteMap({
         setHasError(true);
         setErrorMessage('Map failed to load. Please try again.');
         setIsLoading(false);
-        trackEvent('map_load_failed', {
+        trackMapLoadFailed({
           error: e.error?.message || 'Unknown error',
         });
       });
@@ -275,7 +275,7 @@ export function RouteMap({
         if (onRouteClick) {
           el.addEventListener('click', () => {
             onRouteClick(route);
-            trackEvent('route_selected_from_map', {
+            trackRouteSelectedFromMap({
               route_id: route.id,
               route_name: route.name,
             });

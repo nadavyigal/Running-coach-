@@ -28,8 +28,9 @@ export const MAP_CONFIG = {
     },
     osm: {
       // OpenStreetMap fallback (no dark mode support)
-      light: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      dark: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', // Same as light
+      // Note: Using 'a' subdomain as default (MapLibre will handle load balancing)
+      light: 'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      dark: 'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png', // Same as light
       attribution: '© OpenStreetMap contributors',
     },
   },
