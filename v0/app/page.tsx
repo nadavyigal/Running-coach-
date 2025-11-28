@@ -311,7 +311,8 @@ export default function RunSmartApp() {
             } catch (migrationError) {
               console.warn('[app:init:migration] ⚠️ Migration failed, continuing:', migrationError);
             }
-n          // Step 2.5: Seed demo routes if database initialized
+
+          // Step 2.5: Seed demo routes if database initialized
           if (dbInitSuccess && seedDemoRoutes) {
             console.log('[app:init:routes] Seeding demo routes...')
             try {
