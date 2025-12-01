@@ -9,36 +9,45 @@ import { planAdaptationEngine } from '@/lib/planAdaptationEngine';
 export const dynamic = 'force-dynamic';
 
 
-// Validation schemas
+// Validation schemas - Relaxed to accept minimal input
 const CreateGoalSchema = z.object({
+  // Required minimal fields
   userId: z.number(),
-  title: z.string().min(5, 'Title must be at least 5 characters'),
-  description: z.string().optional(),
+  title: z.string().min(3, 'Title must be at least 3 characters'),
   goalType: z.enum(['time_improvement', 'distance_achievement', 'frequency', 'race_completion', 'consistency', 'health']),
   category: z.enum(['speed', 'endurance', 'consistency', 'health', 'strength']),
-  priority: z.number().min(1).max(3),
+  targetValue: z.number().positive(),
+
+  // Optional fields with defaults
+  description: z.string().optional(),
+  priority: z.number().min(1).max(3).default(2),
+
   specificTarget: z.object({
     metric: z.string(),
     value: z.number(),
     unit: z.string(),
-    description: z.string()
+    description: z.string().optional()
   }),
-  measurableMetrics: z.array(z.string()),
+
+  // Auto-generated fields (optional in request)
+  measurableMetrics: z.array(z.string()).optional(),
   achievableAssessment: z.object({
-    currentLevel: z.number(),
-    targetLevel: z.number(),
-    feasibilityScore: z.number().min(0).max(100),
+    currentLevel: z.number().optional(),
+    targetLevel: z.number().optional(),
+    feasibilityScore: z.number().min(0).max(100).optional(),
     recommendedAdjustments: z.array(z.string()).optional()
-  }),
-  relevantContext: z.string(),
+  }).optional(),
+  relevantContext: z.string().optional(),
+
+  // Time-bound (deadline required, rest optional)
   timeBound: z.object({
     deadline: z.string().transform(str => new Date(str)),
-    startDate: z.string().transform(str => new Date(str)),
-    totalDuration: z.number(),
-    milestoneSchedule: z.array(z.number())
+    startDate: z.string().transform(str => new Date(str)).optional(),
+    totalDuration: z.number().optional(),
+    milestoneSchedule: z.array(z.number()).optional()
   }),
-  baselineValue: z.number(),
-  targetValue: z.number()
+
+  baselineValue: z.number().optional(),
 });
 
 const UpdateGoalSchema = CreateGoalSchema.partial().extend({
@@ -146,44 +155,50 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   console.log('🎯 Goals API POST: Starting goal creation');
-  
+
   try {
     const body = await request.json();
-    console.log('📝 Request body received:', JSON.stringify(body, null, 2));
-    
+    console.log('📝 Request body received');
+
+    // Parse with relaxed schema
     console.log('🔍 Validating goal data against schema...');
     const goalData = CreateGoalSchema.parse(body);
-    console.log('✅ Goal data validation passed');
+    console.log('✅ Basic validation passed');
 
-    // Validate SMART goal criteria
-    console.log('🔍 Validating SMART goal criteria...');
-    const validation = dbUtils.validateSMARTGoal(goalData);
-    
+    // Auto-complete missing fields
+    console.log('🔄 Auto-completing goal fields...');
+    const completedGoal = await dbUtils.autoCompleteGoalFields(goalData, goalData.userId);
+    console.log('✅ Goal fields auto-completed');
+
+    // Validate SMART criteria (non-blocking - only errors block creation)
+    console.log('🔍 Validating SMART criteria...');
+    const validation = dbUtils.validateSMARTGoal(completedGoal);
+    console.log(`✅ SMART score: ${validation.smartScore}/100`);
+
+    // Only block if there are actual errors (not warnings)
     if (!validation.isValid) {
       console.error('❌ SMART goal validation failed:', validation.errors);
       return NextResponse.json(
-        { 
-          error: 'SMART goal validation failed', 
+        {
+          error: 'SMART goal validation failed',
           details: validation.errors,
-          suggestions: validation.suggestions 
+          suggestions: validation.suggestions
         },
         { status: 400 }
       );
     }
-    
-    console.log('✅ SMART goal validation passed');
 
-    // Create the goal
+    // Create the goal (validation warnings don't block)
     console.log('🔍 Creating goal in database...');
     const goalCreateData = {
-      ...goalData,
-      currentValue: goalData.baselineValue,
+      ...completedGoal,
+      currentValue: completedGoal.baselineValue,
       progressPercentage: 0,
       status: 'active' as const
     };
-    
-    console.log('📝 Final goal data for creation:', JSON.stringify(goalCreateData, null, 2));
-    
+
+    console.log('📝 Final goal data for creation');
+
     const goalId = await dbUtils.createGoal(goalCreateData);
     console.log(`✅ Goal created successfully with ID: ${goalId}`);
 
@@ -193,29 +208,29 @@ export async function POST(request: NextRequest) {
       await dbUtils.generateGoalMilestones(goalId);
       console.log('✅ Milestones generated successfully');
     } catch (milestoneError) {
-      console.error('❌ Failed to generate milestones:', milestoneError);
-      // Continue anyway - milestones are not critical for goal creation
+      console.warn('⚠️ Milestone generation failed:', milestoneError);
+      // Continue anyway - milestones are not critical
     }
 
     // Get the created goal with progress
     console.log('🔍 Fetching created goal with progress data...');
     const createdGoal = await dbUtils.getGoal(goalId);
-    
+
     if (!createdGoal) {
       console.error('❌ Failed to retrieve created goal');
       throw new Error('Goal was created but could not be retrieved');
     }
-    
+
     let progress = null;
     let milestones = [];
-    
+
     try {
       progress = await goalProgressEngine.calculateGoalProgress(goalId);
       console.log('✅ Progress calculated successfully');
     } catch (progressError) {
       console.error('❌ Failed to calculate progress:', progressError);
     }
-    
+
     try {
       milestones = await dbUtils.getGoalMilestones(goalId);
       console.log(`✅ Retrieved ${milestones.length} milestones`);
@@ -223,23 +238,29 @@ export async function POST(request: NextRequest) {
       console.error('❌ Failed to retrieve milestones:', milestonesError);
     }
 
+    // Return with SMART validation results
     const response = {
+      success: true,
+      goalId,
       goal: createdGoal,
       progress,
       milestones,
       validation: {
-        isValid: true,
-        suggestions: validation.suggestions
+        smartScore: validation.smartScore,
+        warnings: validation.warnings,
+        suggestions: validation.suggestions,
+        autoGenerated: validation.autoGenerated,
+        completeness: validation.completeness
       }
     };
-    
+
     console.log('✅ Goals API POST: Success, returning created goal');
     return NextResponse.json(response, { status: 201 });
 
   } catch (error) {
     console.error('❌ Goals API POST: Error occurred:', error);
     console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-    
+
     if (error instanceof z.ZodError) {
       console.error('❌ Schema validation error details:', error.errors);
       return NextResponse.json(
@@ -247,9 +268,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    
+
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to create goal',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

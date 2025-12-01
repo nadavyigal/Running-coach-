@@ -2594,6 +2594,714 @@ export async function migrateExistingPlansToUTC(): Promise<{ success: boolean; m
 }
 
 // ============================================================================
+// PERFORMANCE ANALYTICS UTILITIES
+// ============================================================================
+
+/**
+ * Get runs within a specific time range for a user
+ */
+async function getRunsInTimeRange(userId: number, startDate: Date, endDate: Date): Promise<Run[]> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    const runs = await database.runs
+      .where('userId')
+      .equals(userId)
+      .toArray();
+
+    // Filter by date range in JavaScript since createdAt is not indexed
+    return runs.filter(run => {
+      const runDate = new Date(run.createdAt);
+      return runDate >= startDate && runDate <= endDate;
+    }).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, 'getRunsInTimeRange', []);
+}
+
+/**
+ * Calculate performance trends from runs data
+ */
+async function calculatePerformanceTrends(runs: Run[]) {
+  return safeDbOperation(async () => {
+    if (runs.length === 0) {
+      return {
+        averagePace: 0,
+        consistencyScore: 0,
+        performanceScore: 0,
+        paceProgression: [],
+        distanceProgression: [],
+        consistencyProgression: [],
+        performanceProgression: []
+      };
+    }
+
+    // Calculate average pace (seconds per km)
+    const totalPace = runs.reduce((sum, run) => {
+      const pace = run.distance > 0 ? run.duration / run.distance : 0;
+      return sum + pace;
+    }, 0);
+    const averagePace = totalPace / runs.length;
+
+    // Calculate consistency score (based on regularity of runs)
+    const daysSinceFirstRun = Math.ceil(
+      (new Date(runs[runs.length - 1].createdAt).getTime() - new Date(runs[0].createdAt).getTime()) / (1000 * 60 * 60 * 24)
+    );
+    const expectedRuns = Math.max(1, Math.ceil(daysSinceFirstRun / 3)); // Expect run every 3 days
+    const consistencyScore = Math.min(100, (runs.length / expectedRuns) * 100);
+
+    // Calculate performance score (combination of consistency and pace improvement)
+    const firstHalfRuns = runs.slice(0, Math.ceil(runs.length / 2));
+    const secondHalfRuns = runs.slice(Math.ceil(runs.length / 2));
+
+    const firstHalfAvgPace = firstHalfRuns.reduce((sum, run) => {
+      const pace = run.distance > 0 ? run.duration / run.distance : 0;
+      return sum + pace;
+    }, 0) / firstHalfRuns.length;
+
+    const secondHalfAvgPace = secondHalfRuns.reduce((sum, run) => {
+      const pace = run.distance > 0 ? run.duration / run.distance : 0;
+      return sum + pace;
+    }, 0) / secondHalfRuns.length;
+
+    const paceImprovement = firstHalfAvgPace > 0 ? ((firstHalfAvgPace - secondHalfAvgPace) / firstHalfAvgPace) * 100 : 0;
+    const performanceScore = Math.max(0, Math.min(100, 50 + (consistencyScore * 0.3) + (paceImprovement * 0.7)));
+
+    // Generate progression data
+    const paceProgression = runs.map(run => ({
+      date: new Date(run.createdAt),
+      pace: run.distance > 0 ? run.duration / run.distance : 0
+    }));
+
+    const distanceProgression = runs.map(run => ({
+      date: new Date(run.createdAt),
+      distance: run.distance
+    }));
+
+    // Calculate rolling consistency
+    const consistencyProgression = runs.map((_, index) => {
+      const runsToDate = runs.slice(0, index + 1);
+      const days = Math.ceil(
+        (new Date(runs[index].createdAt).getTime() - new Date(runs[0].createdAt).getTime()) / (1000 * 60 * 60 * 24)
+      );
+      const expected = Math.max(1, Math.ceil(days / 3));
+      const score = Math.min(100, (runsToDate.length / expected) * 100);
+
+      return {
+        date: new Date(runs[index].createdAt),
+        consistency: score
+      };
+    });
+
+    // Calculate rolling performance
+    const performanceProgression = runs.map((_, index) => {
+      const runsToDate = runs.slice(0, index + 1);
+      const halfPoint = Math.ceil(runsToDate.length / 2);
+      const firstHalf = runsToDate.slice(0, halfPoint);
+      const secondHalf = runsToDate.slice(halfPoint);
+
+      if (firstHalf.length === 0 || secondHalf.length === 0) {
+        return {
+          date: new Date(runs[index].createdAt),
+          performance: 50
+        };
+      }
+
+      const firstAvg = firstHalf.reduce((sum, r) => sum + (r.distance > 0 ? r.duration / r.distance : 0), 0) / firstHalf.length;
+      const secondAvg = secondHalf.reduce((sum, r) => sum + (r.distance > 0 ? r.duration / r.distance : 0), 0) / secondHalf.length;
+      const improvement = firstAvg > 0 ? ((firstAvg - secondAvg) / firstAvg) * 100 : 0;
+
+      return {
+        date: new Date(runs[index].createdAt),
+        performance: Math.max(0, Math.min(100, 50 + improvement))
+      };
+    });
+
+    return {
+      averagePace,
+      consistencyScore,
+      performanceScore,
+      paceProgression,
+      distanceProgression,
+      consistencyProgression,
+      performanceProgression
+    };
+  }, 'calculatePerformanceTrends', {
+    averagePace: 0,
+    consistencyScore: 0,
+    performanceScore: 0,
+    paceProgression: [],
+    distanceProgression: [],
+    consistencyProgression: [],
+    performanceProgression: []
+  });
+}
+
+/**
+ * Get personal records for a user
+ */
+async function getPersonalRecords(userId: number) {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    const runs = await database.runs.where('userId').equals(userId).toArray();
+
+    if (runs.length === 0) {
+      return [];
+    }
+
+    // Calculate various PRs
+    const longestRun = runs.reduce((max, run) => run.distance > max.distance ? run : max, runs[0]);
+    const fastestPace = runs.reduce((fastest, run) => {
+      const pace = run.distance > 0 ? run.duration / run.distance : Infinity;
+      const fastestPace = fastest.distance > 0 ? fastest.duration / fastest.distance : Infinity;
+      return pace < fastestPace ? run : fastest;
+    }, runs[0]);
+    const longestDuration = runs.reduce((max, run) => run.duration > max.duration ? run : max, runs[0]);
+
+    const records = [
+      {
+        type: 'Longest Run',
+        value: longestRun.distance.toFixed(2) + ' km',
+        date: new Date(longestRun.createdAt).toLocaleDateString(),
+        icon: 'target'
+      },
+      {
+        type: 'Fastest Pace',
+        value: formatPace(fastestPace.distance > 0 ? fastestPace.duration / fastestPace.distance : 0),
+        date: new Date(fastestPace.createdAt).toLocaleDateString(),
+        icon: 'zap'
+      },
+      {
+        type: 'Longest Duration',
+        value: formatDuration(longestDuration.duration),
+        date: new Date(longestDuration.createdAt).toLocaleDateString(),
+        icon: 'clock'
+      },
+      {
+        type: 'Total Runs',
+        value: runs.length.toString(),
+        date: 'All time',
+        icon: 'activity'
+      }
+    ];
+
+    return records;
+  }, 'getPersonalRecords', []);
+}
+
+/**
+ * Format pace in min:sec per km
+ */
+function formatPace(paceSecondsPerKm: number): string {
+  if (paceSecondsPerKm === 0) return '--:--';
+  const minutes = Math.floor(paceSecondsPerKm / 60);
+  const seconds = Math.floor(paceSecondsPerKm % 60);
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Format duration in hours and minutes
+ */
+function formatDuration(durationSeconds: number): string {
+  const hours = Math.floor(durationSeconds / 3600);
+  const minutes = Math.floor((durationSeconds % 3600) / 60);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+}
+
+/**
+ * Get performance insights for a user
+ */
+async function getPerformanceInsights(userId: number, startDate: Date, endDate: Date) {
+  return safeDbOperation(async () => {
+    const runs = await getRunsInTimeRange(userId, startDate, endDate);
+    const trends = await calculatePerformanceTrends(runs);
+
+    const insights = [];
+
+    // Consistency insight
+    if (trends.consistencyScore >= 80) {
+      insights.push({
+        type: 'positive',
+        title: 'Excellent Consistency',
+        description: 'You\'re maintaining a great running schedule! Keep it up!',
+        metric: `${trends.consistencyScore.toFixed(0)}% consistency`
+      });
+    } else if (trends.consistencyScore < 50) {
+      insights.push({
+        type: 'warning',
+        title: 'Improve Consistency',
+        description: 'Try to run more regularly to build momentum and see better results.',
+        metric: `${trends.consistencyScore.toFixed(0)}% consistency`
+      });
+    }
+
+    // Pace improvement insight
+    if (runs.length >= 4) {
+      const firstQuarter = runs.slice(0, Math.ceil(runs.length / 4));
+      const lastQuarter = runs.slice(-Math.ceil(runs.length / 4));
+
+      const firstAvgPace = firstQuarter.reduce((sum, r) => sum + (r.distance > 0 ? r.duration / r.distance : 0), 0) / firstQuarter.length;
+      const lastAvgPace = lastQuarter.reduce((sum, r) => sum + (r.distance > 0 ? r.duration / r.distance : 0), 0) / lastQuarter.length;
+
+      const improvement = ((firstAvgPace - lastAvgPace) / firstAvgPace) * 100;
+
+      if (improvement > 5) {
+        insights.push({
+          type: 'positive',
+          title: 'Pace Improvement',
+          description: `Your pace has improved by ${improvement.toFixed(1)}%! You're getting faster!`,
+          metric: formatPace(lastAvgPace)
+        });
+      } else if (improvement < -5) {
+        insights.push({
+          type: 'info',
+          title: 'Pace Variation',
+          description: 'Your pace has slowed recently. Consider adjusting your training intensity or ensuring adequate recovery.',
+          metric: formatPace(lastAvgPace)
+        });
+      }
+    }
+
+    // Distance insight
+    const totalDistance = runs.reduce((sum, run) => sum + run.distance, 0);
+    if (totalDistance > 50) {
+      insights.push({
+        type: 'positive',
+        title: 'Distance Milestone',
+        description: `You've run ${totalDistance.toFixed(1)} km in this period! Great work!`,
+        metric: `${totalDistance.toFixed(1)} km`
+      });
+    }
+
+    // If no insights yet, add a motivational one
+    if (insights.length === 0 && runs.length > 0) {
+      insights.push({
+        type: 'info',
+        title: 'Keep Going',
+        description: 'Every run counts! You\'re building a strong foundation.',
+        metric: `${runs.length} runs completed`
+      });
+    }
+
+    return insights;
+  }, 'getPerformanceInsights', []);
+}
+
+/**
+ * Get performance metrics for a user in a time range
+ */
+async function getPerformanceMetrics(userId: number, startDate: Date, endDate: Date) {
+  return safeDbOperation(async () => {
+    const runs = await getRunsInTimeRange(userId, startDate, endDate);
+    const trends = await calculatePerformanceTrends(runs);
+
+    return {
+      totalRuns: runs.length,
+      totalDistance: runs.reduce((sum, run) => sum + run.distance, 0),
+      totalDuration: runs.reduce((sum, run) => sum + run.duration, 0),
+      averagePace: trends.averagePace,
+      consistencyScore: trends.consistencyScore,
+      performanceScore: trends.performanceScore
+    };
+  }, 'getPerformanceMetrics', {
+    totalRuns: 0,
+    totalDistance: 0,
+    totalDuration: 0,
+    averagePace: 0,
+    consistencyScore: 0,
+    performanceScore: 0
+  });
+}
+
+/**
+ * Get personal record progression for a specific distance
+ */
+async function getPersonalRecordProgression(userId: number, distance: number) {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    const runs = await database.runs.where('userId').equals(userId).toArray();
+
+    // Filter runs for this specific distance (within 5% tolerance)
+    const relevantRuns = runs.filter(run => {
+      const distanceDiff = Math.abs(run.distance - distance);
+      const tolerance = distance * 0.05; // 5% tolerance
+      return distanceDiff <= tolerance;
+    }).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    if (relevantRuns.length === 0) {
+      return [];
+    }
+
+    // Track personal record progression over time
+    let currentBest = Infinity;
+    const progression = [];
+
+    for (const run of relevantRuns) {
+      const pace = run.distance > 0 ? run.duration / run.distance : Infinity;
+
+      if (pace < currentBest) {
+        currentBest = pace;
+        progression.push({
+          date: new Date(run.createdAt),
+          pace: pace,
+          duration: run.duration,
+          distance: run.distance,
+          isPR: true
+        });
+      }
+    }
+
+    return progression;
+  }, 'getPersonalRecordProgression', []);
+}
+
+/**
+ * Check and update personal records based on new run
+ */
+async function checkAndUpdatePersonalRecords(
+  userId: number,
+  runId: number,
+  distance: number,
+  duration: number,
+  pace: number,
+  date: Date
+) {
+  return safeDbOperation(async () => {
+    const updatedRecords = [];
+    const database = getDatabase();
+    const allRuns = await database.runs.where('userId').equals(userId).toArray();
+
+    // Check various record types
+    const longestRun = allRuns.reduce((max, run) => run.distance > max.distance ? run : max, allRuns[0]);
+    const fastestPace = allRuns.reduce((fastest, run) => {
+      const runPace = run.distance > 0 ? run.duration / run.distance : Infinity;
+      const fastestPace = fastest.distance > 0 ? fastest.duration / fastest.distance : Infinity;
+      return runPace < fastestPace ? run : fastest;
+    }, allRuns[0]);
+    const longestDuration = allRuns.reduce((max, run) => run.duration > max.duration ? run : max, allRuns[0]);
+
+    // Check if this run set any records
+    if (longestRun.id === runId) {
+      updatedRecords.push({
+        type: 'Longest Distance',
+        value: distance,
+        date: date,
+        runId: runId
+      });
+    }
+
+    if (fastestPace.id === runId) {
+      updatedRecords.push({
+        type: 'Fastest Pace',
+        value: pace,
+        date: date,
+        runId: runId
+      });
+    }
+
+    if (longestDuration.id === runId) {
+      updatedRecords.push({
+        type: 'Longest Duration',
+        value: duration,
+        date: date,
+        runId: runId
+      });
+    }
+
+    return updatedRecords;
+  }, 'checkAndUpdatePersonalRecords', []);
+}
+
+/**
+ * Delete a personal record (admin functionality)
+ */
+async function deletePersonalRecord(userId: number, recordId: number) {
+  return safeDbOperation(async () => {
+    // Personal records are derived from runs, so this would delete the run
+    const database = getDatabase();
+    await database.runs.delete(recordId);
+    return true;
+  }, 'deletePersonalRecord', false);
+}
+
+/**
+ * Get goal progress history
+ */
+async function getGoalProgressHistory(goalId: number, limit: number = 30) {
+  return safeDbOperation(async () => {
+    // For now, return empty array - this would be implemented with a goal_progress_history table
+    return [];
+  }, 'getGoalProgressHistory', []);
+}
+
+/**
+ * Get milestones for a specific goal
+ */
+async function getGoalMilestones(goalId: number): Promise<GoalMilestone[]> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database.goalMilestones) {
+      return [];
+    }
+    return await database.goalMilestones.where('goalId').equals(goalId).toArray();
+  }, 'getGoalMilestones', []);
+}
+
+// ============================================================================
+// SMART GOAL VALIDATION & AUTO-COMPLETION
+// ============================================================================
+
+/**
+ * SMART validation result interface
+ */
+export interface SMARTValidationResult {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+  suggestions: string[];
+  autoGenerated: string[];
+  completeness: {
+    specific: boolean;      // Has clear title and target
+    measurable: boolean;    // Has metrics to track
+    achievable: boolean;    // Feasibility assessed
+    relevant: boolean;      // Has context/motivation
+    timeBound: boolean;     // Has deadline
+  };
+  smartScore: number;       // 0-100 overall SMART quality
+}
+
+/**
+ * Derive metrics from goal type
+ */
+function deriveMetricsFromGoalType(goalType: string): string[] {
+  const metricMap: Record<string, string[]> = {
+    time_improvement: ['pace', 'distance', 'time', 'weekly_speed_workouts'],
+    distance_achievement: ['distance', 'weekly_distance', 'longest_run'],
+    frequency: ['runs_per_week', 'total_runs', 'streak'],
+    race_completion: ['race_pace', 'training_volume', 'long_run_distance'],
+    consistency: ['streak', 'runs_per_week', 'adherence_rate'],
+    health: ['hrv', 'resting_heart_rate', 'recovery_score']
+  };
+
+  return metricMap[goalType] || ['progress'];
+}
+
+/**
+ * Calculate feasibility score for a goal
+ */
+function calculateFeasibilityScore(
+  baseline: number,
+  target: number,
+  deadline: Date,
+  goalType: string
+): number {
+  const daysAvailable = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const weeksAvailable = daysAvailable / 7;
+
+  if (baseline <= 0 || target <= 0) return 50;
+
+  const improvementNeeded = Math.abs(target - baseline);
+  const improvementPercent = (improvementNeeded / baseline) * 100;
+
+  if (goalType === 'time_improvement') {
+    // For time goals, improvement per week matters
+    const improvementPerWeek = improvementPercent / weeksAvailable;
+    if (improvementPerWeek < 1) return 85;      // Very achievable
+    if (improvementPerWeek < 2) return 70;      // Challenging
+    if (improvementPerWeek < 4) return 50;      // Difficult
+    return 30;                                   // Very difficult
+  } else {
+    // For distance/frequency goals
+    const progressionRate = improvementNeeded / weeksAvailable;
+    if (progressionRate < baseline * 0.1) return 85;
+    if (progressionRate < baseline * 0.2) return 70;
+    if (progressionRate < baseline * 0.4) return 50;
+    return 30;
+  }
+}
+
+/**
+ * Validate SMART goal criteria
+ * Returns validation result with warnings instead of hard failures
+ */
+export function validateSMARTGoal(goalData: Partial<Goal>): SMARTValidationResult {
+  const result: SMARTValidationResult = {
+    isValid: true,
+    errors: [],
+    warnings: [],
+    suggestions: [],
+    autoGenerated: [],
+    completeness: {
+      specific: false,
+      measurable: false,
+      achievable: false,
+      relevant: false,
+      timeBound: false
+    },
+    smartScore: 0
+  };
+
+  // Validate Specific
+  if (goalData.title && goalData.title.length >= 3 && goalData.specificTarget?.metric) {
+    result.completeness.specific = true;
+  } else {
+    result.warnings.push('Goal should have a clear title and target metric');
+  }
+
+  // Validate Measurable
+  if (goalData.measurableMetrics && goalData.measurableMetrics.length > 0) {
+    result.completeness.measurable = true;
+  } else {
+    result.warnings.push('Metrics will be auto-generated from goal type');
+    result.autoGenerated.push('measurableMetrics');
+  }
+
+  // Validate Achievable
+  if (goalData.achievableAssessment?.feasibilityScore !== undefined) {
+    result.completeness.achievable = true;
+  } else {
+    result.warnings.push('Feasibility will be auto-calculated');
+    result.autoGenerated.push('feasibilityScore');
+  }
+
+  // Validate Relevant
+  if (goalData.relevantContext && goalData.relevantContext.length >= 10) {
+    result.completeness.relevant = true;
+  } else {
+    result.warnings.push('Goal motivation is optional');
+  }
+
+  // Validate Time-bound
+  if (goalData.timeBound?.deadline) {
+    const daysUntil = Math.ceil((goalData.timeBound.deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    if (daysUntil >= 7) {
+      result.completeness.timeBound = true;
+    } else {
+      result.errors.push('Deadline must be at least 7 days in the future');
+      result.isValid = false;
+    }
+  } else {
+    result.errors.push('Deadline is required');
+    result.isValid = false;
+  }
+
+  // Calculate SMART score
+  const criteriaCount = Object.values(result.completeness).filter(Boolean).length;
+  result.smartScore = (criteriaCount / 5) * 100;
+
+  // Add suggestions based on score
+  if (result.smartScore < 60) {
+    result.suggestions.push('Consider providing more details for a stronger goal');
+  } else if (result.smartScore === 100) {
+    result.suggestions.push('Excellent! This goal meets all SMART criteria');
+  }
+
+  return result;
+}
+
+/**
+ * Auto-complete missing goal fields with intelligent defaults
+ */
+export async function autoCompleteGoalFields(
+  goalData: Partial<Goal>,
+  userId: number
+): Promise<Goal> {
+  const completed = { ...goalData } as any;
+
+  // Auto-generate measurable metrics from goal type
+  if (!completed.measurableMetrics || completed.measurableMetrics.length === 0) {
+    completed.measurableMetrics = deriveMetricsFromGoalType(completed.goalType);
+  }
+
+  // Auto-generate description if missing
+  if (!completed.description) {
+    completed.description = `${completed.title} - targeting ${completed.specificTarget?.value} ${completed.specificTarget?.unit}`;
+  }
+
+  // Auto-calculate baseline value from user's recent runs
+  if (!completed.baselineValue && completed.goalType === 'time_improvement') {
+    try {
+      const database = getDatabase();
+      const recentRuns = await database.runs
+        .where('userId')
+        .equals(userId)
+        .reverse()
+        .limit(10)
+        .toArray();
+
+      if (recentRuns.length > 0) {
+        const avgPace = recentRuns.reduce((sum: number, run: any) => sum + (run.duration / run.distance), 0) / recentRuns.length;
+        completed.baselineValue = avgPace;
+      } else {
+        completed.baselineValue = completed.targetValue * 1.2; // Assume 20% improvement
+      }
+    } catch (error) {
+      console.warn('Failed to calculate baseline from runs:', error);
+      completed.baselineValue = completed.targetValue * 1.2; // Fallback
+    }
+  } else if (!completed.baselineValue) {
+    // For other goal types, use target * 1.2 as default
+    completed.baselineValue = completed.targetValue * 1.2;
+  }
+
+  // Auto-calculate feasibility score
+  if (!completed.achievableAssessment) {
+    completed.achievableAssessment = {
+      currentLevel: completed.baselineValue || 0,
+      targetLevel: completed.targetValue || 0,
+      feasibilityScore: calculateFeasibilityScore(
+        completed.baselineValue || 0,
+        completed.targetValue || 0,
+        completed.timeBound?.deadline || new Date(),
+        completed.goalType
+      ),
+      recommendedAdjustments: []
+    };
+  }
+
+  // Auto-generate milestone schedule
+  if (!completed.timeBound?.milestoneSchedule) {
+    completed.timeBound = {
+      ...completed.timeBound,
+      milestoneSchedule: [25, 50, 75, 100]
+    };
+  }
+
+  // Set default start date if missing
+  if (!completed.timeBound?.startDate) {
+    completed.timeBound = {
+      ...completed.timeBound,
+      startDate: new Date()
+    };
+  }
+
+  // Set default relevant context if missing
+  if (!completed.relevantContext) {
+    completed.relevantContext = 'Personal running goal';
+  }
+
+  // Calculate duration if missing
+  if (!completed.timeBound?.totalDuration && completed.timeBound?.deadline) {
+    const start = completed.timeBound.startDate || new Date();
+    const end = completed.timeBound.deadline;
+    completed.timeBound.totalDuration = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  // Set default priority if missing
+  if (!completed.priority) {
+    completed.priority = 2; // Medium priority
+  }
+
+  // Set initial values
+  completed.currentValue = completed.baselineValue;
+  completed.progressPercentage = 0;
+  completed.status = 'active';
+
+  return completed as Goal;
+}
+
+// ============================================================================
 // EXPORT ALL UTILITIES
 // ============================================================================
 
@@ -2643,7 +3351,10 @@ export const dbUtils = {
   updateGoal,
   getUserGoals,
   getGoalWithMilestones,
-  
+  getGoalMilestones,
+  validateSMARTGoal,
+  autoCompleteGoalFields,
+
   // Race goal management
   getRaceGoalsByUser,
   createRaceGoal,
@@ -2672,7 +3383,6 @@ export const dbUtils = {
   getTodaysWorkout,
   markWorkoutCompleted,
   getWorkoutsByPlan,
-  updateWorkout,
   deleteWorkout,
   
   // Run tracking
@@ -2697,12 +3407,23 @@ export const dbUtils = {
   
   // Error handling
   handleDatabaseError,
-  
+
   // Plan-specific error handling (backward compatibility)
   handlePlanError: handleDatabaseError,
-  
+
   // UTC Migration
-  migrateExistingPlansToUTC
+  migrateExistingPlansToUTC,
+
+  // Performance Analytics
+  getRunsInTimeRange,
+  calculatePerformanceTrends,
+  getPersonalRecords,
+  getPerformanceInsights,
+  getPerformanceMetrics,
+  getPersonalRecordProgression,
+  checkAndUpdatePersonalRecords,
+  deletePersonalRecord,
+  getGoalProgressHistory
 };
 
 export default dbUtils; 

@@ -26,7 +26,7 @@ import {
   Sparkles,
   Award
 } from 'lucide-react';
-import { GoalCreationWizard } from './goal-creation-wizard';
+import { SimpleGoalForm } from './simple-goal-form';
 import { GoalAnalyticsInsights } from './goal-analytics-insights';
 import { toast } from '@/components/ui/use-toast';
 
@@ -539,8 +539,8 @@ export function GoalProgressDashboard({ userId, className = '' }: GoalProgressDa
         </TabsContent>
       </Tabs>
 
-      {/* Goal Creation Wizard */}
-      <GoalCreationWizard
+      {/* Goal Creation Form */}
+      <SimpleGoalForm
         isOpen={showCreateWizard}
         onClose={() => setShowCreateWizard(false)}
         userId={userId}
