@@ -5,7 +5,7 @@
  * Displays when map fails to load, showing list view alternative
  */
 
-import { MapOff, RefreshCw, Navigation } from 'lucide-react';
+import { MapPin, RefreshCw, Navigation } from 'lucide-react';
 import type { Route } from '@/lib/db';
 import type { LatLng } from '@/lib/mapConfig';
 import { Button } from '@/components/ui/button';
@@ -39,7 +39,7 @@ export function MapFallback({
       {/* Error state */}
       <div className="text-center mb-6">
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-200 dark:bg-slate-800 mb-4">
-          <MapOff className="w-8 h-8 text-slate-500 dark:text-slate-400" />
+          <MapPin className="w-8 h-8 text-slate-500 dark:text-slate-400" />
         </div>
         <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
           Map View Unavailable
