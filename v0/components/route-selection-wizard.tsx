@@ -14,6 +14,8 @@ import { trackRouteSelected, trackRouteSelectedFromMap, trackRouteWizardMapToggl
 import { db, type Route } from "@/lib/db";
 import { seedDemoRoutes } from "@/lib/seedRoutes";
 import { calculateDistance } from "@/lib/routeUtils";
+import { useToast } from "@/hooks/use-toast";
+import { getDifficultyColor, getDifficultyLabel, getSafetyColor, isDevelopment } from "@/lib/routeHelpers";
 
 interface UserLocation {
   latitude: number;
@@ -43,15 +45,17 @@ interface RouteWithScore extends Route {
   distanceFromUser?: number;
 }
 
-export function RouteSelectionWizard({ 
-  isOpen, 
-  onClose, 
-  userExperience, 
-  onRouteSelected 
+export function RouteSelectionWizard({
+  isOpen,
+  onClose,
+  userExperience,
+  onRouteSelected
 }: RouteSelectionWizardProps) {
+  const { toast } = useToast();
+
   // Step navigation
   const [step, setStep] = useState<'preferences' | 'recommendations'>('preferences');
-  
+
   // User preferences
   const [preferences, setPreferences] = useState<UserPreferences>({
     maxDistance: 10,
@@ -61,22 +65,23 @@ export function RouteSelectionWizard({
     trafficPreference: 'low',
     lightingPreference: 'any',
   });
-  
+
   // Routes from database
   const [allRoutes, setAllRoutes] = useState<Route[]>([]);
   const [isLoadingRoutes, setIsLoadingRoutes] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [recommendedRoutes, setRecommendedRoutes] = useState<RouteWithScore[]>([]);
-  
+
   // Previewed route state (for highlighting on map)
   const [previewedRouteId, setPreviewedRouteId] = useState<number | null>(null);
-  
+
   // View mode
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
-  
+
   // GPS location state
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'granted' | 'denied' | 'unavailable'>('idle');
-  
+
   // Custom route creator state
   const [customRouteCreatorOpen, setCustomRouteCreatorOpen] = useState(false);
 
@@ -84,18 +89,31 @@ export function RouteSelectionWizard({
   const loadRoutes = useCallback(async () => {
     try {
       setIsLoadingRoutes(true);
+      setLoadError(null);
       const count = await db.routes.count();
       if (count === 0) {
-        await seedDemoRoutes();
+        const seeded = await seedDemoRoutes();
+        if (!seeded) {
+          setLoadError('Failed to load demo routes. Please try again.');
+          return;
+        }
       }
       const routes = await db.routes.toArray();
       setAllRoutes(routes);
     } catch (error) {
-      console.error('[RouteSelectionWizard] Error loading routes:', error);
+      if (isDevelopment()) {
+        console.error('[RouteSelectionWizard] Error loading routes:', error);
+      }
+      setLoadError('Failed to load routes. Please refresh the page.');
+      toast({
+        title: 'Error Loading Routes',
+        description: 'Failed to load routes from database.',
+        variant: 'destructive',
+      });
     } finally {
       setIsLoadingRoutes(false);
     }
-  }, []);
+  }, [toast]);
 
   // Load routes when modal opens
   useEffect(() => {
@@ -107,14 +125,15 @@ export function RouteSelectionWizard({
   // Request GPS location when modal opens
   useEffect(() => {
     if (isOpen && locationStatus === 'idle') {
-      requestLocation();
+      const cleanup = requestLocation();
+      return cleanup;
     }
-  }, [isOpen, locationStatus]);
+  }, [isOpen, locationStatus, requestLocation]);
 
-  const requestLocation = () => {
-    const isSecure = typeof window !== 'undefined' && 
+  const requestLocation = useCallback(() => {
+    const isSecure = typeof window !== 'undefined' &&
       (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
-    
+
     if (!isSecure) {
       setLocationStatus('unavailable');
       return;
@@ -126,21 +145,27 @@ export function RouteSelectionWizard({
     }
 
     setLocationStatus('loading');
-    
+
+    let isMounted = true;
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setUserLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy
-        });
-        setLocationStatus('granted');
+        if (isMounted) {
+          setUserLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          });
+          setLocationStatus('granted');
+        }
       },
       (error) => {
-        if (error.code === error.PERMISSION_DENIED) {
-          setLocationStatus('denied');
-        } else {
-          setLocationStatus('unavailable');
+        if (isMounted) {
+          if (error.code === error.PERMISSION_DENIED) {
+            setLocationStatus('denied');
+          } else {
+            setLocationStatus('unavailable');
+          }
         }
       },
       {
@@ -149,7 +174,11 @@ export function RouteSelectionWizard({
         maximumAge: 300000
       }
     );
-  };
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Calculate match score for a route
   const calculateMatchScore = useCallback((
@@ -247,28 +276,43 @@ export function RouteSelectionWizard({
   };
 
   const handleRouteSelect = async (route: RouteWithScore) => {
-    await trackRouteSelected({
-      route_id: route.id?.toString(),
-      route_name: route.name,
-      distance_km: route.distance,
-      difficulty: route.difficulty,
-      elevation_m: route.elevationGain,
-      estimated_time_minutes: route.estimatedTime,
-      safety_score: route.safetyScore,
-      match_score: route.matchScore,
-      distance_from_user_km: route.distanceFromUser,
-      user_location_available: !!userLocation,
-      user_experience: userExperience,
-      selection_method: viewMode,
-    });
-
-    if (viewMode === 'map') {
-      await trackRouteSelectedFromMap({
-        route_id: route.id?.toString(),
-        route_name: route.name,
+    if (!route.id) {
+      toast({
+        title: 'Error',
+        description: 'Cannot select route without ID',
+        variant: 'destructive',
       });
+      return;
     }
-    
+
+    try {
+      await trackRouteSelected({
+        route_id: route.id.toString(),
+        route_name: route.name,
+        distance_km: route.distance,
+        difficulty: route.difficulty,
+        elevation_m: route.elevationGain,
+        estimated_time_minutes: route.estimatedTime,
+        safety_score: route.safetyScore,
+        match_score: route.matchScore,
+        distance_from_user_km: route.distanceFromUser,
+        user_location_available: !!userLocation,
+        user_experience: userExperience,
+        selection_method: viewMode,
+      });
+
+      if (viewMode === 'map') {
+        await trackRouteSelectedFromMap({
+          route_id: route.id.toString(),
+          route_name: route.name,
+        });
+      }
+    } catch (error) {
+      if (isDevelopment()) {
+        console.warn('Analytics tracking failed:', error);
+      }
+    }
+
     onRouteSelected(route);
     setPreviewedRouteId(null);
     onClose();
@@ -286,36 +330,11 @@ export function RouteSelectionWizard({
   const handleCustomRouteSaved = (route: Route) => {
     loadRoutes();
     setStep('recommendations');
-    setPreviewedRouteId(route.id);
-  };
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case "beginner":
-        return "bg-green-100 text-green-800";
-      case "intermediate":
-        return "bg-yellow-100 text-yellow-800";
-      case "advanced":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-gray-100 text-gray-800";
+    if (route.id !== undefined) {
+      setPreviewedRouteId(route.id);
     }
   };
 
-  const getDifficultyLabel = (difficulty: string) => {
-    switch (difficulty) {
-      case "beginner": return "Easy";
-      case "intermediate": return "Moderate";
-      case "advanced": return "Hard";
-      default: return difficulty;
-    }
-  };
-
-  const getSafetyColor = (score: number) => {
-    if (score >= 90) return "text-green-600";
-    if (score >= 75) return "text-yellow-600";
-    return "text-red-600";
-  };
 
   const renderPreferencesStep = () => (
     <div className="space-y-6">
@@ -513,8 +532,19 @@ export function RouteSelectionWizard({
         )}
       </div>
 
+      {/* Error State */}
+      {loadError && (
+        <div className="text-center py-8 text-red-500">
+          <AlertCircle className="h-12 w-12 mx-auto mb-2" />
+          <p>{loadError}</p>
+          <Button onClick={loadRoutes} className="mt-4" variant="outline">
+            Try Again
+          </Button>
+        </div>
+      )}
+
       {/* Map or List View */}
-      {viewMode === 'map' ? (
+      {!loadError && viewMode === 'map' ? (
         <div className="space-y-4">
           <RouteMap
             routes={recommendedRoutes}
@@ -583,7 +613,7 @@ export function RouteSelectionWizard({
             {userLocation && ' sorted by distance from you'}
           </p>
         </div>
-      ) : (
+      ) : !loadError && (
         <div className="space-y-4">
           {recommendedRoutes.length === 0 && !isLoadingRoutes ? (
             <div className="text-center py-8 text-gray-500">
@@ -709,13 +739,15 @@ export function RouteSelectionWizard({
         </div>
       )}
 
-      <Button 
+      {!loadError && (
+        <Button 
         onClick={() => setStep('preferences')} 
         variant="outline" 
         className="w-full"
       >
         Adjust Preferences
       </Button>
+      )}
     </div>
   );
 

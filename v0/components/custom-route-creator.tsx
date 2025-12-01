@@ -20,6 +20,14 @@ import {
 } from '@/lib/routeUtils';
 import { trackCustomRouteSaved } from '@/lib/analytics';
 import type { LatLng } from '@/lib/mapConfig';
+import {
+  MAX_NAME_LENGTH,
+  MAX_NOTES_LENGTH,
+  MAX_DISTANCE_KM,
+  isValidLatitude,
+  isValidLongitude,
+  isDevelopment
+} from '@/lib/routeHelpers';
 
 interface CustomRouteCreatorProps {
   isOpen: boolean;
@@ -98,6 +106,7 @@ export function CustomRouteCreator({ isOpen, onClose, onRouteSaved }: CustomRout
   };
 
   const handleSave = async () => {
+    // Validate name
     if (!routeName.trim()) {
       toast({
         title: 'Name Required',
@@ -107,10 +116,54 @@ export function CustomRouteCreator({ isOpen, onClose, onRouteSaved }: CustomRout
       return;
     }
 
+    if (routeName.length > MAX_NAME_LENGTH) {
+      toast({
+        title: 'Name Too Long',
+        description: `Route name must be ${MAX_NAME_LENGTH} characters or less.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate waypoints
     if (waypoints.length < 2) {
       toast({
         title: 'Add Waypoints',
         description: 'Please add at least a start and end point.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate coordinates
+    const hasInvalidCoords = waypoints.some(wp =>
+      !isValidLatitude(wp.lat) || !isValidLongitude(wp.lng)
+    );
+
+    if (hasInvalidCoords) {
+      toast({
+        title: 'Invalid Coordinates',
+        description: 'Some waypoints have invalid GPS coordinates.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate distance
+    if (distance > MAX_DISTANCE_KM) {
+      toast({
+        title: 'Route Too Long',
+        description: `Route distance exceeds ${MAX_DISTANCE_KM}km limit.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate notes length
+    if (notes.length > MAX_NOTES_LENGTH) {
+      toast({
+        title: 'Notes Too Long',
+        description: `Notes must be ${MAX_NOTES_LENGTH} characters or less.`,
         variant: 'destructive',
       });
       return;
@@ -149,28 +202,41 @@ export function CustomRouteCreator({ isOpen, onClose, onRouteSaved }: CustomRout
       const routeId = await db.routes.add(newRoute);
       const savedRoute = { ...newRoute, id: routeId };
 
-      trackCustomRouteSaved({
-        route_id: routeId,
-        waypoint_count: waypoints.length,
-        distance_km: distance,
-        difficulty,
-      });
+      // Await analytics tracking
+      try {
+        await trackCustomRouteSaved({
+          route_id: routeId,
+          waypoint_count: waypoints.length,
+          distance_km: distance,
+          difficulty,
+        });
+      } catch (error) {
+        if (isDevelopment()) {
+          console.warn('Analytics tracking failed:', error);
+        }
+      }
 
       toast({
         title: 'Route Saved',
         description: `"${newRoute.name}" has been added to your routes.`,
       });
 
+      // Call onRouteSaved before clearing state
       onRouteSaved(savedRoute);
-      onClose();
 
+      // Clear state
       setWaypoints([]);
       setRouteName('');
       setNotes('');
       setDifficulty('beginner');
       setSurfaceType('paved');
+
+      // Close modal last
+      onClose();
     } catch (error) {
-      console.error('Error saving custom route:', error);
+      if (isDevelopment()) {
+        console.error('Error saving custom route:', error);
+      }
       toast({
         title: 'Save Failed',
         description: 'Unable to save route. Please try again.',

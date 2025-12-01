@@ -40,17 +40,22 @@ function generateRoutePath(
 /**
  * Seed database with demo routes
  * Creates 10 varied routes in Tel Aviv area with complete GPS paths
+ * @returns true if seeding was successful, false otherwise
  */
-export async function seedDemoRoutes(): Promise<void> {
+export async function seedDemoRoutes(): Promise<boolean> {
   try {
     // Check if routes already exist
     const existingRoutes = await db.routes.count();
     if (existingRoutes > 0) {
-      console.log('Routes already seeded, skipping...');
-      return;
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('Routes already seeded, skipping...');
+      }
+      return true;
     }
 
-    console.log('🌱 Seeding demo routes...');
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🌱 Seeding demo routes...');
+    }
 
     const demoRoutes: Omit<Route, 'id'>[] = [
       // 1. Beach Promenade Run
@@ -456,9 +461,13 @@ export async function seedDemoRoutes(): Promise<void> {
     // Insert all routes
     await db.routes.bulkAdd(demoRoutes);
 
-    console.log(`✅ Successfully seeded ${demoRoutes.length} demo routes`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`✅ Successfully seeded ${demoRoutes.length} demo routes`);
+    }
+    return true;
   } catch (error) {
     console.error('❌ Error seeding demo routes:', error);
-    throw error;
+    // Don't throw - return false to indicate failure
+    return false;
   }
 }

@@ -13,6 +13,8 @@ import { trackNearbyFilterChanged, trackRouteSelected } from "@/lib/analytics"
 import { calculateDistance } from "@/lib/routeUtils"
 import { db, type Route } from "@/lib/db"
 import { seedDemoRoutes } from "@/lib/seedRoutes"
+import { useToast } from "@/hooks/use-toast"
+import { getDifficultyColor, getDifficultyLabel, UNKNOWN_DISTANCE_KM, isDevelopment } from "@/lib/routeHelpers"
 
 interface RouteSelectorModalProps {
   isOpen: boolean
@@ -25,19 +27,26 @@ interface UserLocation {
   accuracy: number
 }
 
+interface RouteWithDistance extends Route {
+  distanceFromUser?: number
+}
+
 export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps) {
+  const { toast } = useToast()
+
   // Routes from database
   const [routes, setRoutes] = useState<Route[]>([])
   const [isLoadingRoutes, setIsLoadingRoutes] = useState(true)
-  
+  const [loadError, setLoadError] = useState<string | null>(null)
+
   // Selected & previewed route state
   const [previewedRouteId, setPreviewedRouteId] = useState<number | null>(null)
-  
+
   // Location state
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null)
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'granted' | 'denied' | 'unavailable'>('idle')
   const [radiusKm, setRadiusKm] = useState<number>(10)
-  
+
   // Custom route creator state
   const [customRouteCreatorOpen, setCustomRouteCreatorOpen] = useState(false)
 
@@ -45,18 +54,31 @@ export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps)
   const loadRoutes = useCallback(async () => {
     try {
       setIsLoadingRoutes(true)
+      setLoadError(null)
       const count = await db.routes.count()
       if (count === 0) {
-        await seedDemoRoutes()
+        const seeded = await seedDemoRoutes()
+        if (!seeded) {
+          setLoadError('Failed to load demo routes. Please try again.')
+          return
+        }
       }
       const allRoutes = await db.routes.toArray()
       setRoutes(allRoutes)
     } catch (error) {
-      console.error('[RouteSelectorModal] Error loading routes:', error)
+      if (isDevelopment()) {
+        console.error('[RouteSelectorModal] Error loading routes:', error)
+      }
+      setLoadError('Failed to load routes. Please refresh the page.')
+      toast({
+        title: 'Error Loading Routes',
+        description: 'Failed to load routes from database.',
+        variant: 'destructive',
+      })
     } finally {
       setIsLoadingRoutes(false)
     }
-  }, [])
+  }, [toast])
 
   // Load routes when modal opens
   useEffect(() => {
@@ -68,24 +90,35 @@ export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps)
   // Request GPS location when modal opens
   useEffect(() => {
     if (isOpen && locationStatus === 'idle') {
-      requestLocation()
+      const cleanup = requestLocation()
+      return cleanup
     }
-  }, [isOpen, locationStatus])
+  }, [isOpen, locationStatus, requestLocation])
 
   // Calculate routes with distance from user
-  const routesWithDistance = useMemo(() => {
-    if (!userLocation) return routes.map(route => ({ ...route, distanceFromUser: undefined }))
+  const routesWithDistance = useMemo((): RouteWithDistance[] => {
+    if (!userLocation) {
+      return routes.map(route => ({ ...route, distanceFromUser: undefined }))
+    }
 
-    return routes.map(route => ({
-      ...route,
-      distanceFromUser: route.startLat && route.startLng 
-        ? calculateDistance(userLocation.latitude, userLocation.longitude, route.startLat, route.startLng)
-        : 999
-    })).sort((a, b) => (a.distanceFromUser || 999) - (b.distanceFromUser || 999))
+    return routes.map(route => {
+      const distanceFromUser = route.startLat && route.startLng
+        ? calculateDistance(
+            userLocation.latitude,
+            userLocation.longitude,
+            route.startLat,
+            route.startLng
+          )
+        : UNKNOWN_DISTANCE_KM
+
+      return { ...route, distanceFromUser }
+    }).sort((a, b) =>
+      (a.distanceFromUser ?? UNKNOWN_DISTANCE_KM) - (b.distanceFromUser ?? UNKNOWN_DISTANCE_KM)
+    )
   }, [routes, userLocation])
 
   // Filter routes by radius
-  const nearbyRoutes = useMemo(() => {
+  const nearbyRoutes = useMemo((): RouteWithDistance[] => {
     if (!userLocation) return routesWithDistance
 
     return routesWithDistance.filter(
@@ -99,12 +132,14 @@ export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps)
     return nearbyRoutes.find(r => r.id === previewedRouteId) || null
   }, [previewedRouteId, nearbyRoutes])
 
-  const requestLocation = () => {
-    const isSecure = typeof window !== 'undefined' && 
+  const requestLocation = useCallback(() => {
+    const isSecure = typeof window !== 'undefined' &&
       (window.location.protocol === 'https:' || window.location.hostname === 'localhost')
-    
+
     if (!isSecure) {
-      console.warn('[RouteSelectorModal] Not running on HTTPS - GPS unavailable')
+      if (isDevelopment()) {
+        console.warn('[RouteSelectorModal] Not running on HTTPS - GPS unavailable')
+      }
       setLocationStatus('unavailable')
       return
     }
@@ -115,21 +150,27 @@ export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps)
     }
 
     setLocationStatus('loading')
-    
+
+    let isMounted = true
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setUserLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy
-        })
-        setLocationStatus('granted')
+        if (isMounted) {
+          setUserLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          })
+          setLocationStatus('granted')
+        }
       },
       (error) => {
-        if (error.code === error.PERMISSION_DENIED) {
-          setLocationStatus('denied')
-        } else {
-          setLocationStatus('unavailable')
+        if (isMounted) {
+          if (error.code === error.PERMISSION_DENIED) {
+            setLocationStatus('denied')
+          } else {
+            setLocationStatus('unavailable')
+          }
         }
       },
       {
@@ -138,7 +179,11 @@ export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps)
         maximumAge: 300000
       }
     )
-  }
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const handleRoutePreview = (route: Route) => {
     // If already previewed, select it
@@ -150,20 +195,38 @@ export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps)
     }
   }
 
-  const handleRouteSelect = async (route: Route) => {
-    await trackRouteSelected({
-      route_id: route.id?.toString(),
-      route_name: route.name,
-      distance_km: route.distance,
-      difficulty: route.difficulty,
-      elevation_m: route.elevationGain,
-      estimated_time_minutes: route.estimatedTime,
-      distance_from_user_km: route.distanceFromUser,
-      user_location_available: !!userLocation
+  const handleRouteSelect = async (route: RouteWithDistance) => {
+    if (!route.id) {
+      toast({
+        title: 'Error',
+        description: 'Cannot select route without ID',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      await trackRouteSelected({
+        route_id: route.id.toString(),
+        route_name: route.name,
+        distance_km: route.distance,
+        difficulty: route.difficulty,
+        elevation_m: route.elevationGain,
+        estimated_time_minutes: route.estimatedTime,
+        distance_from_user_km: route.distanceFromUser,
+        user_location_available: !!userLocation
+      })
+    } catch (error) {
+      if (isDevelopment()) {
+        console.warn('Analytics tracking failed:', error)
+      }
+    }
+
+    toast({
+      title: 'Route Added',
+      description: `"${route.name}" has been added to your workout!`,
     })
-    
-    console.log("Selected route:", route.id)
-    alert(`Route "${route.name}" added to your workout!`)
+
     setPreviewedRouteId(null)
     onClose()
   }
@@ -177,30 +240,11 @@ export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps)
   const handleCustomRouteSaved = (route: Route) => {
     // Refresh routes list and preview the new route
     loadRoutes()
-    setPreviewedRouteId(route.id)
-  }
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case "beginner":
-        return "bg-green-100 text-green-800"
-      case "intermediate":
-        return "bg-yellow-100 text-yellow-800"
-      case "advanced":
-        return "bg-red-100 text-red-800"
-      default:
-        return "bg-gray-100 text-gray-800"
+    if (route.id !== undefined) {
+      setPreviewedRouteId(route.id)
     }
   }
 
-  const getDifficultyLabel = (difficulty: string) => {
-    switch (difficulty) {
-      case "beginner": return "Easy"
-      case "intermediate": return "Moderate"
-      case "advanced": return "Hard"
-      default: return difficulty
-    }
-  }
 
   return (
     <>
@@ -285,8 +329,16 @@ export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps)
             </span>
           </div>
 
-          {/* Loading State */}
-          {isLoadingRoutes ? (
+          {/* Error State */}
+          {loadError ? (
+            <div className="text-center py-8 text-red-500">
+              <AlertCircle className="h-12 w-12 mx-auto mb-2" />
+              <p>{loadError}</p>
+              <Button onClick={loadRoutes} className="mt-4" variant="outline">
+                Try Again
+              </Button>
+            </div>
+          ) : isLoadingRoutes ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
               <span className="ml-2 text-gray-600">Loading routes...</span>
@@ -398,7 +450,7 @@ export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps)
                         </div>
 
                         {/* Distance from user (if location available) */}
-                        {route.distanceFromUser !== undefined && route.distanceFromUser < 999 && (
+                        {route.distanceFromUser !== undefined && route.distanceFromUser < UNKNOWN_DISTANCE_KM && (
                           <div className="flex items-center gap-1 text-sm text-blue-600">
                             <Navigation className="h-4 w-4" />
                             <span>{route.distanceFromUser < 1 
