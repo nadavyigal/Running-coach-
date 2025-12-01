@@ -504,11 +504,7 @@ export function GoalRecommendations({ userId, className = '' }: GoalRecommendati
         userId={userId}
         onGoalCreated={() => {
           loadRecommendations(); // Refresh recommendations
-          toast({
-            variant: "success",
-            title: "Goal Created! 🎯",
-            description: "Your new goal has been created based on our recommendation.",
-          });
+          // Toast is already shown by SimpleGoalForm with SMART score
         }}
       />
     </div>
