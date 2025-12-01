@@ -1,12 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, TrendingUp, Star, Clock, RouteIcon, Navigation, Loader2, AlertCircle } from "lucide-react"
-import { trackRouteSelected } from "@/lib/analytics"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { RouteMap } from "@/components/maps/RouteMap"
+import { MapPin, TrendingUp, Star, Clock, RouteIcon, Navigation, Loader2, AlertCircle, Radius } from "lucide-react"
+import { trackNearbyFilterChanged, trackRouteSelected } from "@/lib/analytics"
+import { calculateDistance } from "@/lib/routeUtils"
 
 interface RouteSelectorModalProps {
   isOpen: boolean
@@ -90,24 +93,12 @@ const sampleRoutes: RouteData[] = [
   },
 ]
 
-// Calculate distance between two GPS coordinates (Haversine formula)
-function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371 // Earth's radius in km
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLng = (lng2 - lng1) * Math.PI / 180
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLng/2) * Math.sin(dLng/2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
-  return R * c
-}
-
 export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps) {
   const [_selectedRoute, setSelectedRoute] = useState<string | null>(null)
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null)
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'granted' | 'denied' | 'unavailable'>('idle')
   const [sortedRoutes, setSortedRoutes] = useState<RouteData[]>(sampleRoutes)
+  const [radiusKm, setRadiusKm] = useState<number>(5)
 
   // Request GPS location when modal opens
   useEffect(() => {
@@ -133,6 +124,24 @@ export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps)
       setSortedRoutes(sampleRoutes)
     }
   }, [userLocation])
+
+  const nearbyRoutes = useMemo(() => {
+    if (!userLocation) return sortedRoutes
+
+    return sortedRoutes
+      .filter(route => route.distanceFromUser === undefined || route.distanceFromUser <= radiusKm)
+      .sort((a, b) => (a.distanceFromUser || 999) - (b.distanceFromUser || 999))
+  }, [sortedRoutes, userLocation, radiusKm])
+
+  const mapRoutes = useMemo(
+    () =>
+      nearbyRoutes.map(route => ({
+        ...route,
+        // Ensure numeric ID for map layer IDs/highlighting
+        id: Number(route.id) || route.id,
+      })),
+    [nearbyRoutes]
+  )
 
   const requestLocation = () => {
     // Check if running on HTTPS (required for GPS in production)
@@ -183,7 +192,7 @@ export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps)
     setSelectedRoute(routeId)
     
     // Track route selection
-    const selectedRouteData = sortedRoutes.find(route => route.id === routeId)
+    const selectedRouteData = (nearbyRoutes.length ? nearbyRoutes : sortedRoutes).find(route => route.id.toString() === routeId)
     await trackRouteSelected({
       route_id: routeId,
       route_name: selectedRouteData?.name,
@@ -216,7 +225,7 @@ export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps)
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MapPin className="h-5 w-5" />
@@ -268,12 +277,53 @@ export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps)
           )}
         </div>
 
+        {/* Radius Filter */}
+        <div className="flex items-center gap-3 mb-4">
+          <Radius className="h-5 w-5 text-gray-500" />
+          <label className="text-sm font-medium">Nearby Routes:</label>
+          <Select
+            value={radiusKm.toString()}
+            onValueChange={(value) => {
+              const newRadius = parseInt(value)
+              setRadiusKm(newRadius)
+              trackNearbyFilterChanged({ radius_km: newRadius })
+            }}
+          >
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">Within 1 km</SelectItem>
+              <SelectItem value="2">Within 2 km</SelectItem>
+              <SelectItem value="5">Within 5 km</SelectItem>
+              <SelectItem value="10">Within 10 km</SelectItem>
+              <SelectItem value="25">Within 25 km</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-sm text-gray-600">
+            {nearbyRoutes.length} {nearbyRoutes.length === 1 ? 'route' : 'routes'}
+          </span>
+        </div>
+
+        {/* Map View */}
+        <RouteMap
+          routes={mapRoutes as any}
+          userLocation={userLocation ? {
+            lat: userLocation.latitude,
+            lng: userLocation.longitude
+          } : undefined}
+          onRouteClick={(route) => handleRouteSelect(route?.id?.toString?.() ?? '')}
+          selectedRouteId={_selectedRoute ? Number(_selectedRoute) : undefined}
+          height="350px"
+          className="rounded-lg border mb-4"
+        />
+
         <div className="space-y-4">
-          {sortedRoutes.map((route) => (
+          {nearbyRoutes.map((route) => (
             <Card
               key={route.id}
               className="cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => handleRouteSelect(route.id)}
+              onClick={() => handleRouteSelect(route.id.toString())}
             >
               <CardContent className="p-4">
                 <div className="space-y-3">

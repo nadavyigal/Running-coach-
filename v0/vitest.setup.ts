@@ -3,6 +3,7 @@ import '@testing-library/jest-dom';
 import { configure } from '@testing-library/react';
 import { vi } from 'vitest';
 import { ErrorBoundaryAssertions } from './lib/test-utils';
+import './lib/mapLibreMock';
 
 // Mock URL constructor for relative URLs in tests
 const OriginalURL = global.URL;
@@ -699,6 +700,7 @@ Object.defineProperty(global.navigator, 'permissions', {
   },
   writable: true,
 });
+// MapLibre GL JS Mockvi.mock('maplibre-gl', () => {  const mockMap = {    on: vi.fn((event: string, callback: Function) => {      if (event === 'load') {        setTimeout(() => callback(), 0);      }      return mockMap;    }),    off: vi.fn(),    remove: vi.fn(),    addSource: vi.fn(),    removeSource: vi.fn(),    getSource: vi.fn(),    addLayer: vi.fn(),    removeLayer: vi.fn(),    getLayer: vi.fn(),    setStyle: vi.fn(),    fitBounds: vi.fn(),    flyTo: vi.fn(),    jumpTo: vi.fn(),    getCenter: vi.fn(() => ({ lng: 34.7818, lat: 32.0853 })),    getZoom: vi.fn(() => 13),    getBounds: vi.fn(),    addControl: vi.fn(),    removeControl: vi.fn(),    resize: vi.fn(),  };  const mockMarker = {    setLngLat: vi.fn().mockReturnThis(),    addTo: vi.fn().mockReturnThis(),    remove: vi.fn(),    setPopup: vi.fn().mockReturnThis(),    getElement: vi.fn(() => document.createElement('div')),  };  return {    default: {      Map: vi.fn(() => mockMap),      Marker: vi.fn(() => mockMarker),      NavigationControl: vi.fn(),      GeolocateControl: vi.fn(),      Popup: vi.fn(() => ({        setLngLat: vi.fn().mockReturnThis(),        setHTML: vi.fn().mockReturnThis(),        addTo: vi.fn().mockReturnThis(),        remove: vi.fn(),      })),    },  };});
 
 // Setup before/after each test hooks for cleanup
 beforeEach(() => {

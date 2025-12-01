@@ -78,15 +78,16 @@ const PlanScreen = dynamic(() => import("@/components/plan-screen").then(m => ({
 const RecordScreen = dynamic(() => import("@/components/record-screen").then(m => ({ default: m.RecordScreen })), { ssr: false })
 const ChatScreen = dynamic(() => import("@/components/chat-screen").then(m => ({ default: m.ChatScreen })), { ssr: false })
 const ProfileScreen = dynamic(() => import("@/components/profile-screen").then(m => ({ default: m.ProfileScreen })), { ssr: false })
-const PerformanceAnalyticsDashboard = dynamic(() => import("@/components/performance-analytics-dashboard").then(m => ({ default: m.PerformanceAnalyticsDashboard })), { ssr: false })
 const BottomNavigation = dynamic(() => import("@/components/bottom-navigation").then(m => ({ default: m.BottomNavigation })), { ssr: false })
 const OnboardingDebugPanel = dynamic(() => import("@/components/onboarding-debug-panel").then(m => ({ default: m.OnboardingDebugPanel })), { ssr: false })
 
 // Import database utilities with better error handling
 let dbUtils: any = null;
+let seedDemoRoutes: any = null;
 try {
   const dbModule = require("@/lib/dbUtils");
   dbUtils = dbModule.dbUtils ?? dbModule.default;
+  seedDemoRoutes = dbModule.seedDemoRoutes;
 } catch (dbError) {
   console.error('Failed to load database utilities:', dbError);
   // Create mock dbUtils for graceful degradation
@@ -309,6 +310,17 @@ export default function RunSmartApp() {
             } catch (migrationError) {
               console.warn('[app:init:migration] ⚠️ Migration failed, continuing:', migrationError);
             }
+
+          // Step 2.5: Seed demo routes if database initialized
+          if (dbInitSuccess && seedDemoRoutes) {
+            console.log('[app:init:routes] Seeding demo routes...')
+            try {
+              await seedDemoRoutes()
+              console.log('[app:init:routes] ✅ Demo routes seeded successfully')
+            } catch (routeError) {
+              console.warn('[app:init:routes] ⚠️ Route seeding failed (continuing):', routeError);
+            }
+          }
           }
           
           // Step 3: Ensure user is ready with enhanced fallback
@@ -393,11 +405,6 @@ export default function RunSmartApp() {
       setCurrentScreen("record")
     }
 
-    const handleNavigateToAnalytics = () => {
-      console.log('📊 Navigating to analytics screen')
-      setCurrentScreen("analytics")
-    }
-    
     const handleNavigateToChat = () => {
       console.log('💬 Navigating to chat screen')
       setCurrentScreen("chat")
@@ -411,14 +418,12 @@ export default function RunSmartApp() {
     }
 
     window.addEventListener("navigate-to-record", handleNavigateToRecord)
-    window.addEventListener("navigate-to-analytics", handleNavigateToAnalytics)
     window.addEventListener("navigate-to-chat", handleNavigateToChat)
     window.addEventListener("keydown", handleKeyDown)
 
     return () => {
       console.log('🧹 Cleaning up navigation event listeners...')
       window.removeEventListener("navigate-to-record", handleNavigateToRecord)
-      window.removeEventListener("navigate-to-analytics", handleNavigateToAnalytics)
       window.removeEventListener("navigate-to-chat", handleNavigateToChat)
       window.removeEventListener("keydown", handleKeyDown)
       initRef.current = false
@@ -531,8 +536,6 @@ export default function RunSmartApp() {
           return <PlanScreen />
         case "record":
           return <RecordScreen />
-        case "analytics":
-          return <PerformanceAnalyticsDashboard userId={1} />
         case "chat":
           return <ChatScreen />
         case "profile":

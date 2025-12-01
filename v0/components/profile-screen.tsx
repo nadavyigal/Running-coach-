@@ -36,6 +36,7 @@ import { CommunityStatsWidget } from "@/components/community-stats-widget";
 import { CoachingInsightsWidget } from "@/components/coaching-insights-widget";
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
 import { GoalProgressDashboard } from "@/components/goal-progress-dashboard";
+import { PerformanceAnalyticsDashboard } from "@/components/performance-analytics-dashboard";
 import { Brain, Target } from "lucide-react";
 
 export function ProfileScreen() {
@@ -339,6 +340,13 @@ export function ProfileScreen() {
 
       {/* Achievements */}
       {userId && <BadgeCabinet userId={userId} />}
+
+      {/* Performance Analytics */}
+      {userId && (
+        <PerformanceAnalyticsDashboard
+          userId={userId}
+        />
+      )}
 
       {/* Goal Progress */}
       {userId && (
