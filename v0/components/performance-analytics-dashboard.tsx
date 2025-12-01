@@ -168,16 +168,16 @@ export function PerformanceAnalyticsDashboard({ userId = 1, onClose }: Performan
   }
 
   return (
-    <div className="space-y-6">
+    <div className="w-full max-w-full space-y-6 px-4 pb-20">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Performance Analytics</h1>
-          <p className="text-gray-500">
+          <h1 className="text-xl md:text-2xl font-bold">Performance Analytics</h1>
+          <p className="text-sm text-gray-500">
             {new Date(data.dateRange.start).toLocaleDateString()} - {new Date(data.dateRange.end).toLocaleDateString()}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-32">
               <SelectValue />
@@ -197,7 +197,8 @@ export function PerformanceAnalyticsDashboard({ userId = 1, onClose }: Performan
             className="flex items-center gap-2"
           >
             <Download className="h-4 w-4" />
-            Export CSV
+            <span className="hidden sm:inline">Export CSV</span>
+            <span className="sm:hidden">CSV</span>
           </Button>
           <Button
             variant="outline"
@@ -206,13 +207,14 @@ export function PerformanceAnalyticsDashboard({ userId = 1, onClose }: Performan
             className="flex items-center gap-2"
           >
             <Download className="h-4 w-4" />
-            Export JSON
+            <span className="hidden sm:inline">Export JSON</span>
+            <span className="sm:hidden">JSON</span>
           </Button>
         </div>
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Runs</CardTitle>
