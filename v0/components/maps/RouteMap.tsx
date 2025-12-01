@@ -95,6 +95,8 @@ export function RouteMap({
     };
   }, []);
 
+  const [retryCount, setRetryCount] = useState(0);
+
   // Initialize map
   useEffect(() => {
     if (!mapLibre || !mapContainerRef.current || mapRef.current) return;
@@ -170,7 +172,7 @@ export function RouteMap({
         mapRef.current = null;
       }
     };
-  }, [mapLibre, center.lat, center.lng, zoom, interactive, darkMode]);
+  }, [mapLibre, center.lat, center.lng, zoom, interactive, darkMode, retryCount]);
 
   // Clear markers helper
   const clearMarkers = useCallback(() => {
@@ -352,6 +354,7 @@ export function RouteMap({
       mapRef.current.remove();
       mapRef.current = null;
     }
+    setRetryCount(count => count + 1);
   }, []);
 
   // Show fallback if error occurred
