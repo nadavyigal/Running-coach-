@@ -25,7 +25,7 @@ import {
   Users,
   RefreshCw
 } from 'lucide-react';
-import { GoalCreationWizard } from './goal-creation-wizard';
+import { SimpleGoalForm } from './simple-goal-form';
 import { toast } from '@/components/ui/use-toast';
 
 interface GoalRecommendationsProps {
@@ -494,22 +494,17 @@ export function GoalRecommendations({ userId, className = '' }: GoalRecommendati
         </DialogContent>
       </Dialog>
 
-      {/* Goal Creation Wizard */}
-      <GoalCreationWizard
+      {/* Goal Creation Form */}
+      <SimpleGoalForm
         isOpen={showGoalWizard}
         onClose={() => {
           setShowGoalWizard(false);
           setWizardTemplate(null);
         }}
         userId={userId}
-        goalTemplate={wizardTemplate}
         onGoalCreated={() => {
           loadRecommendations(); // Refresh recommendations
-          toast({
-            variant: "success",
-            title: "Goal Created! 🎯",
-            description: "Your new goal has been created based on our recommendation.",
-          });
+          // Toast is already shown by SimpleGoalForm with SMART score
         }}
       />
     </div>

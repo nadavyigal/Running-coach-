@@ -163,6 +163,29 @@ export function ProfileScreen() {
     loadUserData();
   }, [toast]);
 
+  // Fallback: Try to load userId directly from database if user load failed
+  useEffect(() => {
+    const loadUserIdFallback = async () => {
+      // Only try fallback if we're not loading and don't have userId
+      if (!isLoading && !userId && !error) {
+        try {
+          console.log('[ProfileScreen] Attempting userId fallback...');
+          const { db } = await import('@/lib/db');
+          const users = await db.users.toArray();
+          if (users.length > 0 && users[0].id) {
+            console.log(`[ProfileScreen] ✅ Fallback found userId: ${users[0].id}`);
+            setUserId(users[0].id);
+            setError(null);
+          }
+        } catch (fallbackError) {
+          console.warn('[ProfileScreen] Fallback userId load failed:', fallbackError);
+        }
+      }
+    };
+
+    loadUserIdFallback();
+  }, [isLoading, userId, error]);
+
   const connections = [
     { icon: Footprints, name: "Add Shoes", desc: "Track your running shoes mileage" },
     { icon: Users, name: "Join a Cohort", desc: "Join a community group with an invite code" },
@@ -342,11 +365,17 @@ export function ProfileScreen() {
       {userId && <BadgeCabinet userId={userId} />}
 
       {/* Performance Analytics */}
-      {userId && (
+      {userId ? (
         <PerformanceAnalyticsDashboard
           userId={userId}
         />
-      )}
+      ) : isLoading ? (
+        <Card>
+          <CardContent className="p-6 text-center text-muted-foreground">
+            Loading analytics...
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Goal Progress */}
       {userId && (
