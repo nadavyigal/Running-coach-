@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
       goals = [goal];
     } else if (params.userId) {
       // Get progress for all active goals of user
-      goals = await dbUtils.getGoalsByUser(params.userId, 'active');
+      goals = await dbUtils.getUserGoals(params.userId, 'active');
     }
 
     const progressData = await Promise.all(goals.map(async (goal) => {
