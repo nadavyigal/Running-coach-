@@ -283,7 +283,16 @@ export function SimpleGoalForm({ isOpen, onClose, userId, onGoalCreated }: Simpl
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        onInteractOutside={(e) => {
+          // Prevent closing when clicking on calendar popover
+          const target = e.target as Element;
+          if (target.closest('[role="dialog"]') || target.closest('.rdp')) {
+            e.preventDefault();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Target className="w-5 h-5" />
@@ -415,6 +424,7 @@ export function SimpleGoalForm({ isOpen, onClose, userId, onGoalCreated }: Simpl
                       }}
                       disabled={(date) => date < new Date()}
                       defaultMonth={deadline || new Date()}
+                      captionLayout="dropdown-buttons"
                     />
                   </PopoverContent>
                 </Popover>

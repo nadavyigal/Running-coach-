@@ -28,7 +28,7 @@ import { AddActivityModal } from "@/components/add-activity-modal"
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
-import { type Workout, type Plan } from "@/lib/db"
+import { type Workout, type Plan, type Route } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { StreakIndicator } from "@/components/streak-indicator"
@@ -196,6 +196,7 @@ export function TodayScreen() {
   const [showRescheduleModal, setShowRescheduleModal] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [showDateWorkout, setShowDateWorkout] = useState(false)
+  const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
 
   // Add state for date workout modal
   const [selectedDateWorkout, setSelectedDateWorkout] = useState<any>(null)
@@ -312,6 +313,14 @@ export function TodayScreen() {
       default:
         break
     }
+  }
+
+  const handleRouteSelected = (route: Route) => {
+    setSelectedRoute(route)
+    toast({
+      title: "Route Selected",
+      description: `${route.name} - ${route.distance}km (${route.safetyScore}% safe)`,
+    })
   }
 
   const workoutBreakdown = [
@@ -745,7 +754,13 @@ export function TodayScreen() {
       {showAddActivityModal && (
         <AddActivityModal isOpen={showAddActivityModal} onClose={() => setShowAddActivityModal(false)} />
       )}
-      {showRoutesModal && <RouteSelectorModal isOpen={showRoutesModal} onClose={() => setShowRoutesModal(false)} />}
+      {showRoutesModal && (
+        <RouteSelectorModal
+          isOpen={showRoutesModal}
+          onClose={() => setShowRoutesModal(false)}
+          onRouteSelected={handleRouteSelected}
+        />
+      )}
       {showRescheduleModal && (
         <RescheduleModal isOpen={showRescheduleModal} onClose={() => setShowRescheduleModal(false)} />
       )}
