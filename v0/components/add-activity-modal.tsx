@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,13 +13,19 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { format } from "date-fns"
 import { Heart, Watch, Camera, Edit, Upload, CalendarIcon, Zap } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import { analyzeActivityImage } from "@/lib/ai-activity-client"
+import { dbUtils } from "@/lib/dbUtils"
+import { planAdjustmentService } from "@/lib/planAdjustmentService"
+import type { Run } from "@/lib/db"
 
 interface AddActivityModalProps {
   isOpen: boolean
   onClose: () => void
+  onSaved?: () => void
 }
 
-export function AddActivityModal({ isOpen, onClose }: AddActivityModalProps) {
+export function AddActivityModal({ isOpen, onClose, onSaved }: AddActivityModalProps) {
   const [step, setStep] = useState<"method" | "manual" | "upload">("method")
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [activityData, setActivityData] = useState({
@@ -29,6 +35,24 @@ export function AddActivityModal({ isOpen, onClose }: AddActivityModalProps) {
     pace: "",
     notes: "",
   })
+  const [isSaving, setIsSaving] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const { toast } = useToast()
+
+  const normalizedActivityType: Run["type"] = useMemo(() => {
+    switch (activityData.type) {
+      case "run":
+        return "easy"
+      case "tempo":
+      case "intervals":
+      case "long":
+      case "time-trial":
+      case "hill":
+        return activityData.type
+      default:
+        return "other"
+    }
+  }, [activityData.type])
 
   const importMethods = [
     {
@@ -74,18 +98,13 @@ export function AddActivityModal({ isOpen, onClose }: AddActivityModalProps) {
     },
   ]
 
-  const handleManualSave = () => {
-    const activity = {
-      ...activityData,
-      date: selectedDate,
-      distance: Number.parseFloat(activityData.distance),
-      duration: Number.parseInt(activityData.duration),
-    }
+  const formatSecondsToDuration = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
+  }
 
-    console.log("Saving manual activity:", activity)
-    alert("Activity added successfully!")
-
-    // Reset and close
+  const resetForm = () => {
     setStep("method")
     setActivityData({
       type: "run",
@@ -94,15 +113,145 @@ export function AddActivityModal({ isOpen, onClose }: AddActivityModalProps) {
       pace: "",
       notes: "",
     })
-    onClose()
+    setSelectedDate(new Date())
   }
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const saveRun = async (
+    runDetails: {
+      distanceKm: number
+      durationSeconds: number
+      notes?: string
+      paceSecondsPerKm?: number
+      type?: Run["type"]
+      completedAt?: Date
+    },
+    shouldClose = true,
+  ) => {
+    try {
+      setIsSaving(true)
+      const user = await dbUtils.getCurrentUser()
+      if (!user?.id) {
+        toast({
+          title: "User not found",
+          description: "Please complete onboarding before adding activities.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const calories = Math.round(runDetails.distanceKm * 60 + (runDetails.durationSeconds / 60) * 3)
+      const runData: Omit<Run, "id" | "createdAt"> = {
+        userId: user.id,
+        type: runDetails.type || normalizedActivityType,
+        workoutId: undefined,
+        distance: runDetails.distanceKm,
+        duration: runDetails.durationSeconds,
+        pace: runDetails.paceSecondsPerKm || runDetails.durationSeconds / runDetails.distanceKm,
+        calories,
+        notes: runDetails.notes?.trim() || undefined,
+        completedAt: runDetails.completedAt || selectedDate,
+      }
+
+      await dbUtils.createRun(runData)
+      await planAdjustmentService.afterRun(user.id)
+
+      toast({
+        title: "Activity added",
+        description: `Logged ${runDetails.distanceKm.toFixed(2)} km in ${formatSecondsToDuration(runDetails.durationSeconds)}.`,
+      })
+
+      resetForm()
+      onSaved?.()
+      if (shouldClose) onClose()
+    } catch (error) {
+      console.error("Failed to save activity", error)
+      toast({
+        title: "Could not save activity",
+        description: "Something went wrong while saving your run.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleManualSave = async () => {
+    const distanceKm = Number.parseFloat(activityData.distance)
+    const durationMinutes = Number.parseFloat(activityData.duration)
+
+    if (!Number.isFinite(distanceKm) || distanceKm <= 0 || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+      toast({
+        title: "Missing details",
+        description: "Please enter a valid distance and duration.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const durationSeconds = Math.round(durationMinutes * 60)
+    const paceSecondsPerKm = activityData.pace
+      ? activityData.pace
+          .split(":")
+          .map((part) => Number.parseInt(part.trim(), 10))
+          .reduce((acc, part) => acc * 60 + (Number.isFinite(part) ? part : 0), 0)
+      : undefined
+
+    await saveRun({
+      distanceKm,
+      durationSeconds,
+      notes: activityData.notes,
+      paceSecondsPerKm,
+    })
+  }
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (file) {
-      // Here you would process the uploaded image
-      console.log("Processing uploaded file:", file.name)
-      alert("Image uploaded! AI analysis coming soon...")
+    event.target.value = ""
+    if (!file) return
+
+    setIsAnalyzing(true)
+    try {
+      const result = await analyzeActivityImage(file)
+      const paceDisplay = result.paceSecondsPerKm ? formatSecondsToDuration(result.paceSecondsPerKm) : ""
+
+      setActivityData((current) => {
+        const allowedTypes = ["run", "walk", "bike", "swim", "strength", "other"] as const
+        const nextType = allowedTypes.includes((result.type as typeof allowedTypes[number]) || "run")
+          ? (result.type as typeof allowedTypes[number])
+          : current.type
+
+        return {
+          ...current,
+          distance: result.distanceKm.toString(),
+          duration: Math.round(result.durationSeconds / 60).toString(),
+          pace: paceDisplay,
+          notes: result.notes || current.notes,
+          type: nextType,
+        }
+      })
+
+      const completedAt = result.completedAt ? new Date(result.completedAt) : selectedDate
+
+      await saveRun(
+        {
+          distanceKm: result.distanceKm,
+          durationSeconds: result.durationSeconds,
+          notes: result.notes,
+          paceSecondsPerKm: result.paceSecondsPerKm,
+          type: (result.type as Run["type"]) || normalizedActivityType,
+          completedAt,
+        },
+        true,
+      )
+    } catch (error) {
+      console.error("Image analysis failed", error)
+      toast({
+        title: "AI analysis failed",
+        description: error instanceof Error ? error.message : "We couldn't read the workout screenshot.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsAnalyzing(false)
       setStep("method")
     }
   }
@@ -245,11 +394,15 @@ export function AddActivityModal({ isOpen, onClose }: AddActivityModalProps) {
 
             {/* Action Buttons */}
             <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setStep("method")} className="flex-1">
+              <Button variant="outline" onClick={() => setStep("method")} className="flex-1" disabled={isSaving}>
                 Back
               </Button>
-              <Button onClick={handleManualSave} className="flex-1 bg-green-500 hover:bg-green-600">
-                Save Activity
+              <Button
+                onClick={handleManualSave}
+                className="flex-1 bg-green-500 hover:bg-green-600"
+                disabled={isSaving}
+              >
+                {isSaving ? "Saving..." : "Save Activity"}
               </Button>
             </div>
           </div>
@@ -268,16 +421,14 @@ export function AddActivityModal({ isOpen, onClose }: AddActivityModalProps) {
 
               <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" id="file-upload" />
               <label htmlFor="file-upload">
-                <Button asChild className="bg-green-500 hover:bg-green-600">
-                  <span>Choose Photo</span>
+                <Button asChild className="bg-green-500 hover:bg-green-600" disabled={isAnalyzing || isSaving}>
+                  <span>{isAnalyzing ? "Analyzing..." : "Choose Photo"}</span>
                 </Button>
               </label>
             </div>
 
             <div className="text-center">
-              <Button variant="outline" onClick={() => setStep("method")}>
-                Back
-              </Button>
+              <Button variant="outline" onClick={() => setStep("method")}>Back</Button>
             </div>
           </div>
         )}

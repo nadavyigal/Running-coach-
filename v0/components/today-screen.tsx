@@ -752,7 +752,11 @@ export function TodayScreen() {
       {/* Modals */}
       {showAddRunModal && <AddRunModal isOpen={showAddRunModal} onClose={() => setShowAddRunModal(false)} />}
       {showAddActivityModal && (
-        <AddActivityModal isOpen={showAddActivityModal} onClose={() => setShowAddActivityModal(false)} />
+        <AddActivityModal
+          isOpen={showAddActivityModal}
+          onClose={() => setShowAddActivityModal(false)}
+          onSaved={refreshWorkouts}
+        />
       )}
       {showRoutesModal && (
         <RouteSelectorModal
