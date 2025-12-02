@@ -8,49 +8,12 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
-import { Clock, Activity, Save, ImageIcon, Sparkles } from "lucide-react"
+import { Clock, Activity, Save, Upload } from "lucide-react"
 import { type Run } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { planAdjustmentService } from "@/lib/planAdjustmentService"
-
-export const validateManualRunFile = (file: File) => {
-  const allowedTypes = ["image/jpeg", "image/png", "image/webp"]
-  const maxSize = 5 * 1024 * 1024
-
-  if (!allowedTypes.includes(file.type)) {
-    return "Only JPG, PNG, and WebP images are supported"
-  }
-
-  if (file.size > maxSize) {
-    return "Image must be smaller than 5MB"
-  }
-
-  return ""
-}
-
-export const analyzeRunPhoto = async (file: File, fetcher: typeof fetch = fetch) => {
-  const validationMessage = validateManualRunFile(file)
-  if (validationMessage) {
-    throw new Error(validationMessage)
-  }
-
-  const formData = new FormData()
-  formData.append("file", file)
-
-  const response = await fetcher("/api/analysis/run-from-photo", {
-    method: "POST",
-    body: formData
-  })
-
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}))
-    throw new Error(data?.error || "AI analysis failed")
-  }
-
-  const data = await response.json()
-  return data?.data
-}
+import { analyzeActivityImage } from "@/lib/ai-activity-client"
 
 interface ManualRunModalProps {
   isOpen: boolean
@@ -65,11 +28,8 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
   const [type, setType] = useState<'easy' | 'tempo' | 'intervals' | 'long' | 'time-trial' | 'hill' | 'other'>('easy')
   const [notes, setNotes] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [uploadError, setUploadError] = useState("")
-  const [aiStatus, setAiStatus] = useState<"idle" | "uploading" | "analyzing" | "error">("idle")
-  const [aiMessage, setAiMessage] = useState("")
-  
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+
   const { toast } = useToast()
 
   const resetForm = () => {
@@ -77,26 +37,19 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
     setDuration("")
     setType('easy')
     setNotes("")
-    setSelectedFile(null)
-    setUploadError("")
-    setAiStatus("idle")
-    setAiMessage("")
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!distance || !duration) {
-      toast({
-        title: "Missing Information",
-        description: "Please enter both distance and duration",
-        variant: "destructive"
-      })
-      return
-    }
-
+  const saveRun = async (
+    runDetails: {
+      distanceKm: number
+      durationSeconds: number
+      notes?: string
+      typeOverride?: Run['type']
+      completedAt?: Date
+    },
+    autoClose = true,
+  ) => {
     setIsSubmitting(true)
-
     try {
       const user = await dbUtils.getCurrentUser()
       if (!user?.id) {
@@ -108,36 +61,23 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
         return
       }
 
-      const distanceKm = parseFloat(distance)
-      const durationSeconds = parseTimeToSeconds(duration)
-      
-      if (isNaN(distanceKm) || isNaN(durationSeconds) || distanceKm <= 0 || durationSeconds <= 0) {
-        toast({
-          title: "Invalid Input",
-          description: "Please enter valid positive numbers for distance and duration",
-          variant: "destructive"
-        })
-        return
-      }
-
-      const pace = durationSeconds / distanceKm
-      const calories = Math.round(distanceKm * 60 + (durationSeconds / 60) * 3) // Basic estimation
+      const pace = runDetails.durationSeconds / runDetails.distanceKm
+      const calories = Math.round(runDetails.distanceKm * 60 + (runDetails.durationSeconds / 60) * 3)
 
       const runData: Omit<Run, 'id' | 'createdAt'> = {
         userId: user.id,
         workoutId,
-        type,
-        distance: distanceKm,
-        duration: durationSeconds,
+        type: runDetails.typeOverride || type,
+        distance: runDetails.distanceKm,
+        duration: runDetails.durationSeconds,
         pace,
         calories,
-        notes: notes.trim() || undefined,
-        completedAt: new Date()
+        notes: (runDetails.notes ?? notes).trim() || undefined,
+        completedAt: runDetails.completedAt || new Date()
       }
 
       await dbUtils.createRun(runData)
-      
-      // Mark workout as completed if linked
+
       if (workoutId) {
         await dbUtils.markWorkoutCompleted(workoutId)
       }
@@ -146,15 +86,15 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
 
       toast({
         title: "Run Saved! 🎉",
-        description: `Great job! ${distanceKm}km in ${formatDuration(durationSeconds)}`,
+        description: `Great job! ${runDetails.distanceKm}km in ${formatDuration(runDetails.durationSeconds)}`,
       })
 
-      // Reset form
       resetForm()
-      
-      onSaved?.()
-      onClose()
 
+      if (autoClose) {
+        onSaved?.()
+        onClose()
+      }
     } catch (error) {
       console.error('Failed to save manual run:', error)
       toast({
@@ -167,75 +107,71 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
     }
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) {
-      setSelectedFile(null)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!distance || !duration) {
+      toast({
+        title: "Missing Information",
+        description: "Please enter both distance and duration",
+        variant: "destructive"
+      })
       return
     }
 
-    const validationMessage = validateManualRunFile(file)
-    if (validationMessage) {
-      setUploadError(validationMessage)
-      setSelectedFile(null)
-    } else {
-      setUploadError("")
-      setSelectedFile(file)
-    }
-  }
+    const distanceKm = parseFloat(distance)
+    const durationSeconds = parseTimeToSeconds(duration)
 
-  const formatDurationInput = (seconds: number) => {
-    if (seconds <= 0) return ""
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    const remainingSeconds = seconds % 60
-
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`
-    }
-
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
-  }
-
-  const normalizeRunType = (value: string): typeof type => {
-    const allowed: Array<typeof type> = ['easy', 'tempo', 'intervals', 'long', 'time-trial', 'hill', 'other']
-    return allowed.includes(value as typeof type) ? value as typeof type : 'other'
-  }
-
-  const handleAiFill = async () => {
-    if (!selectedFile) {
-      setUploadError("Please choose an image before using AI")
+    if (isNaN(distanceKm) || isNaN(durationSeconds) || distanceKm <= 0 || durationSeconds <= 0) {
+      toast({
+        title: "Invalid Input",
+        description: "Please enter valid positive numbers for distance and duration",
+        variant: "destructive"
+      })
       return
     }
 
-    const validationMessage = validateManualRunFile(selectedFile)
-    if (validationMessage) {
-      setUploadError(validationMessage)
-      return
-    }
+    await saveRun({
+      distanceKm,
+      durationSeconds,
+      notes,
+    })
+  }
 
-    setUploadError("")
-    setAiStatus("uploading")
-    setAiMessage("Uploading image...")
+  const handleAiUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) return
 
+    setIsAnalyzing(true)
     try {
-      setAiStatus("analyzing")
-      setAiMessage("Analyzing run details...")
+      const result = await analyzeActivityImage(file)
+      const durationSeconds = result.durationSeconds
 
-      const result = await analyzeRunPhoto(selectedFile)
+      setDistance(result.distanceKm.toString())
+      setDuration(formatDuration(durationSeconds))
+      setType((result.type as Run['type']) || 'easy')
+      setNotes((current) => current || result.notes || "")
 
-      if (result?.distanceKm) setDistance(result.distanceKm.toString())
-      if (result?.durationSeconds) setDuration(formatDurationInput(result.durationSeconds))
-      if (result?.runType) setType(normalizeRunType(result.runType))
-      if (typeof result?.notes === "string") setNotes(result.notes)
-
-      setAiStatus("idle")
-      setAiMessage("Fields updated from photo. Please review before saving.")
+      await saveRun(
+        {
+          distanceKm: result.distanceKm,
+          durationSeconds,
+          notes: result.notes,
+          typeOverride: (result.type as Run['type']) || 'easy',
+          completedAt: result.completedAt ? new Date(result.completedAt) : new Date(),
+        },
+        true,
+      )
     } catch (error) {
-      console.error("AI analysis failed", error)
-      setAiStatus("error")
-      const message = error instanceof Error ? error.message : "Unable to analyze the image. Please try again or fill manually."
-      setAiMessage(message)
+      console.error('AI upload failed', error)
+      toast({
+        title: "AI Analysis Failed",
+        description: error instanceof Error ? error.message : "Unable to read the workout image.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsAnalyzing(false)
     }
   }
 
@@ -316,6 +252,34 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
             </div>
           </div>
 
+          {/* AI Upload */}
+          <div className="p-3 rounded-md border bg-gray-50">
+            <Label className="text-sm font-medium flex items-center gap-2">
+              <Upload className="h-4 w-4" />
+              Upload screenshot
+            </Label>
+            <p className="text-xs text-gray-600 mt-1">Let AI extract your run from a workout photo.</p>
+            <div className="mt-3">
+              <input
+                id="ai-run-upload"
+                type="file"
+                accept="image/*"
+                onChange={handleAiUpload}
+                className="hidden"
+              />
+              <label htmlFor="ai-run-upload">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isAnalyzing || isSubmitting}
+                >
+                  {isAnalyzing ? "Analyzing..." : "Upload photo"}
+                </Button>
+              </label>
+            </div>
+          </div>
+
           {/* Run Type */}
           <div>
             <Label htmlFor="type">Run Type</Label>
@@ -363,38 +327,6 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
             <div className="text-xs text-gray-500 mt-1">
               Format: 25:30 (minutes:seconds) or 1:25:30 (hours:minutes:seconds)
             </div>
-          </div>
-
-          {/* Photo Upload for AI */}
-          <div className="space-y-2">
-            <Label htmlFor="manual-run-photo">Upload Screenshot (optional)</Label>
-            <div className="flex gap-2 items-center">
-              <Input id="manual-run-photo" type="file" accept="image/*" onChange={handleFileChange} />
-              <Button type="button" variant="secondary" onClick={handleAiFill} disabled={aiStatus === "uploading" || aiStatus === "analyzing"}>
-                {aiStatus === "uploading" || aiStatus === "analyzing" ? (
-                  <>
-                    <Clock className="h-4 w-4 mr-2 animate-spin" />
-                    {aiStatus === "uploading" ? "Uploading" : "Analyzing"}
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    Use AI to fill from photo
-                  </>
-                )}
-              </Button>
-            </div>
-            {(uploadError || aiMessage) && (
-              <div className={`text-xs ${uploadError || aiStatus === "error" ? "text-red-600" : "text-blue-700"}`}>
-                {uploadError || aiMessage}
-              </div>
-            )}
-            {selectedFile && !uploadError && (
-              <div className="text-xs text-gray-600 flex items-center gap-2">
-                <ImageIcon className="h-4 w-4" />
-                {selectedFile.name}
-              </div>
-            )}
           </div>
 
           {/* Calculated Metrics */}
@@ -455,14 +387,14 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
               variant="outline"
               onClick={onClose}
               className="flex-1"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isAnalyzing}
             >
               Cancel
             </Button>
             <Button
               type="submit"
               className="flex-1"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isAnalyzing}
             >
               {isSubmitting ? (
                 <>
