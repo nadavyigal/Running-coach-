@@ -202,15 +202,9 @@ export async function POST(request: NextRequest) {
     const goalId = await dbUtils.createGoal(goalCreateData);
     console.log(`✅ Goal created successfully with ID: ${goalId}`);
 
-    // Generate initial milestones
-    console.log('🔍 Generating initial milestones...');
-    try {
-      await dbUtils.generateGoalMilestones(goalId);
-      console.log('✅ Milestones generated successfully');
-    } catch (milestoneError) {
-      console.warn('⚠️ Milestone generation failed:', milestoneError);
-      // Continue anyway - milestones are not critical
-    }
+    // Note: Milestone generation would happen here if implemented
+    // For now, milestones can be added manually after goal creation
+    console.log('ℹ️ Skipping automatic milestone generation (not yet implemented)');
 
     // Get the created goal with progress
     console.log('🔍 Fetching created goal with progress data...');
@@ -232,7 +226,8 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      milestones = await dbUtils.getGoalMilestones(goalId);
+      const goalWithMilestones = await dbUtils.getGoalWithMilestones(goalId);
+      milestones = goalWithMilestones.milestones;
       console.log(`✅ Retrieved ${milestones.length} milestones`);
     } catch (milestonesError) {
       console.error('❌ Failed to retrieve milestones:', milestonesError);
@@ -312,10 +307,8 @@ export async function PUT(request: NextRequest) {
     // Update the goal
     await dbUtils.updateGoal(goalId, updates);
 
-    // Recalculate progress if target or baseline changed
-    if (updates.targetValue !== undefined || updates.baselineValue !== undefined) {
-      await dbUtils.updateGoalCurrentProgress(goalId);
-    }
+    // Note: Progress will be recalculated automatically on next fetch via goalProgressEngine
+    // The updateGoalCurrentProgress function doesn't exist in dbUtils
 
     // Check if plan should be adapted based on goal update
     try {

@@ -1286,6 +1286,21 @@ export async function getGoalWithMilestones(goalId: number): Promise<{ goal: Goa
   }, 'getGoalWithMilestones', { goal: null, milestones: [] });
 }
 
+/**
+ * Delete a goal and its related data
+ */
+export async function deleteGoal(goalId: number): Promise<void> {
+  return safeDbOperation(async () => {
+    if (db) {
+      // Delete related milestones first
+      await db.goalMilestones.where('goalId').equals(goalId).delete();
+      // Delete the goal
+      await db.goals.delete(goalId);
+      console.log('✅ Goal and related milestones deleted successfully:', goalId);
+    }
+  }, 'deleteGoal');
+}
+
 // ============================================================================
 // PLAN MANAGEMENT UTILITIES
 // ============================================================================
