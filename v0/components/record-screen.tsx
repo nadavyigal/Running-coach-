@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertTriangle, Info, Loader2, RefreshCw } from "lucide-react"
+import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertTriangle, Info, Loader2, RefreshCw, Sparkles } from "lucide-react"
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RouteSelectionWizard } from "@/components/route-selection-wizard"
 import { ManualRunModal } from "@/components/manual-run-modal"
@@ -612,14 +612,22 @@ export function RecordScreen() {
 
             {/* Manual Entry Option */}
             {!isRunning && (
-              <div className="pt-4 border-t">
+              <div className="pt-4 border-t space-y-2">
                 <Button
                   variant="ghost"
                   onClick={() => setShowManualModal(true)}
-                  className="text-gray-600"
+                  className="text-gray-600 w-full"
                 >
                   <Volume2 className="h-4 w-4 mr-2" />
                   Add Manual Run
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowManualModal(true)}
+                  className="w-full"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Upload photo & use AI
                 </Button>
               </div>
             )}

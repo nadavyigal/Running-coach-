@@ -1,6 +1,5 @@
 import { db, type OnboardingSession, type SmartGoal } from './db'
 import { conversationStorage } from './conversationStorage'
-import { validateOnboardingState } from './onboardingStateValidator'
 
 export interface SessionConflict {
   type: 'multiple_active' | 'version_mismatch' | 'corrupted_data' | 'orphaned_session'
@@ -274,7 +273,7 @@ export class SessionManager {
   /**
    * Detect and categorize session conflicts
    */
-  async detectSessionConflicts(userId: number, conversationId: string): Promise<SessionConflict[]> {
+  async detectSessionConflicts(userId: number, _conversationId: string): Promise<SessionConflict[]> {
     const conflicts: SessionConflict[] = []
 
     try {

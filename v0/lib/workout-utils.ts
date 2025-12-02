@@ -3,7 +3,7 @@
  * Centralized functions for workout-related calculations and formatting
  */
 
-import { WORKOUT, PERFORMANCE } from './constants';
+import { WORKOUT } from './constants';
 import type { Workout, Run } from './db';
 
 /**
