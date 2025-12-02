@@ -311,16 +311,10 @@ export default function RunSmartApp() {
               console.warn('[app:init:migration] ⚠️ Migration failed, continuing:', migrationError);
             }
 
-          // Step 2.5: Seed demo routes if database initialized
-          if (dbInitSuccess && seedDemoRoutes) {
-            console.log('[app:init:routes] Seeding demo routes...')
-            try {
-              await seedDemoRoutes()
-              console.log('[app:init:routes] ✅ Demo routes seeded successfully')
-            } catch (routeError) {
-              console.warn('[app:init:routes] ⚠️ Route seeding failed (continuing):', routeError);
-            }
-          }
+          // Step 2.5: Demo route seeding removed
+          // Routes are no longer auto-seeded with Tel Aviv data
+          // Users should create custom routes based on their location
+          // The migration will clear any existing Tel Aviv routes
           }
           
           // Step 3: Ensure user is ready with enhanced fallback

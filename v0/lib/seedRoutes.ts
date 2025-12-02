@@ -38,11 +38,42 @@ function generateRoutePath(
 }
 
 /**
+ * Calculate distance from Tel Aviv center (Haversine formula)
+ * @returns distance in kilometers
+ */
+function calculateDistanceFromTelAviv(lat: number, lng: number): number {
+  const TEL_AVIV_CENTER_LAT = 32.0853;
+  const TEL_AVIV_CENTER_LNG = 34.7818;
+
+  const R = 6371; // Earth's radius in km
+  const dLat = ((lat - TEL_AVIV_CENTER_LAT) * Math.PI) / 180;
+  const dLng = ((lng - TEL_AVIV_CENTER_LNG) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((TEL_AVIV_CENTER_LAT * Math.PI) / 180) *
+      Math.cos((lat * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+/**
  * Seed database with demo routes
  * Creates 10 varied routes in Tel Aviv area with complete GPS paths
+ *
+ * NOTE: This function seeds HARDCODED Tel Aviv routes and should only be used
+ * for development/testing purposes. In production, users should create custom routes
+ * or routes should be fetched based on user's actual location.
+ *
+ * @param forceLocationCheck - If true, will check if user is in Tel Aviv before seeding
+ * @param userLocation - Optional user location to check if seeding is appropriate
  * @returns true if seeding was successful, false otherwise
  */
-export async function seedDemoRoutes(): Promise<boolean> {
+export async function seedDemoRoutes(
+  forceLocationCheck: boolean = false,
+  userLocation?: { latitude: number; longitude: number }
+): Promise<boolean> {
   try {
     // Check if routes already exist
     const existingRoutes = await db.routes.count();
@@ -53,8 +84,24 @@ export async function seedDemoRoutes(): Promise<boolean> {
       return true;
     }
 
+    // If location check is forced, only seed if user is in Tel Aviv area
+    if (forceLocationCheck && userLocation) {
+      const distanceFromTelAviv = calculateDistanceFromTelAviv(
+        userLocation.latitude,
+        userLocation.longitude
+      );
+
+      if (distanceFromTelAviv > 50) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('⚠️ User not in Tel Aviv area, skipping demo route seeding');
+          console.log('   Users should create custom routes or use location-based route discovery');
+        }
+        return false;
+      }
+    }
+
     if (process.env.NODE_ENV !== 'production') {
-      console.log('🌱 Seeding demo routes...');
+      console.log('🌱 Seeding Tel Aviv demo routes...');
     }
 
     const demoRoutes: Omit<Route, 'id'>[] = [

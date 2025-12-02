@@ -320,24 +320,36 @@ export async function performStartupMigration(): Promise<boolean> {
     }
 
     console.log('[migration:start] Performing startup migration...');
-    
+
     try {
       // Ensure database is open and ready
       await database.open();
-      
-      // Check for orphaned draft profiles and promote them
+
+      // Migration 1: Clear Tel Aviv demo routes (one-time)
+      try {
+        const { runClearTelAvivRoutesMigration } = await import('./migrations/clearTelAvivRoutesMigration');
+        const migrationResult = await runClearTelAvivRoutesMigration();
+        if (migrationResult.migrationRun) {
+          console.log(`[migration:routes] Cleared ${migrationResult.routesCleared} Tel Aviv demo routes`);
+        }
+      } catch (migrationError) {
+        console.warn('[migration:routes] Route migration failed (non-critical):', migrationError);
+        // Don't block startup on route migration failure
+      }
+
+      // Migration 2: Check for orphaned draft profiles and promote them
       const draftUsers = await database.users
         .filter((u) => !u.onboardingComplete)
         .toArray();
-      
+
       if (draftUsers.length > 0) {
         console.log(`[migration:promote] Found ${draftUsers.length} draft profiles to promote`);
-        
+
         // Promote the most recent draft to canonical user
         const latestDraft = draftUsers.sort(
           (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         )[0];
-        
+
         if (latestDraft.id) {
           const promotionData = {
             goal: latestDraft.goal || 'habit',
@@ -348,22 +360,22 @@ export async function performStartupMigration(): Promise<boolean> {
             onboardingComplete: true,
             updatedAt: new Date()
           };
-          
+
           await database.users.update(latestDraft.id, promotionData);
           console.log(`[migration:promoted] Promoted draft user ${latestDraft.id} to canonical`);
-          
+
           // Clean up other drafts
           const otherDraftIds = draftUsers
             .filter(u => typeof u.id === 'number' && u.id !== latestDraft.id)
             .map(u => u.id as number);
-            
+
           if (otherDraftIds.length > 0) {
             await database.users.where('id').anyOf(otherDraftIds).delete();
             console.log(`[migration:cleanup] Removed ${otherDraftIds.length} redundant draft users`);
           }
         }
       }
-      
+
       console.log('[migration:complete] Startup migration completed successfully');
       return true;
     } catch (error) {

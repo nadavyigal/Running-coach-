@@ -13,6 +13,7 @@ import { MapPin, TrendingUp, Star, Clock, RouteIcon, Shield, Users, Mountain, Za
 import { trackRouteSelected, trackRouteSelectedFromMap, trackRouteWizardMapToggled } from "@/lib/analytics";
 import { db, type Route } from "@/lib/db";
 import { seedDemoRoutes } from "@/lib/seedRoutes";
+import { clearTelAvivDemoRoutes, shouldClearTelAvivRoutes } from "@/lib/clearDemoRoutes";
 import { calculateDistance } from "@/lib/routeUtils";
 import { useToast } from "@/hooks/use-toast";
 import { getDifficultyColor, getDifficultyLabel, getSafetyColor, isDevelopment } from "@/lib/routeHelpers";
@@ -90,14 +91,31 @@ export function RouteSelectionWizard({
     try {
       setIsLoadingRoutes(true);
       setLoadError(null);
-      const count = await db.routes.count();
-      if (count === 0) {
-        const seeded = await seedDemoRoutes();
-        if (!seeded) {
-          setLoadError('Failed to load demo routes. Please try again.');
-          return;
+
+      // Check if we should clear Tel Aviv demo routes based on user location
+      if (userLocation) {
+        const shouldClear = await shouldClearTelAvivRoutes(
+          userLocation.latitude,
+          userLocation.longitude
+        );
+
+        if (shouldClear) {
+          const result = await clearTelAvivDemoRoutes();
+          if (result.deletedCount > 0 && isDevelopment()) {
+            console.log(`Cleared ${result.deletedCount} Tel Aviv demo routes - user is not in Tel Aviv area`);
+          }
         }
       }
+
+      const count = await db.routes.count();
+      if (count === 0) {
+        // Don't seed demo routes - users should create custom routes
+        // or routes should be fetched based on their location
+        if (isDevelopment()) {
+          console.log('No routes found. Users should create custom routes.');
+        }
+      }
+
       const routes = await db.routes.toArray();
       setAllRoutes(routes);
     } catch (error) {
@@ -113,7 +131,7 @@ export function RouteSelectionWizard({
     } finally {
       setIsLoadingRoutes(false);
     }
-  }, [toast]);
+  }, [toast, userLocation]);
 
   // Load routes when modal opens
   useEffect(() => {
