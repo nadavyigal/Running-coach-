@@ -56,7 +56,7 @@ const UpdateGoalSchema = CreateGoalSchema.partial().extend({
 
 const GoalQuerySchema = z.object({
   userId: z.string().transform(Number),
-  status: z.enum(['active', 'paused', 'completed', 'abandoned']).optional(),
+  status: z.enum(['active', 'paused', 'completed', 'cancelled']).optional(),
   includeProgress: z.string().transform(val => val === 'true').optional().default(false),
   includeAnalytics: z.string().transform(val => val === 'true').optional().default(false)
 });
@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
         active: activeGoals.length,
         completed: completedGoals.length,
         paused: goals.filter(g => g.status === 'paused').length,
-        abandoned: goals.filter(g => g.status === 'abandoned').length,
+        cancelled: goals.filter(g => g.status === 'cancelled').length,
         averageProgress: Math.round(averageProgress * 10) / 10
       }
     };
