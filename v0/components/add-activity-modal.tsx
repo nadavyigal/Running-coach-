@@ -12,12 +12,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { format } from "date-fns"
-import { Heart, Watch, Camera, Edit, Upload, CalendarIcon, Zap } from "lucide-react"
+import { Heart, Watch, Camera, Edit, Upload, CalendarIcon, Zap, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { analyzeActivityImage } from "@/lib/ai-activity-client"
-import { dbUtils } from "@/lib/dbUtils"
-import { planAdjustmentService } from "@/lib/planAdjustmentService"
-import type { Run } from "@/lib/db"
 
 interface AddActivityModalProps {
   isOpen: boolean
@@ -33,26 +29,15 @@ export function AddActivityModal({ isOpen, onClose, onSaved }: AddActivityModalP
     distance: "",
     duration: "",
     pace: "",
+    calories: "",
     notes: "",
   })
-  const [isSaving, setIsSaving] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
 
-  const normalizedActivityType: Run["type"] = useMemo(() => {
-    switch (activityData.type) {
-      case "run":
-        return "easy"
-      case "tempo":
-      case "intervals":
-      case "long":
-      case "time-trial":
-      case "hill":
-        return activityData.type
-      default:
-        return "other"
-    }
-  }, [activityData.type])
+  const formattedSelectedDate = useMemo(() => (selectedDate ? format(selectedDate, "PPP") : "Pick a date"), [selectedDate])
 
   const importMethods = [
     {
@@ -98,12 +83,6 @@ export function AddActivityModal({ isOpen, onClose, onSaved }: AddActivityModalP
     },
   ]
 
-  const formatSecondsToDuration = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60)
-    const remainingSeconds = seconds % 60
-    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
-  }
-
   const resetForm = () => {
     setStep("method")
     setActivityData({
@@ -111,148 +90,153 @@ export function AddActivityModal({ isOpen, onClose, onSaved }: AddActivityModalP
       distance: "",
       duration: "",
       pace: "",
+      calories: "",
       notes: "",
     })
     setSelectedDate(new Date())
+    setError(null)
   }
 
-  const saveRun = async (
-    runDetails: {
-      distanceKm: number
-      durationSeconds: number
-      notes?: string
-      paceSecondsPerKm?: number
-      type?: Run["type"]
-      completedAt?: Date
-    },
-    shouldClose = true,
-  ) => {
+  const parsePaceToSeconds = (pace: string) => {
+    if (!pace) return undefined
+    if (pace.includes(":")) {
+      const [minutes, seconds] = pace.split(":").map((part) => Number.parseInt(part, 10))
+      if (Number.isFinite(minutes) && Number.isFinite(seconds)) {
+        return minutes * 60 + seconds
+      }
+    }
+
+    const numericPace = Number.parseFloat(pace)
+    return Number.isFinite(numericPace) ? Math.round(numericPace * 60) : undefined
+  }
+
+  const formatPaceFromSeconds = (paceSeconds?: number | null) => {
+    if (!paceSeconds || paceSeconds <= 0) return ""
+    const minutes = Math.floor(paceSeconds / 60)
+    const seconds = Math.round(paceSeconds % 60)
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`
+  }
+
+  const persistActivity = async (data: typeof activityData, date: Date) => {
+    const { dbUtils } = await import("@/lib/dbUtils")
+    const user = await dbUtils.getCurrentUser()
+
+    if (!user || !user.id) {
+      throw new Error("Unable to find an active user")
+    }
+
+    const distance = Number.parseFloat(data.distance)
+    const durationMinutes = Number.parseFloat(data.duration)
+
+    if (!Number.isFinite(distance) || distance <= 0) {
+      throw new Error("Please provide a valid distance")
+    }
+
+    if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+      throw new Error("Please provide a valid duration")
+    }
+
+    const paceSeconds = parsePaceToSeconds(data.pace)
+    const calories = data.calories ? Number.parseFloat(data.calories) : undefined
+    const caloriesValue = Number.isFinite(calories) ? calories : undefined
+
+    const runData = {
+      userId: user.id,
+      type: "other" as const,
+      distance,
+      duration: Math.round(durationMinutes * 60),
+      pace: paceSeconds,
+      calories: caloriesValue,
+      notes: data.notes,
+      completedAt: date,
+      updatedAt: new Date(),
+    }
+
+    await dbUtils.recordRun(runData)
+  }
+
+  const handleManualSave = async () => {
+    setIsSaving(true)
+    setError(null)
     try {
-      setIsSaving(true)
-      const user = await dbUtils.getCurrentUser()
-      if (!user?.id) {
-        toast({
-          title: "User not found",
-          description: "Please complete onboarding before adding activities.",
-          variant: "destructive",
-        })
-        return
-      }
-
-      const calories = Math.round(runDetails.distanceKm * 60 + (runDetails.durationSeconds / 60) * 3)
-      const runData: Omit<Run, "id" | "createdAt"> = {
-        userId: user.id,
-        type: runDetails.type || normalizedActivityType,
-        workoutId: undefined,
-        distance: runDetails.distanceKm,
-        duration: runDetails.durationSeconds,
-        pace: runDetails.paceSecondsPerKm || runDetails.durationSeconds / runDetails.distanceKm,
-        calories,
-        notes: runDetails.notes?.trim() || undefined,
-        completedAt: runDetails.completedAt || selectedDate,
-      }
-
-      await dbUtils.createRun(runData)
-      await planAdjustmentService.afterRun(user.id)
-
-      toast({
-        title: "Activity added",
-        description: `Logged ${runDetails.distanceKm.toFixed(2)} km in ${formatSecondsToDuration(runDetails.durationSeconds)}.`,
-      })
-
+      await persistActivity(activityData, selectedDate)
+      toast({ title: "Activity saved", description: "Your run was added to Today's feed." })
       resetForm()
-      onSaved?.()
-      if (shouldClose) onClose()
-    } catch (error) {
-      console.error("Failed to save activity", error)
-      toast({
-        title: "Could not save activity",
-        description: "Something went wrong while saving your run.",
-        variant: "destructive",
-      })
+      onClose()
+    } catch (err) {
+      console.error("Failed to save activity", err)
+      setError(err instanceof Error ? err.message : "Unable to save activity")
     } finally {
       setIsSaving(false)
     }
   }
 
-  const handleManualSave = async () => {
-    const distanceKm = Number.parseFloat(activityData.distance)
-    const durationMinutes = Number.parseFloat(activityData.duration)
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
 
-    if (!Number.isFinite(distanceKm) || distanceKm <= 0 || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
-      toast({
-        title: "Missing details",
-        description: "Please enter a valid distance and duration.",
-        variant: "destructive",
-      })
+    if (!file.type.startsWith("image/")) {
+      setError("Please upload an image file")
       return
     }
 
-    const durationSeconds = Math.round(durationMinutes * 60)
-    const paceSecondsPerKm = activityData.pace
-      ? activityData.pace
-          .split(":")
-          .map((part) => Number.parseInt(part.trim(), 10))
-          .reduce((acc, part) => acc * 60 + (Number.isFinite(part) ? part : 0), 0)
-      : undefined
-
-    await saveRun({
-      distanceKm,
-      durationSeconds,
-      notes: activityData.notes,
-      paceSecondsPerKm,
-    })
-  }
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ""
-    if (!file) return
+    const maxSize = 6 * 1024 * 1024 // 6MB
+    if (file.size > maxSize) {
+      setError("File is too large. Please choose an image under 6MB")
+      return
+    }
 
     setIsAnalyzing(true)
+    setError(null)
+
     try {
-      const result = await analyzeActivityImage(file)
-      const paceDisplay = result.paceSecondsPerKm ? formatSecondsToDuration(result.paceSecondsPerKm) : ""
+      const formData = new FormData()
+      formData.append("file", file)
 
-      setActivityData((current) => {
-        const allowedTypes = ["run", "walk", "bike", "swim", "strength", "other"] as const
-        const nextType = allowedTypes.includes((result.type as typeof allowedTypes[number]) || "run")
-          ? (result.type as typeof allowedTypes[number])
-          : current.type
-
-        return {
-          ...current,
-          distance: result.distanceKm.toString(),
-          duration: Math.round(result.durationSeconds / 60).toString(),
-          pace: paceDisplay,
-          notes: result.notes || current.notes,
-          type: nextType,
-        }
+      const response = await fetch("/api/ai-activity", {
+        method: "POST",
+        body: formData,
       })
 
-      const completedAt = result.completedAt ? new Date(result.completedAt) : selectedDate
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || "Unable to analyze activity")
+      }
 
-      await saveRun(
-        {
-          distanceKm: result.distanceKm,
-          durationSeconds: result.durationSeconds,
-          notes: result.notes,
-          paceSecondsPerKm: result.paceSecondsPerKm,
-          type: (result.type as Run["type"]) || normalizedActivityType,
-          completedAt,
-        },
-        true,
-      )
-    } catch (error) {
-      console.error("Image analysis failed", error)
-      toast({
-        title: "AI analysis failed",
-        description: error instanceof Error ? error.message : "We couldn't read the workout screenshot.",
-        variant: "destructive",
-      })
+      const result = await response.json()
+      const { activity, confidence } = result
+
+      const normalizedDate = activity?.date ? new Date(activity.date) : new Date()
+      setSelectedDate(normalizedDate)
+
+      const updatedActivity = {
+        type: activity?.type || "run",
+        distance: activity?.distance ? String(activity.distance) : "",
+        duration: activity?.durationMinutes ? String(activity.durationMinutes) : "",
+        pace: formatPaceFromSeconds(activity?.paceSeconds),
+        calories: activity?.calories ? String(activity.calories) : "",
+        notes: activity?.notes || "",
+      }
+
+      setActivityData(updatedActivity)
+
+      if (confidence >= 0.7 && activity?.distance && activity?.durationMinutes) {
+        await persistActivity(updatedActivity, normalizedDate)
+        toast({ title: "Activity logged", description: "AI imported your run automatically." })
+        resetForm()
+        onClose()
+      } else {
+        toast({
+          title: "Review details",
+          description: "We pre-filled the form. Please confirm before saving.",
+        })
+        setStep("manual")
+      }
+    } catch (err) {
+      console.error("AI analysis failed", err)
+      setError(err instanceof Error ? err.message : "Failed to analyze the image")
     } finally {
       setIsAnalyzing(false)
-      setStep("method")
     }
   }
 
@@ -266,6 +250,8 @@ export function AddActivityModal({ isOpen, onClose, onSaved }: AddActivityModalP
             {step === "upload" && "Upload Activity"}
           </DialogTitle>
         </DialogHeader>
+
+        {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
 
         {step === "method" && (
           <div className="space-y-4">
@@ -300,7 +286,7 @@ export function AddActivityModal({ isOpen, onClose, onSaved }: AddActivityModalP
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {selectedDate ? format(selectedDate, "PPP") : "Pick a date"}
+                    {formattedSelectedDate}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
@@ -365,6 +351,22 @@ export function AddActivityModal({ isOpen, onClose, onSaved }: AddActivityModalP
               </div>
             </div>
 
+            {/* Calories */}
+            <div className="space-y-2">
+              <Label htmlFor="calories">Calories (optional)</Label>
+              <div className="relative">
+                <Input
+                  id="calories"
+                  type="number"
+                  placeholder="320"
+                  value={activityData.calories}
+                  onChange={(e) => setActivityData({ ...activityData, calories: e.target.value })}
+                  className="pr-12"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">kcal</span>
+              </div>
+            </div>
+
             {/* Average Pace */}
             <div className="space-y-2">
               <Label htmlFor="pace">Average Pace (optional)</Label>
@@ -402,7 +404,14 @@ export function AddActivityModal({ isOpen, onClose, onSaved }: AddActivityModalP
                 className="flex-1 bg-green-500 hover:bg-green-600"
                 disabled={isSaving}
               >
-                {isSaving ? "Saving..." : "Save Activity"}
+                {isSaving ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </span>
+                ) : (
+                  "Save Activity"
+                )}
               </Button>
             </div>
           </div>
@@ -419,12 +428,27 @@ export function AddActivityModal({ isOpen, onClose, onSaved }: AddActivityModalP
                 Upload a photo of your workout from any fitness app or device
               </p>
 
-              <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" id="file-upload" />
-              <label htmlFor="file-upload">
-                <Button asChild className="bg-green-500 hover:bg-green-600" disabled={isAnalyzing || isSaving}>
-                  <span>{isAnalyzing ? "Analyzing..." : "Choose Photo"}</span>
-                </Button>
-              </label>
+              {isAnalyzing ? (
+                <div className="flex items-center justify-center gap-2 text-gray-600">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span>Analyzing your screenshot...</span>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    id="file-upload"
+                  />
+                  <label htmlFor="file-upload">
+                    <Button asChild className="bg-green-500 hover:bg-green-600">
+                      <span>Choose Photo</span>
+                    </Button>
+                  </label>
+                </>
+              )}
             </div>
 
             <div className="text-center">
