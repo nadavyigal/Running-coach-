@@ -8,11 +8,49 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
-import { Clock, Activity, Save } from "lucide-react"
+import { Clock, Activity, Save, ImageIcon, Sparkles } from "lucide-react"
 import { type Run } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { planAdjustmentService } from "@/lib/planAdjustmentService"
+
+export const validateManualRunFile = (file: File) => {
+  const allowedTypes = ["image/jpeg", "image/png", "image/webp"]
+  const maxSize = 5 * 1024 * 1024
+
+  if (!allowedTypes.includes(file.type)) {
+    return "Only JPG, PNG, and WebP images are supported"
+  }
+
+  if (file.size > maxSize) {
+    return "Image must be smaller than 5MB"
+  }
+
+  return ""
+}
+
+export const analyzeRunPhoto = async (file: File, fetcher: typeof fetch = fetch) => {
+  const validationMessage = validateManualRunFile(file)
+  if (validationMessage) {
+    throw new Error(validationMessage)
+  }
+
+  const formData = new FormData()
+  formData.append("file", file)
+
+  const response = await fetcher("/api/analysis/run-from-photo", {
+    method: "POST",
+    body: formData
+  })
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error(data?.error || "AI analysis failed")
+  }
+
+  const data = await response.json()
+  return data?.data
+}
 
 interface ManualRunModalProps {
   isOpen: boolean
@@ -27,8 +65,23 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
   const [type, setType] = useState<'easy' | 'tempo' | 'intervals' | 'long' | 'time-trial' | 'hill' | 'other'>('easy')
   const [notes, setNotes] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [uploadError, setUploadError] = useState("")
+  const [aiStatus, setAiStatus] = useState<"idle" | "uploading" | "analyzing" | "error">("idle")
+  const [aiMessage, setAiMessage] = useState("")
   
   const { toast } = useToast()
+
+  const resetForm = () => {
+    setDistance("")
+    setDuration("")
+    setType('easy')
+    setNotes("")
+    setSelectedFile(null)
+    setUploadError("")
+    setAiStatus("idle")
+    setAiMessage("")
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -97,10 +150,7 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
       })
 
       // Reset form
-      setDistance("")
-      setDuration("")
-      setType('easy')
-      setNotes("")
+      resetForm()
       
       onSaved?.()
       onClose()
@@ -114,6 +164,78 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
       })
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) {
+      setSelectedFile(null)
+      return
+    }
+
+    const validationMessage = validateManualRunFile(file)
+    if (validationMessage) {
+      setUploadError(validationMessage)
+      setSelectedFile(null)
+    } else {
+      setUploadError("")
+      setSelectedFile(file)
+    }
+  }
+
+  const formatDurationInput = (seconds: number) => {
+    if (seconds <= 0) return ""
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const remainingSeconds = seconds % 60
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`
+    }
+
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
+  }
+
+  const normalizeRunType = (value: string): typeof type => {
+    const allowed: Array<typeof type> = ['easy', 'tempo', 'intervals', 'long', 'time-trial', 'hill', 'other']
+    return allowed.includes(value as typeof type) ? value as typeof type : 'other'
+  }
+
+  const handleAiFill = async () => {
+    if (!selectedFile) {
+      setUploadError("Please choose an image before using AI")
+      return
+    }
+
+    const validationMessage = validateManualRunFile(selectedFile)
+    if (validationMessage) {
+      setUploadError(validationMessage)
+      return
+    }
+
+    setUploadError("")
+    setAiStatus("uploading")
+    setAiMessage("Uploading image...")
+
+    try {
+      setAiStatus("analyzing")
+      setAiMessage("Analyzing run details...")
+
+      const result = await analyzeRunPhoto(selectedFile)
+
+      if (result?.distanceKm) setDistance(result.distanceKm.toString())
+      if (result?.durationSeconds) setDuration(formatDurationInput(result.durationSeconds))
+      if (result?.runType) setType(normalizeRunType(result.runType))
+      if (typeof result?.notes === "string") setNotes(result.notes)
+
+      setAiStatus("idle")
+      setAiMessage("Fields updated from photo. Please review before saving.")
+    } catch (error) {
+      console.error("AI analysis failed", error)
+      setAiStatus("error")
+      const message = error instanceof Error ? error.message : "Unable to analyze the image. Please try again or fill manually."
+      setAiMessage(message)
     }
   }
 
@@ -241,6 +363,38 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
             <div className="text-xs text-gray-500 mt-1">
               Format: 25:30 (minutes:seconds) or 1:25:30 (hours:minutes:seconds)
             </div>
+          </div>
+
+          {/* Photo Upload for AI */}
+          <div className="space-y-2">
+            <Label htmlFor="manual-run-photo">Upload Screenshot (optional)</Label>
+            <div className="flex gap-2 items-center">
+              <Input id="manual-run-photo" type="file" accept="image/*" onChange={handleFileChange} />
+              <Button type="button" variant="secondary" onClick={handleAiFill} disabled={aiStatus === "uploading" || aiStatus === "analyzing"}>
+                {aiStatus === "uploading" || aiStatus === "analyzing" ? (
+                  <>
+                    <Clock className="h-4 w-4 mr-2 animate-spin" />
+                    {aiStatus === "uploading" ? "Uploading" : "Analyzing"}
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Use AI to fill from photo
+                  </>
+                )}
+              </Button>
+            </div>
+            {(uploadError || aiMessage) && (
+              <div className={`text-xs ${uploadError || aiStatus === "error" ? "text-red-600" : "text-blue-700"}`}>
+                {uploadError || aiMessage}
+              </div>
+            )}
+            {selectedFile && !uploadError && (
+              <div className="text-xs text-gray-600 flex items-center gap-2">
+                <ImageIcon className="h-4 w-4" />
+                {selectedFile.name}
+              </div>
+            )}
           </div>
 
           {/* Calculated Metrics */}
