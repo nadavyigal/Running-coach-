@@ -669,7 +669,13 @@ export function RecordScreen() {
       />
 
       {/* Modals */}
-      {showRoutesModal && <RouteSelectorModal isOpen={showRoutesModal} onClose={() => setShowRoutesModal(false)} />}
+      {showRoutesModal && (
+        <RouteSelectorModal
+          isOpen={showRoutesModal}
+          onClose={() => setShowRoutesModal(false)}
+          onRouteSelected={handleRouteSelected}
+        />
+      )}
       {showRouteWizard && (
         <RouteSelectionWizard
           isOpen={showRouteWizard}

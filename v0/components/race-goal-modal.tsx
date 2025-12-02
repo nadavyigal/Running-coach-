@@ -82,6 +82,7 @@ export function RaceGoalModal({ isOpen, onClose, onSuccess, userId, editingGoal 
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showTargetTimeHelper, setShowTargetTimeHelper] = useState(false)
+  const [isRaceDateCalendarOpen, setIsRaceDateCalendarOpen] = useState(false)
   const { toast } = useToast()
 
   const handleSubmit = async () => {
@@ -236,19 +237,32 @@ export function RaceGoalModal({ isOpen, onClose, onSuccess, userId, editingGoal 
             </div>
             <div className="space-y-2">
               <Label>Race Date *</Label>
-              <Popover>
+              <Popover open={isRaceDateCalendarOpen} onOpenChange={setIsRaceDateCalendarOpen}>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-full justify-start">
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {formData.raceDate ? format(formData.raceDate, "PPP") : "Pick a date"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
+                <PopoverContent
+                  className="w-auto p-0 z-[200]"
+                  align="start"
+                  side="bottom"
+                  sideOffset={4}
+                  onOpenAutoFocus={(e) => e.preventDefault()}
+                  style={{ pointerEvents: 'auto', touchAction: 'auto' }}
+                >
                   <Calendar
                     mode="single"
                     selected={formData.raceDate}
-                    onSelect={(date) => date && setFormData({ ...formData, raceDate: date })}
-                    initialFocus
+                    onSelect={(date) => {
+                      if (date) {
+                        setFormData({ ...formData, raceDate: date })
+                        setIsRaceDateCalendarOpen(false)
+                      }
+                    }}
+                    disabled={(date) => date < new Date()}
+                    defaultMonth={formData.raceDate || new Date()}
                   />
                 </PopoverContent>
               </Popover>

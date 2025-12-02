@@ -20,6 +20,7 @@ import { getDifficultyColor, getDifficultyLabel, UNKNOWN_DISTANCE_KM, isDevelopm
 interface RouteSelectorModalProps {
   isOpen: boolean
   onClose: () => void
+  onRouteSelected: (route: Route) => void
 }
 
 interface UserLocation {
@@ -32,7 +33,7 @@ interface RouteWithDistance extends Route {
   distanceFromUser?: number
 }
 
-export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps) {
+export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSelectorModalProps) {
   const { toast } = useToast()
 
   // Routes from database
@@ -244,6 +245,9 @@ export function RouteSelectorModal({ isOpen, onClose }: RouteSelectorModalProps)
       title: 'Route Added',
       description: `"${route.name}" has been added to your workout!`,
     })
+
+    // Pass route to parent component before closing
+    onRouteSelected(route)
 
     setPreviewedRouteId(null)
     onClose()

@@ -134,6 +134,7 @@ export function GoalCreationWizard({ isOpen, onClose, userId, onGoalCreated }: G
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [validationSuggestions, setValidationSuggestions] = useState<string[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [isDeadlineCalendarOpen, setIsDeadlineCalendarOpen] = useState(false);
 
   const [formData, setFormData] = useState<GoalFormData>({
     title: '',
@@ -770,7 +771,7 @@ export function GoalCreationWizard({ isOpen, onClose, userId, onGoalCreated }: G
             <div className="space-y-4">
               <div>
                 <Label>Goal Deadline *</Label>
-                <Popover>
+                <Popover open={isDeadlineCalendarOpen} onOpenChange={setIsDeadlineCalendarOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
@@ -783,7 +784,14 @@ export function GoalCreationWizard({ isOpen, onClose, userId, onGoalCreated }: G
                       {formData.timeBound.deadline ? format(formData.timeBound.deadline, "PPP") : "Pick a date"}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
+                  <PopoverContent
+                    className="w-auto p-0 z-[200]"
+                    align="start"
+                    side="bottom"
+                    sideOffset={4}
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    style={{ pointerEvents: 'auto', touchAction: 'auto' }}
+                  >
                     <Calendar
                       mode="single"
                       selected={formData.timeBound.deadline}
@@ -792,16 +800,17 @@ export function GoalCreationWizard({ isOpen, onClose, userId, onGoalCreated }: G
                           const totalDays = Math.ceil((date.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
                           setFormData(prev => ({
                             ...prev,
-                            timeBound: { 
-                              ...prev.timeBound, 
+                            timeBound: {
+                              ...prev.timeBound,
                               deadline: date,
                               totalDuration: totalDays
                             }
                           }));
+                          setIsDeadlineCalendarOpen(false);
                         }
                       }}
                       disabled={(date) => date < new Date()}
-                      initialFocus
+                      defaultMonth={formData.timeBound.deadline || new Date()}
                     />
                   </PopoverContent>
                 </Popover>
