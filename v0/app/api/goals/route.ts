@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
     console.log('✅ Parsed parameters:', params);
 
     console.log(`🔍 Fetching goals for user ${params.userId}...`);
-    const goals = await dbUtils.getGoalsByUser(params.userId, params.status);
+    const goals = await dbUtils.getUserGoals(params.userId, params.status);
     console.log(`📊 Found ${goals.length} goals for user ${params.userId}`);
     
     // Enrich goals with progress and analytics if requested

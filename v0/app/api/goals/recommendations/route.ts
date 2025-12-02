@@ -203,9 +203,9 @@ async function generateDynamicRecommendations(userId: number): Promise<Partial<G
   const recommendations: Partial<GoalRecommendation>[] = [];
   
   // Get user's goals and their progress
-  const activeGoals = await dbUtils.getGoalsByUser(userId, 'active');
-  const completedGoals = await dbUtils.getGoalsByUser(userId, 'completed');
-  const allGoals = await dbUtils.getGoalsByUser(userId);
+  const activeGoals = await dbUtils.getUserGoals(userId, 'active');
+  const completedGoals = await dbUtils.getUserGoals(userId, 'completed');
+  const allGoals = await dbUtils.getUserGoals(userId);
   
   // Get recent runs for analysis
   const recentRuns = await dbUtils.getRunsByUser(userId);

@@ -45,9 +45,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Get goals for analysis
-    let goals = params.goalId 
+    let goals = params.goalId
       ? [await dbUtils.getGoal(params.goalId)].filter(Boolean)
-      : await dbUtils.getGoalsByUser(params.userId);
+      : await dbUtils.getUserGoals(params.userId);
 
     // Filter goals by date range
     goals = goals.filter(goal => new Date(goal.createdAt) >= startDate);

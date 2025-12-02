@@ -28,8 +28,27 @@ export async function analyzeActivityImage(file: File): Promise<AiActivityResult
     throw new Error(message)
   }
 
-  const parsed = AiActivityResultSchema.safeParse(payload?.data ?? payload)
+  // API returns {activity: {...}, confidence: number}
+  // Extract the nested activity object
+  const activityData = payload.activity
+  if (!activityData) {
+    throw new Error("No activity data in API response")
+  }
+
+  // Transform API response format to match our schema
+  const transformed = {
+    distanceKm: activityData.distance,
+    durationSeconds: activityData.durationMinutes * 60, // Convert minutes to seconds
+    paceSecondsPerKm: activityData.paceSeconds,
+    calories: activityData.calories,
+    notes: activityData.notes,
+    completedAt: activityData.date,
+    type: activityData.type,
+  }
+
+  const parsed = AiActivityResultSchema.safeParse(transformed)
   if (!parsed.success) {
+    console.error("Schema validation failed:", parsed.error)
     throw new Error("AI response was not in the expected format")
   }
 
