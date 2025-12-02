@@ -1260,6 +1260,19 @@ export async function getUserGoals(userId: number, status?: Goal['status']): Pro
 }
 
 /**
+ * Get a single goal by ID
+ */
+export async function getGoal(goalId: number): Promise<Goal | null> {
+  return safeDbOperation(async () => {
+    if (db) {
+      const goal = await db.goals.get(goalId);
+      return goal || null;
+    }
+    return null;
+  }, 'getGoal', null);
+}
+
+/**
  * Get goal with milestones
  */
 export async function getGoalWithMilestones(goalId: number): Promise<{ goal: Goal | null; milestones: GoalMilestone[] }> {
@@ -3362,6 +3375,7 @@ export const dbUtils = {
   createGoal,
   updateGoal,
   getUserGoals,
+  getGoal,
   getGoalWithMilestones,
   getGoalMilestones,
   validateSMARTGoal,

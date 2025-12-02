@@ -426,6 +426,8 @@ export function SimpleGoalForm({ isOpen, onClose, userId, onGoalCreated }: Simpl
                       disabled={(date) => date < new Date()}
                       defaultMonth={deadline || new Date()}
                       captionLayout="dropdown"
+                      fromYear={new Date().getFullYear()}
+                      toYear={new Date().getFullYear() + 10}
                     />
                   </PopoverContent>
                 </Popover>

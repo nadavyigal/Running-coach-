@@ -86,6 +86,57 @@ export function RouteSelectionWizard({
   // Custom route creator state
   const [customRouteCreatorOpen, setCustomRouteCreatorOpen] = useState(false);
 
+  // Request GPS location - defined before useEffect that uses it
+  const requestLocation = useCallback(() => {
+    const isSecure = typeof window !== 'undefined' &&
+      (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
+
+    if (!isSecure) {
+      setLocationStatus('unavailable');
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      setLocationStatus('unavailable');
+      return;
+    }
+
+    setLocationStatus('loading');
+
+    let isMounted = true;
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (isMounted) {
+          setUserLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          });
+          setLocationStatus('granted');
+        }
+      },
+      (error) => {
+        if (isMounted) {
+          if (error.code === error.PERMISSION_DENIED) {
+            setLocationStatus('denied');
+          } else {
+            setLocationStatus('unavailable');
+          }
+        }
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 300000
+      }
+    );
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Load routes from database
   const loadRoutes = useCallback(async () => {
     try {
@@ -147,56 +198,6 @@ export function RouteSelectionWizard({
       return cleanup;
     }
   }, [isOpen, locationStatus, requestLocation]);
-
-  const requestLocation = useCallback(() => {
-    const isSecure = typeof window !== 'undefined' &&
-      (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
-
-    if (!isSecure) {
-      setLocationStatus('unavailable');
-      return;
-    }
-
-    if (!navigator.geolocation) {
-      setLocationStatus('unavailable');
-      return;
-    }
-
-    setLocationStatus('loading');
-
-    let isMounted = true;
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        if (isMounted) {
-          setUserLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy
-          });
-          setLocationStatus('granted');
-        }
-      },
-      (error) => {
-        if (isMounted) {
-          if (error.code === error.PERMISSION_DENIED) {
-            setLocationStatus('denied');
-          } else {
-            setLocationStatus('unavailable');
-          }
-        }
-      },
-      {
-        enableHighAccuracy: false,
-        timeout: 10000,
-        maximumAge: 300000
-      }
-    );
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   // Calculate match score for a route
   const calculateMatchScore = useCallback((
