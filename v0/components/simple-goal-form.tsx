@@ -497,15 +497,23 @@ export function SimpleGoalForm({ isOpen, onClose, userId, onGoalCreated }: Simpl
           </Card>
 
           {/* Action Buttons */}
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting || generatingPlan || !title || !targetValue || !deadline}
-              className="flex-1"
-            >
+          <div className="flex flex-col gap-2">
+            {/* Show why button is disabled */}
+            {(!title || !targetValue || !deadline) && (
+              <div className="text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded-md border border-amber-200">
+                ⚠️ Required: {!title && "Title"}{!title && (!targetValue || !deadline) && ", "}{!targetValue && "Target Value"}{!targetValue && !deadline && ", "}{!deadline && "Deadline"}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={onClose} className="flex-1">
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={isSubmitting || generatingPlan || !title || !targetValue || !deadline}
+                className="flex-1"
+              >
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -523,6 +531,7 @@ export function SimpleGoalForm({ isOpen, onClose, userId, onGoalCreated }: Simpl
                 </>
               )}
             </Button>
+            </div>
           </div>
         </div>
       </DialogContent>
