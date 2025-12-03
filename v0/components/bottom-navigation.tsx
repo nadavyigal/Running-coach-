@@ -20,32 +20,54 @@ export function BottomNavigation({ currentScreen, onScreenChange }: BottomNaviga
     { id: "profile", icon: User, label: "Profile" },
   ]
 
+  const activeIndex = navItems.findIndex((item) => !item.isSpecial && item.id === currentScreen)
+
   return (
-    <nav className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white/95 backdrop-blur-sm border-t border-gray-200 px-4 py-2 animate-in slide-in-from-bottom duration-300" aria-label="Main navigation">
-      <div className="flex justify-around items-center">
-        {navItems.map((item, index) => (
-          <Button
-            key={item.id}
-            variant="ghost"
-            size="sm"
-            onClick={() => onScreenChange(item.id)}
-            className={`flex flex-col items-center gap-1 h-auto py-2 px-3 transition-all duration-200 ${
-              item.isSpecial
-                ? "bg-green-500 hover:bg-green-600 text-white rounded-full w-12 h-12 hover:scale-110 shadow-lg"
-                : currentScreen === item.id
-                  ? "text-green-500 scale-110"
-                  : "text-gray-700 hover:text-green-500 hover:scale-105"
-            }`}
-            style={{ animationDelay: `${index * 50}ms` }}
-            aria-label={`Navigate to ${item.label}`}
-            aria-current={currentScreen === item.id ? "page" : undefined}
-          >
-            <item.icon className={`h-5 w-5 ${item.isSpecial ? "h-6 w-6" : ""}`} aria-hidden="true" />
-            {!item.isSpecial && <span className="text-xs font-medium">{item.label}</span>}
-          </Button>
-        ))}
+    <nav
+      className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/90 backdrop-blur-lg border-t border-gray-200/50 shadow-xl shadow-black/5 px-6 py-3 animate-in slide-in-from-bottom duration-500"
+      aria-label="Main navigation"
+    >
+      {/* Active indicator bar */}
+      <div
+        className="absolute top-0 left-0 h-0.5 bg-gradient-to-r from-primary to-accent transition-all duration-300 ease-smooth"
+        style={{
+          width: '20%',
+          marginLeft: `${activeIndex * 20}%`,
+        }}
+      />
+
+      <div className="flex justify-around items-center relative">
+        {navItems.map((item, index) => {
+          const isActive = currentScreen === item.id && !item.isSpecial
+
+          return (
+            <Button
+              key={item.id}
+              variant="ghost"
+              size="sm"
+              onClick={() => onScreenChange(item.id)}
+              className={`relative flex flex-col items-center gap-1 h-auto transition-all duration-200 ${
+                item.isSpecial
+                  ? "bg-gradient-to-br from-primary to-accent text-white rounded-full w-14 h-14 hover:scale-110 active:scale-95 shadow-lg hover:shadow-purple-glow animate-pulse-glow p-0"
+                  : isActive
+                    ? "text-primary scale-110 py-2 px-3"
+                    : "text-gray-500 hover:text-primary hover:scale-105 py-2 px-3"
+              }`}
+              style={{ animationDelay: `${index * 50}ms` }}
+              aria-label={`Navigate to ${item.label}`}
+              aria-current={isActive ? "page" : undefined}
+            >
+              {isActive && !item.isSpecial && (
+                <div className="absolute -top-1 w-1.5 h-1.5 rounded-full bg-primary animate-in zoom-in duration-200" />
+              )}
+              <item.icon className={`${item.isSpecial ? "h-7 w-7" : "h-5 w-5"}`} aria-hidden="true" />
+              {!item.isSpecial && <span className="text-xs font-medium">{item.label}</span>}
+            </Button>
+          )
+        })}
       </div>
-      {/* Version indicator - helps verify deployment */}
+
+      {/* Version indicator */}
       <div className="absolute bottom-0.5 right-2 text-[8px] text-gray-300 select-none">
         {APP_VERSION}
       </div>

@@ -139,41 +139,49 @@ try {
 export default function RunSmartApp() {
   const [currentScreen, setCurrentScreen] = useState<string>("onboarding")
   const [isOnboardingComplete, setIsOnboardingComplete] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false) // CRITICAL FIX: Start with loading=false
   const [hasError, setHasError] = useState(false)
   const [showDebugPanel, setShowDebugPanel] = useState(false)
   const [safeMode, setSafeMode] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  
+
   // Ref to prevent double initialization in React Strict Mode
   const initRef = useRef(false)
 
   // Call chunk error handler hook unconditionally (hooks must be called at top level)
   useChunkErrorHandler()
 
-  console.log('🚀 RunSmartApp component rendering...')
+  console.log('🚀 RunSmartApp component rendering...', { isLoading, isOnboardingComplete })
 
   useEffect(() => {
+    console.log('🔍 RunSmartApp useEffect running...')
+
     // Prevent double initialization in React Strict Mode
     if (initRef.current) {
-      console.log('🔍 Skipping duplicate initialization (React Strict Mode)')
+      console.log('🔍 Skipping duplicate initialization (already initialized)')
       return
     }
     initRef.current = true
-    
-    console.log('🔍 RunSmartApp useEffect running...')
-    
+
+    // CRITICAL SAFETY: Set a maximum timeout for initialization
+    const safetyTimeout = setTimeout(() => {
+      console.warn('⚠️ SAFETY TIMEOUT: Forcing initialization complete')
+      setIsLoading(false)
+    }, 3000) // 3 second maximum
+
     // Global error handler
     const handleGlobalError = (event: ErrorEvent) => {
       console.error('Global error caught:', event.error);
       setErrorMessage(event.error?.message || 'Unknown error occurred');
       setHasError(true);
+      setIsLoading(false); // Ensure loading clears on error
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       console.error('Unhandled promise rejection:', event.reason);
       setErrorMessage(event.reason?.message || 'Promise rejection occurred');
       setHasError(true);
+      setIsLoading(false); // Ensure loading clears on error
     };
 
     window.addEventListener('error', handleGlobalError);
@@ -359,11 +367,12 @@ export default function RunSmartApp() {
         } catch (initErr) {
           console.error('[app:init:error] ❌ Enhanced initialization failed:', initErr)
           logError('App initialization failed', initErr instanceof Error ? initErr : String(initErr));
-          
+
           const errorMessage = initErr instanceof Error ? initErr.message : 'Initialization failed';
           setErrorMessage(errorMessage);
           setHasError(true);
-          
+          setIsLoading(false); // CRITICAL: Clear loading state on error
+
           // Final fallback - just show onboarding
           setIsOnboardingComplete(false);
         }
@@ -379,9 +388,12 @@ export default function RunSmartApp() {
       setIsLoading(false)
     }
 
-    initializeApp()
+    initializeApp().finally(() => {
+      clearTimeout(safetyTimeout) // Clear safety timeout if init completes normally
+    })
 
     return () => {
+      clearTimeout(safetyTimeout)
       window.removeEventListener('error', handleGlobalError);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
@@ -555,14 +567,14 @@ export default function RunSmartApp() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-md mx-auto relative">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50/30 to-cyan-50/30 max-w-md mx-auto relative">
       <div className="pb-20">{renderScreen()}</div>
       {isOnboardingComplete && <BottomNavigation currentScreen={currentScreen} onScreenChange={setCurrentScreen} />}
-      
+
       {/* Debug Panel - Access with Ctrl+Shift+D */}
-      <OnboardingDebugPanel 
-        isOpen={showDebugPanel} 
-        onClose={() => setShowDebugPanel(false)} 
+      <OnboardingDebugPanel
+        isOpen={showDebugPanel}
+        onClose={() => setShowDebugPanel(false)}
       />
     </div>
   )
