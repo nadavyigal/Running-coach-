@@ -272,7 +272,7 @@ export function CoachingFeedbackModal({
             Coaching Feedback
           </DialogTitle>
           <DialogDescription>
-            Help me improve my coaching by sharing your thoughts on this {interactionType.replace('_', ' ')}.
+            Help me improve my coaching by sharing your thoughts on this {interactionType?.replace('_', ' ') || 'interaction'}.
           </DialogDescription>
         </DialogHeader>
 

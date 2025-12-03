@@ -13,7 +13,7 @@ test.describe('Final Verification - All Issues Fixed', () => {
     });
     
     // Navigate to app
-    await page.goto('http://localhost:3004');
+    await page.goto('http://localhost:3000');
     
     // Clear storage to ensure fresh start
     await page.evaluate(() => {

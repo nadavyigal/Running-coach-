@@ -636,8 +636,9 @@ export function TodayScreen() {
         userId={userId || 0}
       />
       <CoachingFeedbackModal
-        open={showCoachingFeedback}
-        onOpenChange={setShowCoachingFeedback}
+        isOpen={showCoachingFeedback}
+        onClose={() => setShowCoachingFeedback(false)}
+        interactionType="workout_recommendation"
         userId={userId || 0}
       />
       <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
