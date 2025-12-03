@@ -384,7 +384,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
         }
         
       } catch (error) {
-        const errorInfo = dbUtils.handlePlanError(error, 'creation/recovery')
+        const errorInfo = dbUtils.handleDatabaseError(error, 'creation/recovery')
         toast({
           variant: "destructive",
           title: errorInfo.title,

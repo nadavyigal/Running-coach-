@@ -75,7 +75,7 @@ export function PlanScreen() {
             activePlan = await dbUtils.ensureUserHasActivePlan(user.id!)
             console.log('Successfully created/recovered plan:', activePlan.title)
           } catch (planError) {
-            const errorInfo = dbUtils.handlePlanError(planError, 'creation/recovery')
+            const errorInfo = dbUtils.handleDatabaseError(planError, 'creation/recovery')
             toast({
               variant: "destructive",
               title: errorInfo.title,
@@ -95,7 +95,7 @@ export function PlanScreen() {
           console.warn('⚠️ PlanScreen: Still no active plan after ensureUserHasActivePlan')
         }
       } catch (error) {
-        const errorInfo = dbUtils.handlePlanError(error, 'loading')
+        const errorInfo = dbUtils.handleDatabaseError(error, 'loading')
         toast({
           title: errorInfo.title,
           description: errorInfo.description,

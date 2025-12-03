@@ -145,7 +145,7 @@ export default function RecoveryDashboard() {
       }
 
       // Create wellness entry
-      const wellnessId = await dbUtils.createSubjectiveWellness({
+      const wellnessId = await dbUtils.saveSubjectiveWellness({
         userId: user.id,
         date: new Date(wellnessData.date),
         energyLevel: wellnessData.energyLevel,

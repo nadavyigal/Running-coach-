@@ -31,7 +31,7 @@ import { AddActivityModal } from "@/components/add-activity-modal"
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
-import { type Workout, type Plan, type Route } from "@/lib/db"
+import { type Workout, type Plan, type Route, resetDatabaseInstance } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { StreakIndicator } from "@/components/streak-indicator"
@@ -180,7 +180,7 @@ export function TodayScreen() {
   const confirmReset = () => {
     try {
       dbUtils.clearPlanCreationLocks()
-      dbUtils.resetDatabaseInstance()
+      resetDatabaseInstance()
       localStorage.clear()
       window.location.href = "/"
     } catch (error) {
