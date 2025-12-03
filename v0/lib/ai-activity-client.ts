@@ -8,6 +8,7 @@ export const AiActivityResultSchema = z.object({
   notes: z.string().optional(),
   completedAt: z.string().optional(),
   type: z.string().optional(),
+  confidence: z.number().min(0).max(100).optional(),
 })
 
 export type AiActivityResult = z.infer<typeof AiActivityResultSchema>
@@ -35,23 +36,16 @@ export async function analyzeActivityImage(file: File): Promise<AiActivityResult
     throw new Error("No activity data in API response")
   }
 
-  // Validate required fields exist and are valid numbers before transformation
-  if (typeof activityData.distance !== 'number' || !isFinite(activityData.distance)) {
-    throw new Error("AI response missing valid distance value")
-  }
-  if (typeof activityData.durationMinutes !== 'number' || !isFinite(activityData.durationMinutes)) {
-    throw new Error("AI response missing valid duration value")
-  }
-
   // Transform API response format to match our schema
   const transformed = {
     distanceKm: activityData.distance,
     durationSeconds: activityData.durationMinutes * 60, // Convert minutes to seconds
-    paceSecondsPerKm: typeof activityData.paceSeconds === 'number' ? activityData.paceSeconds : undefined,
-    calories: typeof activityData.calories === 'number' ? activityData.calories : undefined,
+    paceSecondsPerKm: activityData.paceSeconds,
+    calories: activityData.calories,
     notes: activityData.notes,
     completedAt: activityData.date,
     type: activityData.type,
+    confidence: payload.confidence,
   }
 
   const parsed = AiActivityResultSchema.safeParse(transformed)

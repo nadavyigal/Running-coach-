@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns"
 import { Heart, Watch, Camera, Edit, Upload, CalendarIcon, Zap, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { analyzeActivityImage } from "@/lib/ai-activity-client"
 
 interface AddActivityModalProps {
   isOpen: boolean
@@ -190,37 +191,23 @@ export function AddActivityModal({ isOpen, onClose, onSaved }: AddActivityModalP
     setError(null)
 
     try {
-      const formData = new FormData()
-      formData.append("file", file)
+      const result = await analyzeActivityImage(file)
 
-      const response = await fetch("/api/ai-activity", {
-        method: "POST",
-        body: formData,
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || "Unable to analyze activity")
-      }
-
-      const result = await response.json()
-      const { activity, confidence } = result
-
-      const normalizedDate = activity?.date ? new Date(activity.date) : new Date()
+      const normalizedDate = result.completedAt ? new Date(result.completedAt) : new Date()
       setSelectedDate(normalizedDate)
 
       const updatedActivity = {
-        type: activity?.type || "run",
-        distance: activity?.distance ? String(activity.distance) : "",
-        duration: activity?.durationMinutes ? String(activity.durationMinutes) : "",
-        pace: formatPaceFromSeconds(activity?.paceSeconds),
-        calories: activity?.calories ? String(activity.calories) : "",
-        notes: activity?.notes || "",
+        type: result.type || "run",
+        distance: String(result.distanceKm),
+        duration: String(result.durationSeconds / 60),
+        pace: formatPaceFromSeconds(result.paceSecondsPerKm),
+        calories: result.calories ? String(result.calories) : "",
+        notes: result.notes || "",
       }
 
       setActivityData(updatedActivity)
 
-      if (confidence >= 0.7 && activity?.distance && activity?.durationMinutes) {
+      if (result.confidence && result.confidence >= 70 && result.distanceKm && result.durationSeconds) {
         await persistActivity(updatedActivity, normalizedDate)
         toast({ title: "Activity logged", description: "AI imported your run automatically." })
         resetForm()

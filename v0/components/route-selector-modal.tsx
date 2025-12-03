@@ -112,7 +112,8 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
       const cleanup = requestLocation()
       return cleanup
     }
-  }, [isOpen, locationStatus, requestLocation])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, locationStatus])
 
   // Calculate routes with distance from user
   const routesWithDistance = useMemo((): RouteWithDistance[] => {

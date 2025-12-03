@@ -193,7 +193,6 @@ export async function POST(request: NextRequest) {
     const goalCreateData = {
       ...completedGoal,
       currentValue: completedGoal.baselineValue,
-      progressPercentage: 0,
       status: 'active' as const
     };
 

@@ -197,7 +197,8 @@ export function RouteSelectionWizard({
       const cleanup = requestLocation();
       return cleanup;
     }
-  }, [isOpen, locationStatus, requestLocation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, locationStatus]);
 
   // Calculate match score for a route
   const calculateMatchScore = useCallback((
