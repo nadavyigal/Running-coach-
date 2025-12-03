@@ -113,6 +113,9 @@ export function ProfileScreen() {
           setIsLoading(false);
           
           // Check for new badge unlocks after streak update
+          // NOTE: checkAndUnlockBadges function not yet implemented in dbUtils
+          // TODO: Implement badge checking when badge engine is complete
+          /*
           try {
             const unlocked = await dbUtils.checkAndUnlockBadges(user.id!);
             if (unlocked && unlocked.length > 0) {
@@ -127,6 +130,7 @@ export function ProfileScreen() {
             console.warn('[ProfileScreen] Badge check failed:', badgeError);
             // Don't fail the whole load for badge check
           }
+          */
         } else {
           // User not found - retry with exponential backoff
           if (retryCount < maxRetries) {
