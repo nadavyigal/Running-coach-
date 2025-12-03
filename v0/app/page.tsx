@@ -76,7 +76,37 @@ const TodayScreen = dynamic(
 
 const PlanScreen = dynamic(() => import("@/components/plan-screen").then(m => ({ default: m.PlanScreen })), { ssr: false })
 const RecordScreen = dynamic(() => import("@/components/record-screen").then(m => ({ default: m.RecordScreen })), { ssr: false })
-const ChatScreen = dynamic(() => import("@/components/chat-screen").then(m => ({ default: m.ChatScreen })), { ssr: false })
+const ChatScreen = dynamic(
+  () => import("@/components/chat-screen")
+    .then((module) => {
+      console.log('✅ ChatScreen module loaded:', { exports: Object.keys(module) });
+      if (!module.ChatScreen) {
+        throw new Error(`ChatScreen export not found. Available: ${Object.keys(module).join(', ')}`);
+      }
+      return { default: module.ChatScreen };
+    })
+    .catch((error) => {
+      console.error('❌ Failed to load ChatScreen:', error);
+      return {
+        default: () => (
+          <div className="p-6 text-center space-y-2">
+            <h2 className="text-xl font-semibold text-gray-900">Chat unavailable</h2>
+            <p className="text-sm text-gray-600">
+              We couldn&apos;t load the chat interface. Please retry from the Coach tab or refresh the app.
+            </p>
+          </div>
+        )
+      };
+    }),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="p-6 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500" />
+      </div>
+    )
+  }
+)
 const ProfileScreen = dynamic(() => import("@/components/profile-screen").then(m => ({ default: m.ProfileScreen })), { ssr: false })
 const BottomNavigation = dynamic(() => import("@/components/bottom-navigation").then(m => ({ default: m.BottomNavigation })), { ssr: false })
 const OnboardingDebugPanel = dynamic(() => import("@/components/onboarding-debug-panel").then(m => ({ default: m.OnboardingDebugPanel })), { ssr: false })
