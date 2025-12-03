@@ -34,8 +34,9 @@ import { openai } from "@ai-sdk/openai"
 import { useToast } from "@/hooks/use-toast"
 
 interface AddRunModalProps {
-  isOpen: boolean
-  onClose: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onRunAdded?: () => void
 }
 
 interface WorkoutType {
@@ -169,7 +170,7 @@ const strengthWorkouts = [
   },
 ]
 
-export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
+export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps) {
   const [step, setStep] = useState<"select" | "configure" | "approve">("select")
   const [selectedWorkout, setSelectedWorkout] = useState<WorkoutType | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
@@ -444,12 +445,12 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
       setSelectedGoal("distance")
       setNotes("")
       setGeneratedWorkout(null)
-      onClose()
-      
-      // Trigger a page refresh to show the new workout
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
+      onOpenChange(false)
+
+      // Call onRunAdded callback to refresh data
+      if (onRunAdded) {
+        onRunAdded()
+      }
       
     } catch (error) {
       console.error('Failed to save workout:', error)
@@ -466,7 +467,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-between">
