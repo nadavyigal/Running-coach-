@@ -31,6 +31,7 @@ import { AddActivityModal } from "@/components/add-activity-modal"
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
+import ModalErrorBoundary from "@/components/modal-error-boundary"
 import { type Workout, type Plan, type Route, resetDatabaseInstance } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
@@ -82,6 +83,7 @@ export function TodayScreen() {
   const [showAddRunModal, setShowAddRunModal] = useState(false)
   const [showAddActivityModal, setShowAddActivityModal] = useState(false)
   const [showRouteSelectorModal, setShowRouteSelectorModal] = useState(false)
+  const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
   const [showRescheduleModal, setShowRescheduleModal] = useState(false)
   const [showDateWorkoutModal, setShowDateWorkoutModal] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -146,6 +148,14 @@ export function TodayScreen() {
       setTodaysWorkout(today)
     } catch (error) {
       console.error("Error refreshing workouts:", error)
+    }
+  }
+
+  const startRecordFlow = () => {
+    try {
+      window.dispatchEvent(new CustomEvent("navigate-to-record"))
+    } catch {
+      window.location.hash = "#record"
     }
   }
 
@@ -255,6 +265,15 @@ export function TodayScreen() {
   const consistency =
     plannedRuns > 0 ? Math.round((totalRuns / plannedRuns) * 100) : 0
   const streak = calculateStreak()
+
+  const handleRouteSelected = (route: Route) => {
+    setSelectedRoute(route)
+    setShowRouteSelectorModal(false)
+    toast({
+      title: "Route selected",
+      description: route.name ? `Using ${route.name} for today's run` : "Route saved for your next run.",
+    })
+  }
 
   return (
     <div className="pb-24 space-y-4">
@@ -413,17 +432,24 @@ export function TodayScreen() {
 
             <CardContent className="relative z-10 space-y-4">
               {/* Quick Actions */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <Button
                   variant="secondary"
                   size="lg"
                   className="bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white border-white/30 font-semibold"
-                  onClick={() =>
-                    (window.location.hash = "#record")
-                  }
+                  onClick={startRecordFlow}
                 >
                   <Play className="h-5 w-5 mr-2" />
                   Start Run
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white border-white/30 font-semibold"
+                  onClick={() => setShowRouteSelectorModal(true)}
+                >
+                  <MapPin className="h-5 w-5 mr-2" />
+                  Select Route
                 </Button>
                 <Button
                   variant="ghost"
@@ -464,6 +490,18 @@ export function TodayScreen() {
                   </div>
                 </div>
               )}
+
+              {selectedRoute && (
+                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 text-sm flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4" />
+                    <span className="font-semibold">{selectedRoute.name}</span>
+                  </div>
+                  {selectedRoute.distance && (
+                    <span className="text-white/80">{selectedRoute.distance} km</span>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -476,6 +514,20 @@ export function TodayScreen() {
               <p className="text-gray-600 text-sm">
                 Recovery is just as important as training. Enjoy your rest!
               </p>
+              <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <Button onClick={startRecordFlow} className="gap-2">
+                  <Play className="h-4 w-4" />
+                  Record a Run
+                </Button>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => setShowRouteSelectorModal(true)}
+                >
+                  <MapPin className="h-4 w-4" />
+                  Choose Route
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -609,34 +661,48 @@ export function TodayScreen() {
         )}
       </div>
 
-      {/* Modals */}
-      <AddRunModal
-        open={showAddRunModal}
-        onOpenChange={setShowAddRunModal}
-        onRunAdded={refreshWorkouts}
-      />
-      <AddActivityModal
-        open={showAddActivityModal}
-        onOpenChange={setShowAddActivityModal}
-        onActivityAdded={refreshWorkouts}
-      />
-      <RouteSelectorModal
-        open={showRouteSelectorModal}
-        onOpenChange={setShowRouteSelectorModal}
-        onRouteSelect={() => {}}
-      />
-      <RescheduleModal
-        open={showRescheduleModal}
-        onOpenChange={setShowRescheduleModal}
-        workout={todaysWorkout}
-        onReschedule={refreshWorkouts}
-      />
-      <DateWorkoutModal
-        open={showDateWorkoutModal}
-        onOpenChange={setShowDateWorkoutModal}
-        date={selectedDate || new Date()}
-        onWorkoutAdded={refreshWorkouts}
-      />
+      {/* Modals - wrapped with error boundaries to prevent app crashes */}
+      <ModalErrorBoundary modalName="Add Run" onClose={() => setShowAddRunModal(false)}>
+        <AddRunModal
+          open={showAddRunModal}
+          onOpenChange={setShowAddRunModal}
+          onRunAdded={refreshWorkouts}
+        />
+      </ModalErrorBoundary>
+      
+      <ModalErrorBoundary modalName="Add Activity" onClose={() => setShowAddActivityModal(false)}>
+        <AddActivityModal
+          open={showAddActivityModal}
+          onOpenChange={setShowAddActivityModal}
+          onActivityAdded={refreshWorkouts}
+        />
+      </ModalErrorBoundary>
+      
+      <ModalErrorBoundary modalName="Route Selector" onClose={() => setShowRouteSelectorModal(false)}>
+        <RouteSelectorModal
+          open={showRouteSelectorModal}
+          onOpenChange={setShowRouteSelectorModal}
+          onRouteSelect={handleRouteSelected}
+        />
+      </ModalErrorBoundary>
+      
+      <ModalErrorBoundary modalName="Reschedule" onClose={() => setShowRescheduleModal(false)}>
+        <RescheduleModal
+          open={showRescheduleModal}
+          onOpenChange={setShowRescheduleModal}
+          workout={todaysWorkout}
+          onReschedule={refreshWorkouts}
+        />
+      </ModalErrorBoundary>
+      
+      <ModalErrorBoundary modalName="Date Workout" onClose={() => setShowDateWorkoutModal(false)}>
+        <DateWorkoutModal
+          open={showDateWorkoutModal}
+          onOpenChange={setShowDateWorkoutModal}
+          date={selectedDate || new Date()}
+          onWorkoutAdded={refreshWorkouts}
+        />
+      </ModalErrorBoundary>
       <CoachingPreferencesSettings
         open={showCoachingPreferences}
         onOpenChange={setShowCoachingPreferences}

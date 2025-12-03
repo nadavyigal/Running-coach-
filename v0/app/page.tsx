@@ -167,6 +167,7 @@ try {
 }
 
 export default function RunSmartApp() {
+  const [mounted, setMounted] = useState(false) // Fix hydration by rendering only after mount
   const [currentScreen, setCurrentScreen] = useState<string>("onboarding")
   const [isOnboardingComplete, setIsOnboardingComplete] = useState(false)
   const [isLoading, setIsLoading] = useState(false) // CRITICAL FIX: Start with loading=false
@@ -183,7 +184,13 @@ export default function RunSmartApp() {
 
   console.log('🚀 RunSmartApp component rendering...', { isLoading, isOnboardingComplete })
 
+  // Set mounted state to fix hydration issues
   useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!mounted) return // Don't initialize until mounted
     console.log('🔍 RunSmartApp useEffect running...')
 
     // Prevent double initialization in React Strict Mode
@@ -488,6 +495,18 @@ export default function RunSmartApp() {
   }
 
   console.log('🎭 Current screen:', currentScreen, 'Onboarding complete:', isOnboardingComplete, 'Loading:', isLoading, 'Error:', hasError)
+
+  // Show minimal loading during SSR and initial hydration to prevent mismatch
+  if (!mounted) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Initializing...</p>
+        </div>
+      </div>
+    )
+  }
 
   if (isLoading) {
     console.log('⏳ Showing loading state...')
