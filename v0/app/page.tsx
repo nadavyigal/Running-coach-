@@ -139,7 +139,7 @@ try {
 export default function RunSmartApp() {
   const [currentScreen, setCurrentScreen] = useState<string>("onboarding")
   const [isOnboardingComplete, setIsOnboardingComplete] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false) // CRITICAL FIX: Start with loading=false
   const [hasError, setHasError] = useState(false)
   const [showDebugPanel, setShowDebugPanel] = useState(false)
   const [safeMode, setSafeMode] = useState(false)
@@ -147,37 +147,27 @@ export default function RunSmartApp() {
 
   // Ref to prevent double initialization in React Strict Mode
   const initRef = useRef(false)
-  const hasInitialized = useRef(false)
 
   // Call chunk error handler hook unconditionally (hooks must be called at top level)
   useChunkErrorHandler()
 
-  console.log('🚀 RunSmartApp component rendering...')
-
-  // CRITICAL FIX: Ensure loading completes even if useEffect doesn't run
-  if (isLoading && !hasInitialized.current && typeof window !== 'undefined') {
-    hasInitialized.current = true
-    setTimeout(() => {
-      console.log('⏰ Timer-based initialization complete')
-      setIsLoading(false)
-    }, 1000)
-  }
+  console.log('🚀 RunSmartApp component rendering...', { isLoading, isOnboardingComplete })
 
   useEffect(() => {
+    console.log('🔍 RunSmartApp useEffect running...')
+
     // Prevent double initialization in React Strict Mode
     if (initRef.current) {
-      console.log('🔍 Skipping duplicate initialization (React Strict Mode)')
+      console.log('🔍 Skipping duplicate initialization (already initialized)')
       return
     }
     initRef.current = true
 
-    console.log('🔍 RunSmartApp useEffect running...')
-
-    // CRITICAL SAFETY: Ensure loading state clears even if init hangs
+    // CRITICAL SAFETY: Set a maximum timeout for initialization
     const safetyTimeout = setTimeout(() => {
-      console.warn('⚠️ SAFETY TIMEOUT: Initialization took too long, forcing load complete')
+      console.warn('⚠️ SAFETY TIMEOUT: Forcing initialization complete')
       setIsLoading(false)
-    }, 5000) // 5 second failsafe
+    }, 3000) // 3 second maximum
 
     // Global error handler
     const handleGlobalError = (event: ErrorEvent) => {
@@ -377,11 +367,12 @@ export default function RunSmartApp() {
         } catch (initErr) {
           console.error('[app:init:error] ❌ Enhanced initialization failed:', initErr)
           logError('App initialization failed', initErr instanceof Error ? initErr : String(initErr));
-          
+
           const errorMessage = initErr instanceof Error ? initErr.message : 'Initialization failed';
           setErrorMessage(errorMessage);
           setHasError(true);
-          
+          setIsLoading(false); // CRITICAL: Clear loading state on error
+
           // Final fallback - just show onboarding
           setIsOnboardingComplete(false);
         }
