@@ -555,14 +555,14 @@ export default function RunSmartApp() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-md mx-auto relative">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50/30 to-cyan-50/30 max-w-md mx-auto relative">
       <div className="pb-20">{renderScreen()}</div>
       {isOnboardingComplete && <BottomNavigation currentScreen={currentScreen} onScreenChange={setCurrentScreen} />}
-      
+
       {/* Debug Panel - Access with Ctrl+Shift+D */}
-      <OnboardingDebugPanel 
-        isOpen={showDebugPanel} 
-        onClose={() => setShowDebugPanel(false)} 
+      <OnboardingDebugPanel
+        isOpen={showDebugPanel}
+        onClose={() => setShowDebugPanel(false)}
       />
     </div>
   )
