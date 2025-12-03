@@ -144,14 +144,24 @@ export default function RunSmartApp() {
   const [showDebugPanel, setShowDebugPanel] = useState(false)
   const [safeMode, setSafeMode] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  
+
   // Ref to prevent double initialization in React Strict Mode
   const initRef = useRef(false)
+  const hasInitialized = useRef(false)
 
   // Call chunk error handler hook unconditionally (hooks must be called at top level)
   useChunkErrorHandler()
 
   console.log('🚀 RunSmartApp component rendering...')
+
+  // CRITICAL FIX: Ensure loading completes even if useEffect doesn't run
+  if (isLoading && !hasInitialized.current && typeof window !== 'undefined') {
+    hasInitialized.current = true
+    setTimeout(() => {
+      console.log('⏰ Timer-based initialization complete')
+      setIsLoading(false)
+    }, 1000)
+  }
 
   useEffect(() => {
     // Prevent double initialization in React Strict Mode
@@ -160,20 +170,28 @@ export default function RunSmartApp() {
       return
     }
     initRef.current = true
-    
+
     console.log('🔍 RunSmartApp useEffect running...')
-    
+
+    // CRITICAL SAFETY: Ensure loading state clears even if init hangs
+    const safetyTimeout = setTimeout(() => {
+      console.warn('⚠️ SAFETY TIMEOUT: Initialization took too long, forcing load complete')
+      setIsLoading(false)
+    }, 5000) // 5 second failsafe
+
     // Global error handler
     const handleGlobalError = (event: ErrorEvent) => {
       console.error('Global error caught:', event.error);
       setErrorMessage(event.error?.message || 'Unknown error occurred');
       setHasError(true);
+      setIsLoading(false); // Ensure loading clears on error
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       console.error('Unhandled promise rejection:', event.reason);
       setErrorMessage(event.reason?.message || 'Promise rejection occurred');
       setHasError(true);
+      setIsLoading(false); // Ensure loading clears on error
     };
 
     window.addEventListener('error', handleGlobalError);
@@ -379,9 +397,12 @@ export default function RunSmartApp() {
       setIsLoading(false)
     }
 
-    initializeApp()
+    initializeApp().finally(() => {
+      clearTimeout(safetyTimeout) // Clear safety timeout if init completes normally
+    })
 
     return () => {
+      clearTimeout(safetyTimeout)
       window.removeEventListener('error', handleGlobalError);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
