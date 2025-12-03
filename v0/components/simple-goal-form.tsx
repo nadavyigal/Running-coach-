@@ -77,6 +77,17 @@ export function SimpleGoalForm({ isOpen, onClose, userId, onGoalCreated }: Simpl
   const [deadline, setDeadline] = useState<Date>();
   const [motivation, setMotivation] = useState('');
 
+  // Debug: Log state changes
+  useEffect(() => {
+    console.log('[SimpleGoalForm] State updated:', {
+      hasTitle: !!title,
+      hasTargetValue: !!targetValue,
+      hasDeadline: !!deadline,
+      deadlineValue: deadline?.toISOString(),
+      isButtonEnabled: title && targetValue && deadline && !isSubmitting && !generatingPlan
+    });
+  }, [title, targetValue, deadline, isSubmitting, generatingPlan]);
+
   // Auto-calculated fields
   const [feasibility, setFeasibility] = useState<string>('');
 
@@ -124,8 +135,18 @@ export function SimpleGoalForm({ isOpen, onClose, userId, onGoalCreated }: Simpl
 
   // Form submission with auto-plan generation
   const handleSubmit = async () => {
+    // Debug: Log current form state
+    console.log('[SimpleGoalForm] handleSubmit called');
+    console.log('[SimpleGoalForm] Form state:', {
+      title,
+      targetValue,
+      deadline: deadline?.toISOString(),
+      isButtonDisabled: isSubmitting || generatingPlan || !title || !targetValue || !deadline
+    });
+
     // Validate minimal required fields
     if (!title || !targetValue || !deadline) {
+      console.error('[SimpleGoalForm] Validation failed - missing required fields');
       toast({
         title: 'Missing required fields',
         description: 'Please provide a title, target value, and deadline',
