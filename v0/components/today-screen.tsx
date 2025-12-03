@@ -112,7 +112,7 @@ export function TodayScreen() {
         const user = await dbUtils.getCurrentUser()
         if (user) {
           setUserId(user.id!)
-          const userPlan = await dbUtils.getPlanByUserId(user.id!)
+          const userPlan = await dbUtils.getActivePlan(user.id!)
           setPlan(userPlan)
         }
 
