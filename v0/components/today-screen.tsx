@@ -114,13 +114,20 @@ export function TodayScreen() {
           setUserId(user.id!)
           const userPlan = await dbUtils.getActivePlan(user.id!)
           setPlan(userPlan)
+
+          // Get workouts for the current week
+          const today = new Date()
+          const startOfWeek = new Date(today)
+          startOfWeek.setDate(today.getDate() - today.getDay()) // Start of week (Sunday)
+          const endOfWeek = new Date(startOfWeek)
+          endOfWeek.setDate(startOfWeek.getDate() + 6) // End of week (Saturday)
+
+          const workouts = await dbUtils.getWorkoutsForDateRange(user.id!, startOfWeek, endOfWeek)
+          setWeeklyWorkouts(workouts)
+
+          const todaysWorkout = await dbUtils.getTodaysWorkout(user.id!)
+          setTodaysWorkout(todaysWorkout)
         }
-
-        const workouts = await dbUtils.getWeeklyWorkouts()
-        setWeeklyWorkouts(workouts)
-
-        const today = await dbUtils.getTodaysWorkout()
-        setTodaysWorkout(today)
         setIsLoadingWorkout(false)
       } catch (error) {
         console.error("Error initializing data:", error)
