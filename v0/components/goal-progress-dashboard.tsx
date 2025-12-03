@@ -546,11 +546,7 @@ export function GoalProgressDashboard({ userId, className = '' }: GoalProgressDa
         userId={userId}
         onGoalCreated={() => {
           loadGoalsProgress();
-          toast({
-            variant: "success",
-            title: "Goal Created! 🎯",
-            description: "Your new goal has been added to your dashboard.",
-          });
+          // Toast is already shown by SimpleGoalForm with SMART score
         }}
       />
     </div>
