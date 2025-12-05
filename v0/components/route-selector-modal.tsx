@@ -99,59 +99,7 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
     }
   }, [toast, userLocation])
 
-  // Load routes when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      loadRoutes()
-    }
-  }, [isOpen, loadRoutes])
-
-  // Request GPS location when modal opens
-  useEffect(() => {
-    if (isOpen && locationStatus === 'idle') {
-      const cleanup = requestLocation()
-      return cleanup
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, locationStatus])
-
-  // Calculate routes with distance from user
-  const routesWithDistance = useMemo((): RouteWithDistance[] => {
-    if (!userLocation) {
-      return routes.map(route => ({ ...route, distanceFromUser: undefined }))
-    }
-
-    return routes.map(route => {
-      const distanceFromUser = route.startLat && route.startLng
-        ? calculateDistance(
-            userLocation.latitude,
-            userLocation.longitude,
-            route.startLat,
-            route.startLng
-          )
-        : UNKNOWN_DISTANCE_KM
-
-      return { ...route, distanceFromUser }
-    }).sort((a, b) =>
-      (a.distanceFromUser ?? UNKNOWN_DISTANCE_KM) - (b.distanceFromUser ?? UNKNOWN_DISTANCE_KM)
-    )
-  }, [routes, userLocation])
-
-  // Filter routes by radius
-  const nearbyRoutes = useMemo((): RouteWithDistance[] => {
-    if (!userLocation) return routesWithDistance
-
-    return routesWithDistance.filter(
-      route => route.distanceFromUser === undefined || route.distanceFromUser <= radiusKm
-    )
-  }, [routesWithDistance, userLocation, radiusKm])
-
-  // Get the previewed route object
-  const previewedRoute = useMemo(() => {
-    if (!previewedRouteId) return null
-    return nearbyRoutes.find(r => r.id === previewedRouteId) || null
-  }, [previewedRouteId, nearbyRoutes])
-
+  // Define requestLocation before it's used
   const requestLocation = useCallback(() => {
     const isSecure = typeof window !== 'undefined' &&
       (window.location.protocol === 'https:' || window.location.hostname === 'localhost')
@@ -204,6 +152,59 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
       isMounted = false
     }
   }, [])
+
+  // Load routes when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      loadRoutes()
+    }
+  }, [isOpen, loadRoutes])
+
+  // Request GPS location when modal opens
+  useEffect(() => {
+    if (isOpen && locationStatus === 'idle') {
+      const cleanup = requestLocation()
+      return cleanup
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, locationStatus])
+
+  // Calculate routes with distance from user
+  const routesWithDistance = useMemo((): RouteWithDistance[] => {
+    if (!userLocation) {
+      return routes.map(route => ({ ...route, distanceFromUser: undefined }))
+    }
+
+    return routes.map(route => {
+      const distanceFromUser = route.startLat && route.startLng
+        ? calculateDistance(
+            userLocation.latitude,
+            userLocation.longitude,
+            route.startLat,
+            route.startLng
+          )
+        : UNKNOWN_DISTANCE_KM
+
+      return { ...route, distanceFromUser }
+    }).sort((a, b) =>
+      (a.distanceFromUser ?? UNKNOWN_DISTANCE_KM) - (b.distanceFromUser ?? UNKNOWN_DISTANCE_KM)
+    )
+  }, [routes, userLocation])
+
+  // Filter routes by radius
+  const nearbyRoutes = useMemo((): RouteWithDistance[] => {
+    if (!userLocation) return routesWithDistance
+
+    return routesWithDistance.filter(
+      route => route.distanceFromUser === undefined || route.distanceFromUser <= radiusKm
+    )
+  }, [routesWithDistance, userLocation, radiusKm])
+
+  // Get the previewed route object
+  const previewedRoute = useMemo(() => {
+    if (!previewedRouteId) return null
+    return nearbyRoutes.find(r => r.id === previewedRouteId) || null
+  }, [previewedRouteId, nearbyRoutes])
 
   const handleRoutePreview = (route: Route) => {
     // If already previewed, select it

@@ -39,7 +39,7 @@ export default function RootLayout({
       <head>
         {/* Resource hints for external services */}
         <link rel="dns-prefetch" href="https://us.i.posthog.com" />
-        <link rel="preconnect" href="https://us.i.posthog.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://us.i.posthog.com" crossOrigin="" />
       </head>
       <body className={inter.className}>
         <InitialLoadingSkeleton />

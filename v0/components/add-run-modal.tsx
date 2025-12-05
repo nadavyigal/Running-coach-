@@ -188,10 +188,10 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
 
   // Load plan data for calendar validation when modal opens
   useEffect(() => {
-    if (isOpen && step === "configure") {
+    if (open && step === "configure") {
       loadPlanData()
     }
-  }, [isOpen, step])
+  }, [open, step])
 
   // Load plan data for calendar validation
   const loadPlanData = async () => {
