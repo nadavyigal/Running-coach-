@@ -62,11 +62,14 @@ export function RouteMap({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<MapLibreMarker[]>([]);
+  const routeLayerIdsRef = useRef<string[]>([]);
+  const routeSourceIdsRef = useRef<string[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [mapLibre, setMapLibre] = useState<any>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   // Dynamically import MapLibre GL JS (client-side only)
   useEffect(() => {
@@ -138,6 +141,7 @@ export function RouteMap({
 
       map.on('load', () => {
         setIsLoading(false);
+        setMapReady(true);
         trackMapLoaded({
           tile_provider: useFallback ? 'osm' : 'maptiler',
           dark_mode: darkMode,
@@ -168,11 +172,13 @@ export function RouteMap({
 
     return () => {
       if (mapRef.current) {
+        removeRouteLayers();
         mapRef.current.remove();
         mapRef.current = null;
       }
+      setMapReady(false);
     };
-  }, [mapLibre, center.lat, center.lng, zoom, interactive, darkMode, retryCount]);
+  }, [mapLibre, center.lat, center.lng, zoom, interactive, darkMode, retryCount, removeRouteLayers]);
 
   // Clear markers helper
   const clearMarkers = useCallback(() => {
@@ -182,7 +188,7 @@ export function RouteMap({
 
   // Attach map click handler for waypoint placement / selection
   useEffect(() => {
-    if (!mapRef.current || !onMapClick) return;
+    if (!mapRef.current || !onMapClick || !mapReady) return;
 
     const handler = (e: any) => {
       onMapClick({ lng: e.lngLat.lng, lat: e.lngLat.lat });
@@ -193,45 +199,60 @@ export function RouteMap({
     return () => {
       mapRef.current?.off('click', handler);
     };
-  }, [onMapClick]);
+  }, [onMapClick, mapReady]);
+
+  const removeRouteLayers = useCallback(() => {
+    if (!mapRef.current) return;
+
+    routeLayerIdsRef.current.forEach((id) => {
+      if (mapRef.current?.getLayer(id)) {
+        mapRef.current.removeLayer(id);
+      }
+    });
+
+    routeSourceIdsRef.current.forEach((id) => {
+      if (mapRef.current?.getSource(id)) {
+        mapRef.current.removeSource(id);
+      }
+    });
+
+    routeLayerIdsRef.current = [];
+    routeSourceIdsRef.current = [];
+  }, []);
 
   // Add route markers and paths
   useEffect(() => {
-    if (!mapRef.current || !mapLibre || !routes.length) return;
+    if (!mapRef.current || !mapLibre || !mapReady) return;
 
     clearMarkers();
+    removeRouteLayers();
+
+    if (!routes.length) {
+      return;
+    }
 
     routes.forEach(route => {
-      // Parse GPS path
       const pathPoints = parseGpsPath(route.gpsPath);
 
-      // Add route line if path exists
       if (pathPoints.length >= 2) {
         const sourceId = `route-${route.id}`;
         const layerId = `route-line-${route.id}`;
 
-        // Remove existing source/layer if present
-        if (mapRef.current?.getLayer(layerId)) {
-          mapRef.current.removeLayer(layerId);
-        }
-        if (mapRef.current?.getSource(sourceId)) {
-          mapRef.current.removeSource(sourceId);
-        }
-
-        // Add route source
-        mapRef.current.addSource(sourceId, {
-          type: 'geojson',
-          data: {
-            type: 'Feature',
-            properties: {},
-            geometry: {
-              type: 'LineString',
-              coordinates: pathPoints.map(p => [p.lng, p.lat]),
+        if (!mapRef.current?.getSource(sourceId)) {
+          mapRef.current.addSource(sourceId, {
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'LineString',
+                coordinates: pathPoints.map(p => [p.lng, p.lat]),
+              },
             },
-          },
-        });
+          });
+          routeSourceIdsRef.current.push(sourceId);
+        }
 
-        // Add route line layer
         const isSelected = route.id === selectedRouteId;
         const routeColor =
           route.routeType === 'custom'
@@ -240,25 +261,27 @@ export function RouteMap({
             ? MAP_CONFIG.routes.colors.selected
             : MAP_CONFIG.routes.colors.default;
 
-        mapRef.current.addLayer({
-          id: layerId,
-          type: 'line',
-          source: sourceId,
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round',
-          },
-          paint: {
-            'line-color': routeColor,
-            'line-width': isSelected
-              ? MAP_CONFIG.routes.selectedLineWidth
-              : MAP_CONFIG.routes.lineWidth,
-            'line-opacity': MAP_CONFIG.routes.opacity,
-          },
-        });
+        if (!mapRef.current?.getLayer(layerId)) {
+          mapRef.current.addLayer({
+            id: layerId,
+            type: 'line',
+            source: sourceId,
+            layout: {
+              'line-join': 'round',
+              'line-cap': 'round',
+            },
+            paint: {
+              'line-color': routeColor,
+              'line-width': isSelected
+                ? MAP_CONFIG.routes.selectedLineWidth
+                : MAP_CONFIG.routes.lineWidth,
+              'line-opacity': MAP_CONFIG.routes.opacity,
+            },
+          });
+          routeLayerIdsRef.current.push(layerId);
+        }
       }
 
-      // Add start marker
       if (route.startLat && route.startLng) {
         const el = document.createElement('div');
         el.className = 'route-marker';
@@ -288,7 +311,6 @@ export function RouteMap({
       }
     });
 
-    // Fit bounds to show all routes
     if (routes.length > 0 && routes.some(r => r.startLat && r.startLng)) {
       const allPoints: LatLng[] = [];
 
@@ -318,7 +340,7 @@ export function RouteMap({
         );
       }
     }
-  }, [routes, selectedRouteId, mapLibre, onRouteClick, clearMarkers, userLocation]);
+  }, [routes, selectedRouteId, mapLibre, onRouteClick, clearMarkers, userLocation, mapReady, removeRouteLayers]);
 
   // Add user location marker
   useEffect(() => {
@@ -354,6 +376,7 @@ export function RouteMap({
       mapRef.current.remove();
       mapRef.current = null;
     }
+    setMapReady(false);
     setRetryCount(count => count + 1);
   }, []);
 

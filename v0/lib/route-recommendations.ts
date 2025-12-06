@@ -1,4 +1,4 @@
-import { type User } from './db';
+// Removed unused import: User
 
 export interface Route {
   id: string;
@@ -363,7 +363,7 @@ export class RouteRecommendationService {
   /**
    * Check if cache entry is still valid
    */
-  private isCacheValid(cacheKey: string): boolean {
+  private isCacheValid(_cacheKey: string): boolean {
     // In a real implementation, you'd check timestamps
     // For now, we'll rely on the timeout mechanism
     return true;

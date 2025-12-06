@@ -16,6 +16,7 @@ import { seedDemoRoutes } from "@/lib/seedRoutes"
 import { clearTelAvivDemoRoutes, shouldClearTelAvivRoutes } from "@/lib/clearDemoRoutes"
 import { useToast } from "@/hooks/use-toast"
 import { getDifficultyColor, getDifficultyLabel, UNKNOWN_DISTANCE_KM, isDevelopment } from "@/lib/routeHelpers"
+import { getLocation } from "@/lib/location-service"
 
 interface RouteSelectorModalProps {
   isOpen: boolean
@@ -75,11 +76,10 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
 
       const count = await db.routes.count()
       if (count === 0) {
-        // Don't seed demo routes - users should create custom routes
-        // or routes should be fetched based on their location
-        if (isDevelopment()) {
-          console.log('No routes found. Users should create custom routes.')
-        }
+        await seedDemoRoutes(false, userLocation ? {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude
+        } : undefined)
       }
 
       const allRoutes = await db.routes.toArray()
@@ -100,56 +100,25 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
   }, [toast, userLocation])
 
   // Define requestLocation before it's used
-  const requestLocation = useCallback(() => {
-    const isSecure = typeof window !== 'undefined' &&
-      (window.location.protocol === 'https:' || window.location.hostname === 'localhost')
-
-    if (!isSecure) {
-      if (isDevelopment()) {
-        console.warn('[RouteSelectorModal] Not running on HTTPS - GPS unavailable')
-      }
-      setLocationStatus('unavailable')
-      return
-    }
-
-    if (!navigator.geolocation) {
-      setLocationStatus('unavailable')
-      return
-    }
-
+  const requestLocation = useCallback(async () => {
     setLocationStatus('loading')
 
-    let isMounted = true
+    const result = await getLocation({ timeoutMs: 10000, enableHighAccuracy: false })
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        if (isMounted) {
-          setUserLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy
-          })
-          setLocationStatus('granted')
-        }
-      },
-      (error) => {
-        if (isMounted) {
-          if (error.code === error.PERMISSION_DENIED) {
-            setLocationStatus('denied')
-          } else {
-            setLocationStatus('unavailable')
-          }
-        }
-      },
-      {
-        enableHighAccuracy: false,
-        timeout: 10000,
-        maximumAge: 300000
-      }
-    )
+    if (result.coords) {
+      setUserLocation({
+        latitude: result.coords.latitude,
+        longitude: result.coords.longitude,
+        accuracy: result.coords.accuracy,
+      })
+    }
 
-    return () => {
-      isMounted = false
+    if (result.status === 'granted') {
+      setLocationStatus('granted')
+    } else if (result.status === 'denied') {
+      setLocationStatus('denied')
+    } else {
+      setLocationStatus('unavailable')
     }
   }, [])
 
@@ -163,8 +132,7 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
   // Request GPS location when modal opens
   useEffect(() => {
     if (isOpen && locationStatus === 'idle') {
-      const cleanup = requestLocation()
-      return cleanup
+      requestLocation()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, locationStatus])

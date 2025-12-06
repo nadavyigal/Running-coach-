@@ -585,10 +585,11 @@ export function ChatScreen() {
             disabled={isLoading}
             className="flex-1"
           />
-                     <Button 
-             type="submit" 
+                     <Button
+             type="submit"
              disabled={!inputValue.trim() || isLoading}
              size="icon"
+             aria-label="Send message"
            >
             <Send className="h-4 w-4" />
           </Button>
