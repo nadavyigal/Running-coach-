@@ -296,6 +296,14 @@ export default function RunSmartApp() {
           console.log('[app:init:start] Starting enhanced application initialization...')
           logDiagnostic('database', 'App initialization started');
 
+          // Check environment in production
+          if (process.env.NODE_ENV === 'production') {
+            console.log('[app:init:env] Running in production mode');
+            if (!process.env.NEXT_PUBLIC_APP_URL) {
+              console.warn('[app:init:env] ⚠️ NEXT_PUBLIC_APP_URL not set in production');
+            }
+          }
+
           // Check for force-onboarding flag (set after reset)
           const forceOnboarding = sessionStorage.getItem('force-onboarding') === 'true'
           if (forceOnboarding) {
@@ -476,22 +484,65 @@ export default function RunSmartApp() {
   const handleOnboardingComplete = async (userData?: any) => {
     console.log('✅ Onboarding completed by user with data:', userData)
 
-    // Trust the atomic operation - no verification needed
-    // completeOnboardingAtomic() already created user + plan
-    const finalUserData = userData || {
-      experience: 'beginner',
-      goal: 'habit',
-      daysPerWeek: 3,
-      preferredTimes: ['morning'],
-      age: 30,
-    };
+    try {
+      // CRITICAL FIX: Verify database was actually updated
+      const database = getDatabase();
+      if (!database) {
+        throw new Error('Database not available after onboarding');
+      }
 
-    setIsOnboardingComplete(true)
-    setCurrentScreen("today")
-    localStorage.setItem("onboarding-complete", "true")
-    localStorage.setItem("user-data", JSON.stringify(finalUserData))
+      // Poll for user with onboardingComplete=true (max 5 seconds)
+      let verified = false;
+      const startTime = Date.now();
+      const maxWait = 5000;
 
-    console.log('✅ Onboarding complete - Navigating to Today screen')
+      while (!verified && (Date.now() - startTime) < maxWait) {
+        const users = await database.users
+          .filter(u => Boolean(u.onboardingComplete))
+          .toArray();
+
+        if (users.length > 0) {
+          verified = true;
+          console.log('✅ Database verification successful - user persisted with id:', users[0].id);
+          break;
+        }
+
+        await new Promise(r => setTimeout(r, 200)); // Wait 200ms before retry
+      }
+
+      if (!verified) {
+        throw new Error('Database verification failed - user not persisted after ' + maxWait + 'ms');
+      }
+
+      // NOW safe to update UI state
+      const finalUserData = userData || {
+        experience: 'beginner',
+        goal: 'habit',
+        daysPerWeek: 3,
+        preferredTimes: ['morning'],
+        age: 30,
+      };
+
+      setIsOnboardingComplete(true)
+      setCurrentScreen("today")
+      localStorage.setItem("onboarding-complete", "true")
+      localStorage.setItem("user-data", JSON.stringify(finalUserData))
+
+      console.log('✅ Onboarding complete - Navigating to Today screen')
+
+    } catch (error) {
+      console.error('❌ Onboarding verification failed:', error);
+
+      toast({
+        title: "Setup Incomplete",
+        description: "There was an issue saving your profile. Please try again.",
+        variant: "destructive"
+      });
+
+      // Reset to onboarding to let user try again
+      setIsOnboardingComplete(false);
+      setCurrentScreen("onboarding");
+    }
   }
 
   console.log('🎭 Current screen:', currentScreen, 'Onboarding complete:', isOnboardingComplete, 'Loading:', isLoading, 'Error:', hasError)

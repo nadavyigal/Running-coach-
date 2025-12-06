@@ -198,15 +198,30 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
     try {
       const { dbUtils } = await import('@/lib/dbUtils')
       const user = await dbUtils.getCurrentUser()
-      if (user && user.id) {
-        const plan = await dbUtils.ensureUserHasActivePlan(user.id)
-        if (plan) {
-          setPlanStartDate(new Date(plan.startDate))
-          setPlanEndDate(new Date(plan.endDate))
-        }
+
+      if (!user || !user.id) {
+        console.error('[AddRunModal] No valid user found');
+        toast({
+          title: "User Not Found",
+          description: "Please complete onboarding first.",
+          variant: "destructive"
+        });
+        onOpenChange(false); // Close modal
+        return;
+      }
+
+      const plan = await dbUtils.ensureUserHasActivePlan(user.id)
+      if (plan) {
+        setPlanStartDate(new Date(plan.startDate))
+        setPlanEndDate(new Date(plan.endDate))
       }
     } catch (error) {
-      console.error("Failed to load plan data for calendar:", error)
+      console.error("[AddRunModal] Failed to load plan data for calendar:", error)
+      toast({
+        title: "Error Loading Data",
+        description: "Could not load your training plan. Please try again.",
+        variant: "destructive"
+      });
     }
   }
 

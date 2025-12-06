@@ -1113,13 +1113,34 @@ function checkIndexedDBSupport(): boolean {
 let dbInstance: RunSmartDB | null = null;
 
 // Enhanced database initialization with error handling and concurrent access safety
+async function checkStorageQuota(): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.estimate) {
+    try {
+      const estimate = await navigator.storage.estimate();
+      if (estimate.usage && estimate.quota) {
+        const percentUsed = (estimate.usage / estimate.quota) * 100;
+        console.log(`[db:init] Storage: ${percentUsed.toFixed(1)}% used (${(estimate.usage / 1024 / 1024).toFixed(2)}MB / ${(estimate.quota / 1024 / 1024).toFixed(2)}MB)`);
+
+        if (percentUsed > 90) {
+          console.warn('[db:init] ⚠️ Storage quota nearly full - may cause issues');
+        }
+      }
+    } catch (error) {
+      console.warn('[db:init] Could not check storage quota:', error);
+    }
+  }
+}
+
 function createDatabaseInstance(): RunSmartDB | null {
   try {
     if (!checkIndexedDBSupport()) {
       console.warn('⚠️ IndexedDB not supported, database functionality will be limited');
       return null;
     }
-    
+
+    // Check storage quota (async but don't block initialization)
+    checkStorageQuota().catch(err => console.warn('[db:init] Storage check failed:', err));
+
     console.log('✅ IndexedDB support confirmed, initializing database...');
     const db = new RunSmartDB();
     
