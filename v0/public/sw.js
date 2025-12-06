@@ -1,8 +1,9 @@
 // Service Worker for Running Coach PWA
 // Implements cache-first strategy for static assets to improve performance
+// Updated: 2025-12-06 - Cleared all caches for latest UI updates
 
-const CACHE_NAME = 'running-coach-v3';
-const STATIC_CACHE = 'static-v3';
+const CACHE_NAME = 'running-coach-v4-20251206';
+const STATIC_CACHE = 'static-v4-20251206';
 
 // Cache Next.js static assets on install
 const STATIC_ASSETS = [
