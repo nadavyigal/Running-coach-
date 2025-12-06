@@ -1259,6 +1259,31 @@ export async function getUserGoals(userId: number, status?: Goal['status']): Pro
   }, 'getUserGoals', []);
 }
 
+export async function getPrimaryGoal(userId: number): Promise<Goal | null> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+    const goal = await db.goals
+      .where('userId')
+      .equals(userId)
+      .and(g => g.isPrimary === true)
+      .first();
+    return goal || null;
+  }, 'getPrimaryGoal', null);
+}
+
+export async function setPrimaryGoal(userId: number, goalId: number): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+
+    await db.transaction('rw', db.goals, async () => {
+      // Clear existing primary flags for this user
+      await db.goals.where('userId').equals(userId).modify({ isPrimary: false });
+      // Mark specified goal as primary and active
+      await db.goals.update(goalId, { isPrimary: true, status: 'active', updatedAt: new Date() });
+    });
+  }, 'setPrimaryGoal');
+}
+
 /**
  * Get a single goal by ID
  */
@@ -3402,6 +3427,8 @@ export const dbUtils = {
   createGoal,
   updateGoal,
   getUserGoals,
+  getPrimaryGoal,
+  setPrimaryGoal,
   getGoal,
   getGoalWithMilestones,
   getGoalMilestones,

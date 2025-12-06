@@ -634,6 +634,8 @@ export interface Plan {
   lastComplexityUpdate?: Date;
   adaptationFactors?: AdaptationFactor[];
   userFeedback?: PlanFeedback[];
+  // Goal linkage
+  goalId?: number;
   // Timezone handling for UTC plan activation
   createdInTimezone?: string; // Timezone where plan was originally created
   createdAt: Date;
@@ -743,6 +745,8 @@ export interface Goal {
   baselineValue: number;
   targetValue: number;
   currentValue: number;
+  isPrimary?: boolean; // Marks the primary/active goal
+  planId?: number; // Linked training plan
   lastUpdated: Date;
   createdAt: Date;
   updatedAt: Date;

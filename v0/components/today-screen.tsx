@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import {
   Sun,
   Clock,
@@ -32,7 +33,7 @@ import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
 import ModalErrorBoundary from "@/components/modal-error-boundary"
-import { type Workout, type Plan, type Route, resetDatabaseInstance } from "@/lib/db"
+import { type Workout, type Plan, type Route, type Goal, resetDatabaseInstance } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { StreakIndicator } from "@/components/streak-indicator"
@@ -79,6 +80,7 @@ export function TodayScreen() {
   const [weeklyWorkouts, setWeeklyWorkouts] = useState<Workout[]>([])
   const [userId, setUserId] = useState<number | null>(null)
   const [plan, setPlan] = useState<Plan | null>(null)
+  const [primaryGoal, setPrimaryGoal] = useState<Goal | null>(null)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [showAddRunModal, setShowAddRunModal] = useState(false)
   const [showAddActivityModal, setShowAddActivityModal] = useState(false)
@@ -101,6 +103,23 @@ export function TodayScreen() {
     "Track your progress! Celebrate small wins - every kilometer counts towards your goal.",
   ]
 
+  const goalProgressPercent = (goal?: Goal | null) => {
+    if (!goal) return 0
+    const baseline = typeof goal.baselineValue === 'number' ? goal.baselineValue : 0
+    const target = typeof goal.targetValue === 'number' ? goal.targetValue : 0
+    const current = typeof goal.currentValue === 'number' ? goal.currentValue : baseline
+    const denominator = target - baseline
+    if (denominator === 0) return 0
+    return Math.min(100, Math.max(0, ((current - baseline) / denominator) * 100))
+  }
+
+  const getDaysRemaining = (goal?: Goal | null) => {
+    if (!goal?.timeBound?.deadline) return null
+    const deadline = new Date(goal.timeBound.deadline)
+    const diff = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    return diff < 0 ? 0 : diff
+  }
+
   const refreshTip = () => {
     const currentIndex = tips.indexOf(dailyTip)
     const nextIndex = (currentIndex + 1) % tips.length
@@ -116,6 +135,8 @@ export function TodayScreen() {
           setUserId(user.id!)
           const userPlan = await dbUtils.getActivePlan(user.id!)
           setPlan(userPlan)
+          const goal = await dbUtils.getPrimaryGoal(user.id!)
+          setPrimaryGoal(goal)
 
           // Get workouts for the current week
           const today = new Date()
@@ -277,6 +298,35 @@ export function TodayScreen() {
 
   return (
     <div className="pb-24 space-y-4">
+      {primaryGoal && (
+        <div className="px-4">
+          <Card className="bg-gradient-to-r from-emerald-50 to-blue-50 border-emerald-200">
+            <CardContent className="p-4 space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-emerald-600">Active Goal</p>
+                  <h3 className="text-lg font-bold text-gray-900">{primaryGoal.title}</h3>
+                  <p className="text-sm text-gray-700">{primaryGoal.description}</p>
+                </div>
+                <div className="text-right">
+                  {getDaysRemaining(primaryGoal) !== null && (
+                    <Badge variant="secondary" className="text-xs">
+                      {getDaysRemaining(primaryGoal)} days remaining
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-xs text-gray-700 mb-1">
+                  <span>Progress</span>
+                  <span>{Math.round(goalProgressPercent(primaryGoal))}%</span>
+                </div>
+                <Progress value={goalProgressPercent(primaryGoal)} className="h-2" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
       {/* Header with Gradient Background */}
       <div className="bg-gradient-to-br from-purple-50 via-white to-cyan-50 p-6 rounded-b-3xl shadow-sm animate-in fade-in-0 duration-500">
         <div className="flex justify-between items-start mb-4">

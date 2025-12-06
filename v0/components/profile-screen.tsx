@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Progress } from "@/components/ui/progress"
 import {
   Settings,
   User,
@@ -38,6 +39,9 @@ import { CoachingPreferencesSettings } from "@/components/coaching-preferences-s
 import { GoalProgressDashboard } from "@/components/goal-progress-dashboard";
 import { PerformanceAnalyticsDashboard } from "@/components/performance-analytics-dashboard";
 import { Brain, Target } from "lucide-react";
+import { GoalCreationWizard } from "@/components/goal-creation-wizard";
+import { type Goal } from "@/lib/db";
+import { regenerateTrainingPlan } from "@/lib/plan-regeneration";
 
 export function ProfileScreen() {
   // Add state for the shoes modal at the top of the component
@@ -51,6 +55,9 @@ export function ProfileScreen() {
   const [selectedBadge, setSelectedBadge] = useState<{ id: string; name: string } | null>(null);
   const [showJoinCohortModal, setShowJoinCohortModal] = useState(false);
   const [showCoachingPreferences, setShowCoachingPreferences] = useState(false);
+  const [showGoalWizard, setShowGoalWizard] = useState(false);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [primaryGoal, setPrimaryGoal] = useState<Goal | null>(null);
 
   const handleShareClick = (badgeId: string, badgeName: string) => {
     setSelectedBadge({ id: badgeId, name: badgeName });
@@ -60,6 +67,60 @@ export function ProfileScreen() {
   const handleCloseShareModal = () => {
     setIsShareModalOpen(false);
     setSelectedBadge(null);
+  };
+
+  const goalProgressPercent = (goal?: Goal | null) => {
+    if (!goal) return 0;
+    const baseline = typeof goal.baselineValue === 'number' ? goal.baselineValue : 0;
+    const target = typeof goal.targetValue === 'number' ? goal.targetValue : 0;
+    const current = typeof goal.currentValue === 'number' ? goal.currentValue : baseline;
+    const denominator = target - baseline;
+    if (denominator === 0) return 0;
+    return Math.min(100, Math.max(0, ((current - baseline) / denominator) * 100));
+  };
+
+  const getDaysRemaining = (goal?: Goal | null) => {
+    if (!goal?.timeBound?.deadline) return null;
+    const deadline = new Date(goal.timeBound.deadline);
+    const diff = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return diff < 0 ? 0 : diff;
+  };
+
+  const loadGoals = async () => {
+    if (!userId) return;
+    try {
+      const [primary, activeGoals] = await Promise.all([
+        dbUtils.getPrimaryGoal(userId),
+        dbUtils.getUserGoals(userId, 'active'),
+      ]);
+      setPrimaryGoal(primary || activeGoals[0] || null);
+      setGoals(activeGoals);
+    } catch (goalError) {
+      console.warn('[ProfileScreen] Failed to load goals:', goalError);
+    }
+  };
+
+  const handleGoalCreated = async (goal?: Goal) => {
+    if (!goal?.id || !userId) return;
+    try {
+      await dbUtils.setPrimaryGoal(userId, goal.id);
+      const updatedGoal = await dbUtils.getGoal(goal.id);
+      if (updatedGoal) {
+        await regenerateTrainingPlan(userId, updatedGoal);
+      }
+      await loadGoals();
+      toast({
+        title: 'Goal created',
+        description: 'Training plan regenerated to target your new goal.',
+      });
+    } catch (goalError) {
+      console.error('[ProfileScreen] Goal creation flow failed:', goalError);
+      toast({
+        title: 'Plan update failed',
+        description: 'Goal saved, but the training plan could not be regenerated.',
+        variant: 'destructive',
+      });
+    }
   };
 
   // Add useEffect to load shoes data
@@ -190,6 +251,12 @@ export function ProfileScreen() {
     loadUserIdFallback();
   }, [isLoading, userId, error]);
 
+  useEffect(() => {
+    if (userId) {
+      loadGoals();
+    }
+  }, [userId]);
+
   const connections = [
     { icon: Footprints, name: "Add Shoes", desc: "Track your running shoes mileage" },
     { icon: Users, name: "Join a Cohort", desc: "Join a community group with an invite code" },
@@ -309,6 +376,97 @@ export function ProfileScreen() {
       {/* Show content only when not loading and no error */}
       {!isLoading && !error && (
         <>
+
+      {/* Goals */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-bold">Goals</h2>
+          <Button size="sm" className="gap-2" onClick={() => setShowGoalWizard(true)}>
+            <Plus className="h-4 w-4" />
+            Create Goal
+          </Button>
+        </div>
+
+        {primaryGoal ? (
+          <Card className="bg-gradient-to-r from-blue-50 to-green-50 border-blue-200">
+            <CardContent className="p-5 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-blue-600">PRIMARY GOAL</p>
+                  <h3 className="text-lg font-semibold text-gray-900">{primaryGoal.title}</h3>
+                  <p className="text-sm text-gray-700">{primaryGoal.description}</p>
+                </div>
+                <div className="text-right space-y-1">
+                  {getDaysRemaining(primaryGoal) !== null && (
+                    <Badge variant="secondary" className="text-xs">
+                      {getDaysRemaining(primaryGoal)} days left
+                    </Badge>
+                  )}
+                  {primaryGoal.timeBound?.deadline && (
+                    <div className="text-xs text-gray-500">
+                      Target date: {new Date(primaryGoal.timeBound.deadline).toLocaleDateString()}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex justify-between text-sm text-gray-700">
+                  <span>Progress</span>
+                  <span>{Math.round(goalProgressPercent(primaryGoal))}%</span>
+                </div>
+                <Progress value={goalProgressPercent(primaryGoal)} className="h-2" />
+                <p className="text-xs text-gray-600">
+                  This plan is designed to help you achieve your goal by the target date.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="p-5 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">No active goal</h3>
+                <p className="text-sm text-gray-600">Set a goal to get a tailored training plan.</p>
+              </div>
+              <Button size="sm" onClick={() => setShowGoalWizard(true)} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Create Goal
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {goals.filter(g => !primaryGoal || g.id !== primaryGoal.id).length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Other Goals</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {goals
+                .filter(g => !primaryGoal || g.id !== primaryGoal.id)
+                .map(goal => (
+                  <div key={goal.id} className="p-3 rounded-lg border bg-gray-50">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h4 className="font-semibold text-gray-900">{goal.title}</h4>
+                        <p className="text-xs text-gray-600">{goal.description}</p>
+                      </div>
+                      <Badge variant="outline" className="text-xs">{goal.status}</Badge>
+                    </div>
+                    <div className="mt-2">
+                      <div className="flex justify-between text-xs text-gray-600 mb-1">
+                        <span>Progress</span>
+                        <span>{Math.round(goalProgressPercent(goal))}%</span>
+                      </div>
+                      <Progress value={goalProgressPercent(goal)} className="h-1.5" />
+                    </div>
+                  </div>
+                ))}
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* User Info */}
       <Card>
@@ -587,6 +745,15 @@ export function ProfileScreen() {
             const shoes = JSON.parse(localStorage.getItem("running-shoes") || "[]")
             setRunningShoes(shoes)
           }}
+        />
+      )}
+
+      {userId && (
+        <GoalCreationWizard
+          isOpen={showGoalWizard}
+          onClose={() => setShowGoalWizard(false)}
+          userId={userId}
+          onGoalCreated={handleGoalCreated}
         />
       )}
 
