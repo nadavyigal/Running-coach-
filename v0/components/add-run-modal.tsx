@@ -200,13 +200,9 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
       const user = await dbUtils.getCurrentUser()
 
       if (!user || !user.id) {
-        console.error('[AddRunModal] No valid user found');
-        toast({
-          title: "User Not Found",
-          description: "Please complete onboarding first.",
-          variant: "destructive"
-        });
-        onOpenChange(false); // Close modal
+        console.error('[AddRunModal] No valid user found - will retry on save');
+        // Don't close modal - user might exist but query was slow
+        // Validation will happen again on save
         return;
       }
 
@@ -217,11 +213,8 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
       }
     } catch (error) {
       console.error("[AddRunModal] Failed to load plan data for calendar:", error)
-      toast({
-        title: "Error Loading Data",
-        description: "Could not load your training plan. Please try again.",
-        variant: "destructive"
-      });
+      // Don't show toast or close modal - let user try to save
+      // Error will be caught during save with better messaging
     }
   }
 

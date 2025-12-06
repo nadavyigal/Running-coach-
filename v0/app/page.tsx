@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import dynamic from 'next/dynamic'
+import { useToast } from "@/hooks/use-toast"
 
 // Safer dynamic imports with comprehensive error handling
 const OnboardingScreen = dynamic(
@@ -114,10 +115,14 @@ const OnboardingDebugPanel = dynamic(() => import("@/components/onboarding-debug
 // Import database utilities with better error handling
 let dbUtils: any = null;
 let seedDemoRoutes: any = null;
+let getDatabase: any = null;
 try {
   const dbModule = require("@/lib/dbUtils");
   dbUtils = dbModule.dbUtils ?? dbModule.default;
   seedDemoRoutes = dbModule.seedDemoRoutes;
+
+  const dbCoreModule = require("@/lib/db");
+  getDatabase = dbCoreModule.getDatabase;
 } catch (dbError) {
   console.error('Failed to load database utilities:', dbError);
   // Create mock dbUtils for graceful degradation
@@ -127,6 +132,7 @@ try {
     ensureUserReady: async () => { console.warn('User ready check skipped - database not available'); return null; },
     waitForProfileReady: async () => { console.warn('Profile ready check skipped - database not available'); return null; }
   };
+  getDatabase = () => { console.warn('getDatabase not available'); return null; };
 }
 
 // Import production diagnostics
@@ -178,6 +184,9 @@ export default function RunSmartApp() {
 
   // Ref to prevent double initialization in React Strict Mode
   const initRef = useRef(false)
+
+  // Toast hook for notifications
+  const { toast } = useToast()
 
   // Call chunk error handler hook unconditionally (hooks must be called at top level)
   useChunkErrorHandler()
