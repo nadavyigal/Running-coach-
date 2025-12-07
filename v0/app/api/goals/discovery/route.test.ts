@@ -10,9 +10,14 @@ vi.mock('@/lib/goalDiscoveryEngine', () => ({
 }));
 
 // Mock the AI SDK
-vi.mock('ai', () => ({
-  generateObject: vi.fn()
-}));
+vi.mock('ai', () => {
+  const generateObjectMock = vi.fn();
+  return {
+    __esModule: true,
+    generateObject: generateObjectMock,
+    default: { generateObject: generateObjectMock }
+  };
+});
 
 // Mock the OpenAI SDK
 vi.mock('@ai-sdk/openai', () => ({
@@ -132,8 +137,8 @@ describe('Goal Discovery API', () => {
 
     it('should include AI enhancement when requested', async () => {
       // Mock AI enhancement
-      const { generateObject } = require('ai');
-      generateObject.mockResolvedValue({
+      const aiModule = await import('ai');
+      const generateObjectSpy = vi.spyOn(aiModule as any, 'generateObject').mockResolvedValue({
         object: {
           suitabilityAnalysis: {
             recommendedGoalTypes: ['consistency', 'health'],
@@ -190,7 +195,7 @@ describe('Goal Discovery API', () => {
 
       expect(response.status).toBe(200);
       expect(responseData.metadata.aiEnhanced).toBe(true);
-      expect(generateObject).toHaveBeenCalled();
+      expect(generateObjectSpy).toHaveBeenCalled();
     });
 
     it('should handle invalid request data', async () => {
@@ -293,8 +298,8 @@ describe('Goal Discovery API', () => {
     });
 
     it('should continue with core results when AI enhancement fails', async () => {
-      const { generateObject } = require('ai');
-      generateObject.mockRejectedValue(new Error('AI service unavailable'));
+      const aiModule = await import('ai');
+      const generateObjectSpy = vi.spyOn(aiModule as any, 'generateObject').mockRejectedValue(new Error('AI service unavailable'));
 
       const requestBody = {
         userProfile: mockUserProfile,
@@ -442,28 +447,29 @@ describe('Goal Discovery API', () => {
       const originalConsoleError = console.error;
       console.error = vi.fn();
 
-      // Force an error by mocking URL constructor to throw
       const OriginalURL = global.URL;
-      global.URL = class extends OriginalURL {
-        constructor(...args: any[]) {
-          super(...args);
-          throw new Error('URL parsing failed');
-        }
-      } as any;
-
-      mockRequest = new NextRequest('http://localhost/api/goals/discovery', {
+      const safeRequest = new NextRequest('http://localhost/api/goals/discovery', {
         method: 'GET'
       });
 
-      const response = await GET(mockRequest);
-      const responseData = await response.json();
+      try {
+        // Force an error inside GET by mocking URL constructor to throw
+        global.URL = class extends OriginalURL {
+          constructor(...args: any[]) {
+            super(...args);
+            throw new Error('URL parsing failed');
+          }
+        } as any;
 
-      expect(response.status).toBe(500);
-      expect(responseData.error).toBe('Failed to get discovery capabilities');
+        const response = await GET(safeRequest);
+        const responseData = await response.json();
 
-      // Restore
-      global.URL = OriginalURL;
-      console.error = originalConsoleError;
+        expect(response.status).toBe(500);
+        expect(responseData.error).toBe('Failed to get discovery capabilities');
+      } finally {
+        global.URL = OriginalURL;
+        console.error = originalConsoleError;
+      }
     });
   });
 

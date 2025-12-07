@@ -419,11 +419,11 @@ function assessTimeRealism(availableTime: UserProfile['availableTime']): number 
 }
 
 export async function GET(request: NextRequest) {
-  // Get available goal templates and discovery capabilities
-  const { searchParams } = new URL(request.url);
-  const experience = searchParams.get('experience') as 'beginner' | 'intermediate' | 'advanced' | null;
-
   try {
+    // Get available goal templates and discovery capabilities
+    const { searchParams } = new URL(request.url);
+    const experience = searchParams.get('experience') as 'beginner' | 'intermediate' | 'advanced' | null;
+
     const capabilities = {
       supportedExperienceLevels: ['beginner', 'intermediate', 'advanced'],
       availableGoalTypes: ['consistency', 'speed', 'endurance', 'health', 'strength'],
