@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from 'vitest'
 import { ChatScreen } from './chat-screen'
 import { dbUtils } from '@/lib/dbUtils'
 
@@ -32,6 +32,14 @@ vi.mock('@/hooks/use-toast', () => ({
 global.fetch = vi.fn()
 
 describe('ChatScreen', () => {
+  beforeAll(() => {
+    vi.useRealTimers()
+  })
+
+  afterAll(() => {
+    vi.useFakeTimers()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     // Setup default fetch mock
