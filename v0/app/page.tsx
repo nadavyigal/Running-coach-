@@ -386,6 +386,12 @@ export default function RunSmartApp() {
     }
   }, []) // Empty dependency array - event listeners should only be set up once
 
+  useEffect(() => {
+    if (isOnboardingComplete) {
+      setCurrentScreen("today");
+    }
+  }, [isOnboardingComplete]);
+
   const handleOnboardingComplete = async (userData?: any) => {
     console.log('✅ Onboarding completed by user with data:', userData)
 
@@ -400,7 +406,6 @@ export default function RunSmartApp() {
     };
 
     setIsOnboardingComplete(true)
-    setCurrentScreen("today")
     localStorage.setItem("onboarding-complete", "true")
     localStorage.setItem("user-data", JSON.stringify(finalUserData))
 
