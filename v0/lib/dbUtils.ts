@@ -196,86 +196,22 @@ export async function clearDatabase(): Promise<void> {
 // USER MANAGEMENT UTILITIES
 // ============================================================================
 
-/**
- * Enhanced user identity resolution - guarantees a valid User record exists
- * This is the primary user resolution function that should be used by all components
- */
 export async function ensureUserReady(): Promise<User> {
   return safeDbOperation(async () => {
     const database = getDatabase();
     if (!database) {
-      console.error('[user-resolution:error] Database not available');
       throw new Error('Database not available');
     }
 
-    const phase = 'user-resolution';
-    const traceId = `${phase}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    console.log(`[${phase}:start] traceId=${traceId} Ensuring user is ready...`);
-    
-    try {
-      // Phase 1: Check for existing completed user
-      console.log(`[${phase}:phase1] traceId=${traceId} Checking for completed users...`);
-      // Avoid IndexedDB key range issues on boolean indexes by filtering in JS
-      const completedUsers = await database.users
-        .filter((u) => Boolean(u.onboardingComplete))
-        .toArray();
-      
-      console.log(`[${phase}:phase1] traceId=${traceId} Found ${completedUsers.length} completed users`);
-      
-      if (completedUsers.length > 0) {
-        // Sort by updatedAt and return the most recent
-        completedUsers.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-        const user = completedUsers[0];
-        console.log(`[${phase}:found] traceId=${traceId} Existing user resolved: id=${user.id} updatedAt=${user.updatedAt.toISOString()}`);
-        return user as User;
-      }
+    const user = await database.users.toCollection().first();
 
-      // Phase 2: Check for any user (even incomplete onboarding)
-      console.log(`[${phase}:phase2] traceId=${traceId} No completed users, checking for any users...`);
-      // Avoid using orderBy on non-indexed fields to prevent IDBKeyRange errors
-      const allUsers = await database.users.toArray();
-      allUsers.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-      console.log(`[${phase}:phase2] traceId=${traceId} Found ${allUsers.length} total users`);
-      
-      if (allUsers.length > 0) {
-        const anyUser = allUsers[0]; // Most recent
-        console.log(`[${phase}:found] traceId=${traceId} Returning existing user AS-IS: id=${anyUser.id} onboarding=${anyUser.onboardingComplete}`);
-
-        // Return the user as-is without promotion
-        // This ensures incomplete users stay incomplete and will see onboarding
-        return anyUser as User;
-      }
-
-      // Phase 3: No user exists - create a stub user atomically
-      console.log(`[${phase}:phase3] traceId=${traceId} No users exist, creating stub user...`);
-      const stubUser: Omit<User, 'id'> = {
-        goal: 'habit',
-        experience: 'beginner',
-        preferredTimes: ['morning'],
-        daysPerWeek: 3,
-        consents: { data: true, gdpr: true, push: false },
-        onboardingComplete: false,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      const userId = await database.users.add(stubUser);
-      console.log(`[${phase}:added] traceId=${traceId} Stub user added with id=${userId}`);
-      
-      const createdUser = await database.users.get(userId);
-      
-      if (!createdUser) {
-        console.error(`[${phase}:error] traceId=${traceId} Failed to retrieve created user id=${userId}`);
-        throw new Error('Failed to create stub user - verification failed');
-      }
-      
-      console.log(`[${phase}:success] traceId=${traceId} Stub user created and verified: id=${createdUser.id}`);
-      return createdUser as User;
-      
-    } catch (error) {
-      console.error(`[${phase}:error] traceId=${traceId} Error during user resolution:`, error);
-      throw error;
+    if (user) {
+      return user as User;
     }
+
+    const newUserId = await createUser({});
+    const newUser = await database.users.get(newUserId);
+    return newUser as User;
   }, 'ensureUserReady');
 }
 
@@ -537,73 +473,7 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
   }, 'completeOnboardingAtomic');
 }
 
-/**
- * Wait until a fully persisted, readable profile (and active plan) exist.
- * Production-aware with longer timeouts and better error handling.
- */
-export async function waitForProfileReady(timeoutMs?: number): Promise<User | null> {
-  // Use longer timeout in production to handle slower connections
-  const isProduction = typeof process !== 'undefined' && process.env?.NODE_ENV === 'production';
-  const effectiveTimeout = timeoutMs ?? (isProduction ? 15000 : 10000);
-  const pollInterval = isProduction ? 150 : 100; // Slightly slower polling in production
-  
-  const start = Date.now();
-  let dexieErrorSeen = false;
-  let consecutiveErrors = 0;
-  const MAX_CONSECUTIVE_ERRORS = 3;
 
-  console.log(`[waitForProfileReady] Starting with ${effectiveTimeout}ms timeout (production: ${isProduction})`);
-
-  while (Date.now() - start < effectiveTimeout) {
-    try {
-      const database = getDatabase();
-      if (!database) {
-        console.warn('[waitForProfileReady] Database not available');
-        return null;
-      }
-      
-      const completedUsers = await database.users
-        .filter((u) => Boolean(u.onboardingComplete))
-        .toArray();
-        
-      if (completedUsers.length) {
-        const user = completedUsers
-          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-        if (user && user.id) {
-          const hasActivePlan = await database.plans.where('userId').equals(user.id).and(p => p.isActive).first();
-          if (hasActivePlan) {
-            console.log(`[waitForProfileReady] ✅ Profile ready after ${Date.now() - start}ms`);
-            return user as User;
-          }
-        }
-      }
-      
-      // Reset consecutive errors on successful poll
-      consecutiveErrors = 0;
-    } catch (error) {
-      consecutiveErrors++;
-      
-      // If Dexie is throwing DataError/IDBKeyRange issues, don't spam the console
-      if (!dexieErrorSeen && error && typeof error === 'object') {
-        const name = (error as any).name;
-        if (name === 'DexieError' || name === 'DataError') {
-          dexieErrorSeen = true;
-          console.warn('[waitForProfileReady] Dexie error detected, will exit on next error');
-        }
-      }
-      
-      // Break if we've seen too many consecutive errors or Dexie errors
-      if (dexieErrorSeen || consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-        console.warn(`[waitForProfileReady] Breaking due to ${consecutiveErrors} consecutive errors`);
-        break;
-      }
-    }
-    await sleep(pollInterval);
-  }
-  
-  console.warn(`[waitForProfileReady] Timeout reached after ${Date.now() - start}ms`);
-  return null;
-}
 
 /**
  * Create or update user profile
@@ -672,134 +542,40 @@ export async function getUsersByOnboardingStatus(completed: boolean): Promise<Us
   }, 'getUsersByOnboardingStatus', []);
 }
 
-// Security: Mutex lock for user creation to prevent race conditions
-const userCreationLocks = new Map<string, Promise<number>>();
-
-/**
- * Create user with full profile data and duplicate prevention
- * Enhanced with proper transaction isolation and optimistic locking
- */
 export async function createUser(userData: Partial<User>): Promise<number> {
   return safeDbOperation(async () => {
     const database = getDatabase();
     if (!database) throw new Error('Database not available');
 
-    // Security: Use a lock key based on a unique identifier (e.g., email or temp ID)
-    const lockKey = userData.email || `temp-${Date.now()}`;
-
-    // Security: Check if user creation is already in progress
-    if (userCreationLocks.has(lockKey)) {
-      console.log('🔒 User creation already in progress, waiting for completion...');
-      try {
-        return await userCreationLocks.get(lockKey)!;
-      } catch (error) {
-        // If the original creation failed, allow retry
-        userCreationLocks.delete(lockKey);
+    return await database.transaction('rw', database.users, async () => {
+      // Check for existing completed user
+      const existingUser = await database.users.where('onboardingComplete').equals('true').first();
+      if (existingUser) {
+        console.log('Found existing user:', existingUser.id);
+        return existingUser.id!;
       }
-    }
 
-    // Security: Create a promise for this user creation and lock it
-    const creationPromise = (async (): Promise<number> => {
-      try {
-        // Use a comprehensive transaction with explicit isolation
-        const id = await database.transaction('rw!', [database.users, database.onboardingSessions], async () => {
-          console.log('🔒 Starting atomic user creation transaction with exclusive lock');
+      // Create a new user
+      const userToAdd: Omit<User, 'id'> = {
+        goal: userData.goal || 'habit',
+        experience: userData.experience || 'beginner',
+        preferredTimes: userData.preferredTimes || ['morning'],
+        daysPerWeek: userData.daysPerWeek || 3,
+        consents: userData.consents || {
+          data: true,
+          gdpr: true,
+          push: true,
+        },
+        onboardingComplete: userData.onboardingComplete || false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...userData,
+      };
 
-          // Security: Check for existing users with sanitized email
-          if (userData.email) {
-            const sanitizedEmail = sanitizeString(userData.email, 255).toLowerCase();
-            const existingByEmail = await database.users
-              .filter(u => u.email?.toLowerCase() === sanitizedEmail)
-              .first();
-
-            if (existingByEmail) {
-              console.log('⚠️ User with email already exists:', existingByEmail.id);
-              return existingByEmail.id!;
-            }
-          }
-
-          // Check for existing completed users
-          const existingUsers = await database.users.toArray();
-
-          const completedUser = existingUsers.find(u => u.onboardingComplete);
-          if (completedUser) {
-            console.log('⚠️ Found completed user, returning existing ID:', completedUser.id);
-            return completedUser.id!;
-          }
-
-          // Security: Check for recent users to prevent race conditions (shorter window)
-          const recentThreshold = new Date(Date.now() - 5000); // 5 seconds
-          const recentUser = existingUsers.find(u => u.createdAt > recentThreshold);
-          if (recentUser) {
-            console.log('⚠️ Found recent user (potential race condition), returning ID:', recentUser.id);
-            return recentUser.id!;
-          }
-
-          // Create unique identifier with timestamp and random component
-          const creationId = `creation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-          // Security: Sanitize and validate all user input
-          const userToAdd: Omit<User, 'id'> = {
-            goal: userData.goal || 'habit',
-            experience: userData.experience || 'beginner',
-            preferredTimes: sanitizeArray(userData.preferredTimes || ['morning'], 10),
-            daysPerWeek: sanitizeNumber(userData.daysPerWeek, 1, 7, 3),
-            consents: userData.consents || {
-              data: true,
-              gdpr: true,
-              push: true
-            },
-            onboardingComplete: userData.onboardingComplete || false,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            // Security: Sanitize all optional string fields
-            name: sanitizeString(userData.name || `temp_${creationId}`, 255),
-            email: userData.email ? sanitizeString(userData.email, 255).toLowerCase() : undefined,
-            ...userData
-          };
-
-          try {
-            const newId = await database.users.add(userToAdd);
-            console.log('✅ User created successfully with enhanced transaction:', newId);
-
-            // Security: Verify the user was actually created
-            const verifyUser = await database.users.get(newId);
-            if (!verifyUser) {
-              throw new Error('User creation verification failed');
-            }
-
-            return newId as number;
-          } catch (addError: any) {
-            console.error('❌ User creation failed in transaction:', addError);
-
-            // Security: Handle constraint violations gracefully
-            if (addError.name === 'ConstraintError' || addError.message?.includes('constraint')) {
-              console.log('⚠️ Constraint violation, checking for existing user...');
-              const concurrentUser = (await database.users.toArray())
-                .filter(u => u.createdAt && u.createdAt > recentThreshold)
-                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-
-              if (concurrentUser) {
-                console.log('⚠️ Concurrent user creation detected, using existing:', concurrentUser.id);
-                return concurrentUser.id!;
-              }
-            }
-
-            throw addError;
-          }
-        });
-
-        return id;
-      } finally {
-        // Security: Always clean up the lock
-        userCreationLocks.delete(lockKey);
-      }
-    })();
-
-    // Security: Store the promise to prevent concurrent creations
-    userCreationLocks.set(lockKey, creationPromise);
-
-    return await creationPromise;
+      const newId = await database.users.add(userToAdd);
+      console.log('User created successfully:', newId);
+      return newId as number;
+    });
   }, 'createUser');
 }
 
@@ -3402,7 +3178,7 @@ export const dbUtils = {
   updateUser,
   upsertUser,
   completeOnboardingAtomic,
-  waitForProfileReady,
+  
   getUser,
   getUsersByOnboardingStatus,
   migrateFromLocalStorage,

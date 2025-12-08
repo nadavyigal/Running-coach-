@@ -330,7 +330,7 @@ export function PlanScreen() {
                   </span>
                   <h3 className="font-medium">{item.metric}</h3>
                 </div>
-                <Badge variant="secondary" className="bg-green-100 text-green-800 animate-pulse">
+                <Badge variant="outline" className="bg-green-100 text-green-800 animate-pulse">
                   {item.improvement}
                 </Badge>
               </div>
@@ -416,7 +416,7 @@ export function PlanScreen() {
                 <p className="text-sm text-gray-700">This plan is designed to help you achieve your goal by {primaryGoal.timeBound?.deadline ? new Date(primaryGoal.timeBound.deadline).toLocaleDateString() : 'the target date'}.</p>
               </div>
               {getDaysRemaining(primaryGoal) !== null && (
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="outline" className="text-xs">
                   {getDaysRemaining(primaryGoal)} days remaining
                 </Badge>
               )}
@@ -441,7 +441,7 @@ export function PlanScreen() {
         ].map((view) => (
           <Button
             key={view.id}
-            variant={currentView === view.id ? "default" : "ghost"}
+            variant={currentView === view.id ? "primary" : "ghost"}
             size="sm"
             className={`flex-1 transition-all duration-200 ${
               currentView === view.id ? "scale-105 shadow-sm" : "hover:scale-102"
@@ -478,7 +478,31 @@ export function PlanScreen() {
         }}
       />
 
-      {showAddRunModal && <AddRunModal isOpen={showAddRunModal} onClose={() => setShowAddRunModal(false)} />}
+      {showAddRunModal && (
+        <AddRunModal
+          open={showAddRunModal}
+          onOpenChange={setShowAddRunModal}
+          onRunAdded={() => {
+            // Reload plan data after adding a run
+            const loadPlanData = async () => {
+              try {
+                const user = await dbUtils.getCurrentUser()
+                if (user) {
+                  const activePlan = await dbUtils.getActivePlan(user.id!)
+                  if (activePlan) {
+                    setPlan(activePlan)
+                    const planWorkouts = await dbUtils.getPlanWorkouts(activePlan.id!)
+                    setWorkouts(planWorkouts)
+                  }
+                }
+              } catch (error) {
+                console.error('Failed to reload plan data:', error)
+              }
+            }
+            loadPlanData()
+          }}
+        />
+      )}
     </div>
   )
 }

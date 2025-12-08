@@ -16,7 +16,6 @@ describe('OnboardingScreen - Atomic Finish', () => {
     const onComplete = vi.fn()
 
     const completeSpy = vi.spyOn(dbMod.dbUtils, 'completeOnboardingAtomic').mockResolvedValue({ userId: 1, planId: 11 })
-    vi.spyOn(dbMod.dbUtils, 'waitForProfileReady').mockResolvedValue({ id: 1, goal: 'habit', experience: 'beginner', preferredTimes: ['morning'], daysPerWeek: 3, consents: { data: true, gdpr: true, push: false }, onboardingComplete: true, createdAt: new Date(), updatedAt: new Date() } as any)
 
     render(<OnboardingScreen onComplete={onComplete} />)
 

@@ -195,6 +195,51 @@ export class AdaptiveCoachingEngine {
   }
 
   /**
+   * Get the core coaching knowledge base for nutrition, recovery, and training zones
+   */
+  private getCoachingKnowledgeBase(): string {
+    return `
+## NUTRITION ENGINE KNOWLEDGE
+
+### Pre-Run Fueling:
+- Easy/short runs (<60 min): 0.5g carbs/kg body weight 1-2 hours before
+- Long runs (>60 min) or hard workouts: 1.0g carbs/kg body weight 2-3 hours before
+
+### Intra-Run Fueling:
+- <60 minutes: Water only, 300mg sodium/L
+- 60-89 minutes: 30g carbs/hour, water + electrolytes
+- 90-180 minutes: 60g carbs/hour, glucose/fructose mix
+- >180 minutes: 90g carbs/hour, high-carb mix
+- Hydration: 500-750ml per hour
+
+### Post-Run Recovery Nutrition:
+- Protein: 0.25-0.30g/kg within 30 minutes
+- Carbs for runs <45min: 0.6g/kg; 46-89min: 0.8g/kg; >90min: 1.0g/kg
+
+## RECOVERY PROTOCOL KNOWLEDGE
+
+### Readiness Tiers:
+- Low (0-49): Reduce intensity, focus on recovery
+- Moderate (50-74): Standard training with monitoring
+- High (75-100): Optimal for key workouts
+
+### ACWR Guidelines:
+- <0.8: Increase load 5-10%
+- 0.8-1.3: Optimal range
+- 1.3-1.5: Reduce or hold steady
+- >1.5: Prioritize recovery
+
+## TRAINING ZONES (Karvonen %HRR):
+- Z1 (55-72%): Recovery, RPE 2-3
+- Z2 (72-82%): Aerobic base, RPE 3-4
+- Z3 (82-89%): Tempo, RPE 5-6
+- Z4 (89-95%): VO2max, RPE 7-8
+- Z5 (95-100%): Anaerobic, RPE 9+
+
+80/20 rule: 80% easy (Z1-Z2), 20% hard (Z3-Z5)`;
+  }
+
+  /**
    * Adapt prompt based on user profile and context
    */
   private async adaptPromptToProfile(
@@ -202,11 +247,17 @@ export class AdaptiveCoachingEngine {
     profile: CoachingProfile | undefined,
     context: UserContext
   ): Promise<string> {
+    const knowledgeBase = this.getCoachingKnowledgeBase();
+    
     if (!profile) {
-      return `You are an encouraging AI running coach. The user asks: "${query}". Provide helpful, motivational guidance.`;
+      return `You are an expert AI endurance running coach following the AI Endurance Coach Master Protocol. 
+${knowledgeBase}
+
+The user asks: "${query}". Provide helpful, motivational guidance with specific, actionable advice.`;
     }
 
-    let adaptedPrompt = `You are an AI running coach with the following adaptation for this specific user:
+    let adaptedPrompt = `You are an AI running coach following the AI Endurance Coach Master Protocol with the following adaptation for this specific user:
+${knowledgeBase}
 
 Communication Style:
 - Motivation Level: ${profile.communicationStyle.motivationLevel}

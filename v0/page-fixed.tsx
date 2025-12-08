@@ -94,7 +94,6 @@ try {
     initializeDatabase: async () => { console.warn('Database not available - running in degraded mode'); return true; },
     performStartupMigration: async () => { console.warn('Migration skipped - database not available'); return true; },
     ensureUserReady: async () => { console.warn('User ready check skipped - database not available'); return null; },
-    waitForProfileReady: async () => { console.warn('Profile ready check skipped - database not available'); return null; }
   };
 }
 
@@ -303,37 +302,21 @@ export default function RunSmartApp() {
   const handleOnboardingComplete = async (userData?: any) => {
     console.log('✅ Onboarding completed by user with data:', userData)
     
-    try {
-      console.log('🎉 Committing onboarding atomically and waiting for profile-ready gate')
-      const finalUserData = userData || {
-        experience: 'beginner',
-        goal: 'habit',
-        daysPerWeek: 3,
-        preferredTimes: ['morning'],
-        age: 30,
-      };
+    await dbUtils.completeOnboardingAtomic(userData);
+
+    const finalUserData = userData || {
+      experience: 'beginner',
+      goal: 'habit',
+      daysPerWeek: 3,
+      preferredTimes: ['morning'],
+      age: 30,
+    };
       
-      // Poll for readiness if available
-      if (dbUtils?.waitForProfileReady) {
-        const readyUser = await dbUtils.waitForProfileReady(8000)
-        if (!readyUser) {
-          console.warn('⏳ Profile not ready within gate timeout; showing onboarding again')
-          setIsOnboardingComplete(false)
-          return
-        }
-      }
-      
-      setIsOnboardingComplete(true)
-      setCurrentScreen("today")
-      localStorage.setItem("onboarding-complete", "true")
-      localStorage.setItem("user-data", JSON.stringify(finalUserData))
-      console.log('✅ Profile-ready confirmed; navigating to Today')
-      
-    } catch (error) {
-      console.error('❌ Critical onboarding completion error:', error)
-      setIsOnboardingComplete(false)
-      console.log('⏹️ Holding on navigation; onboarding remains visible')
-    }
+    setIsOnboardingComplete(true)
+    setCurrentScreen("today")
+    localStorage.setItem("onboarding-complete", "true")
+    localStorage.setItem("user-data", JSON.stringify(finalUserData))
+    console.log('✅ Profile-ready confirmed; navigating to Today')
   }
 
   console.log('🎭 Current screen:', currentScreen, 'Onboarding complete:', isOnboardingComplete, 'Loading:', isLoading, 'Error:', hasError)

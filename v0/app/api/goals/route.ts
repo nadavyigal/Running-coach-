@@ -201,6 +201,33 @@ export async function POST(request: NextRequest) {
     const goalId = await dbUtils.createGoal(goalCreateData);
     console.log(`✅ Goal created successfully with ID: ${goalId}`);
 
+    // Adapt plan based on the new goal
+    try {
+      const goal = await dbUtils.getGoal(goalId);
+      if (goal) {
+        const adaptationAssessment = await planAdaptationEngine.shouldAdaptPlan(goal.userId);
+        
+        if (adaptationAssessment.shouldAdapt && adaptationAssessment.confidence > 70) {
+          console.log('New goal triggered plan adaptation:', adaptationAssessment.reason);
+          
+          // Get current active plan
+          const currentPlan = await dbUtils.getActivePlan(goal.userId);
+          if (currentPlan) {
+            // Adapt the plan
+            const adaptedPlan = await planAdaptationEngine.adaptExistingPlan(
+              currentPlan.id!,
+              `New goal created: ${adaptationAssessment.reason}`
+            );
+            
+            console.log('Plan adapted successfully after new goal creation:', adaptedPlan.title);
+          }
+        }
+      }
+    } catch (adaptationError) {
+      console.error('Plan adaptation failed after new goal creation:', adaptationError);
+      // Don't fail the goal creation if adaptation fails
+    }
+
     // Note: Milestone generation would happen here if implemented
     // For now, milestones can be added manually after goal creation
     console.log('ℹ️ Skipping automatic milestone generation (not yet implemented)');

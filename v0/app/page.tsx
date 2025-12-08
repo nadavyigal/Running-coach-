@@ -130,7 +130,6 @@ try {
     initializeDatabase: async () => { console.warn('Database not available - running in degraded mode'); return true; },
     performStartupMigration: async () => { console.warn('Migration skipped - database not available'); return true; },
     ensureUserReady: async () => { console.warn('User ready check skipped - database not available'); return null; },
-    waitForProfileReady: async () => { console.warn('Profile ready check skipped - database not available'); return null; }
   };
   getDatabase = () => { console.warn('getDatabase not available'); return null; };
 }
@@ -212,6 +211,17 @@ export default function RunSmartApp() {
     // CRITICAL SAFETY: Set a maximum timeout for initialization
     const safetyTimeout = setTimeout(() => {
       console.warn('⚠️ SAFETY TIMEOUT: Forcing initialization complete')
+      
+      // Check localStorage before forcing state
+      const localComplete = localStorage.getItem('onboarding-complete') === 'true';
+      const localUserData = localStorage.getItem('user-data');
+      
+      if (localComplete && localUserData) {
+        console.log('[app:safety] ✅ Restoring from localStorage on timeout');
+        setIsOnboardingComplete(true);
+        setCurrentScreen('today');
+      }
+      
       setIsLoading(false)
     }, 3000) // 3 second maximum
 
@@ -289,157 +299,43 @@ export default function RunSmartApp() {
     
     // Initialize app state with enhanced error handling and production resilience
     const initializeApp = async () => {
-      const initStartTime = performance.now();
-      
       if (typeof window !== 'undefined') {
         try {
-          // Log version info first thing
-          logVersionInfo();
+          console.log('[app:init:start] Starting application initialization...');
           
-          // Check for version changes and clear stale cache
-          const versionChanged = checkVersionAndClearCache();
-          if (versionChanged) {
-            console.log('[app:init:version] Version changed - cache cleared');
-          }
-          
-          console.log('[app:init:start] Starting enhanced application initialization...')
-          logDiagnostic('database', 'App initialization started');
+          await dbUtils.initializeDatabase();
+          console.log('[app:init:db] ✅ Database initialized successfully');
 
-          // Check environment in production
-          if (process.env.NODE_ENV === 'production') {
-            console.log('[app:init:env] Running in production mode');
-            if (!process.env.NEXT_PUBLIC_APP_URL) {
-              console.warn('[app:init:env] ⚠️ NEXT_PUBLIC_APP_URL not set in production');
-            }
-          }
+          await dbUtils.performStartupMigration();
+          console.log('[app:init:migration] ✅ Startup migration completed');
 
-          // Check for force-onboarding flag (set after reset)
-          const forceOnboarding = sessionStorage.getItem('force-onboarding') === 'true'
-          if (forceOnboarding) {
-            console.log('[app:init] 🔄 Force onboarding flag detected - showing onboarding')
-            sessionStorage.removeItem('force-onboarding')
-            setIsOnboardingComplete(false)
-            setCurrentScreen('onboarding')
-            setIsLoading(false)
-            return
-          }
-
-          // Production-optimized timeouts (longer for slower connections)
-          const isProduction = process.env.NODE_ENV === 'production';
-          const DB_INIT_TIMEOUT = isProduction ? 10000 : 5000; // 10s in prod, 5s in dev
-          const DB_RETRY_ATTEMPTS = isProduction ? 3 : 2;
-          const DB_RETRY_DELAY = 1000;
-          
-          // Step 1: Initialize database with timeout and retries
-          let dbInitSuccess = false;
-          for (let attempt = 1; attempt <= DB_RETRY_ATTEMPTS && !dbInitSuccess; attempt++) {
-            if (dbUtils?.initializeDatabase) {
-              const dbInitTimeout = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error(`Database init timeout (${DB_INIT_TIMEOUT/1000}s)`)), DB_INIT_TIMEOUT)
-              );
-              
-              try {
-                console.log(`[app:init:db] Attempt ${attempt}/${DB_RETRY_ATTEMPTS} - Initializing database...`)
-                await Promise.race([dbUtils.initializeDatabase(), dbInitTimeout]);
-                dbInitSuccess = true;
-                console.log('[app:init:db] ✅ Database initialized successfully')
-                logDatabaseInit(true, Math.round(performance.now() - initStartTime));
-              } catch (dbError) {
-                const errorMsg = dbError instanceof Error ? dbError.message : 'Unknown error';
-                console.warn(`[app:init:db] ⚠️ Attempt ${attempt} failed:`, errorMsg);
-                
-                if (attempt < DB_RETRY_ATTEMPTS) {
-                  console.log(`[app:init:db] Retrying in ${DB_RETRY_DELAY}ms...`);
-                  await new Promise(r => setTimeout(r, DB_RETRY_DELAY * attempt));
-                } else {
-                  console.warn('[app:init:db] ⚠️ All database init attempts failed, continuing with fallback');
-                  logDatabaseInit(false, Math.round(performance.now() - initStartTime), errorMsg);
-                }
-              }
+          const user = await dbUtils.ensureUserReady();
+          if (user) {
+            console.log(`[app:init:user] ✅ User ready: id=${user.id}, onboarding=${user.onboardingComplete}`);
+            if (user.onboardingComplete) {
+              setIsOnboardingComplete(true);
+              setCurrentScreen("today");
+            } else {
+              setIsOnboardingComplete(false);
+              setCurrentScreen("onboarding");
             }
+          } else {
+            throw new Error('Failed to ensure user is ready');
           }
-          
-          // Step 2: Perform startup migration with error handling
-          if (dbInitSuccess) {
-            console.log('[app:init:migration] Running startup migration...')
-            try {
-              const migrationSuccess = await dbUtils?.performStartupMigration?.()
-              if (migrationSuccess) {
-                console.log('[app:init:migration] ✅ Startup migration completed')
-              } else {
-                console.warn('[app:init:migration] ⚠️ Startup migration had issues (continuing)')
-              }
-            } catch (migrationError) {
-              console.warn('[app:init:migration] ⚠️ Migration failed, continuing:', migrationError);
-            }
-
-          // Step 2.5: Demo route seeding removed
-          // Routes are no longer auto-seeded with Tel Aviv data
-          // Users should create custom routes based on their location
-          // The migration will clear any existing Tel Aviv routes
-          }
-          
-          // Step 3: Ensure user is ready with enhanced fallback
-          console.log('[app:init:user] Ensuring user identity is ready...')
-          let userResolved = false;
-          
-          if (dbInitSuccess) {
-            try {
-              const readyUser = await dbUtils?.ensureUserReady?.()
-              if (readyUser) {
-                console.log(`[app:init:user] ✅ User ready: id=${readyUser.id}, onboarding=${readyUser.onboardingComplete}`)
-                
-                if (readyUser.onboardingComplete) {
-                  setIsOnboardingComplete(true)
-                  setCurrentScreen("today")
-                  localStorage.setItem("onboarding-complete", "true")
-                  console.log('[app:init:nav] ✅ User ready - navigating to today screen')
-                  logNavigation('init', 'today', 'User onboarding complete');
-                } else {
-                  setIsOnboardingComplete(false)
-                  console.log('[app:init:nav] 📝 User needs onboarding - showing onboarding screen')
-                  logNavigation('init', 'onboarding', 'User needs onboarding');
-                }
-                userResolved = true;
-              }
-            } catch (userError) {
-              console.warn('[app:init:user] ⚠️ User ready check failed:', userError);
-              logError('User resolution failed', userError instanceof Error ? userError : String(userError));
-            }
-          }
-          
-          // Step 4: Minimal fallback if database failed completely
-          if (!userResolved) {
-            console.log('[app:init:fallback] Database failed - defaulting to onboarding');
-            // When database fails, ALWAYS show onboarding to be safe
-            // User can complete onboarding again to recreate their data
-            setIsOnboardingComplete(false)
-            setCurrentScreen('onboarding')
-            logNavigation('init', 'onboarding', 'Database failed - default to onboarding');
-          }
-          
         } catch (initErr) {
-          console.error('[app:init:error] ❌ Enhanced initialization failed:', initErr)
-          logError('App initialization failed', initErr instanceof Error ? initErr : String(initErr));
-
-          const errorMessage = initErr instanceof Error ? initErr.message : 'Initialization failed';
-          setErrorMessage(errorMessage);
+          console.error('[app:init:error] ❌ Initialization failed:', initErr);
+          setErrorMessage(initErr.message || 'Initialization failed');
           setHasError(true);
-          setIsLoading(false); // CRITICAL: Clear loading state on error
-
-          // Final fallback - just show onboarding
           setIsOnboardingComplete(false);
+        } finally {
+          setIsLoading(false);
+          console.log('[app:init:complete] ✅ App initialization complete');
         }
       } else {
-        console.log('[app:init:ssr] 📝 Server-side render, showing onboarding')
-        setIsOnboardingComplete(false)
+        console.log('[app:init:ssr] 📝 Server-side render, showing onboarding');
+        setIsOnboardingComplete(false);
+        setIsLoading(false);
       }
-      
-      // CRITICAL: Always set loading to false
-      const totalInitTime = Math.round(performance.now() - initStartTime);
-      console.log(`[app:init:complete] ✅ App initialization complete in ${totalInitTime}ms`)
-      logDiagnostic('database', `App initialization complete`, { duration: totalInitTime });
-      setIsLoading(false)
     }
 
     initializeApp().finally(() => {
@@ -493,65 +389,22 @@ export default function RunSmartApp() {
   const handleOnboardingComplete = async (userData?: any) => {
     console.log('✅ Onboarding completed by user with data:', userData)
 
-    try {
-      // CRITICAL FIX: Verify database was actually updated
-      const database = getDatabase();
-      if (!database) {
-        throw new Error('Database not available after onboarding');
-      }
+    await dbUtils.completeOnboardingAtomic(userData);
 
-      // Poll for user with onboardingComplete=true (max 5 seconds)
-      let verified = false;
-      const startTime = Date.now();
-      const maxWait = 5000;
+    const finalUserData = userData || {
+      experience: 'beginner',
+      goal: 'habit',
+      daysPerWeek: 3,
+      preferredTimes: ['morning'],
+      age: 30,
+    };
 
-      while (!verified && (Date.now() - startTime) < maxWait) {
-        const users = await database.users
-          .filter(u => Boolean(u.onboardingComplete))
-          .toArray();
+    setIsOnboardingComplete(true)
+    setCurrentScreen("today")
+    localStorage.setItem("onboarding-complete", "true")
+    localStorage.setItem("user-data", JSON.stringify(finalUserData))
 
-        if (users.length > 0) {
-          verified = true;
-          console.log('✅ Database verification successful - user persisted with id:', users[0].id);
-          break;
-        }
-
-        await new Promise(r => setTimeout(r, 200)); // Wait 200ms before retry
-      }
-
-      if (!verified) {
-        throw new Error('Database verification failed - user not persisted after ' + maxWait + 'ms');
-      }
-
-      // NOW safe to update UI state
-      const finalUserData = userData || {
-        experience: 'beginner',
-        goal: 'habit',
-        daysPerWeek: 3,
-        preferredTimes: ['morning'],
-        age: 30,
-      };
-
-      setIsOnboardingComplete(true)
-      setCurrentScreen("today")
-      localStorage.setItem("onboarding-complete", "true")
-      localStorage.setItem("user-data", JSON.stringify(finalUserData))
-
-      console.log('✅ Onboarding complete - Navigating to Today screen')
-
-    } catch (error) {
-      console.error('❌ Onboarding verification failed:', error);
-
-      toast({
-        title: "Setup Incomplete",
-        description: "There was an issue saving your profile. Please try again.",
-        variant: "destructive"
-      });
-
-      // Reset to onboarding to let user try again
-      setIsOnboardingComplete(false);
-      setCurrentScreen("onboarding");
-    }
+    console.log('✅ Onboarding complete - Navigating to Today screen')
   }
 
   console.log('🎭 Current screen:', currentScreen, 'Onboarding complete:', isOnboardingComplete, 'Loading:', isLoading, 'Error:', hasError)

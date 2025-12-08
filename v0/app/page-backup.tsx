@@ -177,36 +177,21 @@ export default function RunSmartApp() {
   const handleOnboardingComplete = async (userData?: any) => {
     console.log('✅ Onboarding completed by user with data:', userData)
     
-    try {
-      // Gate navigation on profile-ready state
-      console.log('🎉 Committing onboarding atomically and waiting for profile-ready gate')
-      const finalUserData = userData || {
-        experience: 'beginner',
-        goal: 'habit',
-        daysPerWeek: 3,
-        preferredTimes: ['morning'],
-        age: 30,
-      };
-      // Poll for readiness (in case we navigated from deep link without atomic handler)
-      const readyUser = await dbUtils.waitForProfileReady?.(8000)
-      if (!readyUser) {
-        console.warn('⏳ Profile not ready within gate timeout; showing onboarding again')
-        setIsOnboardingComplete(false)
-        return
-      }
-      setIsOnboardingComplete(true)
-      setCurrentScreen("today")
-      localStorage.setItem("onboarding-complete", "true")
-      localStorage.setItem("user-data", JSON.stringify(finalUserData))
-      console.log('✅ Profile-ready confirmed; navigating to Today')
+    await dbUtils.completeOnboardingAtomic(userData);
+
+    const finalUserData = userData || {
+      experience: 'beginner',
+      goal: 'habit',
+      daysPerWeek: 3,
+      preferredTimes: ['morning'],
+      age: 30,
+    };
       
-    } catch (error) {
-      console.error('❌ Critical onboarding completion error:', error)
-      
-      // In error: do not navigate until profile-ready; let user retry Finish
-      setIsOnboardingComplete(false)
-      console.log('⏹️ Holding on navigation; onboarding remains visible')
-    }
+    setIsOnboardingComplete(true)
+    setCurrentScreen("today")
+    localStorage.setItem("onboarding-complete", "true")
+    localStorage.setItem("user-data", JSON.stringify(finalUserData))
+    console.log('✅ Profile-ready confirmed; navigating to Today')
   }
 
   console.log('🎭 Current screen:', currentScreen, 'Onboarding complete:', isOnboardingComplete, 'Loading:', isLoading, 'Error:', hasError)
