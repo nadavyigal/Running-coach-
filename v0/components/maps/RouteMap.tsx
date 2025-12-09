@@ -100,6 +100,26 @@ export function RouteMap({
 
   const [retryCount, setRetryCount] = useState(0);
 
+  // Helper to remove route layers and sources from map
+  const removeRouteLayers = useCallback(() => {
+    if (!mapRef.current) return;
+
+    routeLayerIdsRef.current.forEach((id) => {
+      if (mapRef.current?.getLayer(id)) {
+        mapRef.current.removeLayer(id);
+      }
+    });
+
+    routeSourceIdsRef.current.forEach((id) => {
+      if (mapRef.current?.getSource(id)) {
+        mapRef.current.removeSource(id);
+      }
+    });
+
+    routeLayerIdsRef.current = [];
+    routeSourceIdsRef.current = [];
+  }, []);
+
   // Initialize map
   useEffect(() => {
     if (!mapLibre || !mapContainerRef.current || mapRef.current) return;
@@ -200,25 +220,6 @@ export function RouteMap({
       mapRef.current?.off('click', handler);
     };
   }, [onMapClick, mapReady]);
-
-  const removeRouteLayers = useCallback(() => {
-    if (!mapRef.current) return;
-
-    routeLayerIdsRef.current.forEach((id) => {
-      if (mapRef.current?.getLayer(id)) {
-        mapRef.current.removeLayer(id);
-      }
-    });
-
-    routeSourceIdsRef.current.forEach((id) => {
-      if (mapRef.current?.getSource(id)) {
-        mapRef.current.removeSource(id);
-      }
-    });
-
-    routeLayerIdsRef.current = [];
-    routeSourceIdsRef.current = [];
-  }, []);
 
   // Add route markers and paths
   useEffect(() => {
