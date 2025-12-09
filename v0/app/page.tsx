@@ -515,15 +515,18 @@ export default function RunSmartApp() {
     try {
       // Always show onboarding if not completed, regardless of currentScreen
       if (!isOnboardingComplete) {
-        console.log('🎓 Rendering full onboarding screen with AI goal wizard')
+        console.log('🎓 Rendering onboarding screen - isOnboardingComplete:', isOnboardingComplete);
+        console.log('🎓 Attempted to show screen:', currentScreen);
+        console.warn('⚠️ REDIRECT TO ONBOARDING: User has not completed onboarding yet!');
+        console.warn('⚠️ To fix: Visit http://localhost:3000/debug-onboarding to check database state');
         return (
-          <OnboardingScreen 
+          <OnboardingScreen
             onComplete={handleOnboardingComplete}
           />
         )
       }
 
-      console.log('📱 Rendering main app with screen:', currentScreen)
+      console.log('📱 Rendering main app with screen:', currentScreen, '| isOnboardingComplete:', isOnboardingComplete)
       
       switch (currentScreen) {
         case "today":

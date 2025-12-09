@@ -45,7 +45,10 @@ export function BottomNavigation({ currentScreen, onScreenChange }: BottomNaviga
               key={item.id}
               variant="ghost"
               size="sm"
-              onClick={() => onScreenChange(item.id)}
+              onClick={() => {
+                console.log(`[navigation] 🎯 Clicked ${item.label} (${item.id})`);
+                onScreenChange(item.id);
+              }}
               className={`relative flex flex-col items-center gap-1 h-auto transition-all duration-200 ${
                 item.isSpecial
                   ? "bg-gradient-to-br from-primary to-accent text-white rounded-full w-14 h-14 hover:scale-110 active:scale-95 shadow-lg hover:shadow-purple-glow animate-pulse-glow p-0"
