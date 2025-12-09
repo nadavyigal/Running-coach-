@@ -316,9 +316,22 @@ export default function RunSmartApp() {
             if (user.onboardingComplete) {
               setIsOnboardingComplete(true);
               setCurrentScreen("today");
+              // SYNC: Ensure localStorage matches database state
+              localStorage.setItem('onboarding-complete', 'true');
+              localStorage.setItem('user-data', JSON.stringify({
+                id: user.id,
+                experience: user.experience,
+                goal: user.goal,
+                daysPerWeek: user.daysPerWeek,
+                preferredTimes: user.preferredTimes,
+              }));
+              console.log('[app:init:sync] ✅ localStorage synced with database');
             } else {
               setIsOnboardingComplete(false);
               setCurrentScreen("onboarding");
+              // Clear localStorage if onboarding not complete
+              localStorage.removeItem('onboarding-complete');
+              console.log('[app:init:sync] ⚠️ Onboarding incomplete, localStorage cleared');
             }
           } else {
             throw new Error('Failed to ensure user is ready');

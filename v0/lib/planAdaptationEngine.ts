@@ -53,7 +53,7 @@ export class PlanAdaptationEngine {
       const recentRuns = await dbUtils.getRunsInTimeRange(userId, twoWeeksAgo, new Date());
 
       // Get current goals
-      const currentGoals = await dbUtils.getGoalsByUser(userId, 'active');
+      const currentGoals = await dbUtils.getUserGoals(userId, 'active');
 
       // Get current plan
       const currentPlan = await dbUtils.getActivePlan(userId);
@@ -453,7 +453,7 @@ Generate a plan that will help this runner overcome their barriers and achieve t
    * @returns Promise<Goal[]> Current active goals
    */
   private async getCurrentGoalsForAdaptation(userId: number): Promise<Goal[]> {
-    return await dbUtils.getGoalsByUser(userId, 'active');
+    return await dbUtils.getUserGoals(userId, 'active');
   }
 }
 

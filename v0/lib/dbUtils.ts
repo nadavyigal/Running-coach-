@@ -206,6 +206,19 @@ export async function ensureUserReady(): Promise<User> {
     const user = await database.users.toCollection().first();
 
     if (user) {
+      // Verify localStorage matches database state
+      if (typeof window !== 'undefined') {
+        const localFlag = localStorage.getItem('onboarding-complete') === 'true';
+        const dbFlag = user.onboardingComplete;
+
+        if (dbFlag && !localFlag) {
+          console.warn('[ensureUserReady] ⚠️ Fixing localStorage mismatch: DB=true, Local=false');
+          localStorage.setItem('onboarding-complete', 'true');
+        } else if (!dbFlag && localFlag) {
+          console.warn('[ensureUserReady] ⚠️ Fixing localStorage mismatch: DB=false, Local=true');
+          localStorage.removeItem('onboarding-complete');
+        }
+      }
       return user as User;
     }
 
@@ -310,6 +323,30 @@ export async function performStartupMigration(): Promise<boolean> {
             console.log(`[migration:cleanup] Removed ${otherDraftIds.length} redundant draft users`);
           }
         }
+      }
+
+      // Migration 3: Set existing goals as primary and regenerate plans (one-time)
+      try {
+        const migrationFlag = 'goals-migration-v1-complete';
+        const migrationRun = typeof window !== 'undefined' ? localStorage.getItem(migrationFlag) : null;
+
+        if (!migrationRun) {
+          console.log('[migration:goals] Running existing goals migration...');
+          const { migrateExistingGoals } = await import('./migrations/migrateExistingGoals');
+          const result = await migrateExistingGoals();
+
+          if (result.errors.length === 0) {
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(migrationFlag, 'true');
+            }
+            console.log(`[migration:goals] ✅ Migrated ${result.migrated} users successfully`);
+          } else {
+            console.warn(`[migration:goals] ⚠️ Migrated ${result.migrated} users with ${result.errors.length} errors:`, result.errors);
+          }
+        }
+      } catch (migrationError) {
+        console.warn('[migration:goals] Goals migration failed (non-critical):', migrationError);
+        // Don't block startup on goals migration failure
       }
 
       console.log('[migration:complete] Startup migration completed successfully');
@@ -467,6 +504,12 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
 
       return { userId, planId };
     });
+
+    // CRITICAL: Force localStorage sync to prevent redirect issues
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('onboarding-complete', 'true');
+      console.log(`[onboarding:sync] traceId=${traceId} localStorage force-synced`);
+    }
 
     console.log(`[onboarding:commit] traceId=${traceId} userId=${result.userId} planId=${result.planId}`);
     return result;

@@ -4,6 +4,7 @@ import { Goal } from '@/lib/db';
 import { dbUtils } from '@/lib/dbUtils';
 import { goalProgressEngine } from '@/lib/goalProgressEngine';
 import { planAdaptationEngine } from '@/lib/planAdaptationEngine';
+import { regenerateTrainingPlan } from '@/lib/plan-regeneration';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -201,31 +202,68 @@ export async function POST(request: NextRequest) {
     const goalId = await dbUtils.createGoal(goalCreateData);
     console.log(`✅ Goal created successfully with ID: ${goalId}`);
 
-    // Adapt plan based on the new goal
+    // Set goal as primary and regenerate training plan
+    // CRITICAL: Both must succeed - if plan fails, rollback goal creation
     try {
       const goal = await dbUtils.getGoal(goalId);
-      if (goal) {
-        const adaptationAssessment = await planAdaptationEngine.shouldAdaptPlan(goal.userId);
-        
-        if (adaptationAssessment.shouldAdapt && adaptationAssessment.confidence > 70) {
-          console.log('New goal triggered plan adaptation:', adaptationAssessment.reason);
-          
-          // Get current active plan
-          const currentPlan = await dbUtils.getActivePlan(goal.userId);
-          if (currentPlan) {
-            // Adapt the plan
-            const adaptedPlan = await planAdaptationEngine.adaptExistingPlan(
-              currentPlan.id!,
-              `New goal created: ${adaptationAssessment.reason}`
-            );
-            
-            console.log('Plan adapted successfully after new goal creation:', adaptedPlan.title);
-          }
-        }
+      if (!goal) {
+        throw new Error('Goal was created but could not be retrieved');
       }
+
+      console.log('🎯 Setting goal as primary and regenerating training plan...');
+
+      // Step 1: Mark goal as primary and active
+      await dbUtils.setPrimaryGoal(goal.userId, goalId);
+      console.log('✅ Goal set as primary');
+
+      // Step 2: Regenerate training plan based on the new goal
+      const regeneratedPlan = await regenerateTrainingPlan(goal.userId, goal);
+
+      if (!regeneratedPlan) {
+        // CRITICAL: Plan regeneration failed - rollback the goal
+        console.error('❌ Plan regeneration failed - rolling back goal creation');
+
+        // Rollback: Delete the goal that was just created
+        await dbUtils.deleteGoal(goalId);
+
+        return NextResponse.json({
+          success: false,
+          error: 'Training plan could not be generated for this goal',
+          details: 'Goal creation requires a valid training plan. The goal was not saved. Please check your goal parameters and try again.',
+          recommendation: 'Try adjusting your goal timeline or target to allow for a realistic training plan.'
+        }, { status: 400 }); // 400 Bad Request - goal creation failed
+      }
+
+      console.log(`✅ Training plan regenerated: planId=${regeneratedPlan.id}`);
+
+      // Step 3: Link goal to plan bidirectionally
+      await dbUtils.updateGoal(goalId, {
+        planId: regeneratedPlan.id,
+        status: 'active' as const,
+        updatedAt: new Date()
+      });
+      console.log('✅ Goal-plan linkage established');
+
+      // SUCCESS: Both goal and plan created successfully
+
     } catch (adaptationError) {
-      console.error('Plan adaptation failed after new goal creation:', adaptationError);
-      // Don't fail the goal creation if adaptation fails
+      console.error('❌ Goal creation workflow failed:', adaptationError);
+
+      // Attempt to rollback goal creation
+      try {
+        await dbUtils.deleteGoal(goalId);
+        console.log('✅ Goal rolled back after error');
+      } catch (rollbackError) {
+        console.error('❌ Failed to rollback goal:', rollbackError);
+      }
+
+      // Return error - goal creation failed
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to create goal and training plan',
+        details: adaptationError instanceof Error ? adaptationError.message : 'Unknown error',
+        recommendation: 'Please check your goal parameters and try again. If the problem persists, contact support.'
+      }, { status: 500 }); // 500 Internal Server Error
     }
 
     // Note: Milestone generation would happen here if implemented
