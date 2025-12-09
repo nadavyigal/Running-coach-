@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from "react"
+import { flushSync } from "react-dom"
 import dynamic from 'next/dynamic'
 import { useToast } from "@/hooks/use-toast"
 
@@ -386,10 +387,8 @@ export default function RunSmartApp() {
     }
   }, []) // Empty dependency array - event listeners should only be set up once
 
-  const handleOnboardingComplete = async (userData?: any) => {
-    console.log('✅ Onboarding completed by user with data:', userData)
-
-    await dbUtils.completeOnboardingAtomic(userData);
+  const handleOnboardingComplete = (userData?: any) => {
+    console.log('✅ [handleOnboardingComplete] Starting navigation to Today screen...')
 
     const finalUserData = userData || {
       experience: 'beginner',
@@ -399,12 +398,28 @@ export default function RunSmartApp() {
       age: 30,
     };
 
-    setIsOnboardingComplete(true)
-    setCurrentScreen("today")
-    localStorage.setItem("onboarding-complete", "true")
-    localStorage.setItem("user-data", JSON.stringify(finalUserData))
+    try {
+      // Update localStorage first
+      localStorage.setItem("onboarding-complete", "true")
+      localStorage.setItem("user-data", JSON.stringify(finalUserData))
+      console.log('✅ [handleOnboardingComplete] localStorage updated')
 
-    console.log('✅ Onboarding complete - Navigating to Today screen')
+      // Use flushSync to force immediate synchronous state updates and re-render
+      // This ensures navigation happens immediately without waiting for batching
+      flushSync(() => {
+        console.log('✅ [handleOnboardingComplete] Setting states synchronously...')
+        setIsOnboardingComplete(true)
+        setCurrentScreen("today")
+      })
+
+      console.log('✅ [handleOnboardingComplete] State updated successfully - should now show Today screen')
+      console.log('✅ [handleOnboardingComplete] Final state: isOnboardingComplete=true, currentScreen=today')
+    } catch (error) {
+      console.error('❌ [handleOnboardingComplete] Error during navigation:', error)
+      // Fallback: try setting states without flushSync
+      setIsOnboardingComplete(true)
+      setCurrentScreen("today")
+    }
   }
 
   console.log('🎭 Current screen:', currentScreen, 'Onboarding complete:', isOnboardingComplete, 'Loading:', isLoading, 'Error:', hasError)

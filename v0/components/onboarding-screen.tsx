@@ -374,15 +374,28 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       
       if (success) {
         // Success path - customize message based on AI availability
+        console.log('🎉 [OnboardingScreen] Onboarding completed successfully!')
+        console.log('🎉 [OnboardingScreen] Calling onComplete() callback to navigate to Today screen...')
+
+        // Set generating plan to false first
+        setIsGeneratingPlan(false)
+
+        // Show success toast
         toast({
           title: "Welcome to Run-Smart! 🏃",
           description: "Your personalized running journey begins now!",
         })
-        
-        console.log('🎉 Onboarding completed successfully!')
-        setIsGeneratingPlan(false)
-        onComplete()
-        
+
+        // Call the parent's onComplete callback to trigger navigation
+        try {
+          onComplete()
+          console.log('✅ [OnboardingScreen] onComplete() called successfully')
+        } catch (error) {
+          console.error('❌ [OnboardingScreen] Error calling onComplete():', error)
+          // Force navigation even if callback fails
+          setIsGeneratingPlan(false)
+        }
+
       } else {
         // All retries failed - ask user to retry
         console.warn('⚠️ All user creation attempts failed; prompting retry')
