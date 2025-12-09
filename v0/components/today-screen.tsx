@@ -730,9 +730,9 @@ export function TodayScreen() {
       
       <ModalErrorBoundary modalName="Route Selector" onClose={() => setShowRouteSelectorModal(false)}>
         <RouteSelectorModal
-          open={showRouteSelectorModal}
-          onOpenChange={setShowRouteSelectorModal}
-          onRouteSelect={handleRouteSelected}
+          isOpen={showRouteSelectorModal}
+          onClose={() => setShowRouteSelectorModal(false)}
+          onRouteSelected={handleRouteSelected}
         />
       </ModalErrorBoundary>
       
