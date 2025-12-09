@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RouteMap } from "@/components/maps/RouteMap";
+import { MapErrorBoundary } from "@/components/maps/MapErrorBoundary";
 import { CustomRouteCreator } from "@/components/custom-route-creator";
 import { MapPin, TrendingUp, Star, Clock, RouteIcon, Shield, Users, Mountain, Zap, Eye, Navigation, Loader2, AlertCircle, Map, List, Plus, Check } from "lucide-react";
 import { trackRouteSelected, trackRouteSelectedFromMap, trackRouteWizardMapToggled } from "@/lib/analytics";
@@ -537,17 +538,19 @@ export function RouteSelectionWizard({
       {/* Map or List View */}
       {!loadError && viewMode === 'map' ? (
         <div className="space-y-4">
-          <RouteMap
-            routes={recommendedRoutes}
-            userLocation={userLocation ? {
-              lat: userLocation.latitude,
-              lng: userLocation.longitude
-            } : undefined}
-            onRouteClick={handleMapRouteClick}
-            selectedRouteId={previewedRouteId ?? undefined}
-            height="400px"
-            className="rounded-lg border"
-          />
+          <MapErrorBoundary fallbackMessage="Route map temporarily unavailable">
+            <RouteMap
+              routes={recommendedRoutes}
+              userLocation={userLocation ? {
+                lat: userLocation.latitude,
+                lng: userLocation.longitude
+              } : undefined}
+              onRouteClick={handleMapRouteClick}
+              selectedRouteId={previewedRouteId ?? undefined}
+              height="400px"
+              className="rounded-lg border"
+            />
+          </MapErrorBoundary>
 
           {/* Previewed Route Card */}
           {previewedRoute && (

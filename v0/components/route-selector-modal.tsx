@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RouteMap } from "@/components/maps/RouteMap"
+import { MapErrorBoundary } from "@/components/maps/MapErrorBoundary"
 import { CustomRouteCreator } from "@/components/custom-route-creator"
 import { MapPin, TrendingUp, Star, Clock, RouteIcon, Navigation, Loader2, AlertCircle, Radius, Plus, Check } from "lucide-react"
 import { trackNearbyFilterChanged, trackRouteSelected } from "@/lib/analytics"
@@ -338,17 +339,19 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
           ) : (
             <>
               {/* Map View */}
-              <RouteMap
-                routes={nearbyRoutes}
-                userLocation={userLocation ? {
-                  lat: userLocation.latitude,
-                  lng: userLocation.longitude
-                } : undefined}
-                onRouteClick={handleMapRouteClick}
-                selectedRouteId={previewedRouteId ?? undefined}
-                height="350px"
-                className="rounded-lg border mb-4"
-              />
+              <MapErrorBoundary fallbackMessage="Map loading failed">
+                <RouteMap
+                  routes={nearbyRoutes}
+                  userLocation={userLocation ? {
+                    lat: userLocation.latitude,
+                    lng: userLocation.longitude
+                  } : undefined}
+                  onRouteClick={handleMapRouteClick}
+                  selectedRouteId={previewedRouteId ?? undefined}
+                  height="350px"
+                  className="rounded-lg border mb-4"
+                />
+              </MapErrorBoundary>
 
               {/* Previewed Route Card */}
               {previewedRoute && (
