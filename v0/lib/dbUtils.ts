@@ -592,9 +592,13 @@ export async function createUser(userData: Partial<User>): Promise<number> {
 
     return await database.transaction('rw', database.users, async () => {
       // Check for existing completed user
-      const existingUser = await database.users.where('onboardingComplete').equals('true').first();
+      // CRITICAL FIX: Use filter() for boolean fields instead of where().equals()
+      // Dexie doesn't support boolean in .equals() for indexed queries
+      const existingUser = await database.users
+        .filter(u => u.onboardingComplete === true)
+        .first();
       if (existingUser) {
-        console.log('Found existing user:', existingUser.id);
+        console.log('[createUser] Found existing completed user:', existingUser.id);
         return existingUser.id!;
       }
 
