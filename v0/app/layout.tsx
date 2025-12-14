@@ -6,7 +6,6 @@ import { Toaster } from '@/components/ui/toaster'
 import { ReminderInit } from '@/components/reminder-init'
 import { PostHogProvider } from '@/lib/posthog-provider'
 import { ChunkErrorBoundary } from '@/components/chunk-error-boundary'
-import { InitialLoadingSkeleton } from '@/components/initial-loading-skeleton'
 import { ServiceWorkerRegister } from '@/components/service-worker-register'
 
 // Optimized font loading with next/font
@@ -131,7 +130,6 @@ export default function RootLayout({
         />
       </head>
       <body className={inter.className}>
-        <InitialLoadingSkeleton />
         <ServiceWorkerRegister />
         <ChunkErrorBoundary>
           <PostHogProvider>

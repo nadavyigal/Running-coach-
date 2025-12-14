@@ -100,8 +100,9 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
     }
   }, [toast, userLocation])
 
-  // Define requestLocation before it's used
-  const requestLocation = useCallback(async () => {
+  // Request GPS location - defined as function declaration to avoid TDZ
+  // Force recompile timestamp: 2025-12-14 13:32
+  async function requestLocation() {
     setLocationStatus('loading')
 
     const result = await getLocation({ timeoutMs: 10000, enableHighAccuracy: false })
@@ -121,7 +122,7 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
     } else {
       setLocationStatus('unavailable')
     }
-  }, [])
+  }
 
   // Load routes when modal opens
   useEffect(() => {

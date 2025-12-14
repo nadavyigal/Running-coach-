@@ -176,7 +176,7 @@ export default function RunSmartApp() {
   const [mounted, setMounted] = useState(false) // Fix hydration by rendering only after mount
   const [currentScreen, setCurrentScreen] = useState<string>("onboarding")
   const [isOnboardingComplete, setIsOnboardingComplete] = useState(false)
-  const [isLoading, setIsLoading] = useState(false) // CRITICAL FIX: Start with loading=false
+  const [isLoading, setIsLoading] = useState(true) // Start with loading=true
   const [hasError, setHasError] = useState(false)
   const [showDebugPanel, setShowDebugPanel] = useState(false)
   const [safeMode, setSafeMode] = useState(false)
@@ -198,16 +198,23 @@ export default function RunSmartApp() {
     setMounted(true)
   }, [])
 
+  // Initialize app - load user and check onboarding status
   useEffect(() => {
-    if (!mounted) return // Don't initialize until mounted
-    console.log('🔍 RunSmartApp useEffect running...')
+    console.log('🔍 [INIT] useEffect triggered, mounted=', mounted)
+    if (!mounted) {
+      console.log('🔍 [INIT] Not mounted yet, returning early')
+      return
+    }
+    
+    console.log('🔍 [INIT] Mounted! Starting initialization...')
 
     // Prevent double initialization in React Strict Mode
     if (initRef.current) {
-      console.log('🔍 Skipping duplicate initialization (already initialized)')
+      console.log('🔍 [INIT] Already initialized (initRef=true), skipping')
       return
     }
     initRef.current = true
+    console.log('🔍 [INIT] initRef set to true, proceeding with initialization')
 
     // CRITICAL SAFETY: Set a maximum timeout for initialization
     const safetyTimeout = setTimeout(() => {
@@ -360,8 +367,9 @@ export default function RunSmartApp() {
       clearTimeout(safetyTimeout)
       window.removeEventListener('error', handleGlobalError);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      initRef.current = false
     };
-  }, [])
+  }, [mounted])
 
   // Separate useEffect for event listeners to avoid SSR issues
   useEffect(() => {
@@ -396,7 +404,6 @@ export default function RunSmartApp() {
       window.removeEventListener("navigate-to-record", handleNavigateToRecord)
       window.removeEventListener("navigate-to-chat", handleNavigateToChat)
       window.removeEventListener("keydown", handleKeyDown)
-      initRef.current = false
     }
   }, []) // Empty dependency array - event listeners should only be set up once
 

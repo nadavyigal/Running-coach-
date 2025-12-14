@@ -161,6 +161,8 @@ const nextConfig = {
     
     // Development optimizations
     if (dev) {
+      // Disable caching to fix HMR issues
+      config.cache = false
       config.watchOptions = {
         ...config.watchOptions,
         poll: 1000,

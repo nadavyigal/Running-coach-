@@ -88,8 +88,9 @@ export function RouteSelectionWizard({
   // Custom route creator state
   const [customRouteCreatorOpen, setCustomRouteCreatorOpen] = useState(false);
 
-  // Request GPS location - defined before useEffect that uses it
-  const requestLocation = useCallback(async () => {
+  // Request GPS location - defined as function declaration to avoid TDZ
+  // Force recompile timestamp: 2025-12-14 13:32
+  async function requestLocation() {
     setLocationStatus('loading');
 
     const result = await getLocation({ timeoutMs: 10000, enableHighAccuracy: false });
@@ -109,7 +110,7 @@ export function RouteSelectionWizard({
     } else {
       setLocationStatus('unavailable');
     }
-  }, []);
+  }
 
   // Load routes from database
   const loadRoutes = useCallback(async () => {
