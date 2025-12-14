@@ -36,7 +36,6 @@ const nextConfig = {
     optimizePackageImports: [
       '@radix-ui/react-icons',
       'date-fns',
-      'recharts',
       '@radix-ui/react-dialog',
       '@radix-ui/react-popover',
       '@radix-ui/react-tooltip',

@@ -1,12 +1,22 @@
 # Technical Debt Assessment and Reduction Plan
 
 **Created:** July 24, 2025  
-**Last Updated:** July 24, 2025  
+**Last Updated:** December 12, 2025  
 **Status:** Active - Epic 8.4 Implementation  
 
 ## Executive Summary
 
 This document provides a comprehensive assessment of technical debt in the Running Coach application, prioritized by impact and effort required for resolution. The analysis covers code quality, architecture patterns, testing coverage, and maintainability concerns.
+
+## Day 2 - Pre-Launch Analysis
+
+- **Launch posture:** Ship to beta with current suppressions, fix in v1.1-v1.3; no additional pre-launch blocks beyond API key regeneration.
+- **TypeScript check:** `npx tsc --noEmit` returns multiple errors; checks are bypassed at build time (`typescript.ignoreBuildErrors: true` in `v0/next.config.mjs`). Risk: type regressions can ship unnoticed; mitigation: gate risky refactors until top error clusters are fixed.
+- **ESLint check:** `npm run lint` surfaces 100+ warnings, mostly `console.log`/debug statements (see `docs/CONSOLE_LOG_AUDIT.md`). Checks are bypassed in builds (`eslint.ignoreDuringBuilds: true`). Risk: noisy logs and inconsistent standards; mitigation: keep logs for debugging until post-beta, then strip.
+- **Recommendation:** Keep build ignores for Day 3 staging; create a rolling hardening plan:
+  - v1.1: Fix highest-churn TypeScript errors (API routes, onboarding persistence), re-enable `tsc` locally.
+  - v1.2: Remove console noise in production paths, reduce lint warnings to <10, re-enable lint in CI with `--max-warnings=0`.
+  - v1.3: Remove `ignoreBuildErrors`/`ignoreDuringBuilds`, add pre-push `npm run quality:check`.
 
 ## Technical Debt Categories
 

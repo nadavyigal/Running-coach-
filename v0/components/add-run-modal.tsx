@@ -571,7 +571,7 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
                   <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
                     <img
                       src="/placeholder.svg?height=40&width=40"
-                      alt="Coach"
+                      alt="AI running coach avatar"
                       className="w-full h-full object-cover bg-green-500"
                     />
                   </div>

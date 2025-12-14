@@ -1,8 +1,10 @@
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { format } from 'date-fns';
+import { useEffect, useState } from 'react';
+
+type RechartsModule = typeof import('recharts');
 
 interface PerformanceChartProps {
   title: string;
@@ -25,6 +27,18 @@ export function PerformanceChart({
   showTrend = true,
   height = 300 
 }: PerformanceChartProps) {
+  const [recharts, setRecharts] = useState<RechartsModule | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    import('recharts').then((mod) => {
+      if (mounted) setRecharts(mod);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   // Transform data for chart
   const chartData = data.map(item => ({
     ...item,
@@ -96,6 +110,24 @@ export function PerformanceChart({
       </Card>
     );
   }
+
+  if (!recharts) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          {yAxisLabel && <CardDescription>{yAxisLabel}</CardDescription>}
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-64 text-gray-500">
+            Loading chart…
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } = recharts;
 
   return (
     <Card>
