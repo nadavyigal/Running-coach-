@@ -30,6 +30,11 @@ import { SimpleGoalForm } from './simple-goal-form';
 import { GoalAnalyticsInsights } from './goal-analytics-insights';
 import { toast } from '@/components/ui/use-toast';
 
+const GoalProgressAnalyticsTab = dynamic(
+  () => import('./goal-progress-analytics-tab').then(mod => mod.GoalProgressAnalyticsTab),
+  { ssr: false, loading: () => <div className="p-6 text-sm text-gray-600">Loading analytics…</div> }
+);
+
 interface GoalProgressDashboardProps {
   userId: number;
   className?: string;
@@ -288,117 +293,6 @@ export function GoalProgressDashboard({ userId, className = '' }: GoalProgressDa
     </div>
   );
 
-  const renderAnalytics = () => {
-    if (goals.length === 0) {
-      return (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No Analytics Available</h3>
-            <p className="text-gray-600">Create some goals to see progress analytics.</p>
-          </CardContent>
-        </Card>
-      );
-    }
-
-    // Prepare chart data
-    const progressData = goals.map(g => ({
-      name: g.goal.title.slice(0, 10) + '...',
-      progress: Math.round(g.progress.progressPercentage),
-      target: 100,
-      trajectory: g.progress.trajectory
-    }));
-
-    const timelineData = goals.map(g => ({
-      name: g.goal.title.slice(0, 10) + '...',
-      daysLeft: g.progress.daysUntilDeadline,
-      probability: Math.round(g.prediction.probability * 100)
-    }));
-
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Progress Overview</CardTitle>
-              <CardDescription>Current progress toward each goal</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={progressData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="progress" fill="#3b82f6" />
-                    <Bar dataKey="target" fill="#e5e7eb" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Success Probability</CardTitle>
-              <CardDescription>Likelihood of achieving each goal</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={timelineData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="probability" fill="#10b981" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Detailed Analytics */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {goals.map((goalData) => (
-            <Card key={goalData.goal.id}>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">{goalData.goal.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Progress</span>
-                  <span className="font-semibold">{Math.round(goalData.progress.progressPercentage)}%</span>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Success Probability</span>
-                  <Badge variant={goalData.prediction.probability > 0.7 ? "default" : goalData.prediction.probability > 0.4 ? "secondary" : "destructive"}>
-                    {Math.round(goalData.prediction.probability * 100)}%
-                  </Badge>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Trajectory</span>
-                  <div className={`flex items-center gap-1 text-xs ${getTrajectoryColor(goalData.progress.trajectory)}`}>
-                    {getTrajectoryIcon(goalData.progress.trajectory)}
-                    {goalData.progress.trajectory.replace('_', ' ')}
-                  </div>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Days Remaining</span>
-                  <span className="font-semibold">{goalData.progress.daysUntilDeadline}</span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
-  };
 
   const renderMilestones = () => (
     <div className="space-y-6">
@@ -523,7 +417,7 @@ export function GoalProgressDashboard({ userId, className = '' }: GoalProgressDa
         </TabsContent>
 
         <TabsContent value="analytics" className="space-y-6">
-          {renderAnalytics()}
+          <GoalProgressAnalyticsTab goals={goals} />
         </TabsContent>
 
         <TabsContent value="milestones" className="space-y-6">
