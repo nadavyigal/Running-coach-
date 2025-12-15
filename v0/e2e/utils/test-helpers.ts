@@ -2,10 +2,26 @@ import { Page } from '@playwright/test';
 
 export class TestHelpers {
   static async clearUserData(page: Page) {
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       localStorage.clear();
       sessionStorage.clear();
-      indexedDB.deleteDatabase('running-coach-db');
+
+      const dbNames = ['RunSmartDB', 'running-coach-db', 'RunningCoachDB'];
+      await Promise.all(
+        dbNames.map(
+          (dbName) =>
+            new Promise((resolve) => {
+              try {
+                const req = indexedDB.deleteDatabase(dbName);
+                req.onsuccess = () => resolve(true);
+                req.onerror = () => resolve(true);
+                req.onblocked = () => resolve(true);
+              } catch {
+                resolve(true);
+              }
+            })
+        )
+      );
     });
   }
 

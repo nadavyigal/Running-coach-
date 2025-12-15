@@ -286,42 +286,47 @@ export async function performStartupMigration(): Promise<boolean> {
         // Don't block startup on route migration failure
       }
 
-      // Migration 2: Check for orphaned draft profiles and promote them
-      const draftUsers = await database.users
-        .filter((u) => !u.onboardingComplete)
-        .toArray();
+      // Migration 2: Clean up orphaned user profiles
+      // Never auto-promote draft users to "completed" (can skip onboarding after a reload).
+      const allUsers = await database.users.toArray();
+      const completedUsers = allUsers.filter((u) => Boolean(u.onboardingComplete));
+      const draftUsers = allUsers.filter((u) => !u.onboardingComplete);
 
-      if (draftUsers.length > 0) {
-        console.log(`[migration:promote] Found ${draftUsers.length} draft profiles to promote`);
+      const byUpdatedAtDesc = (a: any, b: any) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
 
-        // Promote the most recent draft to canonical user
-        const latestDraft = draftUsers.sort(
-          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        )[0];
+      if (completedUsers.length > 0) {
+        const canonicalCompleted = completedUsers.sort(byUpdatedAtDesc)[0];
+        const idsToDelete: number[] = [];
 
-        if (latestDraft.id) {
-          const promotionData = {
-            goal: latestDraft.goal || 'habit',
-            experience: latestDraft.experience || 'beginner',
-            preferredTimes: latestDraft.preferredTimes || ['morning'],
-            daysPerWeek: latestDraft.daysPerWeek || 3,
-            consents: latestDraft.consents || { data: true, gdpr: true, push: false },
-            onboardingComplete: true,
-            updatedAt: new Date()
-          };
+        const redundantCompletedIds = completedUsers
+          .filter((u) => typeof u.id === 'number' && u.id !== canonicalCompleted.id)
+          .map((u) => u.id as number);
 
-          await database.users.update(latestDraft.id, promotionData);
-          console.log(`[migration:promoted] Promoted draft user ${latestDraft.id} to canonical`);
+        const draftIds = draftUsers
+          .filter((u) => typeof u.id === 'number')
+          .map((u) => u.id as number);
 
-          // Clean up other drafts
-          const otherDraftIds = draftUsers
-            .filter(u => typeof u.id === 'number' && u.id !== latestDraft.id)
-            .map(u => u.id as number);
+        idsToDelete.push(...redundantCompletedIds, ...draftIds);
 
-          if (otherDraftIds.length > 0) {
-            await database.users.where('id').anyOf(otherDraftIds).delete();
-            console.log(`[migration:cleanup] Removed ${otherDraftIds.length} redundant draft users`);
-          }
+        if (idsToDelete.length > 0) {
+          await database.users.where('id').anyOf(idsToDelete).delete();
+          console.log(
+            `[migration:users] Kept user ${canonicalCompleted.id}; removed ${idsToDelete.length} duplicates/drafts`
+          );
+        }
+      } else if (draftUsers.length > 1) {
+        // Keep the most recent draft; remove any redundant drafts.
+        const latestDraft = draftUsers.sort(byUpdatedAtDesc)[0];
+        const redundantDraftIds = draftUsers
+          .filter((u) => typeof u.id === 'number' && u.id !== latestDraft.id)
+          .map((u) => u.id as number);
+
+        if (redundantDraftIds.length > 0) {
+          await database.users.where('id').anyOf(redundantDraftIds).delete();
+          console.log(
+            `[migration:users] Kept draft user ${latestDraft.id}; removed ${redundantDraftIds.length} redundant drafts`
+          );
         }
       }
 
@@ -428,22 +433,33 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
     validateUserContract(normalizedProfileRequired);
 
     const result = await database.transaction('rw', [database.users, database.plans, database.workouts], async () => {
-      // Idempotency: if a completed user exists, reuse it and ensure a plan
-      const existingCompleted = (await database.users
+      const allUsers = await database.users.toArray();
+      const byUpdatedAtDesc = (a: any, b: any) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+
+      // Idempotency: if a completed user exists, reuse it and ensure a plan.
+      // Otherwise, upgrade the most recent draft user instead of creating duplicates.
+      const existingCompleted = allUsers
         .filter((u) => Boolean(u.onboardingComplete))
-        .toArray())
-        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+        .sort(byUpdatedAtDesc)[0];
+      const existingAny = allUsers
+        .filter((u) => typeof u.id === 'number')
+        .sort(byUpdatedAtDesc)[0];
       let userId: number;
-      if (existingCompleted && existingCompleted.id) {
+      const updatedAt = new Date();
+      if (existingCompleted?.id) {
         userId = existingCompleted.id;
         // Soft update to latest profile attrs
-        await database.users.update(userId, { ...normalizedProfileRequired, updatedAt: new Date() });
+        await database.users.update(userId, { ...normalizedProfileRequired, updatedAt });
+      } else if (existingAny?.id) {
+        userId = existingAny.id;
+        await database.users.update(userId, { ...normalizedProfileRequired, updatedAt });
       } else {
         // Create fresh user
         const toAdd: Omit<User, 'id'> = {
           ...(normalizedProfileRequired as Omit<User, 'id'>),
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: updatedAt,
+          updatedAt,
         };
         userId = (await database.users.add(toAdd)) as number;
       }
@@ -794,6 +810,25 @@ export async function recordCoachingFeedback(
     } as Omit<CoachingFeedback, 'id'>);
     return id as number;
   }, 'recordCoachingFeedback');
+}
+
+/** Record a coaching interaction entry */
+export async function recordCoachingInteraction(
+  data: Omit<CoachingInteraction, 'id' | 'createdAt'>
+): Promise<number> {
+  if (typeof window === 'undefined') {
+    return 0;
+  }
+
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    const id = await database.coachingInteractions.add({
+      ...data,
+      createdAt: new Date(),
+    } as Omit<CoachingInteraction, 'id'>);
+    return id as number;
+  }, 'recordCoachingInteraction', 0);
 }
 
 /** Get recent coaching interactions */
@@ -3243,6 +3278,7 @@ export const dbUtils = {
   ensureCoachingTablesExist,
   createCoachingProfile,
   recordCoachingFeedback,
+  recordCoachingInteraction,
   getCoachingInteractions,
   updateCoachingProfile,
   

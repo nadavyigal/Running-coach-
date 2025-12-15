@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RunSmart - Offline</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #0b1220;
+        --card: rgba(255, 255, 255, 0.06);
+        --text: rgba(255, 255, 255, 0.92);
+        --muted: rgba(255, 255, 255, 0.7);
+        --accent: #10b981;
+      }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+          "Apple Color Emoji", "Segoe UI Emoji";
+        background: radial-gradient(1200px 600px at 50% -10%, rgba(16, 185, 129, 0.35), transparent),
+          var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+      main {
+        width: min(520px, 100%);
+        background: var(--card);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 16px;
+        padding: 22px 18px;
+        backdrop-filter: blur(10px);
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 20px;
+        letter-spacing: -0.01em;
+      }
+      p {
+        margin: 0 0 16px;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      button,
+      a {
+        appearance: none;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--text);
+        padding: 10px 12px;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        text-decoration: none;
+      }
+      button.primary {
+        border-color: rgba(16, 185, 129, 0.55);
+        background: rgba(16, 185, 129, 0.18);
+      }
+      .hint {
+        margin-top: 12px;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.6);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>You are offline</h1>
+      <p>
+        RunSmart could not reach the network. You can keep using cached screens, but some features may
+        be unavailable until you reconnect.
+      </p>
+      <div class="row">
+        <button class="primary" type="button" onclick="location.reload()">Try again</button>
+        <a href="/" rel="nofollow">Open app</a>
+      </div>
+      <div class="hint">Tip: If this page keeps appearing, check your connection and reload.</div>
+    </main>
+  </body>
+</html>

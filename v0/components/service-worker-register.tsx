@@ -14,8 +14,7 @@ export function ServiceWorkerRegister() {
       'serviceWorker' in navigator &&
       process.env.NODE_ENV === 'production'
     ) {
-      // Register service worker after page load to avoid blocking
-      window.addEventListener('load', () => {
+      const register = () => {
         navigator.serviceWorker
           .register('/sw.js')
           .then((registration) => {
@@ -29,7 +28,17 @@ export function ServiceWorkerRegister() {
           .catch((error) => {
             console.error('Service Worker registration failed:', error)
           })
-      })
+      }
+
+      // If the load event already fired, register immediately.
+      if (document.readyState === 'complete') {
+        register()
+        return
+      }
+
+      // Register service worker after page load to avoid blocking initial paint.
+      window.addEventListener('load', register)
+      return () => window.removeEventListener('load', register)
     }
   }, [])
 

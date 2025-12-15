@@ -53,8 +53,16 @@ async function chatHandler(req: ApiRequest) {
     // Validate and sanitize input
     const validation = await validateAndSanitizeInput(req, 1000);
     if (!validation.valid) {
-      console.error('❌ Input validation failed:', validation.error);
-      return new Response(JSON.stringify({ error: validation.error || "Invalid input" }), {
+      const errorMessage = validation.error || "Invalid input";
+
+      // Requests can be aborted mid-stream during SPA navigation, resulting in truncated JSON bodies.
+      // Treat these as no-op to avoid noisy logs/alerts.
+      if (/unexpected end of json input/i.test(errorMessage)) {
+        return new Response(null, { status: 204 });
+      }
+
+      console.error('❌ Input validation failed:', errorMessage);
+      return new Response(JSON.stringify({ error: errorMessage }), {
         status: 400,
         headers: { "Content-Type": "application/json" }
       });

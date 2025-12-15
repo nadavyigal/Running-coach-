@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { flushSync } from "react-dom"
 import dynamic from 'next/dynamic'
 import { useToast } from "@/hooks/use-toast"
+import { DATABASE } from '@/lib/constants'
 
 // Safer dynamic imports with comprehensive error handling
 const OnboardingScreen = dynamic(
@@ -275,8 +276,15 @@ export default function RunSmartApp() {
           console.log('[app:reset] ✅ localStorage cleared')
 
           // Clear IndexedDB (connection now closed, will succeed)
-          indexedDB.deleteDatabase('running-coach-db')
-          console.log('[app:reset] ✅ Database deletion initiated: running-coach-db')
+          const dbNamesToDelete = [DATABASE.NAME, 'running-coach-db', 'RunningCoachDB']
+          dbNamesToDelete.forEach((dbName) => {
+            try {
+              indexedDB.deleteDatabase(dbName)
+              console.log(`[app:reset] ✅ Database deletion initiated: ${dbName}`)
+            } catch (error) {
+              console.warn(`[app:reset] Failed to delete database ${dbName}:`, error)
+            }
+          })
 
           // Set a flag to force onboarding after reset
           sessionStorage.setItem('force-onboarding', 'true')

@@ -220,7 +220,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     setIsGeneratingPlan(true)
     let retryCount = 0
     const maxRetries = 3
-    
+      
     const attemptUserCreation = async (): Promise<boolean> => {
       try {
         console.log(`📝 Attempt ${retryCount + 1}/${maxRetries}: Atomic Finish commit...`)
@@ -263,6 +263,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         console.log('✅ Atomic commit complete:', { userId, planId })
 
         // Generate AI-powered training plan with enhanced error handling
+        if (isOnline) {
+          void (async () => {
         console.log('🤖 Generating personalized training plan...')
         let aiPlanGenerated = false;
         
@@ -333,6 +335,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         // Show appropriate success message based on AI availability
         if (!aiPlanGenerated) {
           console.log('📋 Using default plan template (AI unavailable)');
+        }
+          })()
         }
 
         return true

@@ -104,7 +104,7 @@ export function ChatScreen() {
         content: `Hi there! I'm your AI running coach. I'm here to help you with training advice, motivation, and any running-related questions. How can I assist you today?`,
         timestamp: new Date(),
       }
-      setMessages([welcomeMessage])
+      setMessages((currentMessages) => (currentMessages.length > 1 ? currentMessages : [welcomeMessage]))
       return
     }
 
@@ -137,7 +137,7 @@ export function ChatScreen() {
           ...(msg.tokenCount !== undefined ? { tokenCount: msg.tokenCount } : {}),
         }))
 
-        setMessages(chatMessages)
+        setMessages((currentMessages) => (currentMessages.length > 1 ? currentMessages : chatMessages))
         console.log('?£ו Chat history loaded successfully')
       } else {
         const welcomeMessage: ChatMessage = {
@@ -146,7 +146,7 @@ export function ChatScreen() {
           content: `Hi there! I'm your AI running coach. I'm here to help you with training advice, motivation, and any running-related questions. How can I assist you today?`,
           timestamp: new Date(),
         }
-        setMessages([welcomeMessage])
+        setMessages((currentMessages) => (currentMessages.length > 1 ? currentMessages : [welcomeMessage]))
         console.log('?ƒסכ No existing history, showing welcome message')
       }
     } catch (error) {
@@ -164,7 +164,7 @@ export function ChatScreen() {
         content: `Hi there! I'm your AI running coach. I'm here to help you with training advice, motivation, and any running-related questions. How can I assist you today?`,
         timestamp: new Date(),
       }
-      setMessages([welcomeMessage])
+      setMessages((currentMessages) => (currentMessages.length > 1 ? currentMessages : [welcomeMessage]))
     } finally {
       setIsLoadingHistory(false)
     }
@@ -588,62 +588,60 @@ export function ChatScreen() {
       {/* Messages */}
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">
-          {isLoadingHistory ? (
-            <div className="flex justify-center items-center py-8" role="status" aria-label="Loading chat history">
+          {isLoadingHistory && (
+            <div className="flex justify-center items-center py-4" role="status" aria-label="Loading chat history">
               <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 <span className="text-sm text-muted-foreground">Loading chat history...</span>
               </div>
             </div>
-          ) : (
-            <>
-              {messages.length <= 1 && (
-                <div className="mb-4">
-                  <p className="text-sm font-medium mb-2">Suggested questions:</p>
-                  <div className="flex flex-col gap-2">
-                    {[
-                      "How should I prepare for my next run?",
-                      "What's a good pace for my level?",
-                      "How many days should I run each week?"
-                    ].map((question) => (
-                      <Button
-                        key={question}
-                        variant="outline"
-                        size="sm"
-                        className="justify-start"
-                        onClick={() => handleSendMessage(question)}
-                      >
-                        {question}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {messages.map((message) => (
-                <MessageBubble key={message.id} message={message} />
-              ))}
-              {isLoading && (
-                <div className="flex justify-start" role="status" aria-label="Loading">
-                  <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2">
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    <span className="text-sm text-muted-foreground">Coach is thinking...</span>
-                  </div>
-                </div>
-              )}
-              
-              {/* Enhanced AI Coach Widget */}
-              {user && showEnhancedCoach && (
-                <div className="mt-4">
-                  <EnhancedAICoach
-                    user={user}
-                    onResponse={handleAICoachResponse}
-                  />
-                </div>
-              )}
-
-              <div ref={messagesEndRef} />
-            </>
           )}
+
+          {messages.length <= 1 && (
+            <div className="mb-4">
+              <p className="text-sm font-medium mb-2">Suggested questions:</p>
+              <div className="flex flex-col gap-2">
+                {[
+                  "How should I prepare for my next run?",
+                  "What's a good pace for my level?",
+                  "How many days should I run each week?"
+                ].map((question) => (
+                  <Button
+                    key={question}
+                    variant="outline"
+                    size="sm"
+                    className="justify-start"
+                    onClick={() => handleSendMessage(question)}
+                  >
+                    {question}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+          {messages.map((message) => (
+            <MessageBubble key={message.id} message={message} />
+          ))}
+          {isLoading && (
+            <div className="flex justify-start" role="status" aria-label="Loading">
+              <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                <span className="text-sm text-muted-foreground">Coach is thinking...</span>
+              </div>
+            </div>
+          )}
+          
+          {/* Enhanced AI Coach Widget */}
+          {user && showEnhancedCoach && (
+            <div className="mt-4">
+              <EnhancedAICoach
+                user={user}
+                onResponse={handleAICoachResponse}
+              />
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
 

@@ -753,11 +753,29 @@ export function TodayScreen() {
           onWorkoutAdded={refreshWorkouts}
         />
       </ModalErrorBoundary>
-      <CoachingPreferencesSettings
-        open={showCoachingPreferences}
-        onOpenChange={setShowCoachingPreferences}
-        userId={userId || 0}
-      />
+      {showCoachingPreferences && userId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-white">
+            <div className="flex items-center justify-between border-b p-4">
+              <h2 className="text-lg font-semibold">Coaching Preferences</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCoachingPreferences(false)}
+                aria-label="Close coaching preferences"
+              >
+                ×
+              </Button>
+            </div>
+            <div className="p-4">
+              <CoachingPreferencesSettings
+                userId={userId}
+                onClose={() => setShowCoachingPreferences(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
       <CoachingFeedbackModal
         isOpen={showCoachingFeedback}
         onClose={() => setShowCoachingFeedback(false)}

@@ -57,6 +57,13 @@ export function RecordScreen() {
   const [currentPosition, setCurrentPosition] = useState<GPSCoordinate | null>(null)
   const watchIdRef = useRef<number | null>(null)
   const startTimeRef = useRef<number>(0)
+  const isRunningRef = useRef(false)
+  const isPausedRef = useRef(false)
+
+  useEffect(() => {
+    isRunningRef.current = isRunning
+    isPausedRef.current = isPaused
+  }, [isRunning, isPaused])
   
   // Metrics state
   const [metrics, setMetrics] = useState<RunMetrics>({
@@ -224,8 +231,26 @@ export function RecordScreen() {
         return
       }
 
+      stopGpsTracking()
+
+      let settled = false
+      const settle = (value: boolean) => {
+        if (settled) return
+        settled = true
+        resolve(value)
+      }
+
+      const timeoutId = window.setTimeout(() => {
+        console.warn('[GPS] GPS tracking start timed out')
+        stopGpsTracking()
+        settle(false)
+      }, 12_000)
+
       watchIdRef.current = navigator.geolocation.watchPosition(
         (position) => {
+          clearTimeout(timeoutId)
+          settle(true)
+
           const newPosition: GPSCoordinate = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -236,27 +261,31 @@ export function RecordScreen() {
           setCurrentPosition(newPosition)
           setGpsAccuracy(position.coords.accuracy)
 
-          if (isRunning && !isPaused) {
-            setGpsPath(prev => [...prev, newPosition])
-            
-            // Update distance
-            if (prev.length > 0) {
-              const newDistance = prev.reduce((total, point, index) => {
-                if (index === 0) return 0
-                return total + calculateDistanceBetweenPoints(prev[index - 1], point)
-              }, 0) + calculateDistanceBetweenPoints(prev[prev.length - 1], newPosition)
-              
-              setMetrics(prev => ({
-                ...prev,
-                distance: newDistance,
-                pace: prev.duration > 0 ? prev.duration / newDistance : 0
-              }))
-            }
+          if (isRunningRef.current && !isPausedRef.current) {
+            setGpsPath((previousPath) => {
+              const nextPath = [...previousPath, newPosition]
+
+              if (nextPath.length > 1) {
+                const newDistance = calculateTotalDistance(nextPath)
+                setMetrics((previousMetrics) => ({
+                  ...previousMetrics,
+                  distance: newDistance,
+                  pace: previousMetrics.duration > 0 ? previousMetrics.duration / newDistance : 0,
+                  calories: estimateCalories(previousMetrics.duration, newDistance),
+                }))
+              }
+
+              return nextPath
+            })
           }
         },
         (error) => {
+          clearTimeout(timeoutId)
           console.error('GPS tracking error:', error)
-          resolve(false)
+          if (!settled) {
+            stopGpsTracking()
+            settle(false)
+          }
         },
         {
           enableHighAccuracy: true,
@@ -265,7 +294,7 @@ export function RecordScreen() {
         }
       )
 
-      resolve(true)
+      // Resolve happens on first position update (or error/timeout).
     })
   }
 
@@ -326,18 +355,6 @@ export function RecordScreen() {
       return
     }
 
-    const trackingStarted = await startGpsTracking()
-    if (!trackingStarted) {
-      toast({
-        title: "GPS Error",
-        description: "Unable to start GPS tracking. Please try again.",
-        variant: "destructive"
-      })
-      return
-    }
-
-    setIsRunning(true)
-    setIsPaused(false)
     startTimeRef.current = Date.now()
     setGpsPath([])
     setMetrics({
@@ -347,6 +364,22 @@ export function RecordScreen() {
       calories: 0
     })
 
+    setIsRunning(true)
+    setIsPaused(false)
+    isRunningRef.current = true
+    isPausedRef.current = false
+    const trackingStarted = await startGpsTracking()
+    if (!trackingStarted) {
+      setIsRunning(false)
+      isRunningRef.current = false
+      toast({
+        title: "GPS Error",
+        description: "Unable to start GPS tracking. Please try again.",
+        variant: "destructive"
+      })
+      return
+    }
+
     toast({
       title: "Run Started",
       description: "GPS tracking active. Your run is being recorded.",
@@ -355,6 +388,7 @@ export function RecordScreen() {
 
   const pauseRun = () => {
     setIsPaused(true)
+    isPausedRef.current = true
     toast({
       title: "Run Paused",
       description: "Your run has been paused. Resume when ready.",
@@ -362,6 +396,8 @@ export function RecordScreen() {
   }
 
   const resumeRun = async () => {
+    setIsPaused(false)
+    isPausedRef.current = false
     const trackingStarted = await startGpsTracking()
     if (!trackingStarted) {
       toast({
@@ -372,7 +408,6 @@ export function RecordScreen() {
       return
     }
 
-    setIsPaused(false)
     toast({
       title: "Run Resumed",
       description: "GPS tracking resumed. Your run continues.",
@@ -383,6 +418,8 @@ export function RecordScreen() {
     stopGpsTracking()
     setIsRunning(false)
     setIsPaused(false)
+    isRunningRef.current = false
+    isPausedRef.current = false
 
     const totalDistance = calculateTotalDistance(gpsPath)
     const finalDuration = metrics.duration

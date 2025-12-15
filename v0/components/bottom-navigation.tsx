@@ -24,7 +24,7 @@ export function BottomNavigation({ currentScreen, onScreenChange }: BottomNaviga
 
   return (
     <nav
-      className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/90 backdrop-blur-lg border-t border-gray-200/50 shadow-xl shadow-black/5 px-6 py-3 animate-in slide-in-from-bottom duration-500"
+      className="fixed z-50 bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/90 backdrop-blur-lg border-t border-gray-200/50 shadow-xl shadow-black/5 px-6 py-3 animate-in slide-in-from-bottom duration-500"
       aria-label="Main navigation"
     >
       {/* Active indicator bar */}

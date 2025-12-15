@@ -30,6 +30,7 @@ import { ReminderSettings } from "@/components/reminder-settings"
 import { useState, useEffect } from "react"
 import { BadgeCabinet } from "@/components/badge-cabinet";
 import { dbUtils } from "@/lib/dbUtils";
+import { DATABASE } from "@/lib/constants";
 import { useToast } from "@/components/ui/use-toast";
 import { ShareBadgeModal } from "@/components/share-badge-modal";
 import { Share2, Users } from "lucide-react";
@@ -353,7 +354,13 @@ export function ProfileScreen() {
                 onClick={() => {
                   // Clear all data and restart
                   localStorage.clear();
-                  indexedDB.deleteDatabase('running-coach-db');
+                  [DATABASE.NAME, 'running-coach-db', 'RunningCoachDB'].forEach((dbName) => {
+                    try {
+                      indexedDB.deleteDatabase(dbName);
+                    } catch {
+                      // Best-effort cleanup
+                    }
+                  });
                   toast({
                     title: "Data Cleared",
                     description: "Restarting with fresh data...",
@@ -713,7 +720,13 @@ export function ProfileScreen() {
               onClick={() => {
                 if (confirm('Are you sure you want to reset all app data? This cannot be undone.')) {
                   // Clear IndexedDB
-                  indexedDB.deleteDatabase('RunSmartDB');
+                  [DATABASE.NAME, 'running-coach-db', 'RunningCoachDB'].forEach((dbName) => {
+                    try {
+                      indexedDB.deleteDatabase(dbName);
+                    } catch {
+                      // Best-effort cleanup
+                    }
+                  });
                   // Clear localStorage
                   localStorage.clear();
                   // Clear sessionStorage
