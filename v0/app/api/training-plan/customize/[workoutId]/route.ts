@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbUtils } from '@/lib/dbUtils';
+import { logger } from '@/lib/logger';
 
 export async function DELETE(req: NextRequest, { params }: { params: { workoutId: string } }) {
   try {
@@ -20,7 +21,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { workoutId
     });
 
   } catch (error) {
-    console.error('Error deleting workout:', error);
+    logger.error('Error deleting workout:', error);
     return NextResponse.json({
       error: 'Failed to delete workout',
       details: error instanceof Error ? error.message : 'Unknown error'

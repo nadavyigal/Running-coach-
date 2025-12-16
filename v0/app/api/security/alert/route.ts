@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withApiSecurity, ApiRequest } from '@/lib/security.middleware';
+import { logger } from '@/lib/logger';
 
 async function securityAlertHandler(req: ApiRequest) {
   if (req.method !== 'POST') {
@@ -8,7 +9,7 @@ async function securityAlertHandler(req: ApiRequest) {
   
   try {
     const alert = await req.json();
-    console.warn('Security alert received:', alert);
+    logger.warn('Security alert received:', alert);
     
     // In production, send alert to security team
     if (process.env.NODE_ENV === 'production') {
@@ -23,7 +24,7 @@ async function securityAlertHandler(req: ApiRequest) {
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Failed to process security alert:', error);
+    logger.error('Failed to process security alert:', error);
     return NextResponse.json({ error: 'Failed to process alert' }, { status: 500 });
   }
 }

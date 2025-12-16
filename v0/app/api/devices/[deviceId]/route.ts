@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { logger } from '@/lib/logger';
 
 // DELETE - Disconnect device
 export async function DELETE(req: Request, { params }: { params: { deviceId: string } }) {
@@ -35,7 +36,7 @@ export async function DELETE(req: Request, { params }: { params: { deviceId: str
     });
 
   } catch (error) {
-    console.error('Device disconnection error:', error);
+    logger.error('Device disconnection error:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to disconnect device'
@@ -79,7 +80,7 @@ export async function PUT(req: Request, { params }: { params: { deviceId: string
     });
 
   } catch (error) {
-    console.error('Device update error:', error);
+    logger.error('Device update error:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to update device'

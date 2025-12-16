@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbUtils } from '@/lib/dbUtils';
 import { z } from 'zod';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,7 +57,7 @@ export async function GET(req: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ message: 'Invalid request data', errors: error.errors }, { status: 400 });
     }
-    console.error('Error fetching cohort stats:', error);
+    logger.error('Error fetching cohort stats:', error);
     return NextResponse.json({
       message: 'Internal server error'
     }, { status: 500 });

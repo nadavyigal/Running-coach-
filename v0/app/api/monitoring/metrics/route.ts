@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withApiSecurity, ApiRequest } from '@/lib/security.middleware';
+import { logger } from '@/lib/logger';
 
 async function metricsHandler(req: ApiRequest) {
   if (req.method !== 'POST') {
@@ -8,7 +9,7 @@ async function metricsHandler(req: ApiRequest) {
   
   try {
     const metrics = await req.json();
-    console.log('Performance metric received:', metrics);
+    logger.log('Performance metric received:', metrics);
     
     // In production, send to monitoring service
     if (process.env.NODE_ENV === 'production') {
@@ -18,7 +19,7 @@ async function metricsHandler(req: ApiRequest) {
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Failed to process metrics:', error);
+    logger.error('Failed to process metrics:', error);
     return NextResponse.json({ error: 'Failed to process metrics' }, { status: 500 });
   }
 }

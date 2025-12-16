@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -97,7 +98,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error fetching goal milestones:', error);
+    logger.error('Error fetching goal milestones:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -149,7 +150,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (error) {
-    console.error('Error creating milestone:', error);
+    logger.error('Error creating milestone:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -194,7 +195,7 @@ export async function PUT(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error updating milestone:', error);
+    logger.error('Error updating milestone:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -240,7 +241,7 @@ export async function DELETE(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error deleting milestone:', error);
+    logger.error('Error deleting milestone:', error);
     
     return NextResponse.json(
       { error: 'Failed to delete milestone' },

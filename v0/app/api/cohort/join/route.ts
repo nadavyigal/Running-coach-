@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod';
+import { logger } from '@/lib/logger';
 
 const joinCohortSchema = z.object({
   inviteCode: z.string().min(1, 'Invite code is required'),
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ message: 'Invalid request data', errors: error.errors }, { status: 400 });
     }
-    console.error('Error joining cohort:', error);
+    logger.error('Error joining cohort:', error);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
 }

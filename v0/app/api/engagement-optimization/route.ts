@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbUtils } from '@/lib/dbUtils';
 import { engagementOptimizationService } from '@/lib/engagement-optimization';
+import { logger } from '@/lib/logger';
 
 export async function GET(_request: NextRequest) {
   try {
@@ -36,7 +37,7 @@ export async function GET(_request: NextRequest) {
       }
     });
   } catch (error) {
-    console.error('Error fetching engagement optimization data:', error);
+    logger.error('Error fetching engagement optimization data:', error);
     return NextResponse.json({ error: 'Failed to fetch engagement data' }, { status: 500 });
   }
 }
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
       user: updatedUser
     });
   } catch (error) {
-    console.error('Error updating engagement preferences:', error);
+    logger.error('Error updating engagement preferences:', error);
     return NextResponse.json({ error: 'Failed to update preferences' }, { status: 500 });
   }
 }
@@ -119,7 +120,7 @@ export async function PUT(request: NextRequest) {
       user: updatedUser
     });
   } catch (error) {
-    console.error('Error updating notification type:', error);
+    logger.error('Error updating notification type:', error);
     return NextResponse.json({ error: 'Failed to update notification type' }, { status: 500 });
   }
 }

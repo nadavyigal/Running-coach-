@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { dbUtils } from '@/lib/dbUtils'
+import { logger } from '@/lib/logger';
 
 export default function DebugPage() {
   const [logs, setLogs] = useState<string[]>([])
@@ -9,7 +10,7 @@ export default function DebugPage() {
 
   const addLog = (message: string) => {
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`])
-    console.log(message)
+    logger.log(message)
   }
 
   const clearLogs = () => {
@@ -110,7 +111,7 @@ export default function DebugPage() {
       
     } catch (error) {
       addLog(`❌ Test failed: ${error}`)
-      console.error('Full error:', error)
+      logger.error('Full error:', error)
     }
     
     setIsRunning(false)

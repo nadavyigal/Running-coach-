@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
 import { adaptiveCoachingEngine, UserContext } from '@/lib/adaptiveCoachingEngine';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -216,7 +217,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('Error generating adaptive recommendations:', error);
+    logger.error('Error generating adaptive recommendations:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -298,7 +299,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('Error processing coaching request:', error);
+    logger.error('Error processing coaching request:', error);
     
     return NextResponse.json(
       { error: 'Failed to process coaching request' },

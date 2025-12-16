@@ -10,6 +10,7 @@ import {
   logRequest
 } from '@/lib/errorHandling';
 import { withErrorHandling } from '@/lib/serverErrorHandling';
+import { logger } from '@/lib/logger';
 
 // GET - Get sync jobs for a user
 export const GET = withErrorHandling(async (req: Request) => {
@@ -66,7 +67,7 @@ export const GET = withErrorHandling(async (req: Request) => {
       }, { status: 400 });
     }
 
-    console.error('Error fetching sync jobs:', error);
+    logger.error('Error fetching sync jobs:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to fetch sync jobs'
@@ -144,7 +145,7 @@ export async function POST(req: Request) {
     });
 
   } catch (error) {
-    console.error('Error scheduling sync job:', error);
+    logger.error('Error scheduling sync job:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to schedule sync job'
@@ -203,7 +204,7 @@ export async function DELETE(req: Request) {
     }
 
   } catch (error) {
-    console.error('Error cancelling sync jobs:', error);
+    logger.error('Error cancelling sync jobs:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to cancel sync jobs'

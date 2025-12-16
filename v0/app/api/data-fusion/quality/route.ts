@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DataFusionEngine } from '../../../../lib/dataFusionEngine';
 import { db } from '../../../../lib/db';
+import { logger } from '@/lib/logger';
 
 const fusionEngine = new DataFusionEngine();
 
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error getting data quality metrics:', error);
+    logger.error('Error getting data quality metrics:', error);
     return NextResponse.json(
       {
         success: false,

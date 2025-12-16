@@ -1,6 +1,7 @@
 import { streamText } from "ai"
 import { openai } from "@ai-sdk/openai"
 import { NextRequest } from "next/server"
+import { logger } from "@/lib/logger"
 
 interface OnboardingSession {
   conversationId: string
@@ -448,7 +449,7 @@ export async function POST(req: NextRequest) {
     })
 
   } catch (error) {
-    console.error('GoalWizard API error:', error)
+    logger.error('GoalWizard API error:', error)
     
     return new Response(JSON.stringify({ 
       error: "An unexpected error occurred. Please try again." 

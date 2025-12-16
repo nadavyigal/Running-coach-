@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../lib/db';
 import { RecoveryEngine } from '../../../../lib/recoveryEngine';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
         recoveryScore = await RecoveryEngine.calculateRecoveryScore(userId, date);
       }
     } catch (dbError) {
-      console.warn('Database operations failed, returning default recovery score:', dbError);
+      logger.warn('Database operations failed, returning default recovery score:', dbError);
       // Return default recovery score when database operations fail (server-side IndexedDB not available)
       recoveryScore = {
         id: 1,
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error getting recovery score:', error);
+    logger.error('Error getting recovery score:', error);
     return NextResponse.json(
       {
         success: false,
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error calculating recovery score:', error);
+    logger.error('Error calculating recovery score:', error);
     return NextResponse.json(
       {
         success: false,

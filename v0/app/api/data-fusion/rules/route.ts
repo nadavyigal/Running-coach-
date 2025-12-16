@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DataFusionEngine } from '../../../../lib/dataFusionEngine';
 import { db } from '../../../../lib/db';
+import { logger } from '@/lib/logger';
 
 const fusionEngine = new DataFusionEngine();
 
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error getting fusion rules:', error);
+    logger.error('Error getting fusion rules:', error);
     return NextResponse.json(
       {
         success: false,
@@ -100,7 +101,7 @@ export async function PUT(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error updating fusion rules:', error);
+    logger.error('Error updating fusion rules:', error);
     return NextResponse.json(
       {
         success: false,

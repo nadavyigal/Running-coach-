@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { decryptToken } from '../token-crypto';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -49,7 +50,7 @@ export async function GET(req: Request) {
     try {
       accessToken = decryptToken(garminDevice.authTokens.accessToken);
     } catch (tokenError) {
-      console.error('Failed to decrypt Garmin access token', tokenError);
+      logger.error('Failed to decrypt Garmin access token', tokenError);
       return NextResponse.json({
         success: false,
         error: 'Garmin device authentication invalid, please reconnect',
@@ -114,7 +115,7 @@ export async function GET(req: Request) {
       });
 
     } catch (apiError) {
-      console.error('Garmin API error:', apiError);
+      logger.error('Garmin API error:', apiError);
       return NextResponse.json({
         success: false,
         error: 'Failed to fetch activities from Garmin Connect'
@@ -122,7 +123,7 @@ export async function GET(req: Request) {
     }
 
   } catch (error) {
-    console.error('Error fetching Garmin activities:', error);
+    logger.error('Error fetching Garmin activities:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to fetch Garmin activities'

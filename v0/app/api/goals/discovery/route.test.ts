@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST, PUT, GET } from './route';
+import { logger } from '@/lib/logger';
 
 // Mock the goal discovery engine
 vi.mock('@/lib/goalDiscoveryEngine', () => ({
@@ -444,8 +445,8 @@ describe('Goal Discovery API', () => {
 
     it('should handle capability retrieval errors', async () => {
       // Mock an error in capability retrieval
-      const originalConsoleError = console.error;
-      console.error = vi.fn();
+      const originalConsoleError = logger.error;
+      logger.error = vi.fn();
 
       const OriginalURL = global.URL;
       const safeRequest = new NextRequest('http://localhost/api/goals/discovery', {
@@ -468,7 +469,7 @@ describe('Goal Discovery API', () => {
         expect(responseData.error).toBe('Failed to get discovery capabilities');
       } finally {
         global.URL = OriginalURL;
-        console.error = originalConsoleError;
+        logger.error = originalConsoleError;
       }
     });
   });

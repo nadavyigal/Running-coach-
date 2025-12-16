@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -133,7 +134,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('Error fetching performance analytics:', error);
+    logger.error('Error fetching performance analytics:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(

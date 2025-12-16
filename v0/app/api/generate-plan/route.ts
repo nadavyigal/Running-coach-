@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { withErrorHandling } from '@/lib/errorHandler.middleware';
 import { withSecureOpenAI } from '@/lib/apiKeyManager';
 import { withApiSecurity } from '@/lib/security.middleware';
+import { logger } from '@/lib/logger';
 
 /**
  * Zod schema for user context from onboarding data
@@ -239,7 +240,7 @@ async function generatePlanHandler(req: NextRequest) {
 
   // If AI fails, return a fallback plan instead of an error
   if (!result.success) {
-    console.log('[generate-plan] AI unavailable, using fallback plan generator');
+    logger.log('[generate-plan] AI unavailable, using fallback plan generator');
     
     const fallbackPlan = generateFallbackPlan(user);
     
@@ -280,7 +281,7 @@ async function handleEnhancedPlanRequest(body: any) {
         );
       }
     } catch (userCheckError) {
-      console.warn('User verification failed:', userCheckError);
+      logger.warn('User verification failed:', userCheckError);
       return NextResponse.json(
         { error: 'User verification failed', errorType: 'database_error', fallbackRequired: true },
         { status: 500 }
@@ -306,7 +307,7 @@ async function handleEnhancedPlanRequest(body: any) {
 
   // If AI fails, return a fallback plan instead of an error
   if (!result.success) {
-    console.log('[generate-plan:enhanced] AI unavailable, using fallback plan generator');
+    logger.log('[generate-plan:enhanced] AI unavailable, using fallback plan generator');
     
     const fallbackPlan = generateFallbackPlan({
       experience: requestData.userContext.experience,
@@ -372,7 +373,7 @@ async function handleEnhancedPlanRequest(body: any) {
  */
 function buildPlanPrompt(user: any, planType?: string, targetDistance?: string, rookie_challenge?: boolean): string {
   if (!user || !user.experience || !user.goal || !user.daysPerWeek || !user.preferredTimes) {
-    console.warn('⚠️ Invalid user data provided, using fallback defaults');
+    logger.warn('⚠️ Invalid user data provided, using fallback defaults');
     // Provide fallback defaults instead of throwing
     user = {
       experience: 'beginner',

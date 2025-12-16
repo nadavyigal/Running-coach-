@@ -1,5 +1,6 @@
 import { db, type User, type Plan, type Workout } from './db';
 import { dbUtils } from '@/lib/dbUtils';
+import { logger } from '@/lib/logger';
 
 export interface GeneratePlanOptions {
   user: User;
@@ -42,18 +43,18 @@ export async function generatePlan(options: GeneratePlanOptions): Promise<PlanDa
       
       // Check if this is a configuration issue that should trigger fallback
       if (errorData.fallbackRequired || response.status === 422) {
-        console.warn('API requires fallback:', errorData.message || errorData.error);
+        logger.warn('API requires fallback:', errorData.message || errorData.error);
         throw new Error(`FALLBACK_REQUIRED: ${errorData.message || errorData.error}`);
       }
       
       // For other errors, provide detailed error information
       const errorMessage = errorData.error || `API request failed with status ${response.status}`;
-      console.error('API plan generation failed:', errorMessage, errorData.details);
+      logger.error('API plan generation failed:', errorMessage, errorData.details);
       throw new Error(`API_ERROR: ${errorMessage}`);
     }
 
     const { plan: generatedPlan, source } = await response.json();
-    console.log(`Plan generated successfully using ${source || 'unknown'} source`);
+    logger.log(`Plan generated successfully using ${source || 'unknown'} source`);
 
     // Create the plan data structure without database operations
     const endDate = new Date(startDate);
@@ -93,10 +94,10 @@ export async function generatePlan(options: GeneratePlanOptions): Promise<PlanDa
       });
     }
 
-    console.log('Generated AI plan data with', workouts.length, 'workouts for user:', user.id);
+    logger.log('Generated AI plan data with', workouts.length, 'workouts for user:', user.id);
     return { plan, workouts };
   } catch (error) {
-    console.error('❌ AI plan generation failed:', error);
+    logger.error('❌ AI plan generation failed:', error);
     throw error;
   }
 }
@@ -148,7 +149,7 @@ export async function generateFallbackPlan(user: User, startDate: Date = new Dat
     trainingDaysPerWeek: user.daysPerWeek
   };
 
-  console.log('Generated fallback plan data for user:', user.id);
+  logger.log('Generated fallback plan data for user:', user.id);
 
   // Create a basic workout structure without database operations
   const workouts: Omit<Workout, 'id' | 'createdAt' | 'updatedAt'>[] = [];
@@ -178,7 +179,7 @@ export async function generateFallbackPlan(user: User, startDate: Date = new Dat
     }
   }
 
-  console.log(`Fallback plan data completed: ${workouts.length} workouts for user ${user.id}`);
+  logger.log(`Fallback plan data completed: ${workouts.length} workouts for user ${user.id}`);
   return { plan, workouts };
 }
 

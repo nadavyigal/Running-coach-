@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { generateText } from "ai"
 import { openai } from "@ai-sdk/openai"
 import { z } from "zod"
+import { logger } from "@/lib/logger"
 
 const activitySchema = z.object({
   type: z.string().optional(),
@@ -42,7 +43,7 @@ const sanitizeJson = (text: string) => {
   try {
     return JSON.parse(jsonMatch[0])
   } catch (error) {
-    console.error("Failed to parse AI response", error)
+    logger.error("Failed to parse AI response", error)
     return null
   }
 }
@@ -174,7 +175,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(responsePayload)
   } catch (error) {
-    console.error("AI activity extraction failed", error)
+    logger.error("AI activity extraction failed", error)
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Invalid activity data returned from AI" }, { status: 422 })
     }

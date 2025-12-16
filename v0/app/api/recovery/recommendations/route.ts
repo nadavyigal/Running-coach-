@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { RecoveryEngine } from '../../../../lib/recoveryEngine';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     try {
       recoveryScore = await RecoveryEngine.getRecoveryScore(userId, date);
     } catch (error) {
-      console.warn('Failed to get existing recovery score, will calculate new one:', error);
+      logger.warn('Failed to get existing recovery score, will calculate new one:', error);
       recoveryScore = null;
     }
     
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
           }
         });
       } catch (calcError) {
-        console.error('Failed to calculate recovery score:', calcError);
+        logger.error('Failed to calculate recovery score:', calcError);
         // Return default recommendations if calculation fails
         return NextResponse.json({
           success: true,
@@ -96,7 +97,7 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error getting recovery recommendations:', error);
+    logger.error('Error getting recovery recommendations:', error);
     return NextResponse.json(
       {
         success: false,
@@ -143,7 +144,7 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error calculating recovery recommendations:', error);
+    logger.error('Error calculating recovery recommendations:', error);
     return NextResponse.json(
       {
         success: false,

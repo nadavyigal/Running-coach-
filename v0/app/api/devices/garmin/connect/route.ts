@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withAuthSecurity, ApiRequest } from '@/lib/security.middleware';
 import { generateSignedState } from '../oauth-state';
+import { logger } from '@/lib/logger';
 
 // POST - Initiate Garmin OAuth flow (SECURED)
 async function handleGarminConnect(req: ApiRequest) {
@@ -42,7 +43,7 @@ async function handleGarminConnect(req: ApiRequest) {
 
     // Security: Never send client secret to client
     if (!garminConfig.clientId) {
-      console.error('❌ Garmin client ID not configured');
+      logger.error('❌ Garmin client ID not configured');
       return NextResponse.json({
         success: false,
         error: 'Service configuration error'
@@ -68,7 +69,7 @@ async function handleGarminConnect(req: ApiRequest) {
     });
 
   } catch (error) {
-    console.error('Garmin OAuth initiation error:', error);
+    logger.error('Garmin OAuth initiation error:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to initiate Garmin connection'

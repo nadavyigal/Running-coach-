@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
 import { goalProgressEngine } from '@/lib/goalProgressEngine';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -144,7 +145,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error fetching goal progress:', error);
+    logger.error('Error fetching goal progress:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -237,7 +238,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (error) {
-    console.error('Error recording goal progress:', error);
+    logger.error('Error recording goal progress:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(

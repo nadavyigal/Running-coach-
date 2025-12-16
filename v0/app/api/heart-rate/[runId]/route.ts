@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { logger } from '@/lib/logger';
 
 // GET - Get heart rate data for a specific run
 export async function GET(req: Request, { params }: { params: { runId: string } }) {
@@ -46,7 +47,7 @@ export async function GET(req: Request, { params }: { params: { runId: string } 
     });
 
   } catch (error) {
-    console.error('Error fetching heart rate data:', error);
+    logger.error('Error fetching heart rate data:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to fetch heart rate data'
@@ -104,7 +105,7 @@ export async function POST(req: Request, { params }: { params: { runId: string }
     });
 
   } catch (error) {
-    console.error('Error adding heart rate data:', error);
+    logger.error('Error adding heart rate data:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to add heart rate data'

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { 
+import { logger } from '@/lib/logger';
   calculateMaxHRZones, 
   calculateLTZones, 
   calculateHRRZones,
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
       settings
     });
   } catch (error) {
-    console.error('Error fetching heart rate zones:', error);
+    logger.error('Error fetching heart rate zones:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to fetch heart rate zones' },
       { status: 500 }
@@ -192,7 +193,7 @@ export async function POST(request: NextRequest) {
       message: 'Heart rate zones calculated and saved successfully'
     });
   } catch (error) {
-    console.error('Error calculating heart rate zones:', error);
+    logger.error('Error calculating heart rate zones:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to calculate heart rate zones' },
       { status: 500 }
@@ -258,7 +259,7 @@ export async function PUT(request: NextRequest) {
       message: 'Heart rate zones updated successfully'
     });
   } catch (error) {
-    console.error('Error updating heart rate zones:', error);
+    logger.error('Error updating heart rate zones:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to update heart rate zones' },
       { status: 500 }
@@ -293,7 +294,7 @@ export async function DELETE(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error deleting heart rate zones:', error);
+    logger.error('Error deleting heart rate zones:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to delete heart rate zones'

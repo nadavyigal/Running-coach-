@@ -5,17 +5,18 @@ import { flushSync } from "react-dom"
 import dynamic from 'next/dynamic'
 import { useToast } from "@/hooks/use-toast"
 import { DATABASE } from '@/lib/constants'
+import { logger } from '@/lib/logger';
 
 // Safer dynamic imports with comprehensive error handling
 const OnboardingScreen = dynamic(
   () => import("@/components/onboarding-screen").then((module) => {
-    console.log('📦 OnboardingScreen module loaded:', { exports: Object.keys(module) });
+    logger.log('📦 OnboardingScreen module loaded:', { exports: Object.keys(module) });
     if (!module.OnboardingScreen) {
       throw new Error(`OnboardingScreen export not found. Available: ${Object.keys(module).join(', ')}`);
     }
     return { default: module.OnboardingScreen };
   }).catch((error) => {
-    console.error('💥 Failed to load OnboardingScreen:', error);
+    logger.error('💥 Failed to load OnboardingScreen:', error);
     // Return a fallback component instead of crashing
     return {
       default: ({ onComplete }: { onComplete: () => void }) => (
@@ -51,13 +52,13 @@ const OnboardingScreen = dynamic(
 
 const TodayScreen = dynamic(
   () => import("@/components/today-screen").then((module) => {
-    console.log('📦 TodayScreen module loaded:', { exports: Object.keys(module) });
+    logger.log('📦 TodayScreen module loaded:', { exports: Object.keys(module) });
     if (!module.TodayScreen) {
       throw new Error(`TodayScreen export not found. Available: ${Object.keys(module).join(', ')}`);
     }
     return { default: module.TodayScreen };
   }).catch((error) => {
-    console.error('💥 Failed to load TodayScreen:', error);
+    logger.error('💥 Failed to load TodayScreen:', error);
     return {
       default: () => (
         <div className="p-8 text-center">
@@ -82,14 +83,14 @@ const RecordScreen = dynamic(() => import("@/components/record-screen").then(m =
 const ChatScreen = dynamic(
   () => import("@/components/chat-screen")
     .then((module) => {
-      console.log('✅ ChatScreen module loaded:', { exports: Object.keys(module) });
+      logger.log('✅ ChatScreen module loaded:', { exports: Object.keys(module) });
       if (!module.ChatScreen) {
         throw new Error(`ChatScreen export not found. Available: ${Object.keys(module).join(', ')}`);
       }
       return { default: module.ChatScreen };
     })
     .catch((error) => {
-      console.error('❌ Failed to load ChatScreen:', error);
+      logger.error('❌ Failed to load ChatScreen:', error);
       return {
         default: () => (
           <div className="p-6 text-center space-y-2">
@@ -126,14 +127,14 @@ try {
   const dbCoreModule = require("@/lib/db");
   getDatabase = dbCoreModule.getDatabase;
 } catch (dbError) {
-  console.error('Failed to load database utilities:', dbError);
+  logger.error('Failed to load database utilities:', dbError);
   // Create mock dbUtils for graceful degradation
   dbUtils = {
-    initializeDatabase: async () => { console.warn('Database not available - running in degraded mode'); return true; },
-    performStartupMigration: async () => { console.warn('Migration skipped - database not available'); return true; },
-    ensureUserReady: async () => { console.warn('User ready check skipped - database not available'); return null; },
+    initializeDatabase: async () => { logger.warn('Database not available - running in degraded mode'); return true; },
+    performStartupMigration: async () => { logger.warn('Migration skipped - database not available'); return true; },
+    ensureUserReady: async () => { logger.warn('User ready check skipped - database not available'); return null; },
   };
-  getDatabase = () => { console.warn('getDatabase not available'); return null; };
+  getDatabase = () => { logger.warn('getDatabase not available'); return null; };
 }
 
 // Import production diagnostics
@@ -170,7 +171,7 @@ try {
   const chunkModule = require("@/components/chunk-error-boundary");
   useChunkErrorHandler = chunkModule.useChunkErrorHandler;
 } catch (chunkError) {
-  console.error('Failed to load chunk error handler:', chunkError);
+  logger.error('Failed to load chunk error handler:', chunkError);
 }
 
 export default function RunSmartApp() {
@@ -192,7 +193,7 @@ export default function RunSmartApp() {
   // Call chunk error handler hook unconditionally (hooks must be called at top level)
   useChunkErrorHandler()
 
-  console.log('🚀 RunSmartApp component rendering...', { isLoading, isOnboardingComplete })
+  logger.log('🚀 RunSmartApp component rendering...', { isLoading, isOnboardingComplete })
 
   // Set mounted state to fix hydration issues
   useEffect(() => {
@@ -201,32 +202,32 @@ export default function RunSmartApp() {
 
   // Initialize app - load user and check onboarding status
   useEffect(() => {
-    console.log('🔍 [INIT] useEffect triggered, mounted=', mounted)
+    logger.log('🔍 [INIT] useEffect triggered, mounted=', mounted)
     if (!mounted) {
-      console.log('🔍 [INIT] Not mounted yet, returning early')
+      logger.log('🔍 [INIT] Not mounted yet, returning early')
       return
     }
     
-    console.log('🔍 [INIT] Mounted! Starting initialization...')
+    logger.log('🔍 [INIT] Mounted! Starting initialization...')
 
     // Prevent double initialization in React Strict Mode
     if (initRef.current) {
-      console.log('🔍 [INIT] Already initialized (initRef=true), skipping')
+      logger.log('🔍 [INIT] Already initialized (initRef=true), skipping')
       return
     }
     initRef.current = true
-    console.log('🔍 [INIT] initRef set to true, proceeding with initialization')
+    logger.log('🔍 [INIT] initRef set to true, proceeding with initialization')
 
     // CRITICAL SAFETY: Set a maximum timeout for initialization
     const safetyTimeout = setTimeout(() => {
-      console.warn('⚠️ SAFETY TIMEOUT: Forcing initialization complete')
+      logger.warn('⚠️ SAFETY TIMEOUT: Forcing initialization complete')
       
       // Check localStorage before forcing state
       const localComplete = localStorage.getItem('onboarding-complete') === 'true';
       const localUserData = localStorage.getItem('user-data');
       
       if (localComplete && localUserData) {
-        console.log('[app:safety] ✅ Restoring from localStorage on timeout');
+        logger.log('[app:safety] ✅ Restoring from localStorage on timeout');
         setIsOnboardingComplete(true);
         setCurrentScreen('today');
       }
@@ -236,14 +237,14 @@ export default function RunSmartApp() {
 
     // Global error handler
     const handleGlobalError = (event: ErrorEvent) => {
-      console.error('Global error caught:', event.error);
+      logger.error('Global error caught:', event.error);
       setErrorMessage(event.error?.message || 'Unknown error occurred');
       setHasError(true);
       setIsLoading(false); // Ensure loading clears on error
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      console.error('Unhandled promise rejection:', event.reason);
+      logger.error('Unhandled promise rejection:', event.reason);
       setErrorMessage(event.reason?.message || 'Promise rejection occurred');
       setHasError(true);
       setIsLoading(false); // Ensure loading clears on error
@@ -259,43 +260,43 @@ export default function RunSmartApp() {
 
         // Reset mode: add ?reset=1 to URL to clear all data and restart onboarding
         if (usp.get('reset') === '1') {
-          console.warn('[app:reset] Reset mode enabled via ?reset=1 - clearing all data')
+          logger.warn('[app:reset] Reset mode enabled via ?reset=1 - clearing all data')
 
           // Import resetDatabaseInstance to close connection (use .then() since we're not in async function)
           import('@/lib/db').then((dbModule) => {
             if (dbModule.resetDatabaseInstance) {
               dbModule.resetDatabaseInstance()
-              console.log('[app:reset] ✅ Database connection closed')
+              logger.log('[app:reset] ✅ Database connection closed')
             }
           }).catch((err) => {
-            console.warn('[app:reset] Failed to close database connection:', err)
+            logger.warn('[app:reset] Failed to close database connection:', err)
           })
 
           // Clear localStorage COMPLETELY
           localStorage.clear()
-          console.log('[app:reset] ✅ localStorage cleared')
+          logger.log('[app:reset] ✅ localStorage cleared')
 
           // Clear IndexedDB (connection now closed, will succeed)
           const dbNamesToDelete = [DATABASE.NAME, 'running-coach-db', 'RunningCoachDB']
           dbNamesToDelete.forEach((dbName) => {
             try {
               indexedDB.deleteDatabase(dbName)
-              console.log(`[app:reset] ✅ Database deletion initiated: ${dbName}`)
+              logger.log(`[app:reset] ✅ Database deletion initiated: ${dbName}`)
             } catch (error) {
-              console.warn(`[app:reset] Failed to delete database ${dbName}:`, error)
+              logger.warn(`[app:reset] Failed to delete database ${dbName}:`, error)
             }
           })
 
           // Set a flag to force onboarding after reset
           sessionStorage.setItem('force-onboarding', 'true')
-          console.log('[app:reset] ✅ Force onboarding flag set')
+          logger.log('[app:reset] ✅ Force onboarding flag set')
 
           // Remove ?reset=1 from URL and reload
           window.history.replaceState({}, '', window.location.pathname)
 
           // Delay reload to ensure database deletion completes
           setTimeout(() => {
-            console.log('[app:reset] ✅ Reloading page with clean state...')
+            logger.log('[app:reset] ✅ Reloading page with clean state...')
             window.location.reload()
           }, 300)
           return
@@ -303,31 +304,31 @@ export default function RunSmartApp() {
 
         // Safe mode to bypass dynamic imports if needed: add ?safe=1 to URL
         if (usp.get('safe') === '1') {
-          console.warn('[app:safe] Safe mode enabled via ?safe=1')
+          logger.warn('[app:safe] Safe mode enabled via ?safe=1')
           setSafeMode(true)
           setIsLoading(false)
           return
         }
       }
     } catch (safeCheckError) {
-      console.warn('Safe mode check failed:', safeCheckError);
+      logger.warn('Safe mode check failed:', safeCheckError);
     }
     
     // Initialize app state with enhanced error handling and production resilience
     const initializeApp = async () => {
       if (typeof window !== 'undefined') {
         try {
-          console.log('[app:init:start] Starting application initialization...');
+          logger.log('[app:init:start] Starting application initialization...');
           
           await dbUtils.initializeDatabase();
-          console.log('[app:init:db] ✅ Database initialized successfully');
+          logger.log('[app:init:db] ✅ Database initialized successfully');
 
           await dbUtils.performStartupMigration();
-          console.log('[app:init:migration] ✅ Startup migration completed');
+          logger.log('[app:init:migration] ✅ Startup migration completed');
 
           const user = await dbUtils.ensureUserReady();
           if (user) {
-            console.log(`[app:init:user] ✅ User ready: id=${user.id}, onboarding=${user.onboardingComplete}`);
+            logger.log(`[app:init:user] ✅ User ready: id=${user.id}, onboarding=${user.onboardingComplete}`);
             if (user.onboardingComplete) {
               setIsOnboardingComplete(true);
               setCurrentScreen("today");
@@ -340,28 +341,28 @@ export default function RunSmartApp() {
                 daysPerWeek: user.daysPerWeek,
                 preferredTimes: user.preferredTimes,
               }));
-              console.log('[app:init:sync] ✅ localStorage synced with database');
+              logger.log('[app:init:sync] ✅ localStorage synced with database');
             } else {
               setIsOnboardingComplete(false);
               setCurrentScreen("onboarding");
               // Clear localStorage if onboarding not complete
               localStorage.removeItem('onboarding-complete');
-              console.log('[app:init:sync] ⚠️ Onboarding incomplete, localStorage cleared');
+              logger.log('[app:init:sync] ⚠️ Onboarding incomplete, localStorage cleared');
             }
           } else {
             throw new Error('Failed to ensure user is ready');
           }
         } catch (initErr) {
-          console.error('[app:init:error] ❌ Initialization failed:', initErr);
+          logger.error('[app:init:error] ❌ Initialization failed:', initErr);
           setErrorMessage(initErr.message || 'Initialization failed');
           setHasError(true);
           setIsOnboardingComplete(false);
         } finally {
           setIsLoading(false);
-          console.log('[app:init:complete] ✅ App initialization complete');
+          logger.log('[app:init:complete] ✅ App initialization complete');
         }
       } else {
-        console.log('[app:init:ssr] 📝 Server-side render, showing onboarding');
+        logger.log('[app:init:ssr] 📝 Server-side render, showing onboarding');
         setIsOnboardingComplete(false);
         setIsLoading(false);
       }
@@ -384,15 +385,15 @@ export default function RunSmartApp() {
     // Only run on client side
     if (typeof window === "undefined") return
 
-    console.log('🔗 Adding navigation event listeners...')
+    logger.log('🔗 Adding navigation event listeners...')
 
     const handleNavigateToRecord = () => {
-      console.log('🎯 Navigating to record screen')
+      logger.log('🎯 Navigating to record screen')
       setCurrentScreen("record")
     }
 
     const handleNavigateToChat = () => {
-      console.log('💬 Navigating to chat screen')
+      logger.log('💬 Navigating to chat screen')
       setCurrentScreen("chat")
     }
 
@@ -408,7 +409,7 @@ export default function RunSmartApp() {
     window.addEventListener("keydown", handleKeyDown)
 
     return () => {
-      console.log('🧹 Cleaning up navigation event listeners...')
+      logger.log('🧹 Cleaning up navigation event listeners...')
       window.removeEventListener("navigate-to-record", handleNavigateToRecord)
       window.removeEventListener("navigate-to-chat", handleNavigateToChat)
       window.removeEventListener("keydown", handleKeyDown)
@@ -416,7 +417,7 @@ export default function RunSmartApp() {
   }, []) // Empty dependency array - event listeners should only be set up once
 
   const handleOnboardingComplete = (userData?: any) => {
-    console.log('✅ [handleOnboardingComplete] Starting navigation to Today screen...')
+    logger.log('✅ [handleOnboardingComplete] Starting navigation to Today screen...')
 
     const finalUserData = userData || {
       experience: 'beginner',
@@ -430,27 +431,27 @@ export default function RunSmartApp() {
       // Update localStorage first
       localStorage.setItem("onboarding-complete", "true")
       localStorage.setItem("user-data", JSON.stringify(finalUserData))
-      console.log('✅ [handleOnboardingComplete] localStorage updated')
+      logger.log('✅ [handleOnboardingComplete] localStorage updated')
 
       // Use flushSync to force immediate synchronous state updates and re-render
       // This ensures navigation happens immediately without waiting for batching
       flushSync(() => {
-        console.log('✅ [handleOnboardingComplete] Setting states synchronously...')
+        logger.log('✅ [handleOnboardingComplete] Setting states synchronously...')
         setIsOnboardingComplete(true)
         setCurrentScreen("today")
       })
 
-      console.log('✅ [handleOnboardingComplete] State updated successfully - should now show Today screen')
-      console.log('✅ [handleOnboardingComplete] Final state: isOnboardingComplete=true, currentScreen=today')
+      logger.log('✅ [handleOnboardingComplete] State updated successfully - should now show Today screen')
+      logger.log('✅ [handleOnboardingComplete] Final state: isOnboardingComplete=true, currentScreen=today')
     } catch (error) {
-      console.error('❌ [handleOnboardingComplete] Error during navigation:', error)
+      logger.error('❌ [handleOnboardingComplete] Error during navigation:', error)
       // Fallback: try setting states without flushSync
       setIsOnboardingComplete(true)
       setCurrentScreen("today")
     }
   }
 
-  console.log('🎭 Current screen:', currentScreen, 'Onboarding complete:', isOnboardingComplete, 'Loading:', isLoading, 'Error:', hasError)
+  logger.log('🎭 Current screen:', currentScreen, 'Onboarding complete:', isOnboardingComplete, 'Loading:', isLoading, 'Error:', hasError)
 
   // Show minimal loading during SSR and initial hydration to prevent mismatch
   if (!mounted) {
@@ -465,7 +466,7 @@ export default function RunSmartApp() {
   }
 
   if (isLoading) {
-    console.log('⏳ Showing loading state...')
+    logger.log('⏳ Showing loading state...')
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -490,7 +491,7 @@ export default function RunSmartApp() {
 
   // Enhanced error display
   if (hasError) {
-    console.log('⚠️ Showing error state')
+    logger.log('⚠️ Showing error state')
     return (
       <div className="min-h-screen bg-gray-50 max-w-md mx-auto relative flex items-center justify-center">
         <div className="text-center p-8">
@@ -530,10 +531,10 @@ export default function RunSmartApp() {
     try {
       // Always show onboarding if not completed, regardless of currentScreen
       if (!isOnboardingComplete) {
-        console.log('🎓 Rendering onboarding screen - isOnboardingComplete:', isOnboardingComplete);
-        console.log('🎓 Attempted to show screen:', currentScreen);
-        console.warn('⚠️ REDIRECT TO ONBOARDING: User has not completed onboarding yet!');
-        console.warn('⚠️ To fix: Visit http://localhost:3000/debug-onboarding to check database state');
+        logger.log('🎓 Rendering onboarding screen - isOnboardingComplete:', isOnboardingComplete);
+        logger.log('🎓 Attempted to show screen:', currentScreen);
+        logger.warn('⚠️ REDIRECT TO ONBOARDING: User has not completed onboarding yet!');
+        logger.warn('⚠️ To fix: Visit http://localhost:3000/debug-onboarding to check database state');
         return (
           <OnboardingScreen
             onComplete={handleOnboardingComplete}
@@ -541,7 +542,7 @@ export default function RunSmartApp() {
         )
       }
 
-      console.log('📱 Rendering main app with screen:', currentScreen, '| isOnboardingComplete:', isOnboardingComplete)
+      logger.log('📱 Rendering main app with screen:', currentScreen, '| isOnboardingComplete:', isOnboardingComplete)
       
       switch (currentScreen) {
         case "today":
@@ -558,7 +559,7 @@ export default function RunSmartApp() {
           return <TodayScreen />
       }
     } catch (renderError) {
-      console.error('Screen rendering error:', renderError);
+      logger.error('Screen rendering error:', renderError);
       return (
         <div className="p-8 text-center">
           <h2 className="text-xl font-bold text-red-600 mb-4">Screen Loading Error</h2>

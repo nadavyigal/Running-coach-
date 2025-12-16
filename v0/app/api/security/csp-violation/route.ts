@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withApiSecurity, ApiRequest } from '@/lib/security.middleware';
+import { logger } from '@/lib/logger';
 
 async function cspViolationHandler(req: ApiRequest) {
   if (req.method !== 'POST') {
@@ -8,7 +9,7 @@ async function cspViolationHandler(req: ApiRequest) {
   
   try {
     const violation = await req.json();
-    console.warn('CSP violation received:', violation);
+    logger.warn('CSP violation received:', violation);
     
     // In production, send to security monitoring service
     if (process.env.NODE_ENV === 'production') {
@@ -19,7 +20,7 @@ async function cspViolationHandler(req: ApiRequest) {
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Failed to process CSP violation:', error);
+    logger.error('Failed to process CSP violation:', error);
     return NextResponse.json({ error: 'Failed to process violation' }, { status: 500 });
   }
 }

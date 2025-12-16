@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -191,7 +192,7 @@ export async function GET(request: NextRequest) {
       });
     }
   } catch (error) {
-    console.error('Error exporting performance data:', error);
+    logger.error('Error exporting performance data:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(

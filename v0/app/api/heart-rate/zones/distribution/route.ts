@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { calculateZoneDistribution, getHeartRateZoneFromBpm } from '@/lib/heartRateZones';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,7 +86,7 @@ export async function GET(request: NextRequest) {
       distribution: fullDistribution
     });
   } catch (error) {
-    console.error('Error calculating zone distribution:', error);
+    logger.error('Error calculating zone distribution:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to calculate zone distribution' },
       { status: 500 }
@@ -196,7 +197,7 @@ export async function POST(request: NextRequest) {
       results
     });
   } catch (error) {
-    console.error('Error processing zone distributions:', error);
+    logger.error('Error processing zone distributions:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to process zone distributions' },
       { status: 500 }

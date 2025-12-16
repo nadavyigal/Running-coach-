@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server';
 import { chatDriver, ChatRequest } from '@/lib/chatDriver';
 import { dbUtils } from '@/lib/dbUtils';
+import { logger } from '@/lib/logger';
 
 export async function POST(req: Request) {
   const requestId = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   
-  console.log(`[chat:api] requestId=${requestId} Starting chat request`);
+  logger.log(`[chat:api] requestId=${requestId} Starting chat request`);
   
   try {
     // Validate content type
     const contentType = req.headers.get('content-type');
     if (!contentType || !contentType.includes('application/json')) {
-      console.error(`[chat:api] requestId=${requestId} Invalid content type:`, contentType);
+      logger.error(`[chat:api] requestId=${requestId} Invalid content type:`, contentType);
       return NextResponse.json({
         error: 'Content-Type must be application/json',
         requestId,
@@ -27,7 +28,7 @@ export async function POST(req: Request) {
       }
       body = JSON.parse(bodyText);
     } catch (parseError) {
-      console.error(`[chat:api] requestId=${requestId} JSON parsing error:`, parseError);
+      logger.error(`[chat:api] requestId=${requestId} JSON parsing error:`, parseError);
       return NextResponse.json({
         error: 'Invalid JSON in request body',
         requestId,
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
       model = 'gpt-4o-mini' 
     } = body;
     
-    console.log(`[chat:api] requestId=${requestId} Request data:`, {
+    logger.log(`[chat:api] requestId=${requestId} Request data:`, {
       messagesCount: messages?.length || 0,
       userId,
       streaming,
@@ -52,7 +53,7 @@ export async function POST(req: Request) {
     
     // Validate required fields
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      console.error(`[chat:api] requestId=${requestId} Invalid messages:`, messages);
+      logger.error(`[chat:api] requestId=${requestId} Invalid messages:`, messages);
       return NextResponse.json({
         error: 'Messages array is required and cannot be empty',
         requestId,
@@ -62,7 +63,7 @@ export async function POST(req: Request) {
     // Validate message format
     for (const msg of messages) {
       if (!msg.role || !msg.content || typeof msg.content !== 'string') {
-        console.error(`[chat:api] requestId=${requestId} Invalid message format:`, msg);
+        logger.error(`[chat:api] requestId=${requestId} Invalid message format:`, msg);
         return NextResponse.json({
           error: 'Each message must have role and content fields',
           requestId,
@@ -70,7 +71,7 @@ export async function POST(req: Request) {
       }
       
       if (!['user', 'assistant', 'system'].includes(msg.role)) {
-        console.error(`[chat:api] requestId=${requestId} Invalid message role:`, msg.role);
+        logger.error(`[chat:api] requestId=${requestId} Invalid message role:`, msg.role);
         return NextResponse.json({
           error: 'Message role must be user, assistant, or system',
           requestId,
@@ -85,14 +86,14 @@ export async function POST(req: Request) {
         const user = await dbUtils.getCurrentUser();
         resolvedUserId = user?.id;
       } catch (error) {
-        console.warn(`[chat:api] requestId=${requestId} Could not resolve user:`, error);
+        logger.warn(`[chat:api] requestId=${requestId} Could not resolve user:`, error);
       }
     }
     
     // Check chat service health
     const health = await chatDriver.health();
     if (!health.available) {
-      console.error(`[chat:api] requestId=${requestId} Chat service unavailable:`, health.lastError);
+      logger.error(`[chat:api] requestId=${requestId} Chat service unavailable:`, health.lastError);
       return NextResponse.json({
         error: 'AI chat is temporarily unavailable. Please try again later.',
         available: false,
@@ -112,14 +113,14 @@ export async function POST(req: Request) {
         ? { ...baseRequest, userId: resolvedUserId }
         : baseRequest;
     
-    console.log(`[chat:api] requestId=${requestId} Sending to ChatDriver, streaming=${streaming}`);
+    logger.log(`[chat:api] requestId=${requestId} Sending to ChatDriver, streaming=${streaming}`);
     
     // Use ChatDriver for the actual AI request
     const response = await chatDriver.ask(chatRequest);
     
     if (!response.success) {
       const error = response.error!;
-      console.error(`[chat:api] requestId=${requestId} ChatDriver error:`, error);
+      logger.error(`[chat:api] requestId=${requestId} ChatDriver error:`, error);
       
       // Map ChatDriver errors to appropriate HTTP responses
       const statusCode = error.code || 500;
@@ -144,7 +145,7 @@ export async function POST(req: Request) {
     }
     
     if (streaming && response.stream) {
-      console.log(`[chat:api] requestId=${requestId} ✅ Returning streaming response`);
+      logger.log(`[chat:api] requestId=${requestId} ✅ Returning streaming response`);
       
       return new Response(response.stream, {
         headers: {
@@ -156,7 +157,7 @@ export async function POST(req: Request) {
       });
       
     } else if (response.data) {
-      console.log(`[chat:api] requestId=${requestId} ✅ Returning non-streaming response`);
+      logger.log(`[chat:api] requestId=${requestId} ✅ Returning non-streaming response`);
       
       // Non-streaming response with full metrics
       return NextResponse.json({
@@ -178,7 +179,7 @@ export async function POST(req: Request) {
     throw new Error('Invalid response from ChatDriver');
     
   } catch (error) {
-    console.error(`[chat:api] requestId=${requestId} Unexpected error:`, error);
+    logger.error(`[chat:api] requestId=${requestId} Unexpected error:`, error);
     
     return NextResponse.json({
       success: false,
@@ -193,7 +194,7 @@ export async function GET() {
   const requestId = `chat_health_${Date.now()}`;
   
   try {
-    console.log(`[chat:api] requestId=${requestId} Health check requested`);
+    logger.log(`[chat:api] requestId=${requestId} Health check requested`);
     
     const health = await chatDriver.health();
     const metrics = chatDriver.getMetrics();
@@ -215,7 +216,7 @@ export async function GET() {
     });
     
   } catch (error) {
-    console.error(`[chat:api] requestId=${requestId} Health check error:`, error);
+    logger.error(`[chat:api] requestId=${requestId} Health check error:`, error);
     
     return NextResponse.json({
       success: false,

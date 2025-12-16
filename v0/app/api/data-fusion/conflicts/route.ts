@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../lib/db';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -72,7 +73,7 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error getting data conflicts:', error);
+    logger.error('Error getting data conflicts:', error);
     return NextResponse.json(
       {
         success: false,
@@ -167,7 +168,7 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error resolving conflicts:', error);
+    logger.error('Error resolving conflicts:', error);
     return NextResponse.json(
       {
         success: false,

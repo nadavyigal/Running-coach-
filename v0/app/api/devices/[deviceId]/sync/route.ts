@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { logger } from '@/lib/logger';
 
 // POST - Trigger manual sync for device
 export async function POST(req: Request, { params }: { params: { deviceId: string } }) {
@@ -49,7 +50,7 @@ export async function POST(req: Request, { params }: { params: { deviceId: strin
           updatedAt: new Date()
         });
       } catch (error) {
-        console.error('Error updating sync status:', error);
+        logger.error('Error updating sync status:', error);
       }
     }, 2000);
 
@@ -59,7 +60,7 @@ export async function POST(req: Request, { params }: { params: { deviceId: strin
     });
 
   } catch (error) {
-    console.error('Device sync error:', error);
+    logger.error('Device sync error:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to sync device'

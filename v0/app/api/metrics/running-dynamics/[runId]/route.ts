@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { logger } from '@/lib/logger';
 
 // GET - Get running dynamics data for a specific run
 export async function GET(req: Request, { params }: { params: { runId: string } }) {
@@ -24,7 +25,7 @@ export async function GET(req: Request, { params }: { params: { runId: string } 
     });
 
   } catch (error) {
-    console.error('Error fetching running dynamics:', error);
+    logger.error('Error fetching running dynamics:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to fetch running dynamics'
@@ -121,7 +122,7 @@ export async function POST(req: Request, { params }: { params: { runId: string }
     }
 
   } catch (error) {
-    console.error('Error adding/updating running dynamics:', error);
+    logger.error('Error adding/updating running dynamics:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to process running dynamics'

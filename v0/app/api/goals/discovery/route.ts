@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 
 // Use a relative import to avoid alias resolution issues in test runners
 import {
+import { logger } from '@/lib/logger';
   goalDiscoveryEngine,
   type UserProfile,
   type GoalAnalysisContext
@@ -142,33 +143,33 @@ Please provide a structured analysis in JSON format with the following structure
 };
 
 export async function POST(request: NextRequest) {
-  console.log('🎯 Goal Discovery API: Starting goal discovery request');
+  logger.log('🎯 Goal Discovery API: Starting goal discovery request');
   
   try {
     const body = await request.json();
-    console.log('📝 Request body received for goal discovery');
+    logger.log('📝 Request body received for goal discovery');
     
     // Validate request
     const requestData = GoalDiscoveryRequestSchema.parse(body);
-    console.log('✅ Goal discovery request validation passed');
+    logger.log('✅ Goal discovery request validation passed');
 
     const { userProfile, context, includeAIEnhancement, maxGoals } = requestData;
 
     // Step 1: Run core goal discovery engine
-    console.log('🔍 Running core goal discovery engine...');
+    logger.log('🔍 Running core goal discovery engine...');
     const discoveryResult = await goalDiscoveryEngine.discoverGoals(userProfile, context);
-    console.log(`✅ Core discovery completed with ${discoveryResult.discoveredGoals.length} goals found`);
+    logger.log(`✅ Core discovery completed with ${discoveryResult.discoveredGoals.length} goals found`);
 
     // Step 2: Enhance with AI insights if requested
     let enhancedResult = discoveryResult;
     if (includeAIEnhancement) {
       try {
-        console.log('🤖 Enhancing goals with AI insights...');
+        logger.log('🤖 Enhancing goals with AI insights...');
         const aiInsights = await getAIGoalInsights(userProfile, context);
         enhancedResult = await enhanceGoalsWithAI(discoveryResult, aiInsights, userProfile);
-        console.log('✅ AI enhancement completed');
+        logger.log('✅ AI enhancement completed');
       } catch (aiError) {
-        console.error('❌ AI enhancement failed, using core results:', aiError);
+        logger.error('❌ AI enhancement failed, using core results:', aiError);
         // Continue with core results if AI fails
       }
     }
@@ -199,15 +200,15 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    console.log('✅ Goal Discovery API: Success, returning enhanced results');
+    logger.log('✅ Goal Discovery API: Success, returning enhanced results');
     return NextResponse.json(response);
 
   } catch (error) {
-    console.error('❌ Goal Discovery API: Error occurred:', error);
-    console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    logger.error('❌ Goal Discovery API: Error occurred:', error);
+    logger.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     
     if (error instanceof z.ZodError) {
-      console.error('❌ Validation error details:', error.errors);
+      logger.error('❌ Validation error details:', error.errors);
       return NextResponse.json(
         { 
           error: 'Invalid request data', 
@@ -232,7 +233,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  console.log('🎯 Goal Discovery API: Goal refinement request');
+  logger.log('🎯 Goal Discovery API: Goal refinement request');
   
   try {
     const body = await request.json();
@@ -255,7 +256,7 @@ export async function PUT(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error refining goals:', error);
+    logger.error('Error refining goals:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -319,7 +320,7 @@ async function getAIGoalInsights(userProfile: UserProfile, context: GoalAnalysis
 
     return object;
   } catch (error) {
-    console.error('Failed to get AI insights:', error);
+    logger.error('Failed to get AI insights:', error);
     throw error;
   }
 }
@@ -454,7 +455,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(capabilities);
 
   } catch (error) {
-    console.error('Error getting goal discovery capabilities:', error);
+    logger.error('Error getting goal discovery capabilities:', error);
     return NextResponse.json(
       { error: 'Failed to get discovery capabilities' },
       { status: 500 }

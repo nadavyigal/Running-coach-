@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DataFusionEngine } from '../../../../lib/dataFusionEngine';
 import { db } from '../../../../lib/db';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error getting data sources:', error);
+    logger.error('Error getting data sources:', error);
     return NextResponse.json(
       {
         success: false,
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error managing data source:', error);
+    logger.error('Error managing data source:', error);
     return NextResponse.json(
       {
         success: false,

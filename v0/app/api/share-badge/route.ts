@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import crypto from 'crypto';
+import { logger } from '@/lib/logger';
 
 interface ShareToken {
   id?: number;
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
 
     // For now, we'll create a simplified tracking mechanism
     // In a real app, you'd want to store this in a dedicated shareTokens table
-    console.log('Generated share token:', {
+    logger.log('Generated share token:', {
       badgeId: numericBadgeId,
       userId: numericUserId,
       token,
@@ -78,9 +79,9 @@ export async function POST(request: Request) {
     try {
       // We could store share analytics in a separate table
       // For now, just log the event
-      console.log(`Badge shared: ${badge.type} milestone ${badge.milestone} by user ${numericUserId}`);
+      logger.log(`Badge shared: ${badge.type} milestone ${badge.milestone} by user ${numericUserId}`);
     } catch (analyticsError) {
-      console.warn('Failed to track badge sharing event:', analyticsError);
+      logger.warn('Failed to track badge sharing event:', analyticsError);
       // Don't fail the request if analytics fails
     }
 
@@ -92,7 +93,7 @@ export async function POST(request: Request) {
     });
 
   } catch (error) {
-    console.error('Error generating shareable link:', error);
+    logger.error('Error generating shareable link:', error);
     
     // Provide more specific error messages
     if (error instanceof Error) {

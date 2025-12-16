@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,7 @@ export async function GET(req: Request) {
     });
 
   } catch (error) {
-    console.error('Error fetching devices:', error);
+    logger.error('Error fetching devices:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to fetch devices'

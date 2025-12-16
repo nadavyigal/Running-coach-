@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbUtils } from '@/lib/dbUtils';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error fetching workouts:', error);
+    logger.error('Error fetching workouts:', error);
     return NextResponse.json({
       error: 'Failed to fetch workouts',
       details: error instanceof Error ? error.message : 'Unknown error'

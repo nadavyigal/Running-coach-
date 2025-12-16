@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { dbUtils } from '@/lib/dbUtils';
 import { db } from '@/lib/db';
+import { logger } from '@/lib/logger';
 
 export default function DebugOnboardingPage() {
   const [status, setStatus] = useState<any>(null);
@@ -37,7 +38,7 @@ export default function DebugOnboardingPage() {
         mismatch: user ? (user.onboardingComplete && localOnboarding !== 'true') : false
       });
     } catch (error) {
-      console.error('Debug error:', error);
+      logger.error('Debug error:', error);
       setStatus({ error: error.message });
     } finally {
       setLoading(false);
@@ -69,7 +70,7 @@ export default function DebugOnboardingPage() {
         window.location.href = '/';
       }
     } catch (error) {
-      console.error('Fix error:', error);
+      logger.error('Fix error:', error);
       alert('❌ Failed to fix: ' + error.message);
     } finally {
       setFixing(false);

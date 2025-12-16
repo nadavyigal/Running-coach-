@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { GoalRecommendation } from '@/lib/db';
 import { dbUtils } from '@/lib/dbUtils';
 import { goalProgressEngine } from '@/lib/goalProgressEngine';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -104,7 +105,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error fetching goal recommendations:', error);
+    logger.error('Error fetching goal recommendations:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -142,7 +143,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (error) {
-    console.error('Error creating goal recommendation:', error);
+    logger.error('Error creating goal recommendation:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -183,7 +184,7 @@ export async function PUT(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error responding to goal recommendation:', error);
+    logger.error('Error responding to goal recommendation:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -438,6 +439,6 @@ async function handleAcceptedRecommendation(recommendationId: number, modificati
         break;
     }
   } catch (error) {
-    console.error('Error handling accepted recommendation:', error);
+    logger.error('Error handling accepted recommendation:', error);
   }
 }
