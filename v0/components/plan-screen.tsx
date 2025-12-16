@@ -407,7 +407,7 @@ export function PlanScreen() {
       </div>
 
       {primaryGoal && (
-        <Card className="bg-gradient-to-r from-emerald-50 to-blue-50 border-emerald-200">
+        <Card className="border">
           <CardContent className="p-4 space-y-2">
             <div className="flex items-center justify-between">
               <div>
@@ -441,11 +441,9 @@ export function PlanScreen() {
         ].map((view) => (
           <Button
             key={view.id}
-            variant={currentView === view.id ? "primary" : "ghost"}
+            variant={currentView === view.id ? "default" : "ghost"}
             size="sm"
-            className={`flex-1 transition-all duration-200 ${
-              currentView === view.id ? "scale-105 shadow-sm" : "hover:scale-102"
-            }`}
+            className="flex-1"
             onClick={() => setCurrentView(view.id as any)}
           >
             <view.icon className="h-4 w-4 mr-1" />

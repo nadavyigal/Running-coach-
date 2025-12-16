@@ -437,7 +437,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               <h2 className="text-2xl font-bold">Welcome to Run-Smart!</h2>
               <p className="text-gray-600">Let's create your personalized running plan</p>
             </div>
-            <Card className="bg-gradient-to-r from-green-400 to-blue-500 text-white">
+            <Card className="bg-green-500 text-white border-green-600">
               <CardContent className="p-6">
                 <h3 className="text-xl font-bold mb-2">🏃‍♂️ Adaptive Training Plan</h3>
                 <p>Get a personalized training plan to get you going!</p>
@@ -616,7 +616,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   return (
     <OnboardingErrorBoundary onReset={handleResetErrorBoundary}>
       <NetworkStatusIndicator />
-      <div className="min-h-screen bg-gradient-to-br from-green-400 to-blue-500 p-4 flex flex-col">
+      <div className="min-h-screen bg-green-500 p-4 flex flex-col">
         <div className="text-center mb-8 pt-8">
           <h1 className="text-3xl font-bold text-white flex items-center justify-center gap-2">
             <Running className="h-8 w-8" />

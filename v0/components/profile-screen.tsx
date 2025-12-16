@@ -396,7 +396,7 @@ export function ProfileScreen() {
         </div>
 
         {primaryGoal ? (
-          <Card className="bg-gradient-to-r from-blue-50 to-green-50 border-blue-200">
+          <Card className="border">
             <CardContent className="p-5 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
