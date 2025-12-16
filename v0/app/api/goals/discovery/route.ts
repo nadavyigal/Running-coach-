@@ -9,11 +9,11 @@ export const dynamic = 'force-dynamic';
 
 // Use a relative import to avoid alias resolution issues in test runners
 import {
-import { logger } from '@/lib/logger';
   goalDiscoveryEngine,
   type UserProfile,
   type GoalAnalysisContext
 } from '@/lib/goalDiscoveryEngine';
+import { logger } from '@/lib/logger';
 
 // Validation schemas
 const UserProfileSchema = z.object({

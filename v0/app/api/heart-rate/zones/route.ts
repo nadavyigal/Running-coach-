@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { 
 import { logger } from '@/lib/logger';
-  calculateMaxHRZones, 
-  calculateLTZones, 
+import {
+  calculateMaxHRZones,
+  calculateLTZones,
   calculateHRRZones,
   estimateMaxHeartRate,
-  validateHeartRateZones 
+  validateHeartRateZones
 } from '@/lib/heartRateZones';
 
 export const dynamic = 'force-dynamic';

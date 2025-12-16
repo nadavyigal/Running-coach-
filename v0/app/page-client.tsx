@@ -115,65 +115,6 @@ const ProfileScreen = dynamic(() => import("@/components/profile-screen").then(m
 const BottomNavigation = dynamic(() => import("@/components/bottom-navigation").then(m => ({ default: m.BottomNavigation })), { ssr: false })
 const OnboardingDebugPanel = dynamic(() => import("@/components/onboarding-debug-panel").then(m => ({ default: m.OnboardingDebugPanel })), { ssr: false })
 
-// Import database utilities with better error handling
-let dbUtils: any = null;
-let seedDemoRoutes: any = null;
-let getDatabase: any = null;
-try {
-  const dbModule = require("@/lib/dbUtils");
-  dbUtils = dbModule.dbUtils ?? dbModule.default;
-  seedDemoRoutes = dbModule.seedDemoRoutes;
-
-  const dbCoreModule = require("@/lib/db");
-  getDatabase = dbCoreModule.getDatabase;
-} catch (dbError) {
-  logger.error('Failed to load database utilities:', dbError);
-  // Create mock dbUtils for graceful degradation
-  dbUtils = {
-    initializeDatabase: async () => { logger.warn('Database not available - running in degraded mode'); return true; },
-    performStartupMigration: async () => { logger.warn('Migration skipped - database not available'); return true; },
-    ensureUserReady: async () => { logger.warn('User ready check skipped - database not available'); return null; },
-  };
-  getDatabase = () => { logger.warn('getDatabase not available'); return null; };
-}
-
-// Import production diagnostics
-let logDiagnostic: any = () => {};
-let logDatabaseInit: any = () => {};
-let logNavigation: any = () => {};
-let logError: any = () => {};
-try {
-  const diagModule = require("@/lib/productionDiagnostics");
-  logDiagnostic = diagModule.logDiagnostic;
-  logDatabaseInit = diagModule.logDatabaseInit;
-  logNavigation = diagModule.logNavigation;
-  logError = diagModule.logError;
-} catch {
-  // Diagnostics not available - use no-ops
-}
-
-// Import version tracking
-let logVersionInfo: any = () => {};
-let checkVersionAndClearCache: any = () => false;
-let getShortVersion: any = () => 'v1.0.0';
-try {
-  const versionModule = require("@/lib/version");
-  logVersionInfo = versionModule.logVersionInfo;
-  checkVersionAndClearCache = versionModule.checkVersionAndClearCache;
-  getShortVersion = versionModule.getShortVersion;
-} catch {
-  // Version module not available
-}
-
-// Import chunk error handler with fallback
-let useChunkErrorHandler: any = () => {};
-try {
-  const chunkModule = require("@/components/chunk-error-boundary");
-  useChunkErrorHandler = chunkModule.useChunkErrorHandler;
-} catch (chunkError) {
-  logger.error('Failed to load chunk error handler:', chunkError);
-}
-
 export default function RunSmartApp() {
   const [mounted, setMounted] = useState(false) // Fix hydration by rendering only after mount
   const [currentScreen, setCurrentScreen] = useState<string>("onboarding")
@@ -186,12 +127,12 @@ export default function RunSmartApp() {
 
   // Ref to prevent double initialization in React Strict Mode
   const initRef = useRef(false)
+  
+  // Ref to store dynamically loaded modules
+  const dbUtilsRef = useRef<any>(null)
 
   // Toast hook for notifications
   const { toast } = useToast()
-
-  // Call chunk error handler hook unconditionally (hooks must be called at top level)
-  useChunkErrorHandler()
 
   logger.log('🚀 RunSmartApp component rendering...', { isLoading, isOnboardingComplete })
 
@@ -320,6 +261,15 @@ export default function RunSmartApp() {
         try {
           logger.log('[app:init:start] Starting application initialization...');
           
+          // Dynamically load database utilities
+          if (!dbUtilsRef.current) {
+            const dbUtilsModule = await import("@/lib/dbUtils");
+            dbUtilsRef.current = dbUtilsModule.dbUtils ?? dbUtilsModule.default ?? dbUtilsModule;
+            logger.log('[app:init:modules] ✅ Database utilities loaded');
+          }
+          
+          const dbUtils = dbUtilsRef.current;
+          
           await dbUtils.initializeDatabase();
           logger.log('[app:init:db] ✅ Database initialized successfully');
 
@@ -352,7 +302,7 @@ export default function RunSmartApp() {
           } else {
             throw new Error('Failed to ensure user is ready');
           }
-        } catch (initErr) {
+        } catch (initErr: any) {
           logger.error('[app:init:error] ❌ Initialization failed:', initErr);
           setErrorMessage(initErr.message || 'Initialization failed');
           setHasError(true);
@@ -453,20 +403,11 @@ export default function RunSmartApp() {
 
   logger.log('🎭 Current screen:', currentScreen, 'Onboarding complete:', isOnboardingComplete, 'Loading:', isLoading, 'Error:', hasError)
 
-  // Show minimal loading during SSR and initial hydration to prevent mismatch
-  if (!mounted) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Initializing...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (isLoading) {
-    logger.log('⏳ Showing loading state...')
+  // Show consistent loading state to prevent hydration mismatch
+  if (!mounted || isLoading) {
+    if (isLoading) {
+      logger.log('⏳ Showing loading state...')
+    }
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">

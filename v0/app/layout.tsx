@@ -1,3 +1,5 @@
+'use client'
+
 import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
 import { Inter } from 'next/font/google'
@@ -64,52 +66,8 @@ const schemaOrgJsonLd = {
   ],
 }
 
-export const metadata: Metadata = {
-  metadataBase,
-  title: {
-    default: defaultTitle,
-    template: '%s | RunSmart',
-  },
-  description: defaultDescription,
-  applicationName: 'RunSmart',
-  openGraph: {
-    type: 'website',
-    url: '/',
-    title: defaultTitle,
-    description: defaultDescription,
-    siteName: 'RunSmart',
-    images: [
-      {
-        url: '/icon-512x512.png',
-        width: 512,
-        height: 512,
-        alt: 'RunSmart app icon',
-      },
-    ],
-  },
-  twitter: {
-    card: 'summary',
-    title: defaultTitle,
-    description: defaultDescription,
-    images: ['/icon-512x512.png'],
-  },
-  icons: {
-    icon: [
-      { url: '/favicon.ico' },
-      { url: '/icon-192x192.png', sizes: '192x192', type: 'image/png' },
-      { url: '/icon-512x512.png', sizes: '512x512', type: 'image/png' },
-    ],
-    apple: [{ url: '/icon-192x192.png' }],
-  },
-  manifest: '/manifest.webmanifest',
-}
-
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 5,
-  themeColor: '#ffffff',
-}
+// Note: metadata exports are not allowed in client components
+// The metadata is now handled in the HTML head directly
 
 export default function RootLayout({
   children,
@@ -119,13 +77,21 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <head>
+        <title>{defaultTitle}</title>
+        <meta name="description" content={defaultDescription} />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
+        <meta name="theme-color" content="#ffffff" />
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192x192.png" />
+        <link rel="icon" type="image/png" sizes="512x512" href="/icon-512x512.png" />
+        <link rel="apple-touch-icon" href="/icon-192x192.png" />
+        <link rel="manifest" href="/manifest.webmanifest" />
         {/* Resource hints for external services */}
         <link rel="dns-prefetch" href="https://us.i.posthog.com" />
         <link rel="preconnect" href="https://us.i.posthog.com" crossOrigin="" />
-        <Script
+        <script
           id="schema-org"
           type="application/ld+json"
-          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaOrgJsonLd) }}
         />
       </head>
