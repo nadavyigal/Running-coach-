@@ -41,11 +41,8 @@ import { CoachingPreferencesSettings } from "@/components/coaching-preferences-s
 import { GoalProgressDashboard } from "@/components/goal-progress-dashboard";
 import { PerformanceAnalyticsDashboard } from "@/components/performance-analytics-dashboard";
 import { Brain, Target } from "lucide-react";
-import { GoalCreationWizard } from "@/components/goal-creation-wizard";
 import { PlanTemplateFlow } from "@/components/plan-template-flow";
-import { ENABLE_PLAN_TEMPLATE_FLOW } from "@/lib/featureFlags";
 import { type Goal } from "@/lib/db";
-import { regenerateTrainingPlan } from "@/lib/plan-regeneration";
 
 export function ProfileScreen() {
   // Add state for the shoes modal at the top of the component
@@ -59,7 +56,6 @@ export function ProfileScreen() {
   const [selectedBadge, setSelectedBadge] = useState<{ id: string; name: string } | null>(null);
   const [showJoinCohortModal, setShowJoinCohortModal] = useState(false);
   const [showCoachingPreferences, setShowCoachingPreferences] = useState(false);
-  const [showGoalWizard, setShowGoalWizard] = useState(false);
   const [showPlanTemplateFlow, setShowPlanTemplateFlow] = useState(false);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [primaryGoal, setPrimaryGoal] = useState<Goal | null>(null);
@@ -102,29 +98,6 @@ export function ProfileScreen() {
       setGoals(activeGoals);
     } catch (goalError) {
       console.warn('[ProfileScreen] Failed to load goals:', goalError);
-    }
-  };
-
-  const handleGoalCreated = async (goal?: Goal) => {
-    if (!goal?.id || !userId) return;
-    try {
-      await dbUtils.setPrimaryGoal(userId, goal.id);
-      const updatedGoal = await dbUtils.getGoal(goal.id);
-      if (updatedGoal) {
-        await regenerateTrainingPlan(userId, updatedGoal);
-      }
-      await loadGoals();
-      toast({
-        title: 'Goal created',
-        description: 'Training plan regenerated to target your new goal.',
-      });
-    } catch (goalError) {
-      console.error('[ProfileScreen] Goal creation flow failed:', goalError);
-      toast({
-        title: 'Plan update failed',
-        description: 'Goal saved, but the training plan could not be regenerated.',
-        variant: 'destructive',
-      });
     }
   };
 
@@ -392,22 +365,10 @@ export function ProfileScreen() {
       <div className="space-y-3">
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-bold">Goals</h2>
-          {ENABLE_PLAN_TEMPLATE_FLOW ? (
-            <div className="flex gap-2">
-              <Button size="sm" className="gap-2" onClick={() => setShowPlanTemplateFlow(true)}>
-                <Plus className="h-4 w-4" />
-                Choose a plan
-              </Button>
-              <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowGoalWizard(true)}>
-                Advanced goal
-              </Button>
-            </div>
-          ) : (
-            <Button size="sm" className="gap-2" onClick={() => setShowGoalWizard(true)}>
-              <Plus className="h-4 w-4" />
-              Create Goal
-            </Button>
-          )}
+          <Button size="sm" className="gap-2" onClick={() => setShowPlanTemplateFlow(true)}>
+            <Plus className="h-4 w-4" />
+            Create Goal
+          </Button>
         </div>
 
         {primaryGoal ? (
@@ -452,25 +413,13 @@ export function ProfileScreen() {
                  <h3 className="text-lg font-semibold">No active goal</h3>
                  <p className="text-sm text-gray-600">Set a goal to get a tailored training plan.</p>
                </div>
-              {ENABLE_PLAN_TEMPLATE_FLOW ? (
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => setShowPlanTemplateFlow(true)} className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    Choose a plan
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setShowGoalWizard(true)}>
-                    Advanced
-                  </Button>
-                </div>
-              ) : (
-                <Button size="sm" onClick={() => setShowGoalWizard(true)} className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Create Goal
-                </Button>
-              )}
+              <Button size="sm" onClick={() => setShowPlanTemplateFlow(true)} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Create Goal
+              </Button>
              </CardContent>
            </Card>
-         )}
+          )}
 
         {goals.filter(g => !primaryGoal || g.id !== primaryGoal.id).length > 0 && (
           <Card>
@@ -790,15 +739,6 @@ export function ProfileScreen() {
       )}
 
       {userId && (
-        <GoalCreationWizard
-          isOpen={showGoalWizard}
-          onClose={() => setShowGoalWizard(false)}
-          userId={userId}
-          onGoalCreated={handleGoalCreated}
-        />
-      )}
-
-      {userId && ENABLE_PLAN_TEMPLATE_FLOW && (
         <PlanTemplateFlow
           isOpen={showPlanTemplateFlow}
           onClose={() => setShowPlanTemplateFlow(false)}
