@@ -222,6 +222,28 @@ export interface User {
   };
   // Timezone handling for UTC plan activation
   timezone?: string; // User's timezone (e.g., "America/New_York", "Europe/London")
+
+  // Plan template flow (optional)
+  planPreferences?: PlanSetupPreferences;
+}
+
+export interface PlanSetupPreferences {
+  // Availability and schedule preferences
+  availableDays?: string[]; // Mon/Tue/... (short)
+  trainingDays?: string[]; // Mon/Tue/... (short), subset used for scheduling
+  longRunDay?: string; // Mon/Tue/... (short)
+
+  // Plan structure
+  startDate?: Date;
+  basePlanLengthWeeks?: number;
+  raceDate?: Date;
+
+  // Intensity preferences
+  trainingVolume?: 'conservative' | 'progressive' | 'high';
+  difficulty?: 'easy' | 'balanced' | 'challenging';
+
+  // Baseline performance (seconds) for the selected distance
+  currentRaceTimeSeconds?: number;
 }
 
 export interface OnboardingSession {
@@ -1416,4 +1438,3 @@ export const badgeTypes: { [key: number]: 'bronze' | 'silver' | 'gold' } = {
   7: 'silver',
   30: 'gold',
 };
-

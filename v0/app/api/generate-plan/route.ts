@@ -73,8 +73,8 @@ const EnhancedPlanRequest = z.object({
  * Used by AI generation to ensure consistent workout format.
  */
 const WorkoutSchema = z.object({
-  /** Week number in the training plan (1-12) */
-  week: z.number().min(1).max(12),
+  /** Week number in the training plan (1-16) */
+  week: z.number().min(1).max(16),
   /** Day of the week for the workout */
   day: z.enum(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']),
   /** Type of workout to perform */
@@ -98,8 +98,8 @@ const PlanSchema = z.object({
   title: z.string(),
   /** Detailed description of the plan's purpose and approach */
   description: z.string(),
-  /** Total duration of the plan in weeks (1-12) */
-  totalWeeks: z.number().min(1).max(12),
+  /** Total duration of the plan in weeks (1-16) */
+  totalWeeks: z.number().min(1).max(16),
   /** Array of all workouts in the plan */
   workouts: z.array(WorkoutSchema)
 });
@@ -108,67 +108,171 @@ const PlanSchema = z.object({
  * Generate a fallback plan when AI is unavailable
  * Creates a reasonable beginner-friendly plan based on user preferences
  */
-function generateFallbackPlan(user: any): z.infer<typeof PlanSchema> {
-  const experience = user?.experience || 'beginner';
-  const goal = user?.goal || 'habit';
-  const daysPerWeek = Math.min(Math.max(user?.daysPerWeek || 3, 2), 6);
-  
-  const totalWeeks = experience === 'beginner' ? 4 : experience === 'intermediate' ? 6 : 8;
-  
-  // Define workout days based on daysPerWeek
-  const dayOptions = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
-  const selectedDays = daysPerWeek === 3 ? ['Mon', 'Wed', 'Fri'] :
-                       daysPerWeek === 4 ? ['Mon', 'Wed', 'Fri', 'Sun'] :
-                       daysPerWeek === 5 ? ['Mon', 'Tue', 'Thu', 'Fri', 'Sun'] :
-                       daysPerWeek === 2 ? ['Wed', 'Sat'] :
-                       ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  
-  const workouts: z.infer<typeof WorkoutSchema>[] = [];
-  
+const MAX_FALLBACK_WEEKS = 16
+type WeekdayShort = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function isWeekdayShort(value: unknown): value is WeekdayShort {
+  return (
+    value === 'Mon' ||
+    value === 'Tue' ||
+    value === 'Wed' ||
+    value === 'Thu' ||
+    value === 'Fri' ||
+    value === 'Sat' ||
+    value === 'Sun'
+  )
+}
+
+function getWeekdayShortFromDate(date: Date): WeekdayShort {
+  return (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const)[date.getDay()] as WeekdayShort
+}
+
+function getDistanceKmFromTargetDistance(targetDistance?: string): number | undefined {
+  const normalized = (targetDistance || '').toLowerCase()
+  if (normalized.includes('5k')) return 5
+  if (normalized.includes('10k')) return 10
+  if (normalized.includes('half')) return 21.1
+  if (normalized.includes('marathon')) return 42.2
+  return undefined
+}
+
+/**
+ * Generate a fallback plan when AI is unavailable.
+ * Creates a reasonable plan and honors optional plan-template preferences.
+ */
+function generateFallbackPlan(
+  user: any,
+  options?: { totalWeeks?: number; planPreferences?: any; targetDistance?: string }
+): z.infer<typeof PlanSchema> {
+  const experience = user?.experience || 'beginner'
+  const goal = user?.goal || 'habit'
+  const daysPerWeek = clampNumber(user?.daysPerWeek || 3, 2, 6)
+
+  const defaultWeeks = experience === 'beginner' ? 4 : experience === 'intermediate' ? 6 : 8
+  const totalWeeks = clampNumber(options?.totalWeeks ?? defaultWeeks, 1, MAX_FALLBACK_WEEKS)
+
+  const preferences = options?.planPreferences || {}
+  const trainingDaysRaw = preferences.trainingDays || preferences.availableDays
+  const preferredDays = Array.isArray(trainingDaysRaw)
+    ? trainingDaysRaw.filter((d: any) => isWeekdayShort(d))
+    : null
+
+  const defaultPattern =
+    daysPerWeek === 2
+      ? (['Wed', 'Sat'] as WeekdayShort[])
+      : daysPerWeek === 3
+        ? (['Mon', 'Wed', 'Fri'] as WeekdayShort[])
+        : daysPerWeek === 4
+          ? (['Mon', 'Wed', 'Fri', 'Sun'] as WeekdayShort[])
+          : daysPerWeek === 5
+            ? (['Mon', 'Tue', 'Thu', 'Fri', 'Sun'] as WeekdayShort[])
+            : (['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as WeekdayShort[])
+
+  const selectedDays = (preferredDays && preferredDays.length >= daysPerWeek
+    ? preferredDays.slice(0, daysPerWeek)
+    : defaultPattern.slice(0, daysPerWeek)) as WeekdayShort[]
+
+  const longRunDayPref = isWeekdayShort(preferences.longRunDay) ? (preferences.longRunDay as WeekdayShort) : undefined
+  const longRunDay = longRunDayPref && selectedDays.includes(longRunDayPref) ? longRunDayPref : selectedDays[selectedDays.length - 1]
+
+  const raceDateRaw = preferences.raceDate
+  const raceDate = raceDateRaw ? new Date(raceDateRaw) : null
+  const raceDay = raceDate && !Number.isNaN(raceDate.getTime()) ? getWeekdayShortFromDate(raceDate) : undefined
+  const raceDistanceKm = getDistanceKmFromTargetDistance(options?.targetDistance)
+
+  const volume: string | undefined = preferences.trainingVolume
+  const difficulty: string | undefined = preferences.difficulty
+
+  const volumeScale = volume === 'conservative' ? 0.9 : volume === 'high' ? 1.12 : 1
+  const hardEveryOtherWeek = difficulty === 'easy'
+  const hardEveryWeek = difficulty === 'challenging'
+
+  const workouts: z.infer<typeof WorkoutSchema>[] = []
+
   for (let week = 1; week <= totalWeeks; week++) {
-    const baseDistance = experience === 'beginner' ? 2 + (week * 0.5) :
-                        experience === 'intermediate' ? 4 + (week * 0.5) : 6 + (week * 0.5);
-    
-    selectedDays.forEach((day, idx) => {
-      // Mix workout types
-      let type: 'easy' | 'tempo' | 'intervals' | 'long' | 'rest' = 'easy';
-      let distance = baseDistance;
-      let duration = Math.round(baseDistance * 6); // ~6 min/km for beginners
-      
-      if (idx === selectedDays.length - 1) {
-        // Last day of the week is long run
-        type = 'long';
-        distance = baseDistance * 1.5;
-        duration = Math.round(distance * 6.5);
-      } else if (idx === 1 && daysPerWeek >= 3) {
-        // Mid-week tempo or intervals
-        type = week % 2 === 0 ? 'tempo' : 'intervals';
-        distance = baseDistance * 0.8;
-        duration = Math.round(distance * 5.5);
+    const baseDistanceRaw =
+      experience === 'beginner' ? 2.5 + week * 0.5 : experience === 'intermediate' ? 4 + week * 0.5 : 6 + week * 0.5
+    const baseDistance = clampNumber(baseDistanceRaw * volumeScale, 1, 50)
+
+    for (const day of selectedDays) {
+      let type: z.infer<typeof WorkoutSchema>['type'] = 'easy'
+      let distance = baseDistance
+      let duration = Math.round(distance * 6)
+
+      const isRaceDay = week === totalWeeks && !!raceDay && day === raceDay && typeof raceDistanceKm === 'number'
+
+      if (isRaceDay) {
+        type = 'time-trial'
+        distance = raceDistanceKm!
+        duration = Math.round(distance * 6)
+      } else if (day === longRunDay) {
+        type = 'long'
+        distance = clampNumber(baseDistance * 1.5 + (week - 1) * 0.2, 1, 50)
+        duration = Math.round(distance * 6.5)
+      } else if (selectedDays.length >= 3 && day === selectedDays[1]) {
+        const shouldBeHard = hardEveryWeek || (!hardEveryOtherWeek && week % 2 === 0) || (hardEveryOtherWeek && week % 3 === 0)
+        if (shouldBeHard) {
+          type = week % 2 === 0 ? 'tempo' : 'intervals'
+          distance = clampNumber(baseDistance * 0.85, 1, 50)
+          duration = Math.round(distance * 5.5)
+        }
       }
-      
+
+      const isTaperWeek = week === totalWeeks
+      if (isTaperWeek && type !== 'time-trial') {
+        distance = clampNumber(distance * 0.75, 1, 50)
+        duration = Math.round(duration * 0.75)
+      }
+
       workouts.push({
         week,
-        day: day as 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun',
+        day,
         type,
         distance: Math.round(distance * 10) / 10,
         duration,
-        notes: type === 'easy' ? 'Keep a conversational pace' :
-               type === 'long' ? 'Focus on time on feet, not speed' :
-               type === 'tempo' ? 'Comfortably hard pace' :
-               type === 'intervals' ? 'Hard efforts with recovery' : undefined
-      });
-    });
+        notes:
+          type === 'easy'
+            ? 'Keep a conversational pace'
+            : type === 'long'
+              ? 'Focus on time on feet, not speed'
+              : type === 'tempo'
+                ? 'Comfortably hard pace'
+                : type === 'intervals'
+                  ? 'Hard efforts with recovery'
+                  : type === 'time-trial'
+                    ? 'Race effort — warm up well and pace yourself'
+                    : undefined,
+      })
+    }
+
+    // If the race day is not in the training days, still add the race as the final workout.
+    if (week === totalWeeks && raceDay && raceDistanceKm && !selectedDays.includes(raceDay)) {
+      workouts.push({
+        week,
+        day: raceDay,
+        type: 'time-trial',
+        distance: raceDistanceKm,
+        duration: Math.round(raceDistanceKm * 6),
+        notes: 'Race effort — warm up well and pace yourself',
+      })
+    }
   }
-  
+
   return {
-    title: goal === 'habit' ? 'Build Your Running Habit' :
-           goal === 'distance' ? 'Increase Your Distance' :
-           'Improve Your Speed',
+    title:
+      goal === 'habit'
+        ? 'Build Your Running Habit'
+        : goal === 'distance'
+          ? 'Increase Your Distance'
+          : 'Improve Your Speed',
     description: `A ${totalWeeks}-week plan designed for ${experience} runners focused on ${goal === 'habit' ? 'building consistency' : goal === 'distance' ? 'increasing endurance' : 'improving pace'}.`,
     totalWeeks,
-    workouts
-  };
+    workouts,
+  }
 }
 
 /**
@@ -220,10 +324,10 @@ async function generatePlanHandler(req: NextRequest) {
   }
   
   // Handle legacy request format
-  const { user, planType, targetDistance, rookie_challenge } = body;
+  const { user, planType, targetDistance, rookie_challenge, totalWeeks, planPreferences } = body;
 
   // Build the comprehensive prompt based on user preferences
-  const prompt = buildPlanPrompt(user, planType, targetDistance, rookie_challenge);
+  const prompt = buildPlanPromptV2(user, planType, targetDistance, rookie_challenge, { totalWeeks, planPreferences });
 
   // Use secure OpenAI wrapper
   const result = await withSecureOpenAI(
@@ -242,7 +346,7 @@ async function generatePlanHandler(req: NextRequest) {
   if (!result.success) {
     logger.log('[generate-plan] AI unavailable, using fallback plan generator');
     
-    const fallbackPlan = generateFallbackPlan(user);
+    const fallbackPlan = generateFallbackPlan(user, { totalWeeks, planPreferences, targetDistance });
     
     return NextResponse.json({ 
       plan: fallbackPlan,
@@ -371,6 +475,106 @@ async function handleEnhancedPlanRequest(body: any) {
  * 
  * @since 1.0.0
  */
+function buildPlanPromptV2(
+  user: any,
+  planType?: string,
+  targetDistance?: string,
+  rookie_challenge?: boolean,
+  options?: { totalWeeks?: number; planPreferences?: any }
+): string {
+  if (!user || !user.experience || !user.goal || !user.daysPerWeek || !user.preferredTimes) {
+    logger.warn('[generate-plan] Invalid user data provided, using fallback defaults');
+    user = {
+      experience: 'beginner',
+      goal: 'habit',
+      daysPerWeek: 3,
+      preferredTimes: ['morning'],
+      ...user,
+    };
+  }
+
+  const formatTimeHms = (totalSeconds: number) => {
+    const seconds = Math.max(0, Math.round(totalSeconds));
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  };
+
+  const preferences = options?.planPreferences || {};
+  const trainingDays = Array.isArray(preferences.trainingDays)
+    ? preferences.trainingDays.filter((d: any) => isWeekdayShort(d))
+    : null;
+  const longRunDay = isWeekdayShort(preferences.longRunDay) ? (preferences.longRunDay as WeekdayShort) : undefined;
+  const raceDateRaw = preferences.raceDate;
+  const raceDate = raceDateRaw ? new Date(raceDateRaw) : null;
+  const raceDay =
+    raceDate && !Number.isNaN(raceDate.getTime()) ? getWeekdayShortFromDate(raceDate) : undefined;
+  const raceDistanceKm = getDistanceKmFromTargetDistance(targetDistance);
+
+  const requestedWeeks =
+    typeof options?.totalWeeks === 'number'
+      ? clampNumber(options.totalWeeks, 1, MAX_FALLBACK_WEEKS)
+      : undefined;
+  const defaultWeeks = user.experience === 'beginner' ? 4 : user.experience === 'intermediate' ? 6 : 8;
+  const resolvedWeeks = requestedWeeks ?? (rookie_challenge ? 2 : defaultWeeks);
+
+  const currentRaceTimeSeconds =
+    typeof preferences.currentRaceTimeSeconds === 'number' ? preferences.currentRaceTimeSeconds : undefined;
+  const trainingVolume = preferences.trainingVolume;
+  const difficulty = preferences.difficulty;
+
+  const schedulingLine = trainingDays
+    ? `- Schedule workouts only on: ${trainingDays.join(', ')}`
+    : `- Schedule workouts across the week to match ${user.daysPerWeek} training days.`;
+
+  const raceLine =
+    raceDay && typeof raceDistanceKm === 'number'
+      ? `- Final workout: Week ${resolvedWeeks} ${raceDay} time-trial (${raceDistanceKm}km)`
+      : '';
+
+  return `Create a personalized running training plan for a runner with the following profile:
+
+**Runner Profile:**
+- Experience Level: ${user.experience}
+- Primary Goal: ${user.goal === 'habit' ? 'Build consistent running habit' : user.goal === 'distance' ? 'Increase running distance' : 'Improve running speed'}
+- Training Days: ${user.daysPerWeek} days per week
+- Preferred Times: ${user.preferredTimes.join(', ')}
+${planType ? `- Plan Type: ${planType}` : ''}
+${targetDistance ? `- Target Distance: ${targetDistance}` : ''}
+${typeof currentRaceTimeSeconds === 'number' ? `- Estimated current race time: ${formatTimeHms(currentRaceTimeSeconds)}` : ''}
+${trainingVolume ? `- Training volume preference: ${trainingVolume}` : ''}
+${difficulty ? `- Difficulty preference: ${difficulty}` : ''}
+${rookie_challenge ? '\n- This user is a rookie and should receive a 14-day rookie challenge plan focused on habit-building and gradual progression.' : ''}
+
+**Scheduling constraints:**
+${schedulingLine}
+${longRunDay ? `- Weekly long run day: ${longRunDay}` : ''}
+${raceLine}
+${raceDate && !Number.isNaN(raceDate.getTime()) ? `- Race date: ${raceDate.toDateString()}` : ''}
+
+**Requirements:**
+- totalWeeks MUST be ${resolvedWeeks} (and workouts must use week numbers 1..${resolvedWeeks})
+- Include variety: easy runs, tempo runs, intervals, long runs, and rest days
+- Follow the 80/20 rule (80% easy, 20% hard efforts)
+- Progress gradually to avoid injury
+- Include specific distances in kilometers
+- Add helpful notes for each workout type
+- If a race day is provided, the final workout should be a time-trial on that day
+
+**Workout Types to Include:**
+- easy: Comfortable pace runs for building aerobic base
+- tempo: Comfortably hard pace runs for lactate threshold
+- intervals: High-intensity interval training
+- long: Weekly long runs for endurance
+- time-trial: Progress testing / race day effort
+- hill: Hill repeats for strength (if appropriate)
+- rest: Complete rest days for recovery
+
+Generate a structured plan that will help this runner achieve their goals safely and effectively.`;
+}
+
 function buildPlanPrompt(user: any, planType?: string, targetDistance?: string, rookie_challenge?: boolean): string {
   if (!user || !user.experience || !user.goal || !user.daysPerWeek || !user.preferredTimes) {
     logger.warn('⚠️ Invalid user data provided, using fallback defaults');

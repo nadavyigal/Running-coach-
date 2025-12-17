@@ -347,6 +347,11 @@ export default function RunSmartApp() {
       setCurrentScreen("chat")
     }
 
+    const handleNavigateToPlan = () => {
+      logger.log('Navigating to plan screen')
+      setCurrentScreen("plan")
+    }
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.shiftKey && event.key === 'D') {
         event.preventDefault()
@@ -356,12 +361,14 @@ export default function RunSmartApp() {
 
     window.addEventListener("navigate-to-record", handleNavigateToRecord)
     window.addEventListener("navigate-to-chat", handleNavigateToChat)
+    window.addEventListener("navigate-to-plan", handleNavigateToPlan)
     window.addEventListener("keydown", handleKeyDown)
 
     return () => {
       logger.log('🧹 Cleaning up navigation event listeners...')
       window.removeEventListener("navigate-to-record", handleNavigateToRecord)
       window.removeEventListener("navigate-to-chat", handleNavigateToChat)
+      window.removeEventListener("navigate-to-plan", handleNavigateToPlan)
       window.removeEventListener("keydown", handleKeyDown)
     }
   }, []) // Empty dependency array - event listeners should only be set up once
