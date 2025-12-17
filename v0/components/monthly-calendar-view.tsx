@@ -53,9 +53,12 @@ export function MonthlyCalendarView() {
         setIsLoading(true)
         const user = await dbUtils.getCurrentUser()
         if (user && user.id) {
-          // Get start and end of current month
+          // Get start and end of current month (full-day range)
           const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+          startOfMonth.setHours(0, 0, 0, 0)
+
           const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+          endOfMonth.setHours(23, 59, 59, 999)
           
           const monthWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfMonth, endOfMonth)
           setWorkouts(monthWorkouts)

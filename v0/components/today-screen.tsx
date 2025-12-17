@@ -38,11 +38,7 @@ import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { StreakIndicator } from "@/components/streak-indicator"
 import { CommunityStatsWidget } from "@/components/community-stats-widget"
-import { CoachingInsightsWidget } from "@/components/coaching-insights-widget"
-import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
-import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
 import { GoalRecommendations } from "@/components/goal-recommendations"
-import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { HabitAnalyticsWidget } from "@/components/habit-analytics-widget"
 import {
   AlertDialog,
@@ -64,6 +60,7 @@ export function TodayScreen() {
   const [todaysWorkout, setTodaysWorkout] = useState<Workout | null>(null)
   const [isLoadingWorkout, setIsLoadingWorkout] = useState(true)
   const [weeklyWorkouts, setWeeklyWorkouts] = useState<Workout[]>([])
+  const [visibleWorkouts, setVisibleWorkouts] = useState<Workout[]>([])
   const [userId, setUserId] = useState<number | null>(null)
   const [plan, setPlan] = useState<Plan | null>(null)
   const [primaryGoal, setPrimaryGoal] = useState<Goal | null>(null)
@@ -76,8 +73,7 @@ export function TodayScreen() {
   const [showDateWorkoutModal, setShowDateWorkoutModal] = useState(false)
   const [selectedDateWorkout, setSelectedDateWorkout] = useState<any>(null)
   const [workoutToDelete, setWorkoutToDelete] = useState<number | null>(null)
-  const [showCoachingPreferences, setShowCoachingPreferences] = useState(false)
-  const [showCoachingFeedback, setShowCoachingFeedback] = useState(false)
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(new Date())
   const { toast } = useToast()
 
   const tips = [
@@ -124,15 +120,28 @@ export function TodayScreen() {
           const goal = await dbUtils.getPrimaryGoal(user.id!)
           setPrimaryGoal(goal)
 
-          // Get workouts for the current week
+          // Get workouts for the current week (for weekly stats)
           const today = new Date()
           const startOfWeek = new Date(today)
           startOfWeek.setDate(today.getDate() - today.getDay()) // Start of week (Sunday)
           const endOfWeek = new Date(startOfWeek)
           endOfWeek.setDate(startOfWeek.getDate() + 6) // End of week (Saturday)
+          startOfWeek.setHours(0, 0, 0, 0)
+          endOfWeek.setHours(23, 59, 59, 999)
 
           const workouts = await dbUtils.getWorkoutsForDateRange(user.id!, startOfWeek, endOfWeek)
           setWeeklyWorkouts(workouts)
+
+          // Get workouts for the visible 7-day strip (today -3 ... today +3)
+          const stripStart = new Date(today)
+          stripStart.setDate(today.getDate() - 3)
+          stripStart.setHours(0, 0, 0, 0)
+          const stripEnd = new Date(today)
+          stripEnd.setDate(today.getDate() + 3)
+          stripEnd.setHours(23, 59, 59, 999)
+
+          const stripWorkouts = await dbUtils.getWorkoutsForDateRange(user.id!, stripStart, stripEnd)
+          setVisibleWorkouts(stripWorkouts)
 
           const todaysWorkout = await dbUtils.getTodaysWorkout(user.id!)
           setTodaysWorkout(todaysWorkout)
@@ -149,10 +158,35 @@ export function TodayScreen() {
 
   const refreshWorkouts = async () => {
     try {
-      const workouts = await dbUtils.getWeeklyWorkouts()
+      const resolvedUserId = userId ?? (await dbUtils.getCurrentUser())?.id ?? null
+      if (!resolvedUserId) return
+
+      const today = new Date()
+
+      const startOfWeek = new Date(today)
+      startOfWeek.setDate(today.getDate() - today.getDay())
+      startOfWeek.setHours(0, 0, 0, 0)
+
+      const endOfWeek = new Date(startOfWeek)
+      endOfWeek.setDate(startOfWeek.getDate() + 6)
+      endOfWeek.setHours(23, 59, 59, 999)
+
+      const workouts = await dbUtils.getWorkoutsForDateRange(resolvedUserId, startOfWeek, endOfWeek)
       setWeeklyWorkouts(workouts)
-      const today = await dbUtils.getTodaysWorkout()
-      setTodaysWorkout(today)
+
+      const stripStart = new Date(today)
+      stripStart.setDate(today.getDate() - 3)
+      stripStart.setHours(0, 0, 0, 0)
+
+      const stripEnd = new Date(today)
+      stripEnd.setDate(today.getDate() + 3)
+      stripEnd.setHours(23, 59, 59, 999)
+
+      const stripWorkouts = await dbUtils.getWorkoutsForDateRange(resolvedUserId, stripStart, stripEnd)
+      setVisibleWorkouts(stripWorkouts)
+
+      const todaysWorkout = await dbUtils.getTodaysWorkout(resolvedUserId)
+      setTodaysWorkout(todaysWorkout)
     } catch (error) {
       console.error("Error refreshing workouts:", error)
     }
@@ -178,13 +212,35 @@ export function TodayScreen() {
     hill: "bg-purple-500",
   }
 
+  const resolveWorkoutForDate = async (date: Date) => {
+    const matchesDate = (workout: Workout) =>
+      new Date(workout.scheduledDate).toDateString() === date.toDateString()
+
+    const cached = visibleWorkouts.find(matchesDate) || weeklyWorkouts.find(matchesDate)
+    if (cached) return cached
+
+    if (!userId) return null
+
+    const start = new Date(date)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(date)
+    end.setHours(23, 59, 59, 999)
+
+    const workouts = await dbUtils.getWorkoutsForDateRange(userId, start, end)
+    return workouts.find(matchesDate) ?? null
+  }
+
   const calendarDays = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date()
-    date.setDate(date.getDate() - 3 + i)
-    const workout = weeklyWorkouts.find(
-      (w) =>
-        new Date(w.scheduledDate).toDateString() === date.toDateString()
+    const start = new Date()
+    start.setDate(start.getDate() - 3)
+    start.setHours(0, 0, 0, 0)
+    const date = new Date(start)
+    date.setDate(start.getDate() + i)
+
+    const workout = visibleWorkouts.find(
+      (w) => new Date(w.scheduledDate).toDateString() === date.toDateString(),
     )
+
     return {
       day: date.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase(),
       date: date.getDate(),
@@ -196,12 +252,11 @@ export function TodayScreen() {
     }
   })
 
-  const handleDateClick = (day: any) => {
+  const handleDateClick = async (day: any) => {
     const clickedDate = day.fullDate as Date
+    setSelectedCalendarDate(clickedDate)
 
-    const workout = weeklyWorkouts.find(
-      (w) => new Date(w.scheduledDate).toDateString() === clickedDate.toDateString(),
-    )
+    const workout = await resolveWorkoutForDate(clickedDate)
 
     if (workout) {
       const workoutDate = new Date(workout.scheduledDate)
@@ -223,7 +278,10 @@ export function TodayScreen() {
       return
     }
 
-    setShowAddRunModal(true)
+    toast({
+      title: "No workout scheduled",
+      description: "Pick another day or add a workout to this date.",
+    })
   }
 
   const handleRestartOnboarding = () => {
@@ -408,7 +466,7 @@ export function TodayScreen() {
       <div className="px-4 animate-in fade-in-0 slide-in-from-left duration-500 delay-200">
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {calendarDays.map((day, index) => {
-            const isSelected = day.isToday
+            const isSelected = day.fullDate.toDateString() === selectedCalendarDate.toDateString()
             return (
               <button
                 key={index}
@@ -678,28 +736,6 @@ export function TodayScreen() {
         )}
 
         {userId && (
-          <div className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-800">
-            <CoachingInsightsWidget
-              userId={userId}
-              showDetails={true}
-              onSettingsClick={() => setShowCoachingPreferences(true)}
-              className="hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
-            />
-          </div>
-        )}
-
-        {userId && (
-          <div className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-900">
-            <RecoveryRecommendations
-              userId={userId}
-              date={new Date()}
-              showBreakdown={true}
-              onRefresh={refreshWorkouts}
-            />
-          </div>
-        )}
-
-        {userId && (
           <div className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-1000">
             <GoalRecommendations
               userId={userId}
@@ -768,6 +804,11 @@ export function TodayScreen() {
           workout={selectedDateWorkout}
         />
       </ModalErrorBoundary>
+      {/*
+      Adaptive coaching removed from Today screen.
+      (Coaching insights, recovery recommendations, and coaching preferences modal)
+      */}
+      {/*
       {showCoachingPreferences && userId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-white">
@@ -797,6 +838,7 @@ export function TodayScreen() {
         interactionType="workout_recommendation"
         userId={userId || 0}
       />
+      */}
       <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
