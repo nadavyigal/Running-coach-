@@ -16,8 +16,15 @@ import {
   Link,
   ChevronDown,
   ChevronUp,
+  Flame,
+  Zap,
+  Timer,
+  Calendar,
+  MessageSquare,
 } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { getRunBreakdown } from "@/lib/run-breakdowns"
+import { getUserExperience, getCurrentUser } from "@/lib/dbUtils"
 
 interface DateWorkoutModalProps {
   isOpen: boolean
@@ -34,6 +41,29 @@ interface DateWorkoutModalProps {
 
 export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalProps) {
   const [showWorkoutBreakdown, setShowWorkoutBreakdown] = useState(false)
+  const [breakdown, setBreakdown] = useState<any>(null)
+  const [userExperience, setUserExperience] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner')
+
+  // Fetch workout breakdown based on user experience
+  useEffect(() => {
+    if (isOpen && workout) {
+      const fetchBreakdown = async () => {
+        try {
+          const user = await getCurrentUser()
+          if (user) {
+            const experience = await getUserExperience(user.id)
+            setUserExperience(experience)
+
+            const workoutBreakdown = getRunBreakdown(workout.type, experience)
+            setBreakdown(workoutBreakdown)
+          }
+        } catch (error) {
+          console.error('Error fetching workout breakdown:', error)
+        }
+      }
+      fetchBreakdown()
+    }
+  }, [isOpen, workout])
 
   if (!workout) return null
 
@@ -44,45 +74,6 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
     long: "Long Run",
     hill: "Hill Run",
   }
-
-  const workoutBreakdown = [
-    {
-      phase: "Warm-up",
-      color: "bg-gray-500",
-      steps: [
-        {
-          step: 1,
-          description: "500m at a conversational pace",
-          detail: "No faster than 6:00/km",
-          type: "RUN",
-        },
-      ],
-    },
-    {
-      phase: "Main Workout",
-      color: workout.color.replace("bg-", "bg-"),
-      repeat: workout.type === "intervals" ? "x3" : undefined,
-      steps: [
-        {
-          step: 2,
-          description: `${workout.distance} at target pace`,
-          type: "RUN",
-        },
-      ],
-    },
-    {
-      phase: "Cool Down",
-      color: "bg-gray-500",
-      steps: [
-        {
-          step: 3,
-          description: "500m at a conversational pace",
-          detail: "Walk for 5-10 minutes after",
-          type: "RUN",
-        },
-      ],
-    },
-  ]
 
   const handleActionClick = (action: string) => {
     switch (action) {
@@ -179,7 +170,7 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
             <div className="flex items-center justify-between">
               <h3 className="font-medium flex items-center gap-2">
                 <div className="w-4 h-4 border border-gray-400 rounded" />
-                Description
+                Workout Breakdown
               </h3>
               <Button
                 variant="ghost"
@@ -196,40 +187,91 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
               </Button>
             </div>
 
-            {showWorkoutBreakdown && (
+            {showWorkoutBreakdown && breakdown && (
               <div className="space-y-3 animate-in slide-in-from-top duration-300">
-                {workoutBreakdown.map((phase, phaseIndex) => (
-                  <div key={phaseIndex}>
-                    <div
-                      className={`${phase.color} text-white px-3 py-2 rounded-t-lg flex items-center justify-between`}
-                    >
-                      <span className="font-medium">{phase.phase}</span>
-                      {phase.repeat && (
-                        <Badge className="bg-white/20 text-white border-white/30">Repeat {phase.repeat}</Badge>
-                      )}
+                {/* Warm-up */}
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <Flame className="h-5 w-5 text-orange-500 mt-1" />
+                      <div className="flex-1">
+                        <h4 className="font-semibold mb-1">Warm-up</h4>
+                        <p className="text-sm text-gray-600">{breakdown.warmup}</p>
+                      </div>
                     </div>
-                    <div className="bg-gray-50 rounded-b-lg">
-                      {phase.steps.map((step, stepIndex) => (
-                        <div
-                          key={stepIndex}
-                          className="flex items-center gap-4 p-4 border-b border-gray-200 last:border-b-0"
-                        >
-                          <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-700">
-                            {step.step}
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-medium">{step.description}</p>
-                            {("detail" in step) && step.detail && <p className="text-sm text-gray-600 mt-1">{step.detail}</p>}
-                          </div>
-                          <Badge variant="outline" className="text-xs">
-                            <Play className="h-3 w-3 mr-1" />
-                            {step.type}
-                          </Badge>
-                        </div>
-                      ))}
+                  </CardContent>
+                </Card>
+
+                {/* Drills */}
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <Zap className="h-5 w-5 text-yellow-500 mt-1" />
+                      <div className="flex-1">
+                        <h4 className="font-semibold mb-1">Drills</h4>
+                        <p className="text-sm text-gray-600">{breakdown.drills}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  </CardContent>
+                </Card>
+
+                {/* Main Set */}
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <Play className="h-5 w-5 text-green-500 mt-1" />
+                      <div className="flex-1">
+                        <h4 className="font-semibold mb-1">Main Set</h4>
+                        <p className="text-sm text-gray-600">{breakdown.mainSet}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Total Time */}
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <Timer className="h-5 w-5 text-blue-500 mt-1" />
+                      <div className="flex-1">
+                        <h4 className="font-semibold mb-1">Total Time</h4>
+                        <p className="text-sm text-gray-600">{breakdown.totalTime}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Frequency */}
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <Calendar className="h-5 w-5 text-purple-500 mt-1" />
+                      <div className="flex-1">
+                        <h4 className="font-semibold mb-1">Frequency</h4>
+                        <p className="text-sm text-gray-600">{breakdown.frequency}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Coach Notes */}
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <MessageSquare className="h-5 w-5 text-indigo-500 mt-1" />
+                      <div className="flex-1">
+                        <h4 className="font-semibold mb-1">Coach Notes</h4>
+                        <p className="text-sm text-gray-600">{breakdown.coachNotes}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {showWorkoutBreakdown && !breakdown && (
+              <div className="text-center py-4 text-gray-500 text-sm">
+                Workout breakdown not available for this run type
               </div>
             )}
           </div>

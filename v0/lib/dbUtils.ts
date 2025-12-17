@@ -700,6 +700,20 @@ export async function getUserById(userId: number): Promise<User | null> {
 }
 
 /**
+ * Get user experience level for workout personalization
+ */
+export async function getUserExperience(userId: number): Promise<'beginner' | 'intermediate' | 'advanced'> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (database) {
+      const user = await database.users.get(userId);
+      return user?.experience || 'beginner';
+    }
+    return 'beginner';
+  }, 'getUserExperience', 'beginner' as 'beginner' | 'intermediate' | 'advanced');
+}
+
+/**
  * Get coaching profile for user
  */
 export async function getCoachingProfile(userId: number): Promise<CoachingProfile | null> {
