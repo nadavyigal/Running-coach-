@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Calendar, CalendarDays, TrendingUp, Plus, ChevronLeft, ChevronRight, MoreHorizontal, Loader2 } from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
+import { DateWorkoutModal } from "@/components/date-workout-modal"
 import { MonthlyCalendarView } from "@/components/monthly-calendar-view"
 import { PlanComplexityIndicator } from "@/components/plan-complexity-indicator"
 import { type Plan, type Workout, type Goal } from "@/lib/db"
@@ -19,6 +20,8 @@ export function PlanScreen() {
   const [currentView, setCurrentView] = useState<"monthly" | "biweekly" | "progress">("monthly")
   // const [currentMonth, setCurrentMonth] = useState(new Date())
   const [showAddRunModal, setShowAddRunModal] = useState(false)
+  const [showDateWorkoutModal, setShowDateWorkoutModal] = useState(false)
+  const [selectedDateWorkout, setSelectedDateWorkout] = useState<any>(null)
   const [plan, setPlan] = useState<Plan | null>(null)
   const [primaryGoal, setPrimaryGoal] = useState<Goal | null>(null)
   const [workouts, setWorkouts] = useState<Workout[]>([])
@@ -185,6 +188,31 @@ export function PlanScreen() {
 
   const weeks = organizeWorkoutsByWeek()
 
+  const openWorkoutDetails = (workoutId?: number) => {
+    if (!workoutId) return
+
+    const workoutEntity = workouts.find((workout) => workout.id === workoutId)
+    if (!workoutEntity) return
+
+    const workoutDate = new Date(workoutEntity.scheduledDate)
+
+    setSelectedDateWorkout({
+      id: workoutEntity.id,
+      type: workoutEntity.type,
+      distance: `${workoutEntity.distance}km`,
+      completed: workoutEntity.completed,
+      color: workoutTypes[workoutEntity.type as keyof typeof workoutTypes]?.color || "bg-gray-400",
+      date: workoutDate,
+      dateString: workoutDate.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+      }),
+      notes: workoutEntity.notes,
+    })
+    setShowDateWorkoutModal(true)
+  }
+
   const renderBiweeklyView = () => {
     if (isLoading) {
       return (
@@ -267,7 +295,13 @@ export function PlanScreen() {
                     <span className="text-gray-600 ml-2">{workout.distance}</span>
                   </div>
                 </div>
-                <Button variant="ghost" size="sm" className="hover:scale-110 transition-transform">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="hover:scale-110 transition-transform"
+                  onClick={() => openWorkoutDetails(workout.id)}
+                  aria-label="View workout details"
+                >
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </div>
@@ -501,6 +535,15 @@ export function PlanScreen() {
           }}
         />
       )}
+
+      <DateWorkoutModal
+        isOpen={showDateWorkoutModal}
+        onClose={() => {
+          setShowDateWorkoutModal(false)
+          setSelectedDateWorkout(null)
+        }}
+        workout={selectedDateWorkout}
+      />
     </div>
   )
 }

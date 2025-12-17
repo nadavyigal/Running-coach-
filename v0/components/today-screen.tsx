@@ -74,7 +74,7 @@ export function TodayScreen() {
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
   const [showRescheduleModal, setShowRescheduleModal] = useState(false)
   const [showDateWorkoutModal, setShowDateWorkoutModal] = useState(false)
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [selectedDateWorkout, setSelectedDateWorkout] = useState<any>(null)
   const [workoutToDelete, setWorkoutToDelete] = useState<number | null>(null)
   const [showCoachingPreferences, setShowCoachingPreferences] = useState(false)
   const [showCoachingFeedback, setShowCoachingFeedback] = useState(false)
@@ -197,8 +197,33 @@ export function TodayScreen() {
   })
 
   const handleDateClick = (day: any) => {
-    setSelectedDate(day.fullDate)
-    setShowDateWorkoutModal(true)
+    const clickedDate = day.fullDate as Date
+
+    const workout = weeklyWorkouts.find(
+      (w) => new Date(w.scheduledDate).toDateString() === clickedDate.toDateString(),
+    )
+
+    if (workout) {
+      const workoutDate = new Date(workout.scheduledDate)
+      setSelectedDateWorkout({
+        id: workout.id,
+        type: workout.type,
+        distance: `${workout.distance}km`,
+        completed: workout.completed,
+        color: workoutColorMap[workout.type] || "bg-gray-500",
+        date: workoutDate,
+        dateString: workoutDate.toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+        }),
+        notes: workout.notes,
+      })
+      setShowDateWorkoutModal(true)
+      return
+    }
+
+    setShowAddRunModal(true)
   }
 
   const handleRestartOnboarding = () => {
@@ -727,12 +752,20 @@ export function TodayScreen() {
         />
       </ModalErrorBoundary>
       
-      <ModalErrorBoundary modalName="Date Workout" onClose={() => setShowDateWorkoutModal(false)}>
+      <ModalErrorBoundary
+        modalName="Date Workout"
+        onClose={() => {
+          setShowDateWorkoutModal(false)
+          setSelectedDateWorkout(null)
+        }}
+      >
         <DateWorkoutModal
-          open={showDateWorkoutModal}
-          onOpenChange={setShowDateWorkoutModal}
-          date={selectedDate || new Date()}
-          onWorkoutAdded={refreshWorkouts}
+          isOpen={showDateWorkoutModal}
+          onClose={() => {
+            setShowDateWorkoutModal(false)
+            setSelectedDateWorkout(null)
+          }}
+          workout={selectedDateWorkout}
         />
       </ModalErrorBoundary>
       {showCoachingPreferences && userId && (
