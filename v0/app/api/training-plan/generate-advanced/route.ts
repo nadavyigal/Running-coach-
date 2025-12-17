@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbUtils } from '@/lib/dbUtils';
 import { PeriodizationEngine } from '@/lib/periodization';
+import { logger } from '@/lib/logger';
 
 export async function POST(req: NextRequest) {
   try {
@@ -107,7 +108,7 @@ export async function POST(req: NextRequest) {
       try {
         targetPaces = await dbUtils.calculateTargetPaces(userId, raceGoalId);
       } catch (error) {
-        console.warn('Could not calculate target paces:', error);
+        logger.warn('Could not calculate target paces:', error);
       }
     }
 
@@ -130,7 +131,7 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error generating advanced training plan:', error);
+    logger.error('Error generating advanced training plan:', error);
     return NextResponse.json({
       error: 'Failed to generate training plan',
       details: error instanceof Error ? error.message : 'Unknown error'
@@ -176,7 +177,7 @@ export async function GET(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error fetching advanced training plans:', error);
+    logger.error('Error fetching advanced training plans:', error);
     return NextResponse.json({
       error: 'Failed to fetch training plans',
       details: error instanceof Error ? error.message : 'Unknown error'

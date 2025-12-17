@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { dbUtils } from '@/lib/dbUtils';
+import { logger } from '@/lib/logger';
 
 export async function POST(request: Request) {
   try {
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
       socialShareUrls
     });
   } catch (error) {
-    console.error('Error generating shareable link:', error);
+    logger.error('Error generating shareable link:', error);
     return NextResponse.json({ message: 'Error generating shareable link' }, { status: 500 });
   }
 }

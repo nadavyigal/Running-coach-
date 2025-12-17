@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { withAuthSecurity, ApiRequest } from '@/lib/security.middleware';
 import { encryptToken } from '../token-crypto';
 import { verifyAndParseState } from '../oauth-state';
+import { logger } from '@/lib/logger';
 
 // POST - Handle Garmin OAuth callback (SECURED)
 async function handleGarminCallback(req: ApiRequest) {
@@ -60,7 +61,7 @@ async function handleGarminCallback(req: ApiRequest) {
 
     // Security: Server-side validation only
     if (!garminConfig.clientId || !garminConfig.clientSecret) {
-      console.error('❌ Garmin API credentials not configured');
+      logger.error('❌ Garmin API credentials not configured');
       return NextResponse.json({
         success: false,
         error: 'Service configuration error'
@@ -84,7 +85,7 @@ async function handleGarminCallback(req: ApiRequest) {
 
       if (!tokenResponse.ok) {
         const errorText = await tokenResponse.text();
-        console.error('❌ Token exchange failed:', errorText);
+        logger.error('❌ Token exchange failed:', errorText);
         throw new Error(`Token exchange failed with status ${tokenResponse.status}`);
       }
 
@@ -100,7 +101,7 @@ async function handleGarminCallback(req: ApiRequest) {
       const userProfile = profileResponse.ok ? await profileResponse.json() : null;
 
       // Security: Find or create device record without relying on client-side storage
-      let device = await db.wearableDevices
+      const device = await db.wearableDevices
         .where({ userId, type: 'garmin' })
         .first();
 
@@ -156,7 +157,7 @@ async function handleGarminCallback(req: ApiRequest) {
       });
 
     } catch (tokenError) {
-      console.error('Garmin token exchange error:', tokenError);
+      logger.error('Garmin token exchange error:', tokenError);
       return NextResponse.json({
         success: false,
         error: 'Failed to exchange authorization code'
@@ -164,7 +165,7 @@ async function handleGarminCallback(req: ApiRequest) {
     }
 
   } catch (error) {
-    console.error('Garmin callback error:', error);
+    logger.error('Garmin callback error:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to complete Garmin connection'
@@ -213,15 +214,15 @@ async function processSyncQueue() {
     try {
       await performGarminSync(job.deviceId, job.userId);
     } catch (error) {
-      console.error(`Sync failed for device ${job.deviceId}:`, error);
+      logger.error(`Sync failed for device ${job.deviceId}:`, error);
 
       // Retry logic
       if (job.retryCount < job.maxRetries) {
         job.retryCount++;
         syncQueue.push(job);
-        console.log(`Retrying sync for device ${job.deviceId} (attempt ${job.retryCount + 1})`);
+        logger.log(`Retrying sync for device ${job.deviceId} (attempt ${job.retryCount + 1})`);
       } else {
-        console.error(`Max retries reached for device ${job.deviceId}`);
+        logger.error(`Max retries reached for device ${job.deviceId}`);
         // Mark device as error state
         try {
           await db.wearableDevices.update(job.deviceId, {
@@ -229,7 +230,7 @@ async function processSyncQueue() {
             updatedAt: new Date()
           });
         } catch (updateError) {
-          console.error('Failed to update device status:', updateError);
+          logger.error('Failed to update device status:', updateError);
         }
       }
     }
@@ -249,7 +250,7 @@ async function performGarminSync(deviceId: number, userId: number) {
 
   // Note: Token is encrypted, would need decryption in real implementation
   // For now, we'll log that sync is queued
-  console.log(`✓ Garmin sync queued for device ${deviceId}, user ${userId}`);
+  logger.log(`✓ Garmin sync queued for device ${deviceId}, user ${userId}`);
 
   // Update last sync time
   await db.wearableDevices.update(deviceId, {

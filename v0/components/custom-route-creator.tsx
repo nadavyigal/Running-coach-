@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { MapPin, Trash2, Save, ListChecks } from 'lucide-react';
 import { RouteMap } from '@/components/maps/RouteMap';
+import { MapErrorBoundary } from '@/components/maps/MapErrorBoundary';
 import { db, type Route } from '@/lib/db';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -258,12 +259,14 @@ export function CustomRouteCreator({ isOpen, onClose, onRouteSaved }: CustomRout
           {/* Map area */}
           <div className="flex-1 lg:w-3/5">
             <div className="h-full min-h-[400px] rounded-lg border">
-              <RouteMap
-                routes={mapRoutes as any}
-                onMapClick={handleMapClick}
-                height="100%"
-                className="rounded-lg"
-              />
+              <MapErrorBoundary fallbackMessage="Click the map to create route waypoints">
+                <RouteMap
+                  routes={mapRoutes as any}
+                  onMapClick={handleMapClick}
+                  height="100%"
+                  className="rounded-lg"
+                />
+              </MapErrorBoundary>
             </div>
           </div>
 

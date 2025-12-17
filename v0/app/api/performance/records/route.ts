@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -113,7 +114,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('Error fetching personal records:', error);
+    logger.error('Error fetching personal records:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -155,7 +156,7 @@ export async function POST(request: NextRequest) {
         : 'No new personal records this time, but keep pushing!',
     });
   } catch (error) {
-    console.error('Error updating personal records:', error);
+    logger.error('Error updating personal records:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -191,7 +192,7 @@ export async function DELETE(request: NextRequest) {
       message: 'Personal record deleted successfully',
     });
   } catch (error) {
-    console.error('Error deleting personal record:', error);
+    logger.error('Error deleting personal record:', error);
     
     return NextResponse.json(
       { error: 'Failed to delete personal record' },

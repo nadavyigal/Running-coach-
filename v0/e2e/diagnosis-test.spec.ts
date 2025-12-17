@@ -8,7 +8,16 @@ test.describe('Running Coach Application Diagnosis', () => {
     await page.evaluate(() => {
       localStorage.clear();
       sessionStorage.clear();
+      // Clear IndexedDB to ensure fresh state
+      if (window.indexedDB) {
+        const databases = ['RunningCoachDB'];
+        databases.forEach(dbName => {
+          indexedDB.deleteDatabase(dbName);
+        });
+      }
     });
+    // Wait a bit for database deletion to complete
+    await page.waitForTimeout(500);
   });
 
   test('1. Check console errors on page load', async ({ page }) => {

@@ -4,37 +4,37 @@ import { db } from '@/lib/db';
 import { backgroundSync } from '@/lib/backgroundSync';
 
 // Mock the database
-vi.mock('@/lib/db', () => ({
-  db: {
-    syncJobs: {
-      where: vi.fn(() => ({
-        equals: vi.fn(() => ({
-          and: vi.fn(() => ({
-            toArray: vi.fn(),
-            orderBy: vi.fn(() => ({
-              reverse: vi.fn(() => ({
-                limit: vi.fn(() => ({
-                  toArray: vi.fn()
-                }))
-              }))
-            }))
-          })),
-          toArray: vi.fn(),
-          orderBy: vi.fn(() => ({
-            reverse: vi.fn(() => ({
-              limit: vi.fn(() => ({
-                toArray: vi.fn()
-              }))
-            }))
-          }))
-        }))
-      }))
-    },
-    wearableDevices: {
-      get: vi.fn()
+vi.mock('@/lib/db', () => {
+  const baseToArray = vi.fn().mockResolvedValue([]);
+  const limitToArray = vi.fn().mockResolvedValue([]);
+
+  const limitChain = { toArray: limitToArray };
+  const reverseChain = { limit: () => limitChain };
+  const orderChain = { reverse: () => reverseChain };
+
+  const queryChain: any = {
+    toArray: baseToArray,
+    orderBy: () => orderChain,
+    and: () => queryChain,
+    equals: () => queryChain
+  };
+
+  const whereFn = vi.fn(() => queryChain);
+
+  return {
+    db: {
+      syncJobs: {
+        get: vi.fn(),
+        where: whereFn,
+        _queryChain: queryChain,
+        _resetWhere: () => whereFn.mockImplementation(() => queryChain)
+      },
+      wearableDevices: {
+        get: vi.fn()
+      }
     }
-  }
-}));
+  };
+});
 
 // Mock the background sync manager
 vi.mock('@/lib/backgroundSync', () => ({
@@ -57,6 +57,7 @@ vi.mock('next/server', () => ({
 describe('/api/sync/jobs API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (db.syncJobs as any)._resetWhere?.();
   });
 
   describe('GET - Get sync jobs', () => {

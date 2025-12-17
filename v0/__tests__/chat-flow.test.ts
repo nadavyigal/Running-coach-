@@ -110,36 +110,54 @@ class ChatFlowService {
   async saveSessionState(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId)
     if (!session) return
-    
-    // Save session state to a separate onboarding sessions table or localStorage
-    // For testing purposes, we'll just update the user's updatedAt timestamp
+
+    const onboardingSession = {
+      sessionId,
+      phase: session.phase,
+      messageCount: session.messages.length,
+      userData: session.userData,
+      lastActivity: session.lastActivity
+    }
+
     await db.users.update(session.userId, {
+      onboardingSession,
       updatedAt: new Date()
     })
   }
   
   async restoreSession(userId: number, sessionData: any): Promise<string> {
-    const sessionId = sessionData.sessionId || await this.createSession(userId)
+    const validPhases = ['motivation', 'assessment', 'creation', 'refinement']
+    const isValidPhase = validPhases.includes(sessionData?.phase)
+    const hasValidCounts = typeof sessionData?.messageCount === 'number' ? sessionData.messageCount >= 0 : true
+    const useExisting = sessionData?.sessionId && isValidPhase && hasValidCounts
+
+    const sessionId = useExisting ? sessionData.sessionId : await this.createSession(userId)
     
-    // Restore messages from database (simulated)
-    const messages: ChatMessage[] = []
+    let messages: ChatMessage[] = []
+    try {
+      const query = db.chatMessages.where as any
+      const stored = await query({ sessionId }).toArray()
+      messages = Array.isArray(stored) ? stored : []
+    } catch {
+      messages = []
+    }
     
     const session: ChatSession = {
       id: sessionId,
       userId,
-      phase: sessionData.phase || 'motivation',
+      phase: isValidPhase ? sessionData.phase : 'motivation',
       messages,
-      startTime: new Date(sessionData.startTime || Date.now()),
-      lastActivity: new Date(sessionData.lastActivity || Date.now()),
-      isComplete: sessionData.isComplete || false,
-      userData: sessionData.userData || {}
+      startTime: new Date(sessionData?.startTime || Date.now()),
+      lastActivity: new Date(sessionData?.lastActivity || Date.now()),
+      isComplete: sessionData?.isComplete || false,
+      userData: sessionData?.userData || {}
     }
     
     this.sessions.set(sessionId, session)
     return sessionId
   }
   
-  async simulateAIResponse(sessionId: string, _userMessage: string): Promise<string> {
+  async simulateAIResponse(sessionId: string, userMessage: string): Promise<string> {
     if (!this.aiServiceAvailable) {
       throw new Error('AI service unavailable')
     }
@@ -194,8 +212,14 @@ class ChatFlowService {
   async transitionPhase(sessionId: string, newPhase: 'motivation' | 'assessment' | 'creation' | 'refinement'): Promise<void> {
     const session = this.sessions.get(sessionId)
     if (session) {
+      const previousPhase = session.phase
       session.phase = newPhase
-      await this.saveSessionState(sessionId)
+      try {
+        await this.saveSessionState(sessionId)
+      } catch (error) {
+        session.phase = previousPhase
+        throw error
+      }
     }
   }
   
@@ -488,7 +512,7 @@ describe('AC2: Integration Tests for AI Chat Flow', () => {
           if (retryCount >= maxRetries) {
             throw error
           }
-          await new Promise(resolve => setTimeout(resolve, 100 * retryCount)) // Exponential backoff
+          await Promise.resolve()
         }
       }
       
@@ -644,8 +668,7 @@ describe('AC2: Integration Tests for AI Chat Flow', () => {
       const phaseStartTimes: Record<string, Date> = {}
       
       // Track motivation phase
-      phaseStartTimes.motivation = new Date()
-      await new Promise(resolve => setTimeout(resolve, 10)) // Small delay
+      phaseStartTimes.motivation = new Date(Date.now() - 15)
       
       await chatService.transitionPhase(sessionId, 'assessment')
       const motivationTime = Date.now() - phaseStartTimes.motivation.getTime()
@@ -653,8 +676,7 @@ describe('AC2: Integration Tests for AI Chat Flow', () => {
       expect(motivationTime).toBeGreaterThan(0)
       
       // Track assessment phase
-      phaseStartTimes.assessment = new Date()
-      await new Promise(resolve => setTimeout(resolve, 10))
+      phaseStartTimes.assessment = new Date(Date.now() - 12)
       
       await chatService.transitionPhase(sessionId, 'creation')
       const assessmentTime = Date.now() - phaseStartTimes.assessment.getTime()

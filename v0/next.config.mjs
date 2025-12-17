@@ -36,7 +36,6 @@ const nextConfig = {
     optimizePackageImports: [
       '@radix-ui/react-icons',
       'date-fns',
-      'recharts',
       '@radix-ui/react-dialog',
       '@radix-ui/react-popover',
       '@radix-ui/react-tooltip',
@@ -162,6 +161,8 @@ const nextConfig = {
     
     // Development optimizations
     if (dev) {
+      // Disable caching to fix HMR issues
+      config.cache = false
       config.watchOptions = {
         ...config.watchOptions,
         poll: 1000,

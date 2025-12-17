@@ -10,53 +10,69 @@ import {
   logRequest
 } from '@/lib/errorHandling';
 import { withErrorHandling } from '@/lib/serverErrorHandling';
+import { logger } from '@/lib/logger';
 
 // GET - Get sync jobs for a user
 export const GET = withErrorHandling(async (req: Request) => {
   logRequest(req, { endpoint: 'sync-jobs-get' });
   
-  const { searchParams } = new URL(req.url);
-  const userId = searchParams.get('userId');
-  const limit = parseInt(searchParams.get('limit') || '10');
-  const status = searchParams.get('status');
+  try {
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get('userId');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const status = searchParams.get('status');
 
-  validateRequired({ userId }, ['userId']);
+    validateRequired({ userId }, ['userId']);
 
-  const jobs = await safeDbOperation(async () => {
-    let query = db.syncJobs.where('userId').equals(parseInt(userId));
-    
-    if (status) {
-      query = query.and(job => job.status === status);
+    const jobs = await safeDbOperation(async () => {
+      let query = db.syncJobs.where('userId').equals(parseInt(userId!));
+      
+      if (status) {
+        query = query.and((job: any) => job.status === status);
+      }
+
+      return await query
+        .orderBy('createdAt')
+        .reverse()
+        .limit(limit)
+        .toArray();
+    }, 'fetch sync jobs');
+
+    // Get summary stats
+    const stats = (await safeDbOperation(async () => {
+      return await db.syncJobs
+        .where('userId')
+        .equals(parseInt(userId!))
+        .toArray();
+    }, 'fetch sync stats')) || [];
+
+    const statusCounts = stats.reduce((acc: Record<string, number>, job: any) => {
+      acc[job.status] = (acc[job.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return NextResponse.json({
+      success: true,
+      jobs: jobs || [],
+      stats: {
+        total: stats.length,
+        ...statusCounts
+      }
+    });
+  } catch (error: any) {
+    if (error?.message?.includes('Missing required fields')) {
+      return NextResponse.json({
+        success: false,
+        error: 'User ID is required'
+      }, { status: 400 });
     }
 
-    return await query
-      .orderBy('createdAt')
-      .reverse()
-      .limit(limit)
-      .toArray();
-  }, 'fetch sync jobs');
-
-  // Get summary stats
-  const stats = await safeDbOperation(async () => {
-    return await db.syncJobs
-      .where('userId')
-      .equals(parseInt(userId))
-      .toArray();
-  }, 'fetch sync stats');
-
-  const statusCounts = stats.reduce((acc, job) => {
-    acc[job.status] = (acc[job.status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  return NextResponse.json({
-    success: true,
-    jobs,
-    stats: {
-      total: stats.length,
-      ...statusCounts
-    }
-  });
+    logger.error('Error fetching sync jobs:', error);
+    return NextResponse.json({
+      success: false,
+      error: 'Failed to fetch sync jobs'
+    }, { status: 500 });
+  }
 });
 
 // POST - Schedule a new sync job
@@ -129,7 +145,7 @@ export async function POST(req: Request) {
     });
 
   } catch (error) {
-    console.error('Error scheduling sync job:', error);
+    logger.error('Error scheduling sync job:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to schedule sync job'
@@ -188,7 +204,7 @@ export async function DELETE(req: Request) {
     }
 
   } catch (error) {
-    console.error('Error cancelling sync jobs:', error);
+    logger.error('Error cancelling sync jobs:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to cancel sync jobs'

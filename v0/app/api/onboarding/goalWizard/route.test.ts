@@ -9,11 +9,16 @@ vi.mock('@ai-sdk/openai', () => ({
 }))
 
 // Mock the AI SDK
-vi.mock('ai', () => ({
-  streamText: vi.fn(() => ({
+vi.mock('ai', () => {
+  const streamText = vi.fn(() => ({
     text: Promise.resolve("That's great! Let's explore your goals further.")
   }))
-}))
+  return {
+    __esModule: true,
+    streamText,
+    default: { streamText }
+  }
+})
 
 describe('goalWizard API', () => {
   beforeEach(() => {
@@ -197,7 +202,8 @@ describe('goalWizard API', () => {
 
   it('handles API errors gracefully', async () => {
     // Mock the AI SDK to throw an error
-    const { streamText } = require('ai')
+    const aiModule = await import('ai')
+    const streamText = vi.mocked((aiModule as any).streamText)
     streamText.mockImplementation(() => {
       throw new Error('API Error')
     })

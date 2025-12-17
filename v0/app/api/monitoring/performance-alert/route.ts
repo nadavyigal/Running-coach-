@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withApiSecurity, ApiRequest } from '@/lib/security.middleware';
+import { logger } from '@/lib/logger';
 
 async function performanceAlertHandler(req: ApiRequest) {
   if (req.method !== 'POST') {
@@ -8,7 +9,7 @@ async function performanceAlertHandler(req: ApiRequest) {
   
   try {
     const alert = await req.json();
-    console.warn('Performance alert received:', alert);
+    logger.warn('Performance alert received:', alert);
     
     // In production, send alert to monitoring service
     if (process.env.NODE_ENV === 'production') {
@@ -19,7 +20,7 @@ async function performanceAlertHandler(req: ApiRequest) {
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Failed to process performance alert:', error);
+    logger.error('Failed to process performance alert:', error);
     return NextResponse.json({ error: 'Failed to process alert' }, { status: 500 });
   }
 }

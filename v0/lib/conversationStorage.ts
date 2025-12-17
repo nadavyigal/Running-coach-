@@ -105,20 +105,20 @@ export class ConversationStorage {
       } = options
 
       // Load messages with pagination
-      let query = db.conversationMessages
+      let messages = await db.conversationMessages
         .where('conversationId')
         .equals(conversationId)
-        .orderBy('timestamp')
+        .toArray()
 
-      if (offset > 0) {
-        query = query.offset(offset)
+      // Sort by timestamp in memory
+      messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+
+      // Apply pagination in memory
+      if (offset > 0 || limit > 0) {
+        const start = offset
+        const end = limit > 0 ? offset + limit : messages.length
+        messages = messages.slice(start, end)
       }
-
-      if (limit > 0) {
-        query = query.limit(limit)
-      }
-
-      const messages = await query.toArray()
       
       // Get total count
       const totalMessages = await db.conversationMessages
@@ -256,11 +256,15 @@ export class ConversationStorage {
     const warnings: string[] = []
 
     try {
-      const msgs = messages || await db.conversationMessages
+      let msgs = messages || await db.conversationMessages
         .where('conversationId')
         .equals(conversationId)
-        .orderBy('timestamp')
         .toArray()
+
+      // Sort by timestamp in memory if we fetched messages
+      if (!messages) {
+        msgs.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+      }
 
       // Check for duplicate messages
       const timestamps = msgs.map(m => m.timestamp.getTime())
@@ -397,8 +401,10 @@ export class ConversationStorage {
       const messages = await db.conversationMessages
         .where('conversationId')
         .equals(conversationId)
-        .orderBy('timestamp')
         .toArray()
+
+      // Sort by timestamp in memory
+      messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
 
       if (messages.length <= keepCount) {
         return false // No compression needed

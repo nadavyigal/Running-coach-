@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { type CoachingProfile } from '@/lib/db';
 import { dbUtils } from '@/lib/dbUtils';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -42,14 +43,14 @@ export async function GET(request: NextRequest) {
     });
 
     const userId = params.userId || 1; // Default to user 1 for now
-    console.log('Fetching coaching profile for userId:', userId);
+    logger.log('Fetching coaching profile for userId:', userId);
     
     // Check database version and ensure coaching tables exist
-    console.log('Verifying database schema...');
+    logger.log('Verifying database schema...');
     const coachingTablesExist = await dbUtils.ensureCoachingTablesExist();
     
     if (!coachingTablesExist) {
-      console.error('Coaching tables do not exist or database version is outdated');
+      logger.error('Coaching tables do not exist or database version is outdated');
       return NextResponse.json(
         { error: 'Database schema outdated. Please refresh the page to update.' },
         { status: 500 }
@@ -57,12 +58,12 @@ export async function GET(request: NextRequest) {
     }
     
     // Get coaching profile
-    console.log('Step 1: Fetching coaching profile...');
+    logger.log('Step 1: Fetching coaching profile...');
     const profile = await dbUtils.getCoachingProfile(userId);
-    console.log('Coaching profile result:', profile ? 'Found' : 'Not found');
+    logger.log('Coaching profile result:', profile ? 'Found' : 'Not found');
     
     if (!profile) {
-      console.log('No coaching profile found for user:', userId, 'attempting to create one...');
+      logger.log('No coaching profile found for user:', userId, 'attempting to create one...');
       
       // Try to create a coaching profile automatically
       try {
@@ -102,11 +103,11 @@ export async function GET(request: NextRequest) {
         // Fetch the newly created profile
         const newProfile = await dbUtils.getCoachingProfile(userId);
         if (newProfile) {
-          console.log('Successfully created coaching profile for user:', userId);
+          logger.log('Successfully created coaching profile for user:', userId);
           return await buildProfileResponse(newProfile, userId);
         }
       } catch (createError) {
-        console.error('Failed to create coaching profile:', createError);
+        logger.error('Failed to create coaching profile:', createError);
       }
       
       return NextResponse.json(
@@ -115,12 +116,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log('Found coaching profile for user:', userId);
+    logger.log('Found coaching profile for user:', userId);
     return await buildProfileResponse(profile, userId);
 
   } catch (error) {
-    console.error('Error fetching coaching profile:', error);
-    console.error('Error details:', {
+    logger.error('Error fetching coaching profile:', error);
+    logger.error('Error details:', {
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
       name: error instanceof Error ? error.name : undefined
@@ -145,50 +146,50 @@ export async function GET(request: NextRequest) {
 
 async function buildProfileResponse(profile: CoachingProfile, userId: number) {
   try {
-    console.log('Building profile response for userId:', userId);
+    logger.log('Building profile response for userId:', userId);
     
     // Get recent adaptations
-    console.log('Step 2: Processing adaptation history...');
+    logger.log('Step 2: Processing adaptation history...');
     const recentAdaptations = (profile.adaptationHistory || [])
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 10);
-    console.log('Recent adaptations count:', recentAdaptations.length);
+    logger.log('Recent adaptations count:', recentAdaptations.length);
 
     // Get behavior patterns with error handling
-    console.log('Step 3: Fetching behavior patterns...');
+    logger.log('Step 3: Fetching behavior patterns...');
     let patterns = [];
     try {
       patterns = await dbUtils.getBehaviorPatterns(userId);
-      console.log('Behavior patterns retrieved:', patterns.length);
+      logger.log('Behavior patterns retrieved:', patterns.length);
     } catch (error) {
-      console.error('Failed to fetch behavior patterns:', error);
+      logger.error('Failed to fetch behavior patterns:', error);
       patterns = [];
     }
     
     // Get recent feedback for effectiveness metrics with error handling
-    console.log('Step 4: Fetching coaching feedback...');
+    logger.log('Step 4: Fetching coaching feedback...');
     let recentFeedback = [];
     try {
       recentFeedback = await dbUtils.getCoachingFeedback(userId, 20);
-      console.log('Coaching feedback retrieved:', recentFeedback.length);
+      logger.log('Coaching feedback retrieved:', recentFeedback.length);
     } catch (error) {
-      console.error('Failed to fetch coaching feedback:', error);
+      logger.error('Failed to fetch coaching feedback:', error);
       recentFeedback = [];
     }
     
     const averageRating = recentFeedback.length > 0 
       ? recentFeedback.reduce((sum, f) => sum + (f.rating || 3), 0) / recentFeedback.length
       : 3.5;
-    console.log('Average rating calculated:', averageRating);
+    logger.log('Average rating calculated:', averageRating);
 
     // Calculate engagement metrics with error handling
-    console.log('Step 5: Fetching coaching interactions...');
+    logger.log('Step 5: Fetching coaching interactions...');
     let recentInteractions = [];
     try {
       recentInteractions = await dbUtils.getCoachingInteractions(userId, 30);
-      console.log('Coaching interactions retrieved:', recentInteractions.length);
+      logger.log('Coaching interactions retrieved:', recentInteractions.length);
     } catch (error) {
-      console.error('Failed to fetch coaching interactions:', error);
+      logger.error('Failed to fetch coaching interactions:', error);
       recentInteractions = [];
     }
     
@@ -196,9 +197,9 @@ async function buildProfileResponse(profile: CoachingProfile, userId: number) {
       ? ((recentInteractions.slice(0, 5).reduce((sum, i) => sum + (i.effectivenessScore || 0), 0) / 5) -
          (recentInteractions.slice(5, 10).reduce((sum, i) => sum + (i.effectivenessScore || 0), 0) / 5)) * 100
       : 0;
-    console.log('Engagement improvement calculated:', engagementImprovement);
+    logger.log('Engagement improvement calculated:', engagementImprovement);
 
-    console.log('Step 6: Building response object...');
+    logger.log('Step 6: Building response object...');
     
     // Validate profile structure and provide safe defaults
     const communicationStyle = profile.communicationStyle || {
@@ -213,8 +214,8 @@ async function buildProfileResponse(profile: CoachingProfile, userId: number) {
       contextualPatterns: { weatherSensitivity: 5, stressResponse: 'maintain' }
     };
     
-    console.log('Communication style:', communicationStyle);
-    console.log('Behavioral patterns:', behavioralPatterns);
+    logger.log('Communication style:', communicationStyle);
+    logger.log('Behavioral patterns:', behavioralPatterns);
 
     const response = {
       coachingProfile: {
@@ -256,10 +257,10 @@ async function buildProfileResponse(profile: CoachingProfile, userId: number) {
       },
     };
 
-    console.log('Step 7: Response built successfully');
+    logger.log('Step 7: Response built successfully');
     return NextResponse.json(response);
   } catch (buildError) {
-    console.error('Error building profile response:', buildError);
+    logger.error('Error building profile response:', buildError);
     return NextResponse.json(
       { error: 'Failed to build coaching profile response' },
       { status: 500 }
@@ -351,7 +352,7 @@ export async function PUT(request: NextRequest) {
       profile: updatedProfile,
     });
   } catch (error) {
-    console.error('Error updating coaching profile:', error);
+    logger.error('Error updating coaching profile:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -429,7 +430,7 @@ export async function POST(request: NextRequest) {
       profileId,
     });
   } catch (error) {
-    console.error('Error creating coaching profile:', error);
+    logger.error('Error creating coaching profile:', error);
     
     return NextResponse.json(
       { error: 'Failed to create coaching profile' },

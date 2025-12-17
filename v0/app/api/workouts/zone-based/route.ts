@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { calculateMaxHRZones, calculateHRRZones, calculateLTZones } from '@/lib/heartRateZones';
+import { logger } from '@/lib/logger';
 
 // GET - Get zone-based workout recommendations
 export async function GET(request: NextRequest) {
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
       }
     });
   } catch (error) {
-    console.error('Error generating zone-based workouts:', error);
+    logger.error('Error generating zone-based workouts:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to generate zone-based workouts' },
       { status: 500 }
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
       message: 'Custom zone-based workout created successfully'
     });
   } catch (error) {
-    console.error('Error creating custom zone workout:', error);
+    logger.error('Error creating custom zone workout:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to create custom zone workout' },
       { status: 500 }

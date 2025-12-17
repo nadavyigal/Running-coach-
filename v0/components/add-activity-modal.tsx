@@ -17,12 +17,12 @@ import { useToast } from "@/hooks/use-toast"
 import { analyzeActivityImage } from "@/lib/ai-activity-client"
 
 interface AddActivityModalProps {
-  isOpen: boolean
-  onClose: () => void
-  onSaved?: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onActivityAdded?: () => void
 }
 
-export function AddActivityModal({ isOpen, onClose, onSaved }: AddActivityModalProps) {
+export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddActivityModalProps) {
   const [step, setStep] = useState<"method" | "manual" | "upload">("method")
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [activityData, setActivityData] = useState({
@@ -163,7 +163,10 @@ export function AddActivityModal({ isOpen, onClose, onSaved }: AddActivityModalP
       await persistActivity(activityData, selectedDate)
       toast({ title: "Activity saved", description: "Your run was added to Today's feed." })
       resetForm()
-      onClose()
+      onOpenChange(false)
+      if (onActivityAdded) {
+        onActivityAdded()
+      }
     } catch (err) {
       console.error("Failed to save activity", err)
       setError(err instanceof Error ? err.message : "Unable to save activity")
@@ -211,7 +214,10 @@ export function AddActivityModal({ isOpen, onClose, onSaved }: AddActivityModalP
         await persistActivity(updatedActivity, normalizedDate)
         toast({ title: "Activity logged", description: "AI imported your run automatically." })
         resetForm()
-        onClose()
+        onOpenChange(false)
+        if (onActivityAdded) {
+          onActivityAdded()
+        }
       } else {
         toast({
           title: "Review details",
@@ -228,7 +234,7 @@ export function AddActivityModal({ isOpen, onClose, onSaved }: AddActivityModalP
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>

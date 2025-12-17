@@ -6,9 +6,9 @@
  */
 
 // Update this on each significant deployment
-export const APP_VERSION = '1.1.0';
-export const BUILD_TIMESTAMP = '2025-11-25T12:00:00Z';
-export const BUILD_ID = 'prod-fixes-v2';
+export const APP_VERSION = '1.2.0';
+export const BUILD_TIMESTAMP = '2025-12-06T15:00:00Z';
+export const BUILD_ID = 'goals-routes-onboarding-fix';
 
 /**
  * Get version info for display and debugging
@@ -58,18 +58,30 @@ export function checkVersionAndClearCache(): boolean {
     
     // If there was a previous version, we might need to handle migration
     if (storedVersion) {
-      console.log('[Version] Clearing potentially stale cache...');
-      // Clear service worker cache if present
+      console.log('[Version] Clearing ALL caches for clean deployment...');
+
+      // Clear service worker cache if present - FORCE CLEAR ALL
       if ('caches' in window) {
         caches.keys().then(names => {
           names.forEach(name => {
-            if (name.includes('next') || name.includes('workbox')) {
-              caches.delete(name);
-              console.log(`[Version] Cleared cache: ${name}`);
-            }
+            caches.delete(name);
+            console.log(`[Version] Cleared cache: ${name}`);
           });
         });
       }
+
+      // Also clear session storage except for critical items
+      const criticalKeys = ['user-id', 'timezone'];
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key && !criticalKeys.includes(key)) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => sessionStorage.removeItem(key));
+
+      console.log('[Version] Cache cleared - hard refresh recommended');
       return true; // Version changed
     }
   }

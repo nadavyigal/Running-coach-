@@ -6,11 +6,25 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PerformanceChart } from '@/components/performance-chart';
-import { PersonalRecordsCard } from '@/components/personal-records-card';
-import { PerformanceInsights } from '@/components/performance-insights';
-import { CommunityComparison } from '@/components/community-comparison';
+import dynamic from 'next/dynamic';
 import { Download, TrendingUp, TrendingDown, Activity, Target, Calendar } from 'lucide-react';
+
+const PerformanceOverviewTab = dynamic(
+  () => import('@/components/performance-overview-tab').then(mod => mod.PerformanceOverviewTab),
+  { ssr: false, loading: () => <div className="p-6 text-sm text-gray-600">Loading overview…</div> }
+);
+const PerformanceTrendsTab = dynamic(
+  () => import('@/components/performance-trends-tab').then(mod => mod.PerformanceTrendsTab),
+  { ssr: false, loading: () => <div className="p-6 text-sm text-gray-600">Loading trends…</div> }
+);
+const PersonalRecordsCard = dynamic(
+  () => import('@/components/personal-records-card').then(mod => mod.PersonalRecordsCard),
+  { ssr: false, loading: () => <div className="p-6 text-sm text-gray-600">Loading records…</div> }
+);
+const CommunityComparison = dynamic(
+  () => import('@/components/community-comparison').then(mod => mod.CommunityComparison),
+  { ssr: false, loading: () => <div className="p-6 text-sm text-gray-600">Loading comparison…</div> }
+);
 
 interface PerformanceAnalyticsData {
   timeRange: string;
@@ -294,44 +308,17 @@ export function PerformanceAnalyticsDashboard({ userId = 1, onClose }: Performan
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <PerformanceChart
-              title="Performance Trends"
-              data={data.trends.performanceProgression}
-              dataKey="performance"
-              color="#3b82f6"
-              yAxisLabel="Performance Score (%)"
-            />
-            <PerformanceInsights insights={data.insights} />
-          </div>
+          <PerformanceOverviewTab
+            performanceProgression={data.trends.performanceProgression}
+            insights={data.insights}
+          />
         </TabsContent>
 
         <TabsContent value="trends" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <PerformanceChart
-              title="Pace Progression"
-              data={data.trends.paceProgression}
-              dataKey="pace"
-              color="#10b981"
-              yAxisLabel="Pace (sec/km)"
-              formatValue={formatPace}
-            />
-            <PerformanceChart
-              title="Distance Progression"
-              data={data.trends.distanceProgression}
-              dataKey="distance"
-              color="#f59e0b"
-              yAxisLabel="Distance (km)"
-              formatValue={(value) => `${value.toFixed(1)} km`}
-            />
-          </div>
-          <PerformanceChart
-            title="Consistency Score"
-            data={data.trends.consistencyProgression}
-            dataKey="consistency"
-            color="#8b5cf6"
-            yAxisLabel="Consistency (%)"
-            formatValue={(value) => `${value.toFixed(0)}%`}
+          <PerformanceTrendsTab
+            paceProgression={data.trends.paceProgression}
+            distanceProgression={data.trends.distanceProgression}
+            consistencyProgression={data.trends.consistencyProgression}
           />
         </TabsContent>
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
 import { goalProgressEngine } from '@/lib/goalProgressEngine';
+import { logger } from '@/lib/logger';
 
 const AchieveMilestoneSchema = z.object({
   milestoneId: z.number(),
@@ -172,7 +173,7 @@ export async function POST(request: NextRequest) {
     }, { status: 200 });
 
   } catch (error) {
-    console.error('Error achieving milestone:', error);
+    logger.error('Error achieving milestone:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(

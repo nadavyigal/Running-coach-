@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbUtils } from '@/lib/dbUtils';
 import { PeriodizationEngine } from '@/lib/periodization';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,7 +77,7 @@ export async function GET(req: NextRequest) {
       try {
         targetPaces = await dbUtils.calculateTargetPaces(parseInt(userId), parseInt(raceGoalId));
       } catch (error) {
-        console.warn('Could not calculate target paces:', error);
+        logger.warn('Could not calculate target paces:', error);
       }
     }
 
@@ -113,7 +114,7 @@ export async function GET(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error generating plan preview:', error);
+    logger.error('Error generating plan preview:', error);
     return NextResponse.json({
       error: 'Failed to generate plan preview',
       details: error instanceof Error ? error.message : 'Unknown error'

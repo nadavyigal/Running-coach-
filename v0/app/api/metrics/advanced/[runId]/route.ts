@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { logger } from '@/lib/logger';
 
 // GET - Get advanced metrics for a specific run
 export async function GET(req: Request, { params }: { params: { runId: string } }) {
@@ -24,7 +25,7 @@ export async function GET(req: Request, { params }: { params: { runId: string } 
     });
 
   } catch (error) {
-    console.error('Error fetching advanced metrics:', error);
+    logger.error('Error fetching advanced metrics:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to fetch advanced metrics'
@@ -115,7 +116,7 @@ export async function POST(req: Request, { params }: { params: { runId: string }
     }
 
   } catch (error) {
-    console.error('Error adding/updating advanced metrics:', error);
+    logger.error('Error adding/updating advanced metrics:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to process advanced metrics'

@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server';
 import { chatDriver } from '@/lib/chatDriver';
+import { logger } from '@/lib/logger';
 
 export async function GET() {
   const startTime = Date.now();
   
   try {
-    console.log('[chat:ping] Checking chat service health...');
+    logger.log('[chat:ping] Checking chat service health...');
     
     const health = await chatDriver.health();
     const totalLatency = Date.now() - startTime;
     
-    console.log(`[chat:ping] Health check completed in ${totalLatency}ms, service available: ${health.available}`);
+    logger.log(`[chat:ping] Health check completed in ${totalLatency}ms, service available: ${health.available}`);
     
     if (!health.available) {
       return NextResponse.json({
@@ -34,7 +35,7 @@ export async function GET() {
     
   } catch (error) {
     const totalLatency = Date.now() - startTime;
-    console.error('[chat:ping] Health check failed:', error);
+    logger.error('[chat:ping] Health check failed:', error);
     
     return NextResponse.json({
       success: false,

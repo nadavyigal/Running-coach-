@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RouteMap } from "@/components/maps/RouteMap";
+import { MapErrorBoundary } from "@/components/maps/MapErrorBoundary";
 import { CustomRouteCreator } from "@/components/custom-route-creator";
 import { MapPin, TrendingUp, Star, Clock, RouteIcon, Shield, Users, Mountain, Zap, Eye, Navigation, Loader2, AlertCircle, Map, List, Plus, Check } from "lucide-react";
 import { trackRouteSelected, trackRouteSelectedFromMap, trackRouteWizardMapToggled } from "@/lib/analytics";
@@ -17,6 +18,7 @@ import { clearTelAvivDemoRoutes, shouldClearTelAvivRoutes } from "@/lib/clearDem
 import { calculateDistance } from "@/lib/routeUtils";
 import { useToast } from "@/hooks/use-toast";
 import { getDifficultyColor, getDifficultyLabel, getSafetyColor, isDevelopment } from "@/lib/routeHelpers";
+import { getLocation } from "@/lib/location-service";
 
 interface UserLocation {
   latitude: number;
@@ -86,56 +88,29 @@ export function RouteSelectionWizard({
   // Custom route creator state
   const [customRouteCreatorOpen, setCustomRouteCreatorOpen] = useState(false);
 
-  // Request GPS location - defined before useEffect that uses it
-  const requestLocation = useCallback(() => {
-    const isSecure = typeof window !== 'undefined' &&
-      (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
-
-    if (!isSecure) {
-      setLocationStatus('unavailable');
-      return;
-    }
-
-    if (!navigator.geolocation) {
-      setLocationStatus('unavailable');
-      return;
-    }
-
+  // Request GPS location - defined as function declaration to avoid TDZ
+  // Force recompile timestamp: 2025-12-14 13:32
+  async function requestLocation() {
     setLocationStatus('loading');
 
-    let isMounted = true;
+    const result = await getLocation({ timeoutMs: 10000, enableHighAccuracy: false });
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        if (isMounted) {
-          setUserLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy
-          });
-          setLocationStatus('granted');
-        }
-      },
-      (error) => {
-        if (isMounted) {
-          if (error.code === error.PERMISSION_DENIED) {
-            setLocationStatus('denied');
-          } else {
-            setLocationStatus('unavailable');
-          }
-        }
-      },
-      {
-        enableHighAccuracy: false,
-        timeout: 10000,
-        maximumAge: 300000
-      }
-    );
+    if (result.coords) {
+      setUserLocation({
+        latitude: result.coords.latitude,
+        longitude: result.coords.longitude,
+        accuracy: result.coords.accuracy,
+      });
+    }
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    if (result.status === 'granted') {
+      setLocationStatus('granted');
+    } else if (result.status === 'denied') {
+      setLocationStatus('denied');
+    } else {
+      setLocationStatus('unavailable');
+    }
+  }
 
   // Load routes from database
   const loadRoutes = useCallback(async () => {
@@ -160,11 +135,10 @@ export function RouteSelectionWizard({
 
       const count = await db.routes.count();
       if (count === 0) {
-        // Don't seed demo routes - users should create custom routes
-        // or routes should be fetched based on their location
-        if (isDevelopment()) {
-          console.log('No routes found. Users should create custom routes.');
-        }
+        await seedDemoRoutes(false, userLocation ? {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+        } : undefined);
       }
 
       const routes = await db.routes.toArray();
@@ -194,8 +168,7 @@ export function RouteSelectionWizard({
   // Request GPS location when modal opens
   useEffect(() => {
     if (isOpen && locationStatus === 'idle') {
-      const cleanup = requestLocation();
-      return cleanup;
+      requestLocation();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, locationStatus]);
@@ -566,17 +539,19 @@ export function RouteSelectionWizard({
       {/* Map or List View */}
       {!loadError && viewMode === 'map' ? (
         <div className="space-y-4">
-          <RouteMap
-            routes={recommendedRoutes}
-            userLocation={userLocation ? {
-              lat: userLocation.latitude,
-              lng: userLocation.longitude
-            } : undefined}
-            onRouteClick={handleMapRouteClick}
-            selectedRouteId={previewedRouteId ?? undefined}
-            height="400px"
-            className="rounded-lg border"
-          />
+          <MapErrorBoundary fallbackMessage="Route map temporarily unavailable">
+            <RouteMap
+              routes={recommendedRoutes}
+              userLocation={userLocation ? {
+                lat: userLocation.latitude,
+                lng: userLocation.longitude
+              } : undefined}
+              onRouteClick={handleMapRouteClick}
+              selectedRouteId={previewedRouteId ?? undefined}
+              height="400px"
+              className="rounded-lg border"
+            />
+          </MapErrorBoundary>
 
           {/* Previewed Route Card */}
           {previewedRoute && (

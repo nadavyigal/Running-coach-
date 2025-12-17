@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
+import { logger } from '@/lib/logger';
 
 interface OAuthStatePayload {
   userId: number;
@@ -52,7 +53,7 @@ function verifyAndParseState(state: string): OAuthStatePayload | null {
 
     return payload;
   } catch (error) {
-    console.error('Failed to parse OAuth state payload', error);
+    logger.error('Failed to parse OAuth state payload', error);
     return null;
   }
 }

@@ -1,13 +1,17 @@
 // Service Worker for Running Coach PWA
 // Implements cache-first strategy for static assets to improve performance
+// Updated: 2025-12-06 - Cleared all caches for latest UI updates
 
-const CACHE_NAME = 'running-coach-v3';
-const STATIC_CACHE = 'static-v3';
+const CACHE_NAME = 'running-coach-v5-20251215';
+const STATIC_CACHE = 'static-v5-20251215';
 
 // Cache Next.js static assets on install
 const STATIC_ASSETS = [
   '/',
-  '/manifest.json',
+  '/manifest.webmanifest',
+  '/icon-192x192.png',
+  '/icon-512x512.png',
+  '/offline.html',
 ];
 
 // Install event - cache static assets
@@ -18,7 +22,16 @@ self.addEventListener('install', (event) => {
     caches.open(STATIC_CACHE)
       .then((cache) => {
         console.log('Caching static assets');
-        return cache.addAll(STATIC_ASSETS);
+        return Promise.all(
+          STATIC_ASSETS.map(async (asset) => {
+            try {
+              await cache.add(asset);
+            } catch (error) {
+              // Best-effort: don't fail install if one asset is unavailable.
+              console.warn('Failed to cache static asset:', asset, error);
+            }
+          })
+        );
       })
       .then(() => self.skipWaiting())
   );
@@ -54,8 +67,38 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Only handle same-origin requests
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
   // Don't cache API routes
   if (url.pathname.startsWith('/api/')) {
+    return;
+  }
+
+  // Navigation requests: network-first with offline fallback
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, networkResponse.clone());
+            });
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cached = await caches.match(request);
+          if (cached) return cached;
+
+          const cachedRoot = await caches.match('/');
+          if (cachedRoot) return cachedRoot;
+
+          return caches.match('/offline.html');
+        })
+    );
     return;
   }
 

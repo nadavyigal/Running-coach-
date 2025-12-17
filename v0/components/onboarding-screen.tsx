@@ -3,14 +3,11 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
-import { MonitorIcon as Running, Calendar, Route, Gauge, Sun, CloudSun, Moon, Loader2, MessageCircle } from "lucide-react"
+import { MonitorIcon as Running, Calendar, Route, Gauge, Sun, CloudSun, Moon, Loader2 } from "lucide-react"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
-import { trackEngagementEvent } from '@/lib/analytics'
-import { 
-  trackGoalDiscovered,
+import {
   trackOnboardingStarted,
   trackStepProgression,
   trackFormValidationError,
@@ -21,15 +18,10 @@ import { useErrorToast, NetworkStatusIndicator } from '@/components/error-toast'
 import { useNetworkErrorHandling } from '@/hooks/use-network-error-handling'
 import { useDatabaseErrorHandling } from '@/hooks/use-database-error-handling'
 import { useAIServiceErrorHandling } from '@/hooks/use-ai-service-error-handling'
-// import { planAdjustmentService } from "@/lib/planAdjustmentService"
-import { OnboardingChatOverlay } from "@/components/onboarding-chat-overlay"
-import { GoalDiscoveryWizard } from "@/components/goal-discovery-wizard"
 import { onboardingManager } from "@/lib/onboardingManager"
 import OnboardingErrorBoundary from "@/components/onboarding-error-boundary"
-// import { validateOnboardingState } from "@/lib/onboardingStateValidator"
-import { PrivacyDashboard, UserPrivacySettings } from "@/components/privacy-dashboard"
+import { UserPrivacySettings } from "@/components/privacy-dashboard"
 import { useEffect } from "react"
-import type { GoalDiscoveryResult } from "@/lib/goalDiscoveryEngine"
 
 interface OnboardingScreenProps {
   onComplete: () => void
@@ -127,8 +119,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       push: false,
     });
     setIsGeneratingPlan(false);
-    setShowChatOverlay(false);
-    setAiGeneratedProfile(null);
     toast({
       title: "Onboarding Restarted",
       description: "The onboarding process has been reset. Please try again.",
@@ -149,10 +139,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     push: false,
   })
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
-  const [showChatOverlay, setShowChatOverlay] = useState(false)
-  const [showGoalWizard, setShowGoalWizard] = useState(false)
-  const [aiGeneratedProfile, setAiGeneratedProfile] = useState<any>(null)
-  const [goalDiscoveryResult, setGoalDiscoveryResult] = useState<GoalDiscoveryResult | null>(null)
   const [privacySettings, setPrivacySettings] = useState<UserPrivacySettings>({
     dataCollection: {
       location: true,
@@ -166,7 +152,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   })
   const { toast } = useToast()
 
-  const totalSteps = 9
+  const totalSteps = 6
 
   const nextStep = () => {
     if (currentStep < totalSteps) {
@@ -179,136 +165,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     }
   }
 
-  const handleChatOverlayComplete = (goals: any[], userProfile: any) => {
-    setAiGeneratedProfile(userProfile)
-    
-    // Update form state with AI-generated data
-    if (userProfile.goal) {
-      setSelectedGoal(userProfile.goal)
-      
-      // Track goal discovery
-      trackGoalDiscovered({
-        goalType: userProfile.goal,
-        goalCategory: userProfile.goal === 'habit' ? 'consistency' : 
-                     userProfile.goal === 'distance' ? 'endurance' : 'speed',
-        goalConfidenceScore: 0.9, // High confidence for AI-guided
-        discoveryMethod: 'ai_guided',
-        goalReasoning: `AI-discovered goal based on conversation analysis`,
-        userContext: { goals_count: goals.length, coaching_style: userProfile.coachingStyle }
-      })
-    }
-    if (userProfile.experience) {
-      setSelectedExperience(userProfile.experience)
-    }
-    if (userProfile.preferredTimes) {
-      setSelectedTimes(userProfile.preferredTimes)
-    }
-    if (userProfile.daysPerWeek) {
-      setDaysPerWeek([userProfile.daysPerWeek])
-    }
-    
-    setShowChatOverlay(false)
-    
-    // Track AI-guided onboarding completion
-    trackEngagementEvent('ai_onboarding_complete', {
-      goals_count: goals.length,
-      coaching_style: userProfile.coachingStyle,
-      goal_types: goals.map((g: any) => g.category)
-    })
-    
-    toast({
-      title: "Goals Created!",
-      description: "Your personalized running goals have been set. Let's continue with your plan.",
-    })
-    
-    // Skip to the next step
-    nextStep()
-  }
-
-  const handleGoalWizardComplete = (discoveryResult: GoalDiscoveryResult) => {
-    console.log('🎯 Goal discovery completed with result:', discoveryResult)
-    setGoalDiscoveryResult(discoveryResult)
-    
-    // Extract primary goal info for form compatibility
-    const primaryGoal = discoveryResult.primaryGoal
-    if (primaryGoal.category === 'consistency') {
-      setSelectedGoal('habit')
-    } else if (primaryGoal.category === 'endurance') {
-      setSelectedGoal('distance')
-    } else if (primaryGoal.category === 'speed') {
-      setSelectedGoal('speed')
-    }
-
-    // Set experience from discovered profile if available
-    if ((discoveryResult as any)?.metadata?.userExperience) {
-      setSelectedExperience(((discoveryResult as any)?.metadata?.userExperience) as string)
-    } else {
-      // Set a reasonable default based on goal complexity
-      setSelectedExperience('beginner')
-    }
-    
-    // Set other reasonable defaults based on discovery results
-    if ((age === null || age === undefined) && (discoveryResult as any)?.metadata?.age) {
-      setAge((((discoveryResult as any)?.metadata?.age) as number) ?? null)
-    } else if (!age) {
-      setAge(25) // Reasonable default
-    }
-    
-    // Set default schedule based on goal difficulty
-    if (!Array.isArray(selectedTimes) || selectedTimes.length === 0) {
-      setSelectedTimes(['morning']) // Default to morning
-    }
-    if (!Array.isArray(daysPerWeek) || (daysPerWeek[0] ?? 0) < 3) {
-      setDaysPerWeek([3]) // Ensure minimum viable frequency
-    }
-    
-    // Set default consent values since the user has engaged with goal discovery
-    setConsents({
-      data: true,
-      gdpr: true,
-      push: consents.push // Keep existing push notification preference
-    })
-    
-    setShowGoalWizard(false)
-    
-    // Track comprehensive goal discovery
-    trackGoalDiscovered({
-      goalType: primaryGoal.goalType as any,
-      goalCategory: primaryGoal.category as any,
-      goalConfidenceScore: primaryGoal.confidence,
-      discoveryMethod: 'form_selection',
-      goalReasoning: primaryGoal.reasoning,
-      userContext: {
-        goals_count: discoveryResult.discoveredGoals.length,
-        success_probability: (discoveryResult as any).estimatedSuccessProbability,
-        ai_enhanced: ((discoveryResult as any).metadata?.aiEnhanced ?? false)
-      } as any
-    })
-    
-    trackEngagementEvent('goal_wizard_complete', {
-      goals_count: discoveryResult.discoveredGoals.length,
-      primary_goal: primaryGoal.title,
-      success_probability: Math.round(discoveryResult.estimatedSuccessProbability * 100),
-      overall_confidence: Math.round(discoveryResult.overallConfidence * 100)
-    })
-    
-    toast({
-      title: "Perfect Goals Discovered!",
-      description: `Found ${discoveryResult.discoveredGoals.length} personalized goals with ${Math.round(discoveryResult.estimatedSuccessProbability * 100)}% success probability.`,
-    })
-
-    console.log('🎯 Goal discovery complete')
-
-    // Show success message and guide user to complete remaining steps
-    toast({
-      title: "Goals Set!",
-      description: "Please complete the remaining onboarding steps.",
-    })
-
-    // Jump to summary step (step 9) to review and complete
-    setCurrentStep(9)
-  }
-
   const canProceed = () => {
     const canProceedResult = (() => {
       switch (currentStep) {
@@ -317,15 +173,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         case 3:
           return selectedExperience !== ""
         case 4:
-          return true // RPE is optional
-        case 5:
           return age !== null && age >= 10 && age <= 100
-        case 6:
+        case 5:
           return (Array.isArray(selectedTimes) && selectedTimes.length > 0) && (Array.isArray(daysPerWeek) && (daysPerWeek[0] ?? 0) >= 2)
-        case 7:
-          return consents.data && consents.gdpr
-        case 8:
-          return consents.data && consents.gdpr // Final step also requires consents
         default:
           return true
       }
@@ -339,13 +189,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             return { field: 'goal', message: 'Goal selection is required' }
           case 3:
             return { field: 'experience', message: 'Experience level is required' }
-          case 5:
+          case 4:
             return { field: 'age', message: 'Valid age (10-100) is required' }
-          case 6:
+          case 5:
             return { field: 'schedule', message: 'At least one time slot and 2+ days per week required' }
-          case 7:
-          case 8:
-            return { field: 'consents', message: 'Required consents must be accepted' }
           default:
             return { field: 'unknown', message: 'Validation failed' }
         }
@@ -373,7 +220,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     setIsGeneratingPlan(true)
     let retryCount = 0
     const maxRetries = 3
-    
+      
     const attemptUserCreation = async (): Promise<boolean> => {
       try {
         console.log(`📝 Attempt ${retryCount + 1}/${maxRetries}: Atomic Finish commit...`)
@@ -391,8 +238,15 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         }
         
         // Validate required fields
-        if (!selectedGoal || !selectedExperience || !consents.data || !consents.gdpr) {
+        if (!selectedGoal || !selectedExperience) {
           throw new Error('Missing required onboarding data')
+        }
+
+        // Set default consents since we removed the consent step
+        formData.consents = {
+          data: true,
+          gdpr: true,
+          push: false
         }
         
         console.log('📋 Creating user profile (atomic) ...')
@@ -409,6 +263,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         console.log('✅ Atomic commit complete:', { userId, planId })
 
         // Generate AI-powered training plan with enhanced error handling
+        if (isOnline) {
+          void (async () => {
         console.log('🤖 Generating personalized training plan...')
         let aiPlanGenerated = false;
         
@@ -480,6 +336,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         if (!aiPlanGenerated) {
           console.log('📋 Using default plan template (AI unavailable)');
         }
+          })()
+        }
 
         return true
         
@@ -520,15 +378,28 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       
       if (success) {
         // Success path - customize message based on AI availability
+        console.log('🎉 [OnboardingScreen] Onboarding completed successfully!')
+        console.log('🎉 [OnboardingScreen] Calling onComplete() callback to navigate to Today screen...')
+
+        // Set generating plan to false first
+        setIsGeneratingPlan(false)
+
+        // Show success toast
         toast({
           title: "Welcome to Run-Smart! 🏃",
           description: "Your personalized running journey begins now!",
         })
-        
-        console.log('🎉 Onboarding completed successfully!')
-        setIsGeneratingPlan(false)
-        onComplete()
-        
+
+        // Call the parent's onComplete callback to trigger navigation
+        try {
+          onComplete()
+          console.log('✅ [OnboardingScreen] onComplete() called successfully')
+        } catch (error) {
+          console.error('❌ [OnboardingScreen] Error calling onComplete():', error)
+          // Force navigation even if callback fails
+          setIsGeneratingPlan(false)
+        }
+
       } else {
         // All retries failed - ask user to retry
         console.warn('⚠️ All user creation attempts failed; prompting retry')
@@ -566,15 +437,17 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               <h2 className="text-2xl font-bold">Welcome to Run-Smart!</h2>
               <p className="text-gray-600">Let's create your personalized running plan</p>
             </div>
-            <Card className="bg-gradient-to-r from-green-400 to-blue-500 text-white">
+            <Card className="bg-green-500 text-white border-green-600">
               <CardContent className="p-6">
-                <h3 className="text-xl font-bold mb-2">🏃‍♂️ 21-Day Rookie Challenge</h3>
-                <p>Perfect for beginners! Build a sustainable running habit with our AI coach.</p>
+                <h3 className="text-xl font-bold mb-2">🏃‍♂️ Adaptive Training Plan</h3>
+                <p>Get a personalized training plan to get you going!</p>
               </CardContent>
             </Card>
-            <Button onClick={nextStep} className="w-full bg-green-500 hover:bg-green-600">
-              Get Started
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button onClick={nextStep} className="w-full bg-green-500 hover:bg-green-600">
+                Get Started
+              </Button>
+            </div>
           </div>
         )
 
@@ -582,58 +455,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         return (
           <div className="space-y-6">
             <h2 className="text-2xl font-bold text-center">What's your running goal?</h2>
-            
-            {/* AI Goal Discovery Options */}
-            <div className="space-y-3">
-              <Card className="border-2 border-dashed border-blue-300 bg-blue-50 dark:bg-blue-900/20">
-                <CardContent className="p-4">
-                  <div className="flex items-center space-x-3">
-                    <Gauge className="h-6 w-6 text-blue-600" />
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-blue-800 dark:text-blue-200">Smart Goal Discovery</h3>
-                      <p className="text-sm text-blue-700 dark:text-blue-300">
-                        Answer a few questions to get personalized goal recommendations with success prediction
-                      </p>
-                    </div>
-                    <Button
-                      onClick={() => setShowGoalWizard(true)}
-                      variant="outline"
-                      size="sm"
-                      className="border-blue-300 text-blue-700 hover:bg-blue-100"
-                    >
-                      Discover Goals
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
 
-              <Card className="border-2 border-dashed border-green-300 bg-green-50 dark:bg-green-900/20">
-                <CardContent className="p-4">
-                  <div className="flex items-center space-x-3">
-                    <MessageCircle className="h-6 w-6 text-green-600" />
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-green-800 dark:text-green-200">Chat with AI Coach</h3>
-                      <p className="text-sm text-green-700 dark:text-green-300">
-                        Have a conversation to explore your running motivations and goals
-                      </p>
-                    </div>
-                    <Button
-                      onClick={() => setShowChatOverlay(true)}
-                      variant="outline"
-                      size="sm"
-                      className="border-green-300 text-green-700 hover:bg-green-100"
-                    >
-                      Start Chat
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-            
-            <div className="text-center text-sm text-gray-500">
-              <p>Or choose from our predefined options:</p>
-            </div>
-            
             <div className="space-y-3">
               {[
                 { id: "habit", icon: Calendar, title: "Build a Running Habit", desc: "Start with consistency" },
@@ -655,53 +477,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 </Card>
               ))}
             </div>
-            
-            {goalDiscoveryResult && (
-              <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200">
-                <CardContent className="p-4">
-                  <div className="space-y-3">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                      <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                        Smart Goal Discovery Results
-                      </p>
-                    </div>
-                    <div className="bg-white dark:bg-blue-950 rounded-lg p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">Primary Goal:</span>
-                        <span className="text-sm text-blue-800 dark:text-blue-200">{goalDiscoveryResult.primaryGoal.title}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">Success Probability:</span>
-                        <span className="text-sm font-semibold text-green-600">
-                          {Math.round(goalDiscoveryResult.estimatedSuccessProbability * 100)}%
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">Supporting Goals:</span>
-                        <span className="text-sm text-blue-800 dark:text-blue-200">
-                          {goalDiscoveryResult.supportingGoals.length} additional
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
-            {aiGeneratedProfile && !goalDiscoveryResult && (
-              <Card className="bg-green-50 dark:bg-green-900/20 border-green-200">
-                <CardContent className="p-4">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <p className="text-sm text-green-700 dark:text-green-300">
-                      AI has suggested: <strong>{aiGeneratedProfile.goal}</strong> goal with {aiGeneratedProfile.coachingStyle} coaching style
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-            
             <Button onClick={nextStep} disabled={!canProceed()} className="w-full bg-green-500 hover:bg-green-600">
               Continue
             </Button>
@@ -739,29 +515,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       case 4:
         return (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-center">Fitness Assessment (Optional)</h2>
-            <div className="space-y-3">
-              <label htmlFor="rpe-slider" className="block text-center mb-2">How hard do you feel you can push yourself? (RPE 1-10)</label>
-              <Slider
-                id="rpe-slider"
-                value={rpe !== null ? [rpe] : [5]}
-                onValueChange={(vals: number[]) => setRpe((vals && typeof vals[0] === 'number') ? vals[0] : 5)}
-                min={1}
-                max={10}
-                step={1}
-                className="w-full"
-                aria-label="Rate of Perceived Exertion"
-              />
-              <div className="text-center text-sm text-gray-600">{rpe !== null ? rpe : 5} / 10</div>
-              <p className="text-xs text-gray-500 text-center">This helps us tailor your plan, but you can skip it.</p>
-            </div>
-            <Button onClick={nextStep} className="w-full bg-green-500 hover:bg-green-600">Continue</Button>
-          </div>
-        )
-
-      case 5:
-        return (
-          <div className="space-y-6">
             <h2 className="text-2xl font-bold text-center">How old are you?</h2>
             <div className="space-y-3">
               <input
@@ -780,7 +533,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           </div>
         )
 
-      case 6:
+      case 5:
         return (
           <div className="space-y-6">
             <h2 className="text-2xl font-bold text-center">When can you run?</h2>
@@ -822,67 +575,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           </div>
         )
 
-      case 7:
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-center">Privacy & Consent</h2>
-            <div className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <Checkbox
-                  id="data-consent"
-                  checked={consents.data}
-                  onCheckedChange={(checked: boolean) => setConsents((prev) => ({ ...prev, data: !!checked }))}
-                  aria-label="I agree to the processing of my health data for personalized coaching"
-                />
-                <label htmlFor="data-consent" className="text-sm leading-relaxed">
-                  I agree to the processing of my health data for personalized coaching
-                </label>
-              </div>
-              <div className="flex items-start space-x-3">
-                <Checkbox
-                  id="gdpr-consent"
-                  checked={consents.gdpr}
-                  onCheckedChange={(checked: boolean) => setConsents((prev) => ({ ...prev, gdpr: !!checked }))}
-                  aria-label="I accept the Terms of Service and Privacy Policy (GDPR compliant)"
-                />
-                <label htmlFor="gdpr-consent" className="text-sm leading-relaxed">
-                  I accept the Terms of Service and Privacy Policy (GDPR compliant)
-                </label>
-              </div>
-              <div className="flex items-start space-x-3">
-                <Checkbox
-                  id="push-consent"
-                  checked={consents.push}
-                  onCheckedChange={(checked: boolean) => setConsents((prev) => ({ ...prev, push: !!checked }))}
-                  aria-label="Enable push notifications for running reminders"
-                />
-                <label htmlFor="push-consent" className="text-sm leading-relaxed">
-                  Enable push notifications for running reminders
-                </label>
-              </div>
-            </div>
-            <Button
-              onClick={nextStep}
-              disabled={!canProceed()}
-              className="w-full bg-green-500 hover:bg-green-600"
-            >
-              Continue
-            </Button>
-          </div>
-        )
-      case 8:
-        return (
-          <div className="space-y-6">
-            <PrivacyDashboard user={{} as any} onSettingsChange={setPrivacySettings} />
-            <Button
-              onClick={nextStep}
-              className="w-full bg-green-500 hover:bg-green-600"
-            >
-              Continue
-            </Button>
-          </div>
-        )
-      case 9:
+      case 6:
         return (
           <div className="space-y-6" role="region" aria-label="Summary and Confirmation">
             <h2 className="text-2xl font-bold text-center" id="summary-heading">Summary & Confirmation</h2>
@@ -895,10 +588,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                   <li><strong>Preferred Times:</strong> {selectedTimes.join(', ')}</li>
                   <li><strong>Days/Week:</strong> {daysPerWeek[0]}</li>
                   <li><strong>RPE:</strong> {rpe !== null ? rpe : 'Not provided'}</li>
-                  <li><strong>GDPR Consent:</strong> {consents.gdpr ? 'Yes' : 'No'}</li>
-                  <li><strong>Health Data Consent:</strong> {consents.data ? 'Yes' : 'No'}</li>
-                  <li><strong>Push Notifications:</strong> {consents.push ? 'Yes' : 'No'}</li>
-                  <li><strong>Privacy Settings:</strong> Configured</li>
                 </ul>
               </CardContent>
             </Card>
@@ -927,7 +616,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   return (
     <OnboardingErrorBoundary onReset={handleResetErrorBoundary}>
       <NetworkStatusIndicator />
-      <div className="min-h-screen bg-gradient-to-br from-green-400 to-blue-500 p-4 flex flex-col">
+      <div className="min-h-screen bg-green-500 p-4 flex flex-col">
         <div className="text-center mb-8 pt-8">
           <h1 className="text-3xl font-bold text-white flex items-center justify-center gap-2">
             <Running className="h-8 w-8" />
@@ -943,7 +632,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
         <div className="flex justify-center mb-8">
           <div className="flex space-x-2" role="progressbar" aria-label="Onboarding progress" aria-valuenow={currentStep} aria-valuemin={1} aria-valuemax={totalSteps}>
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((step) => (
+            {[1, 2, 3, 4, 5, 6].map((step) => (
               <div
                 key={step}
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors duration-200 ${
@@ -971,31 +660,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         <Card className="flex-1 mx-auto w-full max-w-md">
           <CardContent className="p-6">{renderStep()}</CardContent>
         </Card>
-        
-        {/* AI Chat Overlay */}
-        <OnboardingChatOverlay
-          isOpen={showChatOverlay}
-          onClose={() => setShowChatOverlay(false)}
-          onComplete={handleChatOverlayComplete}
-          currentStep={currentStep}
-          totalSteps={totalSteps}
-        />
-        
-        {/* Goal Discovery Wizard */}
-            <GoalDiscoveryWizard
-          isOpen={showGoalWizard}
-          onClose={() => setShowGoalWizard(false)}
-          onComplete={handleGoalWizardComplete}
-          initialProfile={{
-            experience: selectedExperience as any,
-                age: (age ?? undefined) as any,
-            availableTime: {
-                  daysPerWeek: ((daysPerWeek && daysPerWeek[0]) ? daysPerWeek[0] : 3) as number,
-              minutesPerSession: 30,
-              preferredTimes: selectedTimes
-            }
-          }}
-        />
       </div>
     </OnboardingErrorBoundary>
   )

@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -24,6 +24,15 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
+
+type RechartsModule = typeof import('recharts');
+
+const LazyCharts = dynamic(async () => {
+  const mod = await import('recharts');
+  return {
+    default: mod,
+  };
+}, { ssr: false });
 
 interface GoalAnalyticsInsightsProps {
   userId: number;
@@ -108,10 +117,21 @@ export function GoalAnalyticsInsights({
   const [loading, setLoading] = useState(true);
   const [selectedTimeRange, setSelectedTimeRange] = useState(timeRange);
   const [activeTab, setActiveTab] = useState('overview');
+  const [recharts, setRecharts] = useState<RechartsModule | null>(null);
 
   useEffect(() => {
     loadAnalytics();
   }, [userId, goalId, selectedTimeRange]);
+
+  useEffect(() => {
+    let mounted = true;
+    import('recharts').then((mod) => {
+      if (mounted) setRecharts(mod);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const loadAnalytics = async () => {
     try {
@@ -222,6 +242,21 @@ export function GoalAnalyticsInsights({
       </Card>
     );
   }
+
+  if (!recharts) {
+    return (
+      <Card className={className}>
+        <CardContent className="p-6">
+          <div className="flex items-center gap-3">
+            <BarChart3 className="h-5 w-5 animate-pulse text-blue-500" />
+            <div className="text-sm text-gray-600">Loading charts…</div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { ResponsiveContainer, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, BarChart, Bar } = recharts;
 
   return (
     <div className={className}>

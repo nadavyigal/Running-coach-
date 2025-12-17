@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, HRVMeasurement } from '../../../../lib/db';
 import { RecoveryEngine } from '../../../../lib/recoveryEngine';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error getting HRV data:', error);
+    logger.error('Error getting HRV data:', error);
     return NextResponse.json(
       {
         success: false,
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error saving HRV data:', error);
+    logger.error('Error saving HRV data:', error);
     return NextResponse.json(
       {
         success: false,

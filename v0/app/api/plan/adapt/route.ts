@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
 import { planAdaptationEngine } from '@/lib/planAdaptationEngine';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Manual plan adaptation failed:', error);
+    logger.error('Manual plan adaptation failed:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -131,7 +132,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Plan adaptation assessment failed:', error);
+    logger.error('Plan adaptation assessment failed:', error);
     
     return NextResponse.json(
       { error: 'Internal server error' },

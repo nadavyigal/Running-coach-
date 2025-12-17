@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbUtils } from '@/lib/dbUtils';
 import { z } from 'zod';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,35 +17,6 @@ const cohortStatsSchema = z.object({
 
 export async function GET(req: NextRequest) {
   try {
-    // Temporary fix: Return mock data during onboarding to prevent API loops
-    return NextResponse.json({
-      success: true,
-      data: {
-        currentUserStats: {
-          totalDistance: 0,
-          totalRuns: 0,
-          avgPace: '0:00',
-          totalDuration: 0,
-          bestDistance: 0,
-          longestRun: 0,
-          consistency: 0
-        },
-        cohortStats: {
-          memberCount: 1000,
-          avgDistance: 25.0,
-          avgRuns: 12,
-          avgPace: '6:30',
-          topPerformers: 250
-        },
-        comparison: {
-          distanceRank: 'N/A',
-          paceRank: 'N/A', 
-          consistencyRank: 'N/A',
-          percentile: 50
-        }
-      }
-    });
-    
     const { searchParams } = req.nextUrl;
     const userId = searchParams.get('userId');
     const includePerformance = searchParams.get('includePerformance');
@@ -63,16 +35,7 @@ export async function GET(req: NextRequest) {
     // Get the user's cohort information
     const user = await dbUtils.getUserById(parseInt(validatedData.userId));
     if (!user || !user.cohortId) {
-      // Return empty stats instead of error to prevent UI breaking
-      return NextResponse.json({
-        cohortId: null,
-        totalMembers: 0,
-        averageWeeklyRuns: 0,
-        averageDistance: 0,
-        topPerformers: [],
-        recentActivities: [],
-        message: 'User not in a cohort'
-      });
+      return NextResponse.json({ message: 'User not in a cohort' }, { status: 404 });
     }
 
     // Get cohort statistics
@@ -94,16 +57,9 @@ export async function GET(req: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ message: 'Invalid request data', errors: error.errors }, { status: 400 });
     }
-    console.error('Error fetching cohort stats:', error);
-    // Return empty stats instead of error to prevent UI breaking
+    logger.error('Error fetching cohort stats:', error);
     return NextResponse.json({
-      cohortId: null,
-      totalMembers: 0,
-      averageWeeklyRuns: 0,
-      averageDistance: 0,
-      topPerformers: [],
-      recentActivities: [],
-      error: 'Failed to fetch cohort stats'
-    });
+      message: 'Internal server error'
+    }, { status: 500 });
   }
 }

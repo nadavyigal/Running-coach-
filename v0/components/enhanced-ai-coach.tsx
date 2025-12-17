@@ -130,7 +130,7 @@ export function EnhancedAICoach({ user, onResponse, className = '' }: EnhancedAI
   };
 
   const analyzePerformanceTrends = async (runs: Run[]): Promise<PerformanceTrend[]> => {
-    if (runs.length < 2) {
+    if (!runs || runs.length < 2) {
       return [];
     }
 

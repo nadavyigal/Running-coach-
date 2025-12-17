@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import {
   Sun,
   Clock,
@@ -31,7 +32,8 @@ import { AddActivityModal } from "@/components/add-activity-modal"
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
-import { type Workout, type Plan, type Route } from "@/lib/db"
+import ModalErrorBoundary from "@/components/modal-error-boundary"
+import { type Workout, type Plan, type Route, type Goal, resetDatabaseInstance } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { StreakIndicator } from "@/components/streak-indicator"
@@ -53,20 +55,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
-// Get workout color gradient based on type
-const getWorkoutGradient = (type: string): string => {
-  const gradients: Record<string, string> = {
-    easy: "from-green-500 to-green-600",
-    tempo: "from-orange-500 to-orange-600",
-    intervals: "from-pink-500 to-pink-600",
-    long: "from-blue-500 to-blue-600",
-    "time-trial": "from-red-500 to-red-600",
-    hill: "from-purple-500 to-purple-600",
-    rest: "from-gray-400 to-gray-500",
-  }
-  return gradients[type.toLowerCase()] || "from-primary to-primary-dark"
-}
-
 export function TodayScreen() {
   const [dailyTip, setDailyTip] = useState(
     "Focus on your breathing rhythm today. Try the 3:2 pattern - inhale for 3 steps, exhale for 2 steps. This will help you maintain a steady pace!",
@@ -78,10 +66,12 @@ export function TodayScreen() {
   const [weeklyWorkouts, setWeeklyWorkouts] = useState<Workout[]>([])
   const [userId, setUserId] = useState<number | null>(null)
   const [plan, setPlan] = useState<Plan | null>(null)
+  const [primaryGoal, setPrimaryGoal] = useState<Goal | null>(null)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [showAddRunModal, setShowAddRunModal] = useState(false)
   const [showAddActivityModal, setShowAddActivityModal] = useState(false)
   const [showRouteSelectorModal, setShowRouteSelectorModal] = useState(false)
+  const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
   const [showRescheduleModal, setShowRescheduleModal] = useState(false)
   const [showDateWorkoutModal, setShowDateWorkoutModal] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -99,6 +89,23 @@ export function TodayScreen() {
     "Track your progress! Celebrate small wins - every kilometer counts towards your goal.",
   ]
 
+  const goalProgressPercent = (goal?: Goal | null) => {
+    if (!goal) return 0
+    const baseline = typeof goal.baselineValue === 'number' ? goal.baselineValue : 0
+    const target = typeof goal.targetValue === 'number' ? goal.targetValue : 0
+    const current = typeof goal.currentValue === 'number' ? goal.currentValue : baseline
+    const denominator = target - baseline
+    if (denominator === 0) return 0
+    return Math.min(100, Math.max(0, ((current - baseline) / denominator) * 100))
+  }
+
+  const getDaysRemaining = (goal?: Goal | null) => {
+    if (!goal?.timeBound?.deadline) return null
+    const deadline = new Date(goal.timeBound.deadline)
+    const diff = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    return diff < 0 ? 0 : diff
+  }
+
   const refreshTip = () => {
     const currentIndex = tips.indexOf(dailyTip)
     const nextIndex = (currentIndex + 1) % tips.length
@@ -112,15 +119,24 @@ export function TodayScreen() {
         const user = await dbUtils.getCurrentUser()
         if (user) {
           setUserId(user.id!)
-          const userPlan = await dbUtils.getPlanByUserId(user.id!)
+          const userPlan = await dbUtils.getActivePlan(user.id!)
           setPlan(userPlan)
+          const goal = await dbUtils.getPrimaryGoal(user.id!)
+          setPrimaryGoal(goal)
+
+          // Get workouts for the current week
+          const today = new Date()
+          const startOfWeek = new Date(today)
+          startOfWeek.setDate(today.getDate() - today.getDay()) // Start of week (Sunday)
+          const endOfWeek = new Date(startOfWeek)
+          endOfWeek.setDate(startOfWeek.getDate() + 6) // End of week (Saturday)
+
+          const workouts = await dbUtils.getWorkoutsForDateRange(user.id!, startOfWeek, endOfWeek)
+          setWeeklyWorkouts(workouts)
+
+          const todaysWorkout = await dbUtils.getTodaysWorkout(user.id!)
+          setTodaysWorkout(todaysWorkout)
         }
-
-        const workouts = await dbUtils.getWeeklyWorkouts()
-        setWeeklyWorkouts(workouts)
-
-        const today = await dbUtils.getTodaysWorkout()
-        setTodaysWorkout(today)
         setIsLoadingWorkout(false)
       } catch (error) {
         console.error("Error initializing data:", error)
@@ -142,7 +158,26 @@ export function TodayScreen() {
     }
   }
 
+  const startRecordFlow = () => {
+    try {
+      window.dispatchEvent(new CustomEvent("navigate-to-record"))
+    } catch {
+      window.location.hash = "#record"
+    }
+  }
+
   // Calendar days
+  // Workout color mapping for calendar indicators
+  const workoutColorMap: { [key: string]: string } = {
+    easy: "bg-green-500",
+    tempo: "bg-orange-500",
+    intervals: "bg-pink-500",
+    long: "bg-blue-500",
+    rest: "bg-gray-400",
+    "time-trial": "bg-red-500",
+    hill: "bg-purple-500",
+  }
+
   const calendarDays = Array.from({ length: 7 }, (_, i) => {
     const date = new Date()
     date.setDate(date.getDate() - 3 + i)
@@ -156,7 +191,7 @@ export function TodayScreen() {
       fullDate: date,
       isToday: date.toDateString() === new Date().toDateString(),
       hasWorkout: !!workout,
-      workoutColor: workout ? getWorkoutGradient(workout.type) : undefined,
+      workoutColor: workout ? workoutColorMap[workout.type] : undefined,
       workoutType: workout?.type,
     }
   })
@@ -173,7 +208,7 @@ export function TodayScreen() {
   const confirmReset = () => {
     try {
       dbUtils.clearPlanCreationLocks()
-      dbUtils.resetDatabaseInstance()
+      resetDatabaseInstance()
       localStorage.clear()
       window.location.href = "/"
     } catch (error) {
@@ -249,10 +284,48 @@ export function TodayScreen() {
     plannedRuns > 0 ? Math.round((totalRuns / plannedRuns) * 100) : 0
   const streak = calculateStreak()
 
+  const handleRouteSelected = (route: Route) => {
+    setSelectedRoute(route)
+    setShowRouteSelectorModal(false)
+    toast({
+      title: "Route selected",
+      description: route.name ? `Using ${route.name} for today's run` : "Route saved for your next run.",
+    })
+  }
+
   return (
     <div className="pb-24 space-y-4">
-      {/* Header with Gradient Background */}
-      <div className="bg-gradient-to-br from-purple-50 via-white to-cyan-50 p-6 rounded-b-3xl shadow-sm animate-in fade-in-0 duration-500">
+      {primaryGoal && (
+        <div className="px-4">
+          <Card className="border">
+            <CardContent className="p-4 space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-emerald-600">Active Goal</p>
+                  <h3 className="text-lg font-bold text-gray-900">{primaryGoal.title}</h3>
+                  <p className="text-sm text-gray-700">{primaryGoal.description}</p>
+                </div>
+                <div className="text-right">
+                  {getDaysRemaining(primaryGoal) !== null && (
+                    <Badge variant="secondary" className="text-xs">
+                      {getDaysRemaining(primaryGoal)} days remaining
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-xs text-gray-700 mb-1">
+                  <span>Progress</span>
+                  <span>{Math.round(goalProgressPercent(primaryGoal))}%</span>
+                </div>
+                <Progress value={goalProgressPercent(primaryGoal)} className="h-2" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      {/* Header */}
+      <div className="bg-white p-6 rounded-b-3xl shadow-sm">
         <div className="flex justify-between items-start mb-4">
           <div>
             <p className="text-sm text-gray-600 mb-1">
@@ -262,12 +335,12 @@ export function TodayScreen() {
                 day: "numeric",
               })}
             </p>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold text-gray-900">
               {plan?.title || "Your Training"}
             </h1>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm text-accent px-4 py-2 rounded-full shadow-sm">
+            <div className="flex items-center gap-2 bg-blue-100 text-blue-800 px-4 py-2 rounded-full">
               <Sun className="h-5 w-5" />
               <span className="text-sm font-semibold">22°C</span>
             </div>
@@ -275,7 +348,7 @@ export function TodayScreen() {
               variant="ghost"
               size="xs"
               onClick={handleRestartOnboarding}
-              className="gap-1.5 text-xs text-gray-500 hover:text-primary"
+              className="gap-1.5 text-xs text-gray-500 hover:text-gray-700"
             >
               <RefreshCw className="h-3 w-3" />
               Reset
@@ -283,21 +356,21 @@ export function TodayScreen() {
           </div>
         </div>
 
-        {/* Streak & Challenge Progress - 2 Column Bento */}
-        <div className="grid grid-cols-2 gap-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-100">
-          <Card variant="stat" size="sm" className="hover:-translate-y-1">
+        {/* Streak & Challenge Progress */}
+        <div className="grid grid-cols-2 gap-3">
+          <Card className="border">
             <CardContent className="p-4 text-center">
               <Flame className="h-6 w-6 text-orange-500 mx-auto mb-2" />
-              <div className="text-3xl font-bold text-primary mb-1">
+              <div className="text-3xl font-bold text-gray-900 mb-1">
                 {streak}
               </div>
               <div className="text-xs font-medium text-gray-600">Day Streak</div>
             </CardContent>
           </Card>
-          <Card variant="stat" size="sm" className="hover:-translate-y-1">
+          <Card className="border">
             <CardContent className="p-4 text-center">
-              <Target className="h-6 w-6 text-cyan-500 mx-auto mb-2" />
-              <div className="text-3xl font-bold text-accent mb-1">
+              <BarChart3 className="h-6 w-6 text-blue-500 mx-auto mb-2" />
+              <div className="text-3xl font-bold text-gray-900 mb-1">
                 {totalRuns}/{plannedRuns}
               </div>
               <div className="text-xs font-medium text-gray-600">This Week</div>
@@ -314,10 +387,10 @@ export function TodayScreen() {
             return (
               <button
                 key={index}
-                className={`flex-shrink-0 text-center p-3 rounded-xl min-w-[70px] transition-all duration-300 hover:scale-105 active:scale-95 animate-in fade-in-0 slide-in-from-left duration-500 ${
+                className={`flex-shrink-0 text-center p-3 rounded-xl min-w-[70px] transition-all duration-300 hover:scale-105 active:scale-95 ${
                   isSelected
-                    ? "bg-gradient-to-br from-primary to-primary-dark text-white shadow-lg shadow-primary/20 scale-105"
-                    : "bg-white border border-gray-200 hover:shadow-md hover:border-primary/30"
+                    ? "bg-blue-500 text-white shadow-lg scale-105"
+                    : "bg-white border border-gray-200 hover:shadow-md"
                 }`}
                 style={{ animationDelay: `${200 + index * 50}ms` }}
                 onClick={() => handleDateClick(day)}
@@ -330,7 +403,7 @@ export function TodayScreen() {
                       className={`w-2 h-2 rounded-full ${
                         isSelected
                           ? "bg-white"
-                          : `bg-gradient-to-r ${day.workoutColor}`
+                          : day.workoutColor || "bg-green-500"
                       }`}
                     />
                   </div>
@@ -341,32 +414,20 @@ export function TodayScreen() {
         </div>
       </div>
 
-      {/* Today's Workout - Hero Card with Workout-Themed Gradient */}
-      <div className="px-4 animate-in fade-in-0 scale-in duration-500 delay-300">
+      {/* Today's Workout */}
+      <div className="px-4">
         {isLoadingWorkout ? (
-          <Card variant="elevated" className="h-64 flex items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <Card className="h-64 flex items-center justify-center border">
+            <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
           </Card>
         ) : todaysWorkout ? (
-          <Card
-            variant="workout"
-            className={`bg-gradient-to-br ${getWorkoutGradient(
-              todaysWorkout.type
-            )} text-white shadow-xl overflow-hidden relative`}
-          >
-            {/* Decorative Elements */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl" />
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full blur-2xl" />
-
-            <CardHeader className="relative z-10">
+          <Card className="border shadow-lg">
+            <CardHeader>
               <div className="flex items-center gap-2 mb-3">
-                <Badge
-                  className="bg-white/20 backdrop-blur-sm text-white border-white/30 uppercase tracking-wider"
-                  size="sm"
-                >
+                <Badge variant="secondary" className="uppercase tracking-wider">
                   Today
                 </Badge>
-                <span className="text-sm text-white/90">
+                <span className="text-sm text-gray-500">
                   {todaysWorkout.scheduledDate
                     ? new Date(todaysWorkout.scheduledDate).toLocaleDateString(
                         "en-US",
@@ -375,12 +436,12 @@ export function TodayScreen() {
                     : ""}
                 </span>
               </div>
-              <CardTitle className="text-2xl font-bold mb-2">
+              <CardTitle className="text-2xl font-bold mb-2 text-gray-900">
                 {todaysWorkout.type.charAt(0).toUpperCase() +
                   todaysWorkout.type.slice(1)}{" "}
                 Run
               </CardTitle>
-              <div className="flex items-center gap-4 text-white/90">
+              <div className="flex items-center gap-4 text-gray-700">
                 <div className="flex items-center gap-2">
                   <StretchHorizontal className="h-5 w-5" />
                   <span className="font-semibold">
@@ -404,24 +465,28 @@ export function TodayScreen() {
               </div>
             </CardHeader>
 
-            <CardContent className="relative z-10 space-y-4">
+            <CardContent className="space-y-4">
               {/* Quick Actions */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <Button
-                  variant="secondary"
+                  variant="default"
                   size="lg"
-                  className="bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white border-white/30 font-semibold"
-                  onClick={() =>
-                    (window.location.hash = "#record")
-                  }
+                  onClick={startRecordFlow}
                 >
                   <Play className="h-5 w-5 mr-2" />
                   Start Run
                 </Button>
                 <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={() => setShowRouteSelectorModal(true)}
+                >
+                  <MapPin className="h-5 w-5 mr-2" />
+                  Select Route
+                </Button>
+                <Button
                   variant="ghost"
                   size="lg"
-                  className="bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white"
                   onClick={() => setShowWorkoutBreakdown(!showWorkoutBreakdown)}
                 >
                   {showWorkoutBreakdown ? (
@@ -457,6 +522,18 @@ export function TodayScreen() {
                   </div>
                 </div>
               )}
+
+              {selectedRoute && (
+                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 text-sm flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4" />
+                    <span className="font-semibold">{selectedRoute.name}</span>
+                  </div>
+                  {selectedRoute.distance && (
+                    <span className="text-white/80">{selectedRoute.distance} km</span>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -469,6 +546,20 @@ export function TodayScreen() {
               <p className="text-gray-600 text-sm">
                 Recovery is just as important as training. Enjoy your rest!
               </p>
+              <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <Button onClick={startRecordFlow} className="gap-2">
+                  <Play className="h-4 w-4" />
+                  Record a Run
+                </Button>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => setShowRouteSelectorModal(true)}
+                >
+                  <MapPin className="h-4 w-4" />
+                  Choose Route
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -602,39 +693,71 @@ export function TodayScreen() {
         )}
       </div>
 
-      {/* Modals */}
-      <AddRunModal
-        open={showAddRunModal}
-        onOpenChange={setShowAddRunModal}
-        onRunAdded={refreshWorkouts}
-      />
-      <AddActivityModal
-        open={showAddActivityModal}
-        onOpenChange={setShowAddActivityModal}
-        onActivityAdded={refreshWorkouts}
-      />
-      <RouteSelectorModal
-        open={showRouteSelectorModal}
-        onOpenChange={setShowRouteSelectorModal}
-        onRouteSelect={() => {}}
-      />
-      <RescheduleModal
-        open={showRescheduleModal}
-        onOpenChange={setShowRescheduleModal}
-        workout={todaysWorkout}
-        onReschedule={refreshWorkouts}
-      />
-      <DateWorkoutModal
-        open={showDateWorkoutModal}
-        onOpenChange={setShowDateWorkoutModal}
-        date={selectedDate || new Date()}
-        onWorkoutAdded={refreshWorkouts}
-      />
-      <CoachingPreferencesSettings
-        open={showCoachingPreferences}
-        onOpenChange={setShowCoachingPreferences}
-        userId={userId || 0}
-      />
+      {/* Modals - wrapped with error boundaries to prevent app crashes */}
+      <ModalErrorBoundary modalName="Add Run" onClose={() => setShowAddRunModal(false)}>
+        <AddRunModal
+          open={showAddRunModal}
+          onOpenChange={setShowAddRunModal}
+          onRunAdded={refreshWorkouts}
+        />
+      </ModalErrorBoundary>
+      
+      <ModalErrorBoundary modalName="Add Activity" onClose={() => setShowAddActivityModal(false)}>
+        <AddActivityModal
+          open={showAddActivityModal}
+          onOpenChange={setShowAddActivityModal}
+          onActivityAdded={refreshWorkouts}
+        />
+      </ModalErrorBoundary>
+      
+      <ModalErrorBoundary modalName="Route Selector" onClose={() => setShowRouteSelectorModal(false)}>
+        <RouteSelectorModal
+          isOpen={showRouteSelectorModal}
+          onClose={() => setShowRouteSelectorModal(false)}
+          onRouteSelected={handleRouteSelected}
+        />
+      </ModalErrorBoundary>
+      
+      <ModalErrorBoundary modalName="Reschedule" onClose={() => setShowRescheduleModal(false)}>
+        <RescheduleModal
+          open={showRescheduleModal}
+          onOpenChange={setShowRescheduleModal}
+          workout={todaysWorkout}
+          onReschedule={refreshWorkouts}
+        />
+      </ModalErrorBoundary>
+      
+      <ModalErrorBoundary modalName="Date Workout" onClose={() => setShowDateWorkoutModal(false)}>
+        <DateWorkoutModal
+          open={showDateWorkoutModal}
+          onOpenChange={setShowDateWorkoutModal}
+          date={selectedDate || new Date()}
+          onWorkoutAdded={refreshWorkouts}
+        />
+      </ModalErrorBoundary>
+      {showCoachingPreferences && userId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-white">
+            <div className="flex items-center justify-between border-b p-4">
+              <h2 className="text-lg font-semibold">Coaching Preferences</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCoachingPreferences(false)}
+                aria-label="Close coaching preferences"
+              >
+                ×
+              </Button>
+            </div>
+            <div className="p-4">
+              <CoachingPreferencesSettings
+                userId={userId}
+                onClose={() => setShowCoachingPreferences(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
       <CoachingFeedbackModal
         isOpen={showCoachingFeedback}
         onClose={() => setShowCoachingFeedback(false)}

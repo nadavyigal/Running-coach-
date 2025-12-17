@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../lib/db';
 import { RecoveryEngine } from '../../../../lib/recoveryEngine';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
     try {
       trends = await RecoveryEngine.getRecoveryTrends(userId, days);
     } catch (dbError) {
-      console.warn('Database operations failed, generating mock trend data:', dbError);
+      logger.warn('Database operations failed, generating mock trend data:', dbError);
       // Generate mock trend data when database operations fail
       trends = [];
       for (let i = 0; i < Math.min(days, 7); i++) {
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error getting recovery trends:', error);
+    logger.error('Error getting recovery trends:', error);
     return NextResponse.json(
       {
         success: false,

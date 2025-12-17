@@ -1,9 +1,10 @@
 "use client"
 
 import * as React from "react"
-import * as RechartsPrimitive from "recharts"
 
 import { cn } from "@/lib/utils"
+
+type RechartsModule = typeof import("recharts")
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const
@@ -23,6 +24,7 @@ type ChartContextProps = {
 }
 
 const ChartContext = React.createContext<ChartContextProps | null>(null)
+const RechartsContext = React.createContext<RechartsModule | null>(null)
 
 function useChart() {
   const context = React.useContext(ChartContext)
@@ -34,34 +36,67 @@ function useChart() {
   return context
 }
 
+function useRecharts() {
+  const recharts = React.useContext(RechartsContext)
+  if (!recharts) {
+    throw new Error("Recharts not loaded yet")
+  }
+  return recharts
+}
+
 const ChartContainer = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
     config: ChartConfig
-    children: React.ComponentProps<
-      typeof RechartsPrimitive.ResponsiveContainer
-    >["children"]
+    children: React.ReactNode
   }
 >(({ id, className, children, config, ...props }, ref) => {
   const uniqueId = React.useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
+  const [recharts, setRecharts] = React.useState<RechartsModule | null>(null)
 
-  return (
-    <ChartContext.Provider value={{ config }}>
+  React.useEffect(() => {
+    let mounted = true
+    import("recharts").then((mod) => {
+      if (mounted) setRecharts(mod)
+    })
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  if (!recharts) {
+    return (
       <div
         data-chart={chartId}
         ref={ref}
         className={cn(
-          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none",
+          "flex aspect-video items-center justify-center text-xs text-muted-foreground",
           className
         )}
         {...props}
       >
-        <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer>
-          {children}
-        </RechartsPrimitive.ResponsiveContainer>
+        Loading chart…
       </div>
+    )
+  }
+
+  return (
+    <ChartContext.Provider value={{ config }}>
+      <RechartsContext.Provider value={recharts}>
+        <div
+          data-chart={chartId}
+          ref={ref}
+          className={cn(
+            "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none",
+            className
+          )}
+          {...props}
+        >
+          <ChartStyle id={chartId} config={config} />
+          <recharts.ResponsiveContainer>{children}</recharts.ResponsiveContainer>
+        </div>
+      </RechartsContext.Provider>
     </ChartContext.Provider>
   )
 })
@@ -100,18 +135,33 @@ ${colorConfig
   )
 }
 
-const ChartTooltip = RechartsPrimitive.Tooltip
+const ChartTooltip = (props: Record<string, unknown>) => {
+  const recharts = useRecharts()
+  return <recharts.Tooltip {...props} />
+}
 
 const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
-    React.ComponentProps<"div"> & {
-      hideLabel?: boolean
-      hideIndicator?: boolean
-      indicator?: "line" | "dot" | "dashed"
-      nameKey?: string
-      labelKey?: string
-    }
+  React.ComponentProps<"div"> & {
+    hideLabel?: boolean
+    hideIndicator?: boolean
+    indicator?: "line" | "dot" | "dashed"
+    nameKey?: string
+    labelKey?: string
+    payload?: any[]
+    active?: boolean
+    label?: React.ReactNode
+    formatter?: (
+      value: number,
+      name: string,
+      item: any,
+      index: number,
+      payload: any
+    ) => React.ReactNode
+    color?: string
+    labelFormatter?: (value: any, payload: any) => React.ReactNode
+    labelClassName?: string
+  }
 >(
   (
     {
@@ -256,15 +306,24 @@ const ChartTooltipContent = React.forwardRef<
 )
 ChartTooltipContent.displayName = "ChartTooltip"
 
-const ChartLegend = RechartsPrimitive.Legend
+const ChartLegend = (props: Record<string, unknown>) => {
+  const recharts = useRecharts()
+  return <recharts.Legend {...props} />
+}
 
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"div"> &
-    Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
-      hideIcon?: boolean
-      nameKey?: string
-    }
+  React.ComponentProps<"div"> & {
+    hideIcon?: boolean
+    nameKey?: string
+    verticalAlign?: "top" | "bottom"
+    payload?: Array<{
+      color?: string
+      value?: string
+      dataKey?: string
+      payload?: Record<string, unknown>
+    }>
+  }
 >(
   (
     { className, hideIcon = false, payload, verticalAlign = "bottom", nameKey },

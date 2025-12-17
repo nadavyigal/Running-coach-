@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbUtils } from '@/lib/dbUtils';
+import { logger } from '@/lib/logger';
 
 export async function PUT(req: NextRequest) {
   try {
@@ -76,7 +77,7 @@ export async function PUT(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error customizing workout:', error);
+    logger.error('Error customizing workout:', error);
     return NextResponse.json({
       error: 'Failed to customize workout',
       details: error instanceof Error ? error.message : 'Unknown error'
@@ -288,7 +289,7 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error adding workout:', error);
+    logger.error('Error adding workout:', error);
     return NextResponse.json({
       error: 'Failed to add workout',
       details: error instanceof Error ? error.message : 'Unknown error'

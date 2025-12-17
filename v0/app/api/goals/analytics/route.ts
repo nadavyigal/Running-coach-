@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
 import { goalProgressEngine } from '@/lib/goalProgressEngine';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(analytics);
 
   } catch (error) {
-    console.error('Error generating goal analytics:', error);
+    logger.error('Error generating goal analytics:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(

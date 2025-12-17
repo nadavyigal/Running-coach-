@@ -634,6 +634,8 @@ export interface Plan {
   lastComplexityUpdate?: Date;
   adaptationFactors?: AdaptationFactor[];
   userFeedback?: PlanFeedback[];
+  // Goal linkage
+  goalId?: number;
   // Timezone handling for UTC plan activation
   createdInTimezone?: string; // Timezone where plan was originally created
   createdAt: Date;
@@ -743,6 +745,8 @@ export interface Goal {
   baselineValue: number;
   targetValue: number;
   currentValue: number;
+  isPrimary?: boolean; // Marks the primary/active goal
+  planId?: number; // Linked training plan
   lastUpdated: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -1039,26 +1043,8 @@ export class RunSmartDB extends Dexie {
       userRoutePreferences: '++id, userId, maxDistance, preferredDifficulty, createdAt',
     });
 
-    // Version 2: Reset onboarding for existing users to fix production issue
     this.version(2).stores({}).upgrade(async (trans) => {
-      console.log('🔄 Upgrading database to version 2: Resetting onboarding for all users');
-
-      // Reset onboardingComplete for all existing users
-      const users = await trans.table('users').toArray();
-
-      for (const user of users) {
-        await trans.table('users').update(user.id!, {
-          onboardingComplete: false,
-          updatedAt: new Date()
-        });
-        console.log(`✓ Reset onboarding for user ${user.id}`);
-      }
-
-      console.log(`✓ Database upgrade complete: Reset onboarding for ${users.length} users`);
-    });
-    // Version 3: Add map-related fields to routes for map visualization
-    this.version(3).stores({}).upgrade(async (trans) => {
-      console.log('🔄 Upgrading database to version 3: Adding map fields to routes');
+      console.log('🔄 Upgrading database to version 2: Adding map fields to routes');
 
       // Update existing routes with default map values
       const routes = await trans.table('routes').toArray();
@@ -1109,13 +1095,34 @@ function checkIndexedDBSupport(): boolean {
 let dbInstance: RunSmartDB | null = null;
 
 // Enhanced database initialization with error handling and concurrent access safety
+async function checkStorageQuota(): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.estimate) {
+    try {
+      const estimate = await navigator.storage.estimate();
+      if (estimate.usage && estimate.quota) {
+        const percentUsed = (estimate.usage / estimate.quota) * 100;
+        console.log(`[db:init] Storage: ${percentUsed.toFixed(1)}% used (${(estimate.usage / 1024 / 1024).toFixed(2)}MB / ${(estimate.quota / 1024 / 1024).toFixed(2)}MB)`);
+
+        if (percentUsed > 90) {
+          console.warn('[db:init] ⚠️ Storage quota nearly full - may cause issues');
+        }
+      }
+    } catch (error) {
+      console.warn('[db:init] Could not check storage quota:', error);
+    }
+  }
+}
+
 function createDatabaseInstance(): RunSmartDB | null {
   try {
     if (!checkIndexedDBSupport()) {
       console.warn('⚠️ IndexedDB not supported, database functionality will be limited');
       return null;
     }
-    
+
+    // Check storage quota (async but don't block initialization)
+    checkStorageQuota().catch(err => console.warn('[db:init] Storage check failed:', err));
+
     console.log('✅ IndexedDB support confirmed, initializing database...');
     const db = new RunSmartDB();
     

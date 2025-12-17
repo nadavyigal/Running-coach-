@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbUtils } from '@/lib/dbUtils';
+import { logger } from '@/lib/logger';
 
 export async function POST(req: NextRequest) {
   try {
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error creating race goal:', error);
+    logger.error('Error creating race goal:', error);
     return NextResponse.json({
       error: 'Failed to create race goal',
       details: error instanceof Error ? error.message : 'Unknown error'
@@ -106,7 +107,7 @@ export async function GET(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error fetching race goals:', error);
+    logger.error('Error fetching race goals:', error);
     return NextResponse.json({
       error: 'Failed to fetch race goals',
       details: error instanceof Error ? error.message : 'Unknown error'
@@ -183,7 +184,7 @@ export async function PUT(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error updating race goal:', error);
+    logger.error('Error updating race goal:', error);
     return NextResponse.json({
       error: 'Failed to update race goal',
       details: error instanceof Error ? error.message : 'Unknown error'
@@ -221,7 +222,7 @@ export async function DELETE(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error deleting race goal:', error);
+    logger.error('Error deleting race goal:', error);
     return NextResponse.json({
       error: 'Failed to delete race goal',
       details: error instanceof Error ? error.message : 'Unknown error'

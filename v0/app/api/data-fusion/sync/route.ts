@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DataFusionEngine, RawDataPoint, UserPreferences } from '../../../../lib/dataFusionEngine';
 import { db } from '../../../../lib/db';
+import { logger } from '@/lib/logger';
 
 const fusionEngine = new DataFusionEngine();
 
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    console.log(`🔄 Starting multi-device sync for user ${userId}`);
+    logger.log(`🔄 Starting multi-device sync for user ${userId}`);
     
     // Get user's data sources
     const dataSources = await fusionEngine.getDataSources(userId);
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
     
     // If data points are provided, process them
     if (dataPoints && dataPoints.length > 0) {
-      console.log(`📊 Processing ${dataPoints.length} data points`);
+      logger.log(`📊 Processing ${dataPoints.length} data points`);
       
       // Validate and convert data points
       const validDataPoints: RawDataPoint[] = dataPoints
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
               conflicts: fusedTypePoints.filter(p => p.conflicts && p.conflicts.length > 0).length
             });
           } catch (fusionError) {
-            console.error(`Fusion error for ${dataType}:`, fusionError);
+            logger.error(`Fusion error for ${dataType}:`, fusionError);
             fusionResults.push({
               dataType,
               originalPoints: typePoints.length,
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
         }
       }
       
-      console.log(`✅ Data fusion completed: ${fusedPoints.length} fused points created`);
+      logger.log(`✅ Data fusion completed: ${fusedPoints.length} fused points created`);
     }
     
     // Generate sync summary
@@ -146,7 +147,7 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error during multi-device sync:', error);
+    logger.error('Error during multi-device sync:', error);
     return NextResponse.json(
       {
         success: false,

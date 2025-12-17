@@ -1,6 +1,16 @@
-import posthog from 'posthog-js'
 import { safeDbOperation } from './db'
 import { getCurrentUser } from './dbUtils'
+import { logger } from './logger'
+
+type PosthogInstance = {
+  capture?: (eventName: string, properties?: Record<string, any>) => void
+}
+
+declare global {
+  interface Window {
+    posthog?: PosthogInstance
+  }
+}
 
 // Get current user context for analytics
 const getUserContext = async () => {
@@ -20,20 +30,13 @@ const getUserContext = async () => {
 
 // Base analytics function with user context
 const trackEvent = async (eventName: string, properties?: Record<string, any>) => {
-  try {
-    const userContext = await getUserContext()
-    const eventProperties = {
-      ...userContext,
-      timestamp: new Date().toISOString(),
-      ...properties
-    }
-    
-    if (typeof window !== 'undefined' && posthog && posthog.capture) {
-      posthog.capture(eventName, eventProperties)
-    }
-  } catch (error) {
-    // In test environment or when database is unavailable, still call posthog with basic properties
-    const eventProperties = {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const propertyContext = await getUserContext().catch((error) => {
+    logger.warn('Failed to load user context for analytics:', error)
+    return {
       user_id: undefined,
       user_experience: undefined,
       user_goal: undefined,
@@ -41,13 +44,20 @@ const trackEvent = async (eventName: string, properties?: Record<string, any>) =
       onboarding_complete: undefined,
       current_streak: 0,
       cohort_id: undefined,
-      timestamp: new Date().toISOString(),
-      ...properties
     }
-    
-    if (typeof window !== 'undefined' && posthog && posthog.capture) {
-      posthog.capture(eventName, eventProperties)
-    }
+  })
+
+  const eventProperties = {
+    ...propertyContext,
+    timestamp: new Date().toISOString(),
+    ...properties,
+  }
+
+  const posthog = typeof window !== 'undefined' ? window.posthog : undefined
+  if (posthog && posthog.capture) {
+    posthog.capture(eventName, eventProperties)
+  } else {
+    logger.debug('PostHog not ready, skipped event capture:', eventName)
   }
 }
 

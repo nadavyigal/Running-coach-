@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../../../lib/db';
+import { logger } from '@/lib/logger';
 
 // POST /api/data-fusion/conflicts/{id}/resolve - Manually resolve specific conflict
 export async function POST(
@@ -114,7 +115,7 @@ export async function POST(
     });
     
   } catch (error) {
-    console.error('Error resolving conflict:', error);
+    logger.error('Error resolving conflict:', error);
     return NextResponse.json(
       {
         success: false,

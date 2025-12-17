@@ -34,8 +34,9 @@ import { openai } from "@ai-sdk/openai"
 import { useToast } from "@/hooks/use-toast"
 
 interface AddRunModalProps {
-  isOpen: boolean
-  onClose: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onRunAdded?: () => void
 }
 
 interface WorkoutType {
@@ -169,7 +170,7 @@ const strengthWorkouts = [
   },
 ]
 
-export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
+export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps) {
   const [step, setStep] = useState<"select" | "configure" | "approve">("select")
   const [selectedWorkout, setSelectedWorkout] = useState<WorkoutType | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
@@ -187,25 +188,33 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
 
   // Load plan data for calendar validation when modal opens
   useEffect(() => {
-    if (isOpen && step === "configure") {
+    if (open && step === "configure") {
       loadPlanData()
     }
-  }, [isOpen, step])
+  }, [open, step])
 
   // Load plan data for calendar validation
   const loadPlanData = async () => {
     try {
       const { dbUtils } = await import('@/lib/dbUtils')
       const user = await dbUtils.getCurrentUser()
-      if (user && user.id) {
-        const plan = await dbUtils.ensureUserHasActivePlan(user.id)
-        if (plan) {
-          setPlanStartDate(new Date(plan.startDate))
-          setPlanEndDate(new Date(plan.endDate))
-        }
+
+      if (!user || !user.id) {
+        console.error('[AddRunModal] No valid user found - will retry on save');
+        // Don't close modal - user might exist but query was slow
+        // Validation will happen again on save
+        return;
+      }
+
+      const plan = await dbUtils.ensureUserHasActivePlan(user.id)
+      if (plan) {
+        setPlanStartDate(new Date(plan.startDate))
+        setPlanEndDate(new Date(plan.endDate))
       }
     } catch (error) {
-      console.error("Failed to load plan data for calendar:", error)
+      console.error("[AddRunModal] Failed to load plan data for calendar:", error)
+      // Don't show toast or close modal - let user try to save
+      // Error will be caught during save with better messaging
     }
   }
 
@@ -384,7 +393,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
         }
         
       } catch (error) {
-        const errorInfo = dbUtils.handlePlanError(error, 'creation/recovery')
+        const errorInfo = dbUtils.handleDatabaseError(error, 'creation/recovery')
         toast({
           variant: "destructive",
           title: errorInfo.title,
@@ -444,12 +453,12 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
       setSelectedGoal("distance")
       setNotes("")
       setGeneratedWorkout(null)
-      onClose()
-      
-      // Trigger a page refresh to show the new workout
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
+      onOpenChange(false)
+
+      // Call onRunAdded callback to refresh data
+      if (onRunAdded) {
+        onRunAdded()
+      }
       
     } catch (error) {
       console.error('Failed to save workout:', error)
@@ -466,7 +475,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-between">
@@ -562,7 +571,7 @@ export function AddRunModal({ isOpen, onClose }: AddRunModalProps) {
                   <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
                     <img
                       src="/placeholder.svg?height=40&width=40"
-                      alt="Coach"
+                      alt="AI running coach avatar"
                       className="w-full h-full object-cover bg-green-500"
                     />
                   </div>

@@ -12,23 +12,22 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "portrait",
     icons: [
       {
-        src: "/placeholder.svg",
+        src: "/icon-192x192.png",
         sizes: "192x192",
-        type: "image/svg+xml",
+        type: "image/png",
       },
       {
-        src: "/placeholder.svg",
+        src: "/icon-512x512.png",
         sizes: "512x512",
-        type: "image/svg+xml",
+        type: "image/png",
+      },
+      {
+        src: "/icon-512x512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any maskable",
       },
     ],
     categories: ["health", "fitness", "sports"],
-    screenshots: [
-      {
-        src: "/screenshot-mobile.png",
-        sizes: "390x844",
-        type: "image/png",
-      },
-    ],
   }
 }

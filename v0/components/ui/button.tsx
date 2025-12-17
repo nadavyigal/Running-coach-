@@ -5,31 +5,29 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "../../lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-95 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        primary: "bg-gradient-to-r from-primary to-primary-dark text-primary-foreground shadow-md hover:shadow-purple-glow hover:scale-105",
-        secondary: "bg-gray-100 text-gray-900 hover:bg-gray-200 shadow-sm hover:scale-105",
-        accent: "bg-gradient-to-r from-accent to-accent-dark text-accent-foreground shadow-md hover:shadow-cyan-glow hover:scale-105",
-        success: "bg-gradient-to-r from-success to-green-600 text-success-foreground shadow-md hover:shadow-lg hover:scale-105",
-        danger: "bg-gradient-to-r from-destructive to-red-600 text-destructive-foreground shadow-md hover:shadow-lg hover:scale-105",
-        warning: "bg-gradient-to-r from-warning to-orange-600 text-warning-foreground shadow-md hover:shadow-lg hover:scale-105",
-        ghost: "hover:bg-gray-100 hover:text-gray-900",
-        outline: "border-2 border-gray-300 bg-transparent hover:bg-gray-50 hover:border-gray-400",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive:
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline:
+          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        xs: "h-8 px-3 text-xs rounded-md",
-        sm: "h-9 px-4 text-sm",
-        default: "h-11 px-6",
-        lg: "h-14 px-8 text-base rounded-xl",
-        icon: "h-10 w-10 rounded-full",
-        iconLg: "h-14 w-14 rounded-full",
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-8",
+        icon: "h-10 w-10",
       },
     },
     defaultVariants: {
-      variant: "primary",
+      variant: "default",
       size: "default",
     },
   }

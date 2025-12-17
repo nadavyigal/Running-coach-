@@ -54,10 +54,8 @@ export const createErrorBoundaryTest = (
   return render(
     React.createElement(
       TestErrorBoundary,
-      { 
-        fallback: ErrorFallback,
-        children: React.createElement(Component, props)
-      }
+      { fallback: ErrorFallback },
+      React.createElement(Component, props)
     )
   );
 };
@@ -339,10 +337,8 @@ export const renderWithErrorBoundary = (
   const Wrapper = ({ children }: { children: React.ReactNode }) =>
     React.createElement(
       TestErrorBoundary,
-      { 
-        fallback: ErrorFallback,
-        children
-      }
+      { fallback: ErrorFallback },
+      children
     );
 
   return render(ui, { wrapper: Wrapper, ...options });

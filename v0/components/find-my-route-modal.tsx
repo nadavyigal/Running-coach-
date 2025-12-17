@@ -15,6 +15,7 @@ import {
   trackFindMyRouteFailed,
   trackRouteSelected,
 } from '@/lib/analytics';
+import { getLocation } from '@/lib/location-service';
 
 interface FindMyRouteModalProps {
   isOpen: boolean;
@@ -51,52 +52,34 @@ export function FindMyRouteModal({
     }
   }, [isOpen, locationStatus]);
 
-  const requestLocation = () => {
+  const requestLocation = async () => {
     setLocationStatus('loading');
 
-    const isSecure =
-      typeof window !== 'undefined' &&
-      (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
+    const result = await getLocation({ timeoutMs: 10000, enableHighAccuracy: true });
 
-    if (!isSecure) {
-      setLocationStatus('unavailable');
-      trackFindMyRouteFailed({ reason: 'not_https' });
-      return;
+    if (result.coords) {
+      const location = {
+        latitude: result.coords.latitude,
+        longitude: result.coords.longitude,
+        accuracy: result.coords.accuracy,
+      };
+      setUserLocation(location);
+      findTopRoutes(location);
     }
 
-    if (!navigator.geolocation) {
-      setLocationStatus('unavailable');
-      trackFindMyRouteFailed({ reason: 'geolocation_unavailable' });
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const location = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-        };
-        setUserLocation(location);
-        setLocationStatus('success');
-        trackFindMyRouteSuccess({ accuracy: position.coords.accuracy });
-        findTopRoutes(location);
-      },
-      (error) => {
-        if (error.code === error.PERMISSION_DENIED) {
-          setLocationStatus('denied');
-          trackFindMyRouteFailed({ reason: 'permission_denied' });
-        } else {
-          setLocationStatus('unavailable');
-          trackFindMyRouteFailed({ reason: error.message });
-        }
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
+    if (result.status === 'granted') {
+      setLocationStatus('success');
+      trackFindMyRouteSuccess({ accuracy: result.coords?.accuracy || 0 });
+    } else if (result.status === 'denied') {
+      setLocationStatus('denied');
+      trackFindMyRouteFailed({ reason: 'permission_denied' });
+    } else {
+      // We still attempt to show routes using cached/default coords if available
+      setLocationStatus(result.coords ? 'success' : 'unavailable');
+      if (!result.coords) {
+        trackFindMyRouteFailed({ reason: result.error || 'location_unavailable' });
       }
-    );
+    }
   };
 
   const findTopRoutes = (location: UserLocation) => {

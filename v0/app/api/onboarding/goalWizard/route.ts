@@ -1,6 +1,7 @@
 import { streamText } from "ai"
 import { openai } from "@ai-sdk/openai"
 import { NextRequest } from "next/server"
+import { logger } from "@/lib/logger"
 
 interface OnboardingSession {
   conversationId: string
@@ -174,22 +175,28 @@ const GOAL_TEMPLATES = {
   }
 }
 
-function analyzeUserResponse(userMessage: string, phase: string): any {
+function analyzeUserResponse(
+  userMessage: string,
+  _phase: string,
+  session?: OnboardingSession
+): any {
   // Simple keyword analysis for coaching style detection
   const supportiveKeywords = ['nervous', 'anxious', 'worried', 'scared', 'unsure', 'beginner', 'first time']
   const challengingKeywords = ['competitive', 'challenge', 'push', 'hard', 'intense', 'ambitious']
   const analyticalKeywords = ['data', 'numbers', 'metrics', 'track', 'measure', 'analyze', 'progress']
   const encouragingKeywords = ['excited', 'motivated', 'ready', 'confident', 'positive', 'determined']
 
-  let coachingStyle: 'supportive' | 'challenging' | 'analytical' | 'encouraging' = 'supportive'
+  let coachingStyle: 'supportive' | 'challenging' | 'analytical' | 'encouraging' = session?.coachingStyle || 'supportive'
   
   const message = userMessage.toLowerCase()
   if (challengingKeywords.some(keyword => message.includes(keyword))) {
     coachingStyle = 'challenging'
   } else if (analyticalKeywords.some(keyword => message.includes(keyword))) {
     coachingStyle = 'analytical'
-  } else if (encouragingKeywords.some(keyword => message.includes(keyword))) {
-    coachingStyle = 'encouraging'
+  } else if (supportiveKeywords.some(keyword => message.includes(keyword))) {
+    coachingStyle = 'supportive'
+  } else if (encouragingKeywords.some(keyword => message.includes(keyword)) && coachingStyle === 'supportive') {
+    coachingStyle = 'supportive'
   }
 
   return { coachingStyle }
@@ -381,7 +388,7 @@ export async function POST(req: NextRequest) {
     const conversation = messages.map(m => `${m.role}: ${m.content}`).join('\n')
 
     // Analyze user response for coaching style
-    const analysis = analyzeUserResponse(userMessage, currentPhase)
+    const analysis = analyzeUserResponse(userMessage, currentPhase, session)
 
     // Determine next phase based on conversation progress
     let nextPhase = currentPhase
@@ -432,7 +439,7 @@ export async function POST(req: NextRequest) {
     const responseData = {
       response,
       nextPhase,
-      goals: nextPhase === 'complete' ? goals : [],
+      goals: nextPhase === 'complete' || nextPhase === 'refinement' ? goals : [],
       userProfile: nextPhase === 'complete' ? userProfile : {},
       coachingStyle: analysis.coachingStyle
     }
@@ -442,7 +449,7 @@ export async function POST(req: NextRequest) {
     })
 
   } catch (error) {
-    console.error('GoalWizard API error:', error)
+    logger.error('GoalWizard API error:', error)
     
     return new Response(JSON.stringify({ 
       error: "An unexpected error occurred. Please try again." 

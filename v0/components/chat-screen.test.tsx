@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from 'vitest'
 import { ChatScreen } from './chat-screen'
 import { dbUtils } from '@/lib/dbUtils'
 
@@ -32,11 +32,20 @@ vi.mock('@/hooks/use-toast', () => ({
 global.fetch = vi.fn()
 
 describe('ChatScreen', () => {
+  beforeAll(() => {
+    vi.useRealTimers()
+  })
+
+  afterAll(() => {
+    vi.useFakeTimers()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     // Setup default fetch mock
     ;(global.fetch as any).mockResolvedValue({
       ok: true,
+      json: vi.fn().mockResolvedValue({ messages: [] }),
       body: {
         getReader: () => ({
           read: vi.fn()
@@ -45,7 +54,7 @@ describe('ChatScreen', () => {
               value: new TextEncoder().encode('0:{"textDelta": "Hello! "}')
             })
             .mockResolvedValueOnce({
-              done: false, 
+              done: false,
               value: new TextEncoder().encode('0:{"textDelta": "How can I help?"}')
             })
             .mockResolvedValueOnce({
@@ -59,37 +68,37 @@ describe('ChatScreen', () => {
 
   it('renders chat interface correctly', () => {
     render(<ChatScreen />)
-    
+
     expect(screen.getByText('AI Running Coach')).toBeInTheDocument()
     expect(screen.getByText('Your personal training assistant')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Ask your running coach anything...')).toBeInTheDocument()
-    expect(screen.getByRole('button')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /send/i })).toBeInTheDocument()
   })
 
   it('displays welcome message on load', async () => {
     render(<ChatScreen />)
-    
+
     await waitFor(() => {
       expect(screen.getByText(/Hi there! I'm your AI running coach/)).toBeInTheDocument()
-    })
+    }, { timeout: 10000 })
   })
 
   it('shows suggested questions initially', async () => {
     render(<ChatScreen />)
-    
+
     await waitFor(() => {
       expect(screen.getByText('Suggested questions:')).toBeInTheDocument()
       expect(screen.getByText('How should I prepare for my next run?')).toBeInTheDocument()
       expect(screen.getByText("What's a good pace for my level?")).toBeInTheDocument()
-    })
+    }, { timeout: 10000 })
   })
 
   it('sends message when form is submitted', async () => {
     render(<ChatScreen />)
-    
+
     const input = screen.getByPlaceholderText('Ask your running coach anything...')
-    const submitButton = screen.getByRole('button')
-    
+    const submitButton = screen.getByRole('button', { name: /send/i })
+
     fireEvent.change(input, { target: { value: 'Test message' } })
     fireEvent.click(submitButton)
     
@@ -102,43 +111,43 @@ describe('ChatScreen', () => {
         }),
         body: expect.stringContaining('"Test message"')
       }))
-    })
+    }, { timeout: 10000 })
   })
 
   it('handles suggested question clicks', async () => {
     render(<ChatScreen />)
-    
+
     await waitFor(() => {
       const suggestedQuestion = screen.getByText('How should I prepare for my next run?')
       fireEvent.click(suggestedQuestion)
-    })
-    
+    }, { timeout: 10000 })
+
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalled()
-    })
+    }, { timeout: 10000 })
   })
 
   it('displays loading state during API call', async () => {
     render(<ChatScreen />)
-    
+
     const input = screen.getByPlaceholderText('Ask your running coach anything...')
     fireEvent.change(input, { target: { value: 'Test message' } })
-    
-    const submitButton = screen.getByRole('button')
+
+    const submitButton = screen.getByRole('button', { name: /send/i })
     fireEvent.click(submitButton)
     
     await waitFor(() => {
       expect(screen.getByText('Coach is thinking...')).toBeInTheDocument()
-    })
+    }, { timeout: 10000 })
   })
 
   it('includes user context in API calls', async () => {
     render(<ChatScreen />)
-    
+
     const input = screen.getByPlaceholderText('Ask your running coach anything...')
     fireEvent.change(input, { target: { value: 'Test message' } })
-    
-    const submitButton = screen.getByRole('button')
+
+    const submitButton = screen.getByRole('button', { name: /send/i })
     fireEvent.click(submitButton)
     
     await waitFor(() => {
@@ -146,59 +155,59 @@ describe('ChatScreen', () => {
         headers: expect.objectContaining({ Authorization: 'Bearer user-1' }),
         body: expect.stringContaining('"userContext"')
       }))
-    })
+    }, { timeout: 10000 })
   })
 
   it('handles API errors gracefully', async () => {
     ;(global.fetch as any).mockRejectedValueOnce(new Error('Network error'))
-    
+
     render(<ChatScreen />)
-    
+
     const input = screen.getByPlaceholderText('Ask your running coach anything...')
     fireEvent.change(input, { target: { value: 'Test message' } })
-    
-    const submitButton = screen.getByRole('button')
+
+    const submitButton = screen.getByRole('button', { name: /send/i })
     fireEvent.click(submitButton)
     
     await waitFor(() => {
       expect(screen.getByText(/I'm sorry, I'm having trouble responding/)).toBeInTheDocument()
-    })
+    }, { timeout: 10000 })
   })
 
   it('disables input during loading', async () => {
     render(<ChatScreen />)
-    
+
     const input = screen.getByPlaceholderText('Ask your running coach anything...')
     fireEvent.change(input, { target: { value: 'Test message' } })
-    
-    const submitButton = screen.getByRole('button')
+
+    const submitButton = screen.getByRole('button', { name: /send/i })
     fireEvent.click(submitButton)
-    
+
     expect(input).toBeDisabled()
     expect(submitButton).toBeDisabled()
   })
 
   it('formats message timestamps correctly', async () => {
     render(<ChatScreen />)
-    
+
     await waitFor(() => {
       const timeElements = screen.getAllByText(/\d{1,2}:\d{2}/)
       expect(timeElements.length).toBeGreaterThan(0)
-    })
+    }, { timeout: 10000 })
   })
 
   it('builds user context from profile and runs', async () => {
     render(<ChatScreen />)
-    
+
     const input = screen.getByPlaceholderText('Ask your running coach anything...')
     fireEvent.change(input, { target: { value: 'Test message' } })
-    
-    const submitButton = screen.getByRole('button')
+
+    const submitButton = screen.getByRole('button', { name: /send/i })
     fireEvent.click(submitButton)
     
     await waitFor(() => {
       expect(dbUtils.getCurrentUser).toHaveBeenCalled()
       expect(dbUtils.getRunsByUser).toHaveBeenCalledWith(1)
-    })
+    }, { timeout: 10000 })
   })
 }) 

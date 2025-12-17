@@ -57,6 +57,13 @@ export function RecordScreen() {
   const [currentPosition, setCurrentPosition] = useState<GPSCoordinate | null>(null)
   const watchIdRef = useRef<number | null>(null)
   const startTimeRef = useRef<number>(0)
+  const isRunningRef = useRef(false)
+  const isPausedRef = useRef(false)
+
+  useEffect(() => {
+    isRunningRef.current = isRunning
+    isPausedRef.current = isPaused
+  }, [isRunning, isPaused])
   
   // Metrics state
   const [metrics, setMetrics] = useState<RunMetrics>({
@@ -69,11 +76,45 @@ export function RecordScreen() {
   const { toast } = useToast()
   const router = useRouter()
 
+  // Initialize GPS - proactively request permission on mount
+  const initializeGps = async () => {
+    if (isInitializingGps) return
+    
+    setIsInitializingGps(true)
+    console.log('[GPS] Starting GPS initialization...')
+    
+    try {
+      const granted = await requestGpsPermission()
+      if (granted) {
+        console.log('[GPS] GPS initialized successfully')
+        toast({
+          title: "GPS Ready",
+          description: "Location access granted. You can now start your run.",
+        })
+      } else {
+        console.warn('[GPS] GPS initialization failed')
+      }
+    } catch (error) {
+      console.error('[GPS] Error during GPS initialization:', error)
+    } finally {
+      setIsInitializingGps(false)
+    }
+  }
+
   // Load today's workout and user data on mount
   useEffect(() => {
     loadTodaysWorkout()
     loadCurrentUser()
-    checkGpsSupport()
+    
+    // Check GPS support and then initialize GPS
+    const setupGps = async () => {
+      await checkGpsSupport()
+      // After checking support, proactively request GPS permission
+      if (navigator.geolocation) {
+        initializeGps()
+      }
+    }
+    setupGps()
     
     return () => {
       if (watchIdRef.current) {
@@ -163,36 +204,16 @@ export function RecordScreen() {
         return
       }
 
-      let resolved = false
-
-      // Manual timeout as a fallback
-      const timeoutId = setTimeout(() => {
-        if (!resolved) {
-          resolved = true
-          console.error('GPS permission request timeout after 15s')
-          setGpsPermission('denied')
-          resolve(false)
-        }
-      }, 15000)
-
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          if (!resolved) {
-            resolved = true
-            clearTimeout(timeoutId)
-            setGpsPermission('granted')
-            setGpsAccuracy(position.coords.accuracy)
-            resolve(true)
-          }
+          setGpsPermission('granted')
+          setGpsAccuracy(position.coords.accuracy)
+          resolve(true)
         },
         (error) => {
-          if (!resolved) {
-            resolved = true
-            clearTimeout(timeoutId)
-            console.error('GPS permission denied:', error)
-            setGpsPermission('denied')
-            resolve(false)
-          }
+          console.error('GPS permission denied:', error)
+          setGpsPermission('denied')
+          resolve(false)
         },
         {
           enableHighAccuracy: true,
@@ -210,8 +231,26 @@ export function RecordScreen() {
         return
       }
 
+      stopGpsTracking()
+
+      let settled = false
+      const settle = (value: boolean) => {
+        if (settled) return
+        settled = true
+        resolve(value)
+      }
+
+      const timeoutId = window.setTimeout(() => {
+        console.warn('[GPS] GPS tracking start timed out')
+        stopGpsTracking()
+        settle(false)
+      }, 12_000)
+
       watchIdRef.current = navigator.geolocation.watchPosition(
         (position) => {
+          clearTimeout(timeoutId)
+          settle(true)
+
           const newPosition: GPSCoordinate = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -222,27 +261,31 @@ export function RecordScreen() {
           setCurrentPosition(newPosition)
           setGpsAccuracy(position.coords.accuracy)
 
-          if (isRunning && !isPaused) {
-            setGpsPath(prev => [...prev, newPosition])
-            
-            // Update distance
-            if (prev.length > 0) {
-              const newDistance = prev.reduce((total, point, index) => {
-                if (index === 0) return 0
-                return total + calculateDistanceBetweenPoints(prev[index - 1], point)
-              }, 0) + calculateDistanceBetweenPoints(prev[prev.length - 1], newPosition)
-              
-              setMetrics(prev => ({
-                ...prev,
-                distance: newDistance,
-                pace: prev.duration > 0 ? prev.duration / newDistance : 0
-              }))
-            }
+          if (isRunningRef.current && !isPausedRef.current) {
+            setGpsPath((previousPath) => {
+              const nextPath = [...previousPath, newPosition]
+
+              if (nextPath.length > 1) {
+                const newDistance = calculateTotalDistance(nextPath)
+                setMetrics((previousMetrics) => ({
+                  ...previousMetrics,
+                  distance: newDistance,
+                  pace: previousMetrics.duration > 0 ? previousMetrics.duration / newDistance : 0,
+                  calories: estimateCalories(previousMetrics.duration, newDistance),
+                }))
+              }
+
+              return nextPath
+            })
           }
         },
         (error) => {
+          clearTimeout(timeoutId)
           console.error('GPS tracking error:', error)
-          resolve(false)
+          if (!settled) {
+            stopGpsTracking()
+            settle(false)
+          }
         },
         {
           enableHighAccuracy: true,
@@ -251,7 +294,7 @@ export function RecordScreen() {
         }
       )
 
-      resolve(true)
+      // Resolve happens on first position update (or error/timeout).
     })
   }
 
@@ -312,18 +355,6 @@ export function RecordScreen() {
       return
     }
 
-    const trackingStarted = await startGpsTracking()
-    if (!trackingStarted) {
-      toast({
-        title: "GPS Error",
-        description: "Unable to start GPS tracking. Please try again.",
-        variant: "destructive"
-      })
-      return
-    }
-
-    setIsRunning(true)
-    setIsPaused(false)
     startTimeRef.current = Date.now()
     setGpsPath([])
     setMetrics({
@@ -333,6 +364,22 @@ export function RecordScreen() {
       calories: 0
     })
 
+    setIsRunning(true)
+    setIsPaused(false)
+    isRunningRef.current = true
+    isPausedRef.current = false
+    const trackingStarted = await startGpsTracking()
+    if (!trackingStarted) {
+      setIsRunning(false)
+      isRunningRef.current = false
+      toast({
+        title: "GPS Error",
+        description: "Unable to start GPS tracking. Please try again.",
+        variant: "destructive"
+      })
+      return
+    }
+
     toast({
       title: "Run Started",
       description: "GPS tracking active. Your run is being recorded.",
@@ -341,6 +388,7 @@ export function RecordScreen() {
 
   const pauseRun = () => {
     setIsPaused(true)
+    isPausedRef.current = true
     toast({
       title: "Run Paused",
       description: "Your run has been paused. Resume when ready.",
@@ -348,6 +396,8 @@ export function RecordScreen() {
   }
 
   const resumeRun = async () => {
+    setIsPaused(false)
+    isPausedRef.current = false
     const trackingStarted = await startGpsTracking()
     if (!trackingStarted) {
       toast({
@@ -358,7 +408,6 @@ export function RecordScreen() {
       return
     }
 
-    setIsPaused(false)
     toast({
       title: "Run Resumed",
       description: "GPS tracking resumed. Your run continues.",
@@ -369,6 +418,8 @@ export function RecordScreen() {
     stopGpsTracking()
     setIsRunning(false)
     setIsPaused(false)
+    isRunningRef.current = false
+    isPausedRef.current = false
 
     const totalDistance = calculateTotalDistance(gpsPath)
     const finalDuration = metrics.duration
@@ -440,17 +491,26 @@ export function RecordScreen() {
   }
 
   const getGpsStatusColor = () => {
-    if (gpsPermission === 'granted') return 'text-green-600'
-    if (gpsPermission === 'denied') return 'text-red-600'
-    if (gpsPermission === 'unsupported') return 'text-gray-500'
-    return 'text-yellow-600'
+    switch (gpsPermission) {
+      case 'granted': return gpsAccuracy < 10 ? 'text-green-500' : 'text-yellow-500'
+      case 'denied': return 'text-red-500'
+      case 'unsupported': return 'text-gray-500'
+      default: return 'text-gray-400'
+    }
   }
 
   const getGpsStatusText = () => {
-    if (gpsPermission === 'granted') return 'GPS Ready'
-    if (gpsPermission === 'denied') return 'GPS Access Denied'
-    if (gpsPermission === 'unsupported') return 'GPS Unavailable'
-    return 'Requesting GPS Access...'
+    if (gpsPermission === 'granted') return 'GPS Active'
+    if (gpsPermission === 'denied') return 'GPS Denied - Allow in browser settings'
+    if (gpsPermission === 'unsupported') {
+      const isSecure = typeof window !== 'undefined' && 
+        (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
+      if (!isSecure) {
+        return 'GPS requires HTTPS'
+      }
+      return 'GPS Unsupported'
+    }
+    return 'GPS Pending - Tap to enable'
   }
 
   const handleRouteSelected = (route: Route) => {
@@ -508,38 +568,115 @@ export function RecordScreen() {
       )}
 
       {/* GPS Status */}
-      <Card>
+      <Card className={gpsPermission === 'denied' ? 'border-red-200 bg-red-50' : gpsPermission === 'granted' ? 'border-green-200 bg-green-50' : ''}>
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Satellite className={`h-5 w-5 ${getGpsStatusColor()}`} />
+              {isInitializingGps ? (
+                <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
+              ) : (
+                <Satellite className={`h-5 w-5 ${getGpsStatusColor()}`} />
+              )}
               <div>
-                <p className="font-medium">{getGpsStatusText()}</p>
+                <p className="font-medium">{isInitializingGps ? 'Initializing GPS...' : getGpsStatusText()}</p>
                 <p className="text-sm text-gray-600">
-                  Accuracy: {gpsAccuracy > 0 ? `${gpsAccuracy.toFixed(1)}m` : 'Unknown'}
+                  {isInitializingGps 
+                    ? 'Please allow location access when prompted'
+                    : gpsAccuracy > 0 
+                      ? `Accuracy: ${gpsAccuracy.toFixed(1)}m` 
+                      : 'Accuracy: Waiting for signal'
+                  }
                 </p>
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowGPSDetails(!showGPSDetails)}
-            >
-              {showGPSDetails ? 'Hide' : 'Details'}
-            </Button>
+            <div className="flex gap-2">
+              {/* Enable GPS button for prompt state */}
+              {gpsPermission === 'prompt' && !isInitializingGps && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={initializeGps}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  Enable GPS
+                </Button>
+              )}
+              {/* Retry button for denied state */}
+              {gpsPermission === 'denied' && !isInitializingGps && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={initializeGps}
+                  className="border-red-300 text-red-700 hover:bg-red-100"
+                >
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  Retry
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowGPSDetails(!showGPSDetails)}
+              >
+                {showGPSDetails ? 'Hide' : 'Details'}
+              </Button>
+            </div>
           </div>
+
+          {/* GPS Permission Denied Warning */}
+          {gpsPermission === 'denied' && (
+            <div className="mt-3 p-3 bg-red-100 rounded-lg">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-red-800">Location Access Denied</p>
+                  <p className="text-sm text-red-700 mt-1">
+                    To record your run with GPS tracking, please:
+                  </p>
+                  <ol className="text-sm text-red-700 mt-2 list-decimal list-inside space-y-1">
+                    <li>Open your browser settings</li>
+                    <li>Find location/privacy settings</li>
+                    <li>Allow location access for this site</li>
+                    <li>Tap "Retry" above</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* GPS Unsupported Warning */}
+          {gpsPermission === 'unsupported' && (
+            <div className="mt-3 p-3 bg-gray-100 rounded-lg">
+              <div className="flex items-start gap-2">
+                <Info className="h-5 w-5 text-gray-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-gray-800">GPS Unavailable</p>
+                  <p className="text-sm text-gray-700 mt-1">
+                    GPS is not available on this device or browser. You can still use the "Add Manual Run" option below.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* GPS Details */}
           {showGPSDetails && (
             <div className="mt-4 pt-4 border-t">
-              <GPSAccuracyIndicator 
-                currentAccuracy={currentGPSAccuracy}
-                accuracyHistory={gpsAccuracyHistory}
-                onAccuracyUpdate={(data) => {
-                  setCurrentGPSAccuracy(data)
-                  setGpsAccuracyHistory(prev => [...prev.slice(-10), data])
-                }}
-              />
+              {currentGPSAccuracy ? (
+                <GPSAccuracyIndicator 
+                  accuracy={currentGPSAccuracy}
+                  onAccuracyChange={(data: GPSAccuracyData) => {
+                    setCurrentGPSAccuracy(data)
+                    setGpsAccuracyHistory(prev => [...prev.slice(-10), data])
+                  }}
+                  showTroubleshooting={true}
+                />
+              ) : (
+                <div className="text-center py-4 text-gray-500">
+                  <Satellite className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">GPS accuracy data will appear here once tracking starts</p>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -574,8 +711,12 @@ export function RecordScreen() {
                   className="bg-green-600 hover:bg-green-700"
                   disabled={gpsPermission === 'denied' || gpsPermission === 'unsupported' || isInitializingGps}
                 >
-                  <Play className="h-5 w-5 mr-2" />
-                  Start Run
+                  {isInitializingGps ? (
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  ) : (
+                    <Play className="h-5 w-5 mr-2" />
+                  )}
+                  {isInitializingGps ? 'Initializing GPS...' : 'Start Run'}
                 </Button>
               ) : (
                 <>
@@ -765,4 +906,3 @@ function RouteVisualization({ gpsPath, currentPosition }: {
     </svg>
   )
 }
-

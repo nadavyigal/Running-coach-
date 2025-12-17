@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { openai } from "@ai-sdk/openai"
 import { generateObject } from "ai"
+import { logger } from "@/lib/logger"
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
@@ -58,7 +59,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, data: result.object })
   } catch (error) {
-    console.error("Failed to analyze run photo", error)
+    logger.error("Failed to analyze run photo", error)
     return NextResponse.json({ success: false, error: "Failed to analyze image" }, { status: 500 })
   }
 }

@@ -7,6 +7,7 @@ import type { ChatUserProfile } from '@/lib/models/chat'
 import { withChatSecurity, validateAndSanitizeInput, ApiRequest } from '@/lib/security.middleware'
 // Error handling is managed by the secure wrapper and middleware
 import { withSecureOpenAI } from '@/lib/apiKeyManager'
+import { logger } from '@/lib/logger'
 
 // Token budget configuration
 const MONTHLY_TOKEN_BUDGET = 200000 // Approximate tokens for $50/mo budget
@@ -47,22 +48,30 @@ function checkRateLimit(userId: string): boolean {
 }
 
 async function chatHandler(req: ApiRequest) {
-  console.log('💬 Chat API: Starting request');
+  logger.log('💬 Chat API: Starting request');
   
   try {
     // Validate and sanitize input
     const validation = await validateAndSanitizeInput(req, 1000);
     if (!validation.valid) {
-      console.error('❌ Input validation failed:', validation.error);
-      return new Response(JSON.stringify({ error: validation.error || "Invalid input" }), {
+      const errorMessage = validation.error || "Invalid input";
+
+      // Requests can be aborted mid-stream during SPA navigation, resulting in truncated JSON bodies.
+      // Treat these as no-op to avoid noisy logs/alerts.
+      if (/unexpected end of json input/i.test(errorMessage)) {
+        return new Response(null, { status: 204 });
+      }
+
+      logger.error('❌ Input validation failed:', errorMessage);
+      return new Response(JSON.stringify({ error: errorMessage }), {
         status: 400,
         headers: { "Content-Type": "application/json" }
       });
     }
 
     const body = validation.sanitized || await req.json();
-    console.log('📝 Request body keys:', Object.keys(body));
-    console.log('👤 User ID:', body.userId);
+    logger.log('📝 Request body keys:', Object.keys(body));
+    logger.log('👤 User ID:', body.userId);
 
     const { messages, userId, userContext } = body;
     const conversationId = typeof body.conversationId === 'string' && body.conversationId.trim()
@@ -77,7 +86,7 @@ async function chatHandler(req: ApiRequest) {
     const userIdKey = normalizedUserId ? normalizedUserId.toString() : rawUserId ? String(rawUserId) : undefined;
 
     if (rawUserId && !hasValidUserId) {
-      console.error('❌ Invalid userId provided to chat route:', rawUserId);
+      logger.error('❌ Invalid userId provided to chat route:', rawUserId);
       return new Response(JSON.stringify({ error: 'Invalid user identifier provided' }), {
         status: 400,
         headers: { "Content-Type": "application/json" }
@@ -85,18 +94,18 @@ async function chatHandler(req: ApiRequest) {
     }
 
     // Validate input
-    console.log('🔍 Validating input...');
+    logger.log('🔍 Validating input...');
     if (!messages || !Array.isArray(messages)) {
-      console.error('❌ Invalid messages format:', messages);
+      logger.error('❌ Invalid messages format:', messages);
       return new Response(JSON.stringify({ error: "Invalid messages format" }), {
         status: 400,
         headers: { "Content-Type": "application/json" }
       })
     }
     
-    console.log(`📨 Received ${messages.length} messages`);
+    logger.log(`📨 Received ${messages.length} messages`);
     const latestMessage = messages[messages.length - 1];
-    console.log('📨 Latest message:', latestMessage);
+    logger.log('📨 Latest message:', latestMessage);
 
     const userMessageContent = latestMessage?.content || '';
 
@@ -115,14 +124,14 @@ async function chatHandler(req: ApiRequest) {
         });
         userMessageStored = true;
       } catch (storageError) {
-        console.error('❌ Failed to persist user message:', storageError);
+        logger.error('❌ Failed to persist user message:', storageError);
       }
     };
 
     // Rate limiting
-    console.log('🔍 Checking rate limits...');
+    logger.log('🔍 Checking rate limits...');
     if (userIdKey && !checkRateLimit(userIdKey)) {
-      console.warn(`⚠️ Rate limit exceeded for user ${userId}`);
+      logger.warn(`⚠️ Rate limit exceeded for user ${userId}`);
       return new Response(JSON.stringify({ 
         error: "Rate limit exceeded. Please try again later." 
       }), {
@@ -135,10 +144,10 @@ async function chatHandler(req: ApiRequest) {
     const estimatedTokens = messages.reduce((acc: number, msg: any) => 
       acc + (msg.content?.length || 0) / 4, 0) // Rough estimation: 4 chars per token
     
-    console.log(`📊 Estimated tokens: ${estimatedTokens}`);
+    logger.log(`📊 Estimated tokens: ${estimatedTokens}`);
 
     if (userIdKey && !trackTokenUsage(userIdKey, estimatedTokens)) {
-      console.warn(`⚠️ Token budget exceeded for user ${userId}`);
+      logger.warn(`⚠️ Token budget exceeded for user ${userId}`);
       return new Response(JSON.stringify({ 
         error: "Monthly token budget exceeded. Please try again next month." 
       }), {
@@ -154,13 +163,13 @@ async function chatHandler(req: ApiRequest) {
       if (!isNaN(parsed) && parsed > 0) {
         validUserId = parsed;
       } else {
-        console.warn(`⚠️ Invalid userId provided: ${userId}`);
+        logger.warn(`⚠️ Invalid userId provided: ${userId}`);
       }
     }
 
     // Check if we should use adaptive coaching
     const useAdaptiveCoaching = normalizedUserId !== undefined && normalizedUserId > 0;
-    console.log(`🤖 Use adaptive coaching: ${useAdaptiveCoaching} (userId: ${userId})`);
+    logger.log(`🤖 Use adaptive coaching: ${useAdaptiveCoaching} (userId: ${userId})`);
     
     // If userId is provided, verify user exists
     if (normalizedUserId && normalizedUserId > 0) {
@@ -171,13 +180,13 @@ async function chatHandler(req: ApiRequest) {
 
         const user = await chatRepository.getUserById(normalizedUserId);
         if (!user) {
-          console.warn(`⚠️ User ${normalizedUserId} not found, proceeding with anonymous chat`);
+          logger.warn(`⚠️ User ${normalizedUserId} not found, proceeding with anonymous chat`);
           // Don't fail the request, just proceed without user-specific features
         } else {
-          console.log(`✅ User ${normalizedUserId} found and verified`);
+          logger.log(`✅ User ${normalizedUserId} found and verified`);
         }
       } catch (userCheckError) {
-        console.warn('⚠️ User verification failed, proceeding with anonymous chat:', userCheckError);
+        logger.warn('⚠️ User verification failed, proceeding with anonymous chat:', userCheckError);
         // Don't fail the request, just proceed without user-specific features
       }
     }
@@ -206,9 +215,9 @@ async function chatHandler(req: ApiRequest) {
       };
 
       try {
-        console.log('🤖 Attempting adaptive coaching response...');
-        console.log('📝 User message:', userMessage);
-        console.log('🎯 Adaptive context:', adaptiveContext);
+        logger.log('🤖 Attempting adaptive coaching response...');
+        logger.log('📝 User message:', userMessage);
+        logger.log('🎯 Adaptive context:', adaptiveContext);
         
         // Generate adaptive coaching response with timeout
         const coachingResponse = await Promise.race([
@@ -220,12 +229,12 @@ async function chatHandler(req: ApiRequest) {
           timeoutPromise
         ]) as any;
         
-        console.log('✅ Adaptive coaching response generated successfully');
-        console.log('📊 Response confidence:', coachingResponse.confidence);
-        console.log('🔧 Adaptations:', coachingResponse.adaptations);
+        logger.log('✅ Adaptive coaching response generated successfully');
+        logger.log('📊 Response confidence:', coachingResponse.confidence);
+        logger.log('🔧 Adaptations:', coachingResponse.adaptations);
 
         // Store the conversation in database
-        console.log('💾 Storing conversation messages...');
+        logger.log('💾 Storing conversation messages...');
         try {
           await persistUserMessage();
 
@@ -239,14 +248,14 @@ async function chatHandler(req: ApiRequest) {
             });
           }
 
-          console.log('✅ Chat messages stored successfully');
+          logger.log('✅ Chat messages stored successfully');
         } catch (storageError) {
-          console.error('❌ Failed to store chat messages:', storageError);
+          logger.error('❌ Failed to store chat messages:', storageError);
           // Continue anyway - message storage failure shouldn't block response
         }
 
         // Return adaptive response as a stream in the same SSE-like format the client expects
-        console.log('📤 Creating adaptive response stream...');
+        logger.log('📤 Creating adaptive response stream...');
         const stream = new ReadableStream({
           start(controller) {
             const encoder = new TextEncoder();
@@ -256,7 +265,7 @@ async function chatHandler(req: ApiRequest) {
           }
         });
 
-        console.log('✅ Adaptive coaching response completed successfully');
+        logger.log('✅ Adaptive coaching response completed successfully');
         return new Response(stream, {
           headers: {
             'Content-Type': 'text/plain; charset=utf-8',
@@ -266,13 +275,13 @@ async function chatHandler(req: ApiRequest) {
           }
         });
       } catch (adaptiveError) {
-        console.error('❌ Adaptive coaching failed, falling back to standard chat:');
-        console.error('❌ Adaptive error details:', adaptiveError);
-        console.error('❌ Adaptive error stack:', adaptiveError instanceof Error ? adaptiveError.stack : 'No stack trace');
+        logger.error('❌ Adaptive coaching failed, falling back to standard chat:');
+        logger.error('❌ Adaptive error details:', adaptiveError);
+        logger.error('❌ Adaptive error stack:', adaptiveError instanceof Error ? adaptiveError.stack : 'No stack trace');
         
         // If adaptive coaching fails completely, try to provide a basic response
         if (adaptiveError instanceof Error && adaptiveError.message === 'Request timeout') {
-          console.log('⏱️ Adaptive coaching timed out, trying basic response');
+          logger.log('⏱️ Adaptive coaching timed out, trying basic response');
           return new Response(JSON.stringify({
             error: "I'm taking a bit longer than usual to respond. Let me try with a simpler approach - what specific running question can I help you with?",
             fallback: true
@@ -287,13 +296,69 @@ async function chatHandler(req: ApiRequest) {
     }
 
     // Standard chat system (fallback or for users without adaptive coaching)
-    console.log('🗨️ Using standard chat system...');
+    logger.log('🗨️ Using standard chat system...');
     
-    let systemPrompt = `You are an expert AI running coach. You provide helpful, encouraging, and scientifically-backed advice about running training, technique, nutrition, injury prevention, and motivation. Keep responses concise but informative. Always be supportive and positive. Focus on practical, actionable advice.`
+    let systemPrompt = `You are an expert AI endurance running coach following the AI Endurance Coach Master Protocol. You provide helpful, encouraging, and scientifically-backed advice about running training, technique, nutrition, injury prevention, and motivation.
+
+## NUTRITION ENGINE KNOWLEDGE
+
+### Pre-Run Fueling:
+- Easy/short runs (<60 min): 0.5g carbs/kg body weight 1-2 hours before
+- Long runs (>60 min) or hard workouts: 1.0g carbs/kg body weight 2-3 hours before
+- Examples: banana, toast with honey, oatmeal, energy bar
+
+### Intra-Run Fueling:
+- <60 minutes: Water only, 300mg sodium/L
+- 60-89 minutes: 30g carbs/hour, water + electrolytes, 400mg sodium/L
+- 90-180 minutes: 60g carbs/hour, glucose/fructose mix, 500mg sodium/L
+- >180 minutes: 90g carbs/hour, high-carb mix, 600mg sodium/L
+- Hydration: 500-750ml per hour depending on conditions
+
+### Post-Run Recovery Nutrition:
+- Protein: 0.25-0.30g/kg within 30 minutes (whey, greek yogurt, eggs)
+- Carbs for runs <45min: 0.6g/kg; 46-89min: 0.8g/kg; >90min: 1.0g/kg
+- Window: Consume within 30-60 minutes post-workout for optimal glycogen replenishment
+
+## RECOVERY PROTOCOL KNOWLEDGE
+
+### Readiness Tiers:
+- Low readiness (0-49): Reduce intensity, focus on recovery activities
+- Moderate readiness (50-74): Standard training with monitoring
+- High readiness (75-100): Optimal for key workouts and progression
+
+### Recovery Factors:
+- Sleep: 7-9 hours for athletes, sleep quality matters as much as duration
+- HRV: Morning HRV trending down suggests need for recovery
+- Soreness scale (1-10): >7 suggests backing off intensity
+- Stress: High mental stress impacts physical recovery
+
+### Recovery Recommendations by ACWR (Acute:Chronic Workload Ratio):
+- ACWR <0.8 (Underload): Gradually increase load 5-10%
+- ACWR 0.8-1.3 (Optimal): Maintain progressive overload
+- ACWR 1.3-1.5 (Elevated): Hold or slightly reduce, avoid stacking hard days
+- ACWR >1.5 (High Risk): Prioritize recovery, cap intensity
+
+## TRAINING ZONE KNOWLEDGE
+
+### Heart Rate Zones (using Karvonen method):
+- Z1 (55-72% HRR): Recovery, very easy, RPE 2-3
+- Z2 (72-82% HRR): Aerobic base, easy conversation pace, RPE 3-4
+- Z3 (82-89% HRR): Tempo/threshold, comfortably hard, RPE 5-6
+- Z4 (89-95% HRR): VO2max intervals, hard effort, RPE 7-8
+- Z5 (95-100% HRR): Anaerobic/sprint, maximum effort, RPE 9+
+
+### Training Intensity Distribution:
+- 80/20 rule: 80% easy (Z1-Z2), 20% hard (Z3-Z5)
+- Polarized training: Minimize Z3 "gray zone" training
+- Key workouts: Long runs, tempo, intervals - schedule with adequate recovery
+
+## COACHING GUIDELINES
+
+Keep responses concise but informative. Always be supportive and positive. Focus on practical, actionable advice. When discussing nutrition or recovery, provide specific numbers and examples. Consider the user's training phase (base, build, peak, taper, recovery) when giving advice.`
 
     if (userContext) {
       systemPrompt += `\n\nUser Context: ${userContext}`
-      console.log('🎯 Added user context to system prompt');
+      logger.log('🎯 Added user context to system prompt');
     }
 
     // Prepare messages with system prompt
@@ -302,15 +367,15 @@ async function chatHandler(req: ApiRequest) {
       ...messages
     ]
     
-    console.log(`📨 Prepared ${apiMessages.length} messages for OpenAI`);
-    console.log('⚙️ Using model: gpt-4o, maxTokens: 500, temperature: 0.7');
+    logger.log(`📨 Prepared ${apiMessages.length} messages for OpenAI`);
+    logger.log('⚙️ Using model: gpt-4o, maxTokens: 500, temperature: 0.7');
 
     // Use secure OpenAI wrapper for stream generation
     await persistUserMessage();
 
     const result = await withSecureOpenAI(
       async () => {
-        console.log('🔄 Calling OpenAI streamText...');
+        logger.log('🔄 Calling OpenAI streamText...');
         
         const streamResult = await Promise.race([
           streamText({
@@ -322,7 +387,7 @@ async function chatHandler(req: ApiRequest) {
           timeoutPromise
         ]) as any;
 
-        console.log('✅ OpenAI streamText call initiated successfully');
+        logger.log('✅ OpenAI streamText call initiated successfully');
         return streamResult;
       }
     );
@@ -372,7 +437,7 @@ async function chatHandler(req: ApiRequest) {
                   aggregatedContent += data.textDelta;
                 }
               } catch (parseError) {
-                console.error('❌ Failed to parse streamed chat chunk:', parseError);
+                logger.error('❌ Failed to parse streamed chat chunk:', parseError);
               }
             } else {
               aggregatedContent += line;
@@ -390,7 +455,7 @@ async function chatHandler(req: ApiRequest) {
               tokenCount: Math.ceil(aggregatedContent.length / 4),
             });
           } catch (storageError) {
-            console.error('❌ Failed to store assistant message from stream:', storageError);
+            logger.error('❌ Failed to store assistant message from stream:', storageError);
           }
         }
         controller.close();
@@ -399,17 +464,17 @@ async function chatHandler(req: ApiRequest) {
     return new Response(transformed, { headers: original.headers });
 
   } catch (error) {
-    console.error('❌ Chat API error occurred:', error);
-    console.error('❌ Error type:', error instanceof Error ? error.constructor.name : typeof error);
-    console.error('❌ Error message:', error instanceof Error ? error.message : String(error));
-    console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    logger.error('❌ Chat API error occurred:', error);
+    logger.error('❌ Error type:', error instanceof Error ? error.constructor.name : typeof error);
+    logger.error('❌ Error message:', error instanceof Error ? error.message : String(error));
+    logger.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     
     // Return appropriate error response
     if (error instanceof Error) {
-      console.log('🔍 Analyzing error type and message...');
+      logger.log('🔍 Analyzing error type and message...');
       
       if (error.message.includes('timeout')) {
-        console.log('⏱️ Timeout error detected');
+        logger.log('⏱️ Timeout error detected');
         return new Response(JSON.stringify({ 
           error: "Request timeout. Please try again." 
         }), {
@@ -419,7 +484,7 @@ async function chatHandler(req: ApiRequest) {
       }
       
       if (error.message.includes('rate limit')) {
-        console.log('🚫 Rate limit error detected');
+        logger.log('🚫 Rate limit error detected');
         return new Response(JSON.stringify({ 
           error: "API rate limit exceeded. Please try again in a moment." 
         }), {
@@ -429,7 +494,7 @@ async function chatHandler(req: ApiRequest) {
       }
       
       if (error.message.includes('API key') || error.message.includes('unauthorized')) {
-        console.log('🔑 API key error detected');
+        logger.log('🔑 API key error detected');
         return new Response(JSON.stringify({ 
           error: "AI service authentication failed. Please contact support." 
         }), {
@@ -439,7 +504,7 @@ async function chatHandler(req: ApiRequest) {
       }
       
       if (error.message.includes('network') || error.message.includes('fetch')) {
-        console.log('🌐 Network error detected');
+        logger.log('🌐 Network error detected');
         return new Response(JSON.stringify({ 
           error: "Network connection failed. Please check your internet and try again." 
         }), {
@@ -449,7 +514,7 @@ async function chatHandler(req: ApiRequest) {
       }
     }
 
-    console.log('❌ Returning generic error response');
+    logger.log('❌ Returning generic error response');
     return new Response(JSON.stringify({ 
       error: "An unexpected error occurred. Please try again.",
       details: error instanceof Error ? error.message : 'Unknown error'
@@ -541,7 +606,7 @@ async function chatHistoryHandler(req: ApiRequest): Promise<NextResponse> {
       conversationId,
     });
   } catch (error) {
-    console.error('❌ Failed to load chat history:', error);
+    logger.error('❌ Failed to load chat history:', error);
     return NextResponse.json({ error: 'Failed to load chat history' }, { status: 500 });
   }
 }

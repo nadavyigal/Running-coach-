@@ -15,6 +15,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { dbUtils } from '@/lib/dbUtils';
 import { 
   Target, 
   Clock, 
@@ -323,7 +324,15 @@ export function GoalCreationWizard({ isOpen, onClose, userId, onGoalCreated }: G
 
       if (response.ok) {
         const result = await response.json();
-        
+
+        if (result?.goal?.id) {
+          try {
+            await dbUtils.updateGoal(result.goal.id, { isPrimary: true });
+          } catch (updateError) {
+            console.warn('Failed to mark goal as primary:', updateError);
+          }
+        }
+
         toast({
           variant: "success",
           title: "Goal Created Successfully! 🎯",
@@ -331,7 +340,7 @@ export function GoalCreationWizard({ isOpen, onClose, userId, onGoalCreated }: G
         });
 
         if (onGoalCreated) {
-          onGoalCreated(result.goal);
+          onGoalCreated(result.goal ? { ...result.goal, isPrimary: true } : result.goal);
         }
         
         onClose();

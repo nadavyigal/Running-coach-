@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { logger } from '@/lib/logger';
 
 export async function POST(req: Request) {
   try {
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
     });
 
   } catch (error) {
-    console.error('Device connection error:', error);
+    logger.error('Device connection error:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to connect device'

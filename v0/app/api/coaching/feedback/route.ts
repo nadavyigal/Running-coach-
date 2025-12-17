@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
 import { adaptiveCoachingEngine } from '@/lib/adaptiveCoachingEngine';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
         }
       );
     } catch (error) {
-      console.error('Error generating coaching response to feedback:', error);
+      logger.error('Error generating coaching response to feedback:', error);
     }
 
     const response = {
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('Error processing coaching feedback:', error);
+    logger.error('Error processing coaching feedback:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -262,7 +263,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('Error fetching coaching feedback:', error);
+    logger.error('Error fetching coaching feedback:', error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(

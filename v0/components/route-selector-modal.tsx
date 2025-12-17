@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RouteMap } from "@/components/maps/RouteMap"
+import { MapErrorBoundary } from "@/components/maps/MapErrorBoundary"
 import { CustomRouteCreator } from "@/components/custom-route-creator"
 import { MapPin, TrendingUp, Star, Clock, RouteIcon, Navigation, Loader2, AlertCircle, Radius, Plus, Check } from "lucide-react"
 import { trackNearbyFilterChanged, trackRouteSelected } from "@/lib/analytics"
@@ -16,6 +17,7 @@ import { seedDemoRoutes } from "@/lib/seedRoutes"
 import { clearTelAvivDemoRoutes, shouldClearTelAvivRoutes } from "@/lib/clearDemoRoutes"
 import { useToast } from "@/hooks/use-toast"
 import { getDifficultyColor, getDifficultyLabel, UNKNOWN_DISTANCE_KM, isDevelopment } from "@/lib/routeHelpers"
+import { getLocation } from "@/lib/location-service"
 
 interface RouteSelectorModalProps {
   isOpen: boolean
@@ -75,11 +77,10 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
 
       const count = await db.routes.count()
       if (count === 0) {
-        // Don't seed demo routes - users should create custom routes
-        // or routes should be fetched based on their location
-        if (isDevelopment()) {
-          console.log('No routes found. Users should create custom routes.')
-        }
+        await seedDemoRoutes(false, userLocation ? {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude
+        } : undefined)
       }
 
       const allRoutes = await db.routes.toArray()
@@ -99,6 +100,30 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
     }
   }, [toast, userLocation])
 
+  // Request GPS location - defined as function declaration to avoid TDZ
+  // Force recompile timestamp: 2025-12-14 13:32
+  async function requestLocation() {
+    setLocationStatus('loading')
+
+    const result = await getLocation({ timeoutMs: 10000, enableHighAccuracy: false })
+
+    if (result.coords) {
+      setUserLocation({
+        latitude: result.coords.latitude,
+        longitude: result.coords.longitude,
+        accuracy: result.coords.accuracy,
+      })
+    }
+
+    if (result.status === 'granted') {
+      setLocationStatus('granted')
+    } else if (result.status === 'denied') {
+      setLocationStatus('denied')
+    } else {
+      setLocationStatus('unavailable')
+    }
+  }
+
   // Load routes when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -109,8 +134,7 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
   // Request GPS location when modal opens
   useEffect(() => {
     if (isOpen && locationStatus === 'idle') {
-      const cleanup = requestLocation()
-      return cleanup
+      requestLocation()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, locationStatus])
@@ -151,59 +175,6 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
     if (!previewedRouteId) return null
     return nearbyRoutes.find(r => r.id === previewedRouteId) || null
   }, [previewedRouteId, nearbyRoutes])
-
-  const requestLocation = useCallback(() => {
-    const isSecure = typeof window !== 'undefined' &&
-      (window.location.protocol === 'https:' || window.location.hostname === 'localhost')
-
-    if (!isSecure) {
-      if (isDevelopment()) {
-        console.warn('[RouteSelectorModal] Not running on HTTPS - GPS unavailable')
-      }
-      setLocationStatus('unavailable')
-      return
-    }
-
-    if (!navigator.geolocation) {
-      setLocationStatus('unavailable')
-      return
-    }
-
-    setLocationStatus('loading')
-
-    let isMounted = true
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        if (isMounted) {
-          setUserLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy
-          })
-          setLocationStatus('granted')
-        }
-      },
-      (error) => {
-        if (isMounted) {
-          if (error.code === error.PERMISSION_DENIED) {
-            setLocationStatus('denied')
-          } else {
-            setLocationStatus('unavailable')
-          }
-        }
-      },
-      {
-        enableHighAccuracy: false,
-        timeout: 10000,
-        maximumAge: 300000
-      }
-    )
-
-    return () => {
-      isMounted = false
-    }
-  }, [])
 
   const handleRoutePreview = (route: Route) => {
     // If already previewed, select it
@@ -369,17 +340,19 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
           ) : (
             <>
               {/* Map View */}
-              <RouteMap
-                routes={nearbyRoutes}
-                userLocation={userLocation ? {
-                  lat: userLocation.latitude,
-                  lng: userLocation.longitude
-                } : undefined}
-                onRouteClick={handleMapRouteClick}
-                selectedRouteId={previewedRouteId ?? undefined}
-                height="350px"
-                className="rounded-lg border mb-4"
-              />
+              <MapErrorBoundary fallbackMessage="Map loading failed">
+                <RouteMap
+                  routes={nearbyRoutes}
+                  userLocation={userLocation ? {
+                    lat: userLocation.latitude,
+                    lng: userLocation.longitude
+                  } : undefined}
+                  onRouteClick={handleMapRouteClick}
+                  selectedRouteId={previewedRouteId ?? undefined}
+                  height="350px"
+                  className="rounded-lg border mb-4"
+                />
+              </MapErrorBoundary>
 
               {/* Previewed Route Card */}
               {previewedRoute && (

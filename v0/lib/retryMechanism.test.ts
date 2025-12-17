@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest'
 import {
   withRetry,
   withRetryProgress,
@@ -18,6 +18,15 @@ import {
 } from './retryMechanism'
 
 describe('retryMechanism', () => {
+  beforeAll(() => {
+    vi.useRealTimers()
+  })
+
+  afterAll(() => {
+    // Return to default fake timers configured in global setup
+    vi.useFakeTimers()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
   })

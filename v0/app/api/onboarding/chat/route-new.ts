@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server';
 import { chatDriver, ChatRequest } from '@/lib/chatDriver';
 import { OnboardingPromptBuilder } from '@/lib/onboardingPromptBuilder';
+import { logger } from '@/lib/logger';
 
 export async function POST(req: Request) {
   const requestId = `onboarding_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   
-  console.log(`[onboarding:chat] requestId=${requestId} Starting onboarding chat request`);
+  logger.log(`[onboarding:chat] requestId=${requestId} Starting onboarding chat request`);
   
   try {
     // Validate content type
     const contentType = req.headers.get('content-type');
     if (!contentType || !contentType.includes('application/json')) {
-      console.error(`[onboarding:chat] requestId=${requestId} Invalid content type:`, contentType);
+      logger.error(`[onboarding:chat] requestId=${requestId} Invalid content type:`, contentType);
       return NextResponse.json({
         error: 'Content-Type must be application/json',
         fallback: true,
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
       }
       body = JSON.parse(bodyText);
     } catch (parseError) {
-      console.error(`[onboarding:chat] requestId=${requestId} JSON parsing error:`, parseError);
+      logger.error(`[onboarding:chat] requestId=${requestId} JSON parsing error:`, parseError);
       return NextResponse.json({
         error: 'Invalid JSON in request body',
         fallback: true,
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
     
     const { messages, userId, userContext, currentPhase, streaming = true } = body;
     
-    console.log(`[onboarding:chat] requestId=${requestId} Request data:`, {
+    logger.log(`[onboarding:chat] requestId=${requestId} Request data:`, {
       messagesCount: messages?.length || 0,
       userId,
       currentPhase,
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
     
     // Validate required fields
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      console.error(`[onboarding:chat] requestId=${requestId} Invalid messages:`, messages);
+      logger.error(`[onboarding:chat] requestId=${requestId} Invalid messages:`, messages);
       return NextResponse.json({
         error: 'Messages array is required and cannot be empty',
         fallback: true,
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
     }
     
     if (!currentPhase) {
-      console.error(`[onboarding:chat] requestId=${requestId} Missing currentPhase`);
+      logger.error(`[onboarding:chat] requestId=${requestId} Missing currentPhase`);
       return NextResponse.json({
         error: 'Current phase is required',
         fallback: true,
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
     // Check chat service health first
     const health = await chatDriver.health();
     if (!health.available) {
-      console.error(`[onboarding:chat] requestId=${requestId} Chat service unavailable:`, health.lastError);
+      logger.error(`[onboarding:chat] requestId=${requestId} Chat service unavailable:`, health.lastError);
       return NextResponse.json({
         error: 'AI coaching is currently unavailable. Please use the guided form to complete your setup.',
         fallback: true,
@@ -78,7 +79,7 @@ export async function POST(req: Request) {
     }
     
     // Build onboarding-specific context
-    console.log(`[onboarding:chat] requestId=${requestId} Building onboarding prompt for phase:`, currentPhase);
+    logger.log(`[onboarding:chat] requestId=${requestId} Building onboarding prompt for phase:`, currentPhase);
     
     const conversationHistory = messages.map((msg: any) => ({
       id: `${msg.role}-${Date.now()}`,
@@ -109,14 +110,14 @@ export async function POST(req: Request) {
       model: "gpt-4o",
     };
     
-    console.log(`[onboarding:chat] requestId=${requestId} Sending to ChatDriver, streaming=${streaming}`);
+    logger.log(`[onboarding:chat] requestId=${requestId} Sending to ChatDriver, streaming=${streaming}`);
     
     // Use ChatDriver for the actual AI request
     const response = await chatDriver.ask(chatRequest);
     
     if (!response.success) {
       const error = response.error!;
-      console.error(`[onboarding:chat] requestId=${requestId} ChatDriver error:`, error);
+      logger.error(`[onboarding:chat] requestId=${requestId} ChatDriver error:`, error);
       
       // Map ChatDriver errors to onboarding-specific responses
       if (error.type === 'auth') {
@@ -155,7 +156,7 @@ export async function POST(req: Request) {
     }
     
     if (streaming && response.stream) {
-      console.log(`[onboarding:chat] requestId=${requestId} ✅ Returning streaming response`);
+      logger.log(`[onboarding:chat] requestId=${requestId} ✅ Returning streaming response`);
       
       // Transform the stream to match the expected client format
       const reader = response.stream.getReader();
@@ -180,7 +181,7 @@ export async function POST(req: Request) {
               }
             }
           } catch (error) {
-            console.error(`[onboarding:chat] requestId=${requestId} Stream error:`, error);
+            logger.error(`[onboarding:chat] requestId=${requestId} Stream error:`, error);
           } finally {
             controller.close();
             reader.releaseLock();
@@ -198,7 +199,7 @@ export async function POST(req: Request) {
       });
       
     } else if (response.data) {
-      console.log(`[onboarding:chat] requestId=${requestId} ✅ Returning non-streaming response`);
+      logger.log(`[onboarding:chat] requestId=${requestId} ✅ Returning non-streaming response`);
       
       // Non-streaming response
       return NextResponse.json({
@@ -215,7 +216,7 @@ export async function POST(req: Request) {
     throw new Error('Invalid response from ChatDriver');
     
   } catch (error) {
-    console.error(`[onboarding:chat] requestId=${requestId} Unexpected error:`, error);
+    logger.error(`[onboarding:chat] requestId=${requestId} Unexpected error:`, error);
     
     return NextResponse.json({
       error: 'An unexpected error occurred. Please try again.',

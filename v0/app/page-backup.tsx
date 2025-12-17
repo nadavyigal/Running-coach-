@@ -15,6 +15,7 @@ import { dbUtils } from "@/lib/dbUtils"
 // import { planAdjustmentService } from "@/lib/planAdjustmentService"
 // import { onboardingManager } from "@/lib/onboardingManager"
 import { useChunkErrorHandler } from "@/components/chunk-error-boundary"
+import { logger } from '@/lib/logger';
 
 export default function RunSmartApp() {
   const [currentScreen, setCurrentScreen] = useState<string>("today")
@@ -27,16 +28,16 @@ export default function RunSmartApp() {
   // Add chunk error handler
   useChunkErrorHandler()
 
-  console.log('🚀 RunSmartApp component rendering...')
+  logger.log('🚀 RunSmartApp component rendering...')
 
   useEffect(() => {
-    console.log('🔍 RunSmartApp useEffect running...')
+    logger.log('🔍 RunSmartApp useEffect running...')
     // Safe mode to bypass dynamic imports if needed: add ?safe=1 to URL
     try {
       if (typeof window !== 'undefined') {
         const usp = new URLSearchParams(window.location.search)
         if (usp.get('safe') === '1') {
-          console.warn('[app:safe] Safe mode enabled via ?safe=1')
+          logger.warn('[app:safe] Safe mode enabled via ?safe=1')
           setSafeMode(true)
           setIsLoading(false)
           return
@@ -51,7 +52,7 @@ export default function RunSmartApp() {
     const initializeApp = async () => {
       if (typeof window !== 'undefined') {
         try {
-          console.log('[app:init:start] Starting enhanced application initialization...')
+          logger.log('[app:init:start] Starting enhanced application initialization...')
           
           // Step 1: Initialize database with timeout
           const dbInitTimeout = new Promise((_, reject) => 
@@ -61,33 +62,33 @@ export default function RunSmartApp() {
           const dbInit = dbUtils.initializeDatabase?.()
           if (dbInit) {
             await Promise.race([dbInit, dbInitTimeout])
-            console.log('[app:init:db] ✅ Database initialized successfully')
+            logger.log('[app:init:db] ✅ Database initialized successfully')
           }
           
           // Step 2: Perform startup migration  
-          console.log('[app:init:migration] Running startup migration...')
+          logger.log('[app:init:migration] Running startup migration...')
           const migrationSuccess = await dbUtils.performStartupMigration?.()
           if (migrationSuccess) {
-            console.log('[app:init:migration] ✅ Startup migration completed')
+            logger.log('[app:init:migration] ✅ Startup migration completed')
           } else {
-            console.warn('[app:init:migration] ⚠️ Startup migration had issues (continuing)')
+            logger.warn('[app:init:migration] ⚠️ Startup migration had issues (continuing)')
           }
           
           // Step 3: Ensure user is ready (this guarantees a user exists)
-          console.log('[app:init:user] Ensuring user identity is ready...')
+          logger.log('[app:init:user] Ensuring user identity is ready...')
           const readyUser = await dbUtils.ensureUserReady?.()
           if (readyUser) {
-            console.log(`[app:init:user] ✅ User ready: id=${readyUser.id}, onboarding=${readyUser.onboardingComplete}`)
+            logger.log(`[app:init:user] ✅ User ready: id=${readyUser.id}, onboarding=${readyUser.onboardingComplete}`)
             
             // Set onboarding state based on actual user data
             if (readyUser.onboardingComplete) {
               setIsOnboardingComplete(true)
               setCurrentScreen("today")
               localStorage.setItem("onboarding-complete", "true")
-              console.log('[app:init:nav] ✅ User ready - navigating to today screen')
+              logger.log('[app:init:nav] ✅ User ready - navigating to today screen')
             } else {
               setIsOnboardingComplete(false)
-              console.log('[app:init:nav] 📝 User needs onboarding - showing onboarding screen')
+              logger.log('[app:init:nav] 📝 User needs onboarding - showing onboarding screen')
             }
           } else {
             // Fallback if ensureUserReady failed
@@ -95,32 +96,32 @@ export default function RunSmartApp() {
           }
           
         } catch (initErr) {
-          console.error('[app:init:error] ❌ Enhanced initialization failed:', initErr)
+          logger.error('[app:init:error] ❌ Enhanced initialization failed:', initErr)
           
           // Fallback to localStorage check
           try {
-            console.log('[app:init:fallback] Falling back to localStorage check...')
+            logger.log('[app:init:fallback] Falling back to localStorage check...')
             const onboardingComplete = localStorage.getItem("onboarding-complete")
             if (onboardingComplete === "true") {
               setIsOnboardingComplete(true)
               setCurrentScreen("today")
-              console.log('[app:init:fallback] ✅ localStorage fallback - navigating to today')
+              logger.log('[app:init:fallback] ✅ localStorage fallback - navigating to today')
             } else {
               setIsOnboardingComplete(false)
-              console.log('[app:init:fallback] 📝 localStorage fallback - showing onboarding')
+              logger.log('[app:init:fallback] 📝 localStorage fallback - showing onboarding')
             }
           } catch (fallbackError) {
-            console.warn('[app:init:fallback] ⚠️ localStorage fallback failed:', fallbackError)
+            logger.warn('[app:init:fallback] ⚠️ localStorage fallback failed:', fallbackError)
             setIsOnboardingComplete(false)
           }
         }
       } else {
-        console.log('[app:init:ssr] 📝 Server-side render, showing onboarding')
+        logger.log('[app:init:ssr] 📝 Server-side render, showing onboarding')
         setIsOnboardingComplete(false)
       }
       
       // CRITICAL: Always set loading to false
-      console.log('[app:init:complete] ✅ App initialization complete, setting loading to false')
+      logger.log('[app:init:complete] ✅ App initialization complete, setting loading to false')
       setIsLoading(false)
     }
 
@@ -132,21 +133,21 @@ export default function RunSmartApp() {
     // Only run on client side
     if (typeof window === "undefined") return
 
-    console.log('🔗 Adding navigation event listeners...')
+    logger.log('🔗 Adding navigation event listeners...')
 
     // Listen for navigation events
     const handleNavigateToRecord = () => {
-      console.log('🎯 Navigating to record screen')
+      logger.log('🎯 Navigating to record screen')
       setCurrentScreen("record")
     }
 
     const handleNavigateToAnalytics = () => {
-      console.log('📊 Navigating to analytics screen')
+      logger.log('📊 Navigating to analytics screen')
       setCurrentScreen("analytics")
     }
     
     const handleNavigateToChat = () => {
-      console.log('💬 Navigating to chat screen')
+      logger.log('💬 Navigating to chat screen')
       setCurrentScreen("chat")
     }
 
@@ -166,7 +167,7 @@ export default function RunSmartApp() {
 
     // Cleanup function
     return () => {
-      console.log('🧹 Cleaning up navigation event listeners...')
+      logger.log('🧹 Cleaning up navigation event listeners...')
       window.removeEventListener("navigate-to-record", handleNavigateToRecord)
       window.removeEventListener("navigate-to-analytics", handleNavigateToAnalytics)
       window.removeEventListener("navigate-to-chat", handleNavigateToChat)
@@ -175,44 +176,29 @@ export default function RunSmartApp() {
   }, [showDebugPanel])
 
   const handleOnboardingComplete = async (userData?: any) => {
-    console.log('✅ Onboarding completed by user with data:', userData)
+    logger.log('✅ Onboarding completed by user with data:', userData)
     
-    try {
-      // Gate navigation on profile-ready state
-      console.log('🎉 Committing onboarding atomically and waiting for profile-ready gate')
-      const finalUserData = userData || {
-        experience: 'beginner',
-        goal: 'habit',
-        daysPerWeek: 3,
-        preferredTimes: ['morning'],
-        age: 30,
-      };
-      // Poll for readiness (in case we navigated from deep link without atomic handler)
-      const readyUser = await dbUtils.waitForProfileReady?.(8000)
-      if (!readyUser) {
-        console.warn('⏳ Profile not ready within gate timeout; showing onboarding again')
-        setIsOnboardingComplete(false)
-        return
-      }
-      setIsOnboardingComplete(true)
-      setCurrentScreen("today")
-      localStorage.setItem("onboarding-complete", "true")
-      localStorage.setItem("user-data", JSON.stringify(finalUserData))
-      console.log('✅ Profile-ready confirmed; navigating to Today')
+    await dbUtils.completeOnboardingAtomic(userData);
+
+    const finalUserData = userData || {
+      experience: 'beginner',
+      goal: 'habit',
+      daysPerWeek: 3,
+      preferredTimes: ['morning'],
+      age: 30,
+    };
       
-    } catch (error) {
-      console.error('❌ Critical onboarding completion error:', error)
-      
-      // In error: do not navigate until profile-ready; let user retry Finish
-      setIsOnboardingComplete(false)
-      console.log('⏹️ Holding on navigation; onboarding remains visible')
-    }
+    setIsOnboardingComplete(true)
+    setCurrentScreen("today")
+    localStorage.setItem("onboarding-complete", "true")
+    localStorage.setItem("user-data", JSON.stringify(finalUserData))
+    logger.log('✅ Profile-ready confirmed; navigating to Today')
   }
 
-  console.log('🎭 Current screen:', currentScreen, 'Onboarding complete:', isOnboardingComplete, 'Loading:', isLoading, 'Error:', hasError)
+  logger.log('🎭 Current screen:', currentScreen, 'Onboarding complete:', isOnboardingComplete, 'Loading:', isLoading, 'Error:', hasError)
 
   if (isLoading) {
-    console.log('⏳ Showing loading state...')
+    logger.log('⏳ Showing loading state...')
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -237,7 +223,7 @@ export default function RunSmartApp() {
 
   // If there was an error or timeout, show onboarding as fallback
   if (hasError) {
-    console.log('⚠️ Showing onboarding due to error/timeout')
+    logger.log('⚠️ Showing onboarding due to error/timeout')
     return (
       <div className="min-h-screen bg-gray-50 max-w-md mx-auto relative">
         <div className="pb-20">
@@ -250,7 +236,7 @@ export default function RunSmartApp() {
   const renderScreen = () => {
     // Always show onboarding if not completed, regardless of currentScreen
     if (!isOnboardingComplete) {
-      console.log('🎓 Rendering full onboarding screen with AI goal wizard')
+      logger.log('🎓 Rendering full onboarding screen with AI goal wizard')
       return (
         <OnboardingScreen 
           onComplete={handleOnboardingComplete}
@@ -258,7 +244,7 @@ export default function RunSmartApp() {
       )
     }
 
-    console.log('📱 Rendering main app with screen:', currentScreen)
+    logger.log('📱 Rendering main app with screen:', currentScreen)
     
     switch (currentScreen) {
       case "today":

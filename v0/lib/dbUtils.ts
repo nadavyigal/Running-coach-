@@ -196,86 +196,35 @@ export async function clearDatabase(): Promise<void> {
 // USER MANAGEMENT UTILITIES
 // ============================================================================
 
-/**
- * Enhanced user identity resolution - guarantees a valid User record exists
- * This is the primary user resolution function that should be used by all components
- */
 export async function ensureUserReady(): Promise<User> {
   return safeDbOperation(async () => {
     const database = getDatabase();
     if (!database) {
-      console.error('[user-resolution:error] Database not available');
       throw new Error('Database not available');
     }
 
-    const phase = 'user-resolution';
-    const traceId = `${phase}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    console.log(`[${phase}:start] traceId=${traceId} Ensuring user is ready...`);
-    
-    try {
-      // Phase 1: Check for existing completed user
-      console.log(`[${phase}:phase1] traceId=${traceId} Checking for completed users...`);
-      // Avoid IndexedDB key range issues on boolean indexes by filtering in JS
-      const completedUsers = await database.users
-        .filter((u) => Boolean(u.onboardingComplete))
-        .toArray();
-      
-      console.log(`[${phase}:phase1] traceId=${traceId} Found ${completedUsers.length} completed users`);
-      
-      if (completedUsers.length > 0) {
-        // Sort by updatedAt and return the most recent
-        completedUsers.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-        const user = completedUsers[0];
-        console.log(`[${phase}:found] traceId=${traceId} Existing user resolved: id=${user.id} updatedAt=${user.updatedAt.toISOString()}`);
-        return user as User;
+    const user = await database.users.toCollection().first();
+
+    if (user) {
+      // Verify localStorage matches database state
+      if (typeof window !== 'undefined') {
+        const localFlag = localStorage.getItem('onboarding-complete') === 'true';
+        const dbFlag = user.onboardingComplete;
+
+        if (dbFlag && !localFlag) {
+          console.warn('[ensureUserReady] ⚠️ Fixing localStorage mismatch: DB=true, Local=false');
+          localStorage.setItem('onboarding-complete', 'true');
+        } else if (!dbFlag && localFlag) {
+          console.warn('[ensureUserReady] ⚠️ Fixing localStorage mismatch: DB=false, Local=true');
+          localStorage.removeItem('onboarding-complete');
+        }
       }
-
-      // Phase 2: Check for any user (even incomplete onboarding)
-      console.log(`[${phase}:phase2] traceId=${traceId} No completed users, checking for any users...`);
-      // Avoid using orderBy on non-indexed fields to prevent IDBKeyRange errors
-      const allUsers = await database.users.toArray();
-      allUsers.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-      console.log(`[${phase}:phase2] traceId=${traceId} Found ${allUsers.length} total users`);
-      
-      if (allUsers.length > 0) {
-        const anyUser = allUsers[0]; // Most recent
-        console.log(`[${phase}:found] traceId=${traceId} Returning existing user AS-IS: id=${anyUser.id} onboarding=${anyUser.onboardingComplete}`);
-
-        // Return the user as-is without promotion
-        // This ensures incomplete users stay incomplete and will see onboarding
-        return anyUser as User;
-      }
-
-      // Phase 3: No user exists - create a stub user atomically
-      console.log(`[${phase}:phase3] traceId=${traceId} No users exist, creating stub user...`);
-      const stubUser: Omit<User, 'id'> = {
-        goal: 'habit',
-        experience: 'beginner',
-        preferredTimes: ['morning'],
-        daysPerWeek: 3,
-        consents: { data: true, gdpr: true, push: false },
-        onboardingComplete: false,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      const userId = await database.users.add(stubUser);
-      console.log(`[${phase}:added] traceId=${traceId} Stub user added with id=${userId}`);
-      
-      const createdUser = await database.users.get(userId);
-      
-      if (!createdUser) {
-        console.error(`[${phase}:error] traceId=${traceId} Failed to retrieve created user id=${userId}`);
-        throw new Error('Failed to create stub user - verification failed');
-      }
-      
-      console.log(`[${phase}:success] traceId=${traceId} Stub user created and verified: id=${createdUser.id}`);
-      return createdUser as User;
-      
-    } catch (error) {
-      console.error(`[${phase}:error] traceId=${traceId} Error during user resolution:`, error);
-      throw error;
+      return user as User;
     }
+
+    const newUserId = await createUser({});
+    const newUser = await database.users.get(newUserId);
+    return newUser as User;
   }, 'ensureUserReady');
 }
 
@@ -337,43 +286,72 @@ export async function performStartupMigration(): Promise<boolean> {
         // Don't block startup on route migration failure
       }
 
-      // Migration 2: Check for orphaned draft profiles and promote them
-      const draftUsers = await database.users
-        .filter((u) => !u.onboardingComplete)
-        .toArray();
+      // Migration 2: Clean up orphaned user profiles
+      // Never auto-promote draft users to "completed" (can skip onboarding after a reload).
+      const allUsers = await database.users.toArray();
+      const completedUsers = allUsers.filter((u) => Boolean(u.onboardingComplete));
+      const draftUsers = allUsers.filter((u) => !u.onboardingComplete);
 
-      if (draftUsers.length > 0) {
-        console.log(`[migration:promote] Found ${draftUsers.length} draft profiles to promote`);
+      const byUpdatedAtDesc = (a: any, b: any) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
 
-        // Promote the most recent draft to canonical user
-        const latestDraft = draftUsers.sort(
-          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        )[0];
+      if (completedUsers.length > 0) {
+        const canonicalCompleted = completedUsers.sort(byUpdatedAtDesc)[0];
+        const idsToDelete: number[] = [];
 
-        if (latestDraft.id) {
-          const promotionData = {
-            goal: latestDraft.goal || 'habit',
-            experience: latestDraft.experience || 'beginner',
-            preferredTimes: latestDraft.preferredTimes || ['morning'],
-            daysPerWeek: latestDraft.daysPerWeek || 3,
-            consents: latestDraft.consents || { data: true, gdpr: true, push: false },
-            onboardingComplete: true,
-            updatedAt: new Date()
-          };
+        const redundantCompletedIds = completedUsers
+          .filter((u) => typeof u.id === 'number' && u.id !== canonicalCompleted.id)
+          .map((u) => u.id as number);
 
-          await database.users.update(latestDraft.id, promotionData);
-          console.log(`[migration:promoted] Promoted draft user ${latestDraft.id} to canonical`);
+        const draftIds = draftUsers
+          .filter((u) => typeof u.id === 'number')
+          .map((u) => u.id as number);
 
-          // Clean up other drafts
-          const otherDraftIds = draftUsers
-            .filter(u => typeof u.id === 'number' && u.id !== latestDraft.id)
-            .map(u => u.id as number);
+        idsToDelete.push(...redundantCompletedIds, ...draftIds);
 
-          if (otherDraftIds.length > 0) {
-            await database.users.where('id').anyOf(otherDraftIds).delete();
-            console.log(`[migration:cleanup] Removed ${otherDraftIds.length} redundant draft users`);
+        if (idsToDelete.length > 0) {
+          await database.users.where('id').anyOf(idsToDelete).delete();
+          console.log(
+            `[migration:users] Kept user ${canonicalCompleted.id}; removed ${idsToDelete.length} duplicates/drafts`
+          );
+        }
+      } else if (draftUsers.length > 1) {
+        // Keep the most recent draft; remove any redundant drafts.
+        const latestDraft = draftUsers.sort(byUpdatedAtDesc)[0];
+        const redundantDraftIds = draftUsers
+          .filter((u) => typeof u.id === 'number' && u.id !== latestDraft.id)
+          .map((u) => u.id as number);
+
+        if (redundantDraftIds.length > 0) {
+          await database.users.where('id').anyOf(redundantDraftIds).delete();
+          console.log(
+            `[migration:users] Kept draft user ${latestDraft.id}; removed ${redundantDraftIds.length} redundant drafts`
+          );
+        }
+      }
+
+      // Migration 3: Set existing goals as primary and regenerate plans (one-time)
+      try {
+        const migrationFlag = 'goals-migration-v1-complete';
+        const migrationRun = typeof window !== 'undefined' ? localStorage.getItem(migrationFlag) : null;
+
+        if (!migrationRun) {
+          console.log('[migration:goals] Running existing goals migration...');
+          const { migrateExistingGoals } = await import('./migrations/migrateExistingGoals');
+          const result = await migrateExistingGoals();
+
+          if (result.errors.length === 0) {
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(migrationFlag, 'true');
+            }
+            console.log(`[migration:goals] ✅ Migrated ${result.migrated} users successfully`);
+          } else {
+            console.warn(`[migration:goals] ⚠️ Migrated ${result.migrated} users with ${result.errors.length} errors:`, result.errors);
           }
         }
+      } catch (migrationError) {
+        console.warn('[migration:goals] Goals migration failed (non-critical):', migrationError);
+        // Don't block startup on goals migration failure
       }
 
       console.log('[migration:complete] Startup migration completed successfully');
@@ -455,22 +433,33 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
     validateUserContract(normalizedProfileRequired);
 
     const result = await database.transaction('rw', [database.users, database.plans, database.workouts], async () => {
-      // Idempotency: if a completed user exists, reuse it and ensure a plan
-      const existingCompleted = (await database.users
+      const allUsers = await database.users.toArray();
+      const byUpdatedAtDesc = (a: any, b: any) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+
+      // Idempotency: if a completed user exists, reuse it and ensure a plan.
+      // Otherwise, upgrade the most recent draft user instead of creating duplicates.
+      const existingCompleted = allUsers
         .filter((u) => Boolean(u.onboardingComplete))
-        .toArray())
-        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+        .sort(byUpdatedAtDesc)[0];
+      const existingAny = allUsers
+        .filter((u) => typeof u.id === 'number')
+        .sort(byUpdatedAtDesc)[0];
       let userId: number;
-      if (existingCompleted && existingCompleted.id) {
+      const updatedAt = new Date();
+      if (existingCompleted?.id) {
         userId = existingCompleted.id;
         // Soft update to latest profile attrs
-        await database.users.update(userId, { ...normalizedProfileRequired, updatedAt: new Date() });
+        await database.users.update(userId, { ...normalizedProfileRequired, updatedAt });
+      } else if (existingAny?.id) {
+        userId = existingAny.id;
+        await database.users.update(userId, { ...normalizedProfileRequired, updatedAt });
       } else {
         // Create fresh user
         const toAdd: Omit<User, 'id'> = {
           ...(normalizedProfileRequired as Omit<User, 'id'>),
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: updatedAt,
+          updatedAt,
         };
         userId = (await database.users.add(toAdd)) as number;
       }
@@ -532,78 +521,18 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
       return { userId, planId };
     });
 
+    // CRITICAL: Force localStorage sync to prevent redirect issues
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('onboarding-complete', 'true');
+      console.log(`[onboarding:sync] traceId=${traceId} localStorage force-synced`);
+    }
+
     console.log(`[onboarding:commit] traceId=${traceId} userId=${result.userId} planId=${result.planId}`);
     return result;
   }, 'completeOnboardingAtomic');
 }
 
-/**
- * Wait until a fully persisted, readable profile (and active plan) exist.
- * Production-aware with longer timeouts and better error handling.
- */
-export async function waitForProfileReady(timeoutMs?: number): Promise<User | null> {
-  // Use longer timeout in production to handle slower connections
-  const isProduction = typeof process !== 'undefined' && process.env?.NODE_ENV === 'production';
-  const effectiveTimeout = timeoutMs ?? (isProduction ? 15000 : 10000);
-  const pollInterval = isProduction ? 150 : 100; // Slightly slower polling in production
-  
-  const start = Date.now();
-  let dexieErrorSeen = false;
-  let consecutiveErrors = 0;
-  const MAX_CONSECUTIVE_ERRORS = 3;
 
-  console.log(`[waitForProfileReady] Starting with ${effectiveTimeout}ms timeout (production: ${isProduction})`);
-
-  while (Date.now() - start < effectiveTimeout) {
-    try {
-      const database = getDatabase();
-      if (!database) {
-        console.warn('[waitForProfileReady] Database not available');
-        return null;
-      }
-      
-      const completedUsers = await database.users
-        .filter((u) => Boolean(u.onboardingComplete))
-        .toArray();
-        
-      if (completedUsers.length) {
-        const user = completedUsers
-          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-        if (user && user.id) {
-          const hasActivePlan = await database.plans.where('userId').equals(user.id).and(p => p.isActive).first();
-          if (hasActivePlan) {
-            console.log(`[waitForProfileReady] ✅ Profile ready after ${Date.now() - start}ms`);
-            return user as User;
-          }
-        }
-      }
-      
-      // Reset consecutive errors on successful poll
-      consecutiveErrors = 0;
-    } catch (error) {
-      consecutiveErrors++;
-      
-      // If Dexie is throwing DataError/IDBKeyRange issues, don't spam the console
-      if (!dexieErrorSeen && error && typeof error === 'object') {
-        const name = (error as any).name;
-        if (name === 'DexieError' || name === 'DataError') {
-          dexieErrorSeen = true;
-          console.warn('[waitForProfileReady] Dexie error detected, will exit on next error');
-        }
-      }
-      
-      // Break if we've seen too many consecutive errors or Dexie errors
-      if (dexieErrorSeen || consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-        console.warn(`[waitForProfileReady] Breaking due to ${consecutiveErrors} consecutive errors`);
-        break;
-      }
-    }
-    await sleep(pollInterval);
-  }
-  
-  console.warn(`[waitForProfileReady] Timeout reached after ${Date.now() - start}ms`);
-  return null;
-}
 
 /**
  * Create or update user profile
@@ -672,134 +601,44 @@ export async function getUsersByOnboardingStatus(completed: boolean): Promise<Us
   }, 'getUsersByOnboardingStatus', []);
 }
 
-// Security: Mutex lock for user creation to prevent race conditions
-const userCreationLocks = new Map<string, Promise<number>>();
-
-/**
- * Create user with full profile data and duplicate prevention
- * Enhanced with proper transaction isolation and optimistic locking
- */
 export async function createUser(userData: Partial<User>): Promise<number> {
   return safeDbOperation(async () => {
     const database = getDatabase();
     if (!database) throw new Error('Database not available');
 
-    // Security: Use a lock key based on a unique identifier (e.g., email or temp ID)
-    const lockKey = userData.email || `temp-${Date.now()}`;
-
-    // Security: Check if user creation is already in progress
-    if (userCreationLocks.has(lockKey)) {
-      console.log('🔒 User creation already in progress, waiting for completion...');
-      try {
-        return await userCreationLocks.get(lockKey)!;
-      } catch (error) {
-        // If the original creation failed, allow retry
-        userCreationLocks.delete(lockKey);
+    return await database.transaction('rw', database.users, async () => {
+      // Check for existing completed user
+      // CRITICAL FIX: Use filter() for boolean fields instead of where().equals()
+      // Dexie doesn't support boolean in .equals() for indexed queries
+      const existingUser = await database.users
+        .filter(u => u.onboardingComplete === true)
+        .first();
+      if (existingUser) {
+        console.log('[createUser] Found existing completed user:', existingUser.id);
+        return existingUser.id!;
       }
-    }
 
-    // Security: Create a promise for this user creation and lock it
-    const creationPromise = (async (): Promise<number> => {
-      try {
-        // Use a comprehensive transaction with explicit isolation
-        const id = await database.transaction('rw!', [database.users, database.onboardingSessions], async () => {
-          console.log('🔒 Starting atomic user creation transaction with exclusive lock');
+      // Create a new user
+      const userToAdd: Omit<User, 'id'> = {
+        goal: userData.goal || 'habit',
+        experience: userData.experience || 'beginner',
+        preferredTimes: userData.preferredTimes || ['morning'],
+        daysPerWeek: userData.daysPerWeek || 3,
+        consents: userData.consents || {
+          data: true,
+          gdpr: true,
+          push: true,
+        },
+        onboardingComplete: userData.onboardingComplete || false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...userData,
+      };
 
-          // Security: Check for existing users with sanitized email
-          if (userData.email) {
-            const sanitizedEmail = sanitizeString(userData.email, 255).toLowerCase();
-            const existingByEmail = await database.users
-              .filter(u => u.email?.toLowerCase() === sanitizedEmail)
-              .first();
-
-            if (existingByEmail) {
-              console.log('⚠️ User with email already exists:', existingByEmail.id);
-              return existingByEmail.id!;
-            }
-          }
-
-          // Check for existing completed users
-          const existingUsers = await database.users.toArray();
-
-          const completedUser = existingUsers.find(u => u.onboardingComplete);
-          if (completedUser) {
-            console.log('⚠️ Found completed user, returning existing ID:', completedUser.id);
-            return completedUser.id!;
-          }
-
-          // Security: Check for recent users to prevent race conditions (shorter window)
-          const recentThreshold = new Date(Date.now() - 5000); // 5 seconds
-          const recentUser = existingUsers.find(u => u.createdAt > recentThreshold);
-          if (recentUser) {
-            console.log('⚠️ Found recent user (potential race condition), returning ID:', recentUser.id);
-            return recentUser.id!;
-          }
-
-          // Create unique identifier with timestamp and random component
-          const creationId = `creation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-          // Security: Sanitize and validate all user input
-          const userToAdd: Omit<User, 'id'> = {
-            goal: userData.goal || 'habit',
-            experience: userData.experience || 'beginner',
-            preferredTimes: sanitizeArray(userData.preferredTimes || ['morning'], 10),
-            daysPerWeek: sanitizeNumber(userData.daysPerWeek, 1, 7, 3),
-            consents: userData.consents || {
-              data: true,
-              gdpr: true,
-              push: true
-            },
-            onboardingComplete: userData.onboardingComplete || false,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            // Security: Sanitize all optional string fields
-            name: sanitizeString(userData.name || `temp_${creationId}`, 255),
-            email: userData.email ? sanitizeString(userData.email, 255).toLowerCase() : undefined,
-            ...userData
-          };
-
-          try {
-            const newId = await database.users.add(userToAdd);
-            console.log('✅ User created successfully with enhanced transaction:', newId);
-
-            // Security: Verify the user was actually created
-            const verifyUser = await database.users.get(newId);
-            if (!verifyUser) {
-              throw new Error('User creation verification failed');
-            }
-
-            return newId as number;
-          } catch (addError: any) {
-            console.error('❌ User creation failed in transaction:', addError);
-
-            // Security: Handle constraint violations gracefully
-            if (addError.name === 'ConstraintError' || addError.message?.includes('constraint')) {
-              console.log('⚠️ Constraint violation, checking for existing user...');
-              const concurrentUser = (await database.users.toArray())
-                .filter(u => u.createdAt && u.createdAt > recentThreshold)
-                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-
-              if (concurrentUser) {
-                console.log('⚠️ Concurrent user creation detected, using existing:', concurrentUser.id);
-                return concurrentUser.id!;
-              }
-            }
-
-            throw addError;
-          }
-        });
-
-        return id;
-      } finally {
-        // Security: Always clean up the lock
-        userCreationLocks.delete(lockKey);
-      }
-    })();
-
-    // Security: Store the promise to prevent concurrent creations
-    userCreationLocks.set(lockKey, creationPromise);
-
-    return await creationPromise;
+      const newId = await database.users.add(userToAdd);
+      console.log('User created successfully:', newId);
+      return newId as number;
+    });
   }, 'createUser');
 }
 
@@ -971,6 +810,25 @@ export async function recordCoachingFeedback(
     } as Omit<CoachingFeedback, 'id'>);
     return id as number;
   }, 'recordCoachingFeedback');
+}
+
+/** Record a coaching interaction entry */
+export async function recordCoachingInteraction(
+  data: Omit<CoachingInteraction, 'id' | 'createdAt'>
+): Promise<number> {
+  if (typeof window === 'undefined') {
+    return 0;
+  }
+
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    const id = await database.coachingInteractions.add({
+      ...data,
+      createdAt: new Date(),
+    } as Omit<CoachingInteraction, 'id'>);
+    return id as number;
+  }, 'recordCoachingInteraction', 0);
 }
 
 /** Get recent coaching interactions */
@@ -1257,6 +1115,31 @@ export async function getUserGoals(userId: number, status?: Goal['status']): Pro
     }
     return [];
   }, 'getUserGoals', []);
+}
+
+export async function getPrimaryGoal(userId: number): Promise<Goal | null> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+    const goal = await db.goals
+      .where('userId')
+      .equals(userId)
+      .and(g => g.isPrimary === true)
+      .first();
+    return goal || null;
+  }, 'getPrimaryGoal', null);
+}
+
+export async function setPrimaryGoal(userId: number, goalId: number): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+
+    await db.transaction('rw', db.goals, async () => {
+      // Clear existing primary flags for this user
+      await db.goals.where('userId').equals(userId).modify({ isPrimary: false });
+      // Mark specified goal as primary and active
+      await db.goals.update(goalId, { isPrimary: true, status: 'active', updatedAt: new Date() });
+    });
+  }, 'setPrimaryGoal');
 }
 
 /**
@@ -3377,7 +3260,7 @@ export const dbUtils = {
   updateUser,
   upsertUser,
   completeOnboardingAtomic,
-  waitForProfileReady,
+  
   getUser,
   getUsersByOnboardingStatus,
   migrateFromLocalStorage,
@@ -3395,6 +3278,7 @@ export const dbUtils = {
   ensureCoachingTablesExist,
   createCoachingProfile,
   recordCoachingFeedback,
+  recordCoachingInteraction,
   getCoachingInteractions,
   updateCoachingProfile,
   
@@ -3402,6 +3286,8 @@ export const dbUtils = {
   createGoal,
   updateGoal,
   getUserGoals,
+  getPrimaryGoal,
+  setPrimaryGoal,
   getGoal,
   getGoalWithMilestones,
   getGoalMilestones,
