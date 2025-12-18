@@ -428,7 +428,7 @@ export function PlanSetupWizard(props: {
                       onDistanceChange?.(chip.key)
                     }}
                     className={cn(
-                      'rounded-full h-10 px-5 shrink-0',
+                      'rounded-full h-10 px-6 shrink-0',
                       active
                         ? 'bg-emerald-400 text-neutral-950 hover:bg-emerald-300'
                         : 'bg-white/10 text-white hover:bg-white/15'

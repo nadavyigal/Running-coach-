@@ -9,15 +9,14 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { 
-  Target, 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  Target,
+  TrendingUp,
+  TrendingDown,
   AlertTriangle,
   CheckCircle2,
   Clock,
   Calendar,
-  Plus,
   Settings,
   Trophy,
   Zap,
@@ -27,7 +26,6 @@ import {
   Sparkles,
   Award
 } from 'lucide-react';
-import { SimpleGoalForm } from './simple-goal-form';
 import { GoalAnalyticsInsights } from './goal-analytics-insights';
 import { toast } from '@/components/ui/use-toast';
 
@@ -88,7 +86,6 @@ export function GoalProgressDashboard({ userId, className = '' }: GoalProgressDa
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [filterStatus, setFilterStatus] = useState('active');
-  const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<GoalWithProgress | null>(null);
 
   useEffect(() => {
@@ -280,14 +277,13 @@ export function GoalProgressDashboard({ userId, className = '' }: GoalProgressDa
             <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">No Goals Yet</h3>
             <p className="text-gray-600 mb-4">
-              {filterStatus === 'active' 
-                ? "Create your first goal to start tracking your running progress!" 
+              {filterStatus === 'active'
+                ? "Go to your Profile to create your first goal and get a personalized training plan."
                 : `No ${filterStatus} goals found.`}
             </p>
-            <Button onClick={() => setShowCreateWizard(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Your First Goal
-            </Button>
+            <p className="text-sm text-gray-500">
+              Tap the Profile icon in the bottom navigation to get started.
+            </p>
           </CardContent>
         </Card>
       )}
@@ -397,11 +393,6 @@ export function GoalProgressDashboard({ userId, className = '' }: GoalProgressDa
               <SelectItem value="all">All Goals</SelectItem>
             </SelectContent>
           </Select>
-          
-          <Button onClick={() => setShowCreateWizard(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Goal
-          </Button>
         </div>
       </div>
 
@@ -433,17 +424,6 @@ export function GoalProgressDashboard({ userId, className = '' }: GoalProgressDa
           />
         </TabsContent>
       </Tabs>
-
-      {/* Goal Creation Form */}
-      <SimpleGoalForm
-        isOpen={showCreateWizard}
-        onClose={() => setShowCreateWizard(false)}
-        userId={userId}
-        onGoalCreated={() => {
-          loadGoalsProgress();
-          // Toast is already shown by SimpleGoalForm with SMART score
-        }}
-      />
     </div>
   );
 }

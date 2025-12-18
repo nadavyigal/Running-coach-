@@ -104,9 +104,9 @@ function CatalogView(props: {
             )}
             onClick={() => onSelectTemplate(template)}
           >
-            <CardContent className="p-4 flex items-center gap-4">
+            <CardContent className="p-4 flex items-center gap-4 overflow-hidden">
               <PlanBadge label={template.distanceLabel} accentClassName={template.accentClassName} />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="text-lg font-semibold truncate">{template.name}</div>
                 <div className="text-sm text-white/70">
                   {template.recommendedWeeks} weeks • {formatDistanceKm(template.distanceKm)}
