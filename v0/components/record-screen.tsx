@@ -14,7 +14,6 @@ import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { GPSAccuracyIndicator } from "@/components/gps-accuracy-indicator"
-import { workoutTypeToRunType } from "@/lib/run-recording"
 import { GPSMonitoringService, type GPSAccuracyData } from "@/lib/gps-monitoring"
 import { routeRecommendationService, type Route } from "@/lib/route-recommendations"
 
@@ -848,8 +847,6 @@ export function RecordScreen() {
         open={showAddActivityModal}
         onOpenChange={setShowAddActivityModal}
         initialStep="upload"
-        workoutId={currentWorkout?.type === "rest" ? undefined : currentWorkout?.id}
-        runTypeHint={currentWorkout ? workoutTypeToRunType(currentWorkout.type) : undefined}
         onActivityAdded={() => router.push("/")}
       />
     </div>
