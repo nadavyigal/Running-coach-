@@ -721,6 +721,12 @@ export interface Run {
   endAccuracy?: number; // GPS accuracy at end (meters)
   averageAccuracy?: number; // Average GPS accuracy during run (meters)
   shoeId?: number;
+  importSource?: string; // e.g. "image", "manual", "strava"
+  importConfidencePct?: number;
+  importRequestId?: string;
+  importMethod?: string;
+  importModel?: string;
+  importParserVersion?: string;
   completedAt: Date;
   createdAt: Date;
   updatedAt?: Date;

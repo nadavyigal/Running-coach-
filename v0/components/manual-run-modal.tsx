@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,7 +13,8 @@ import { type Run } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { planAdjustmentService } from "@/lib/planAdjustmentService"
-import { analyzeActivityImage } from "@/lib/ai-activity-client"
+import { AiActivityAnalysisError, analyzeActivityImage } from "@/lib/ai-activity-client"
+import { trackAnalyticsEvent } from "@/lib/analytics"
 
 interface ManualRunModalProps {
   isOpen: boolean
@@ -29,14 +30,33 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
   const [notes, setNotes] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [imageImportMeta, setImageImportMeta] = useState<{
+    requestId?: string
+    confidence?: number
+    method?: string
+    model?: string
+    parserVersion?: string
+  } | null>(null)
 
   const { toast } = useToast()
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
 
   const resetForm = () => {
     setDistance("")
     setDuration("")
     setType('easy')
     setNotes("")
+    setImageImportMeta(null)
+    setPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current)
+      return null
+    })
   }
 
   const saveRun = async (
@@ -46,6 +66,13 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
       notes?: string
       typeOverride?: Run['type']
       completedAt?: Date
+      importMeta?: {
+        requestId?: string
+        confidence?: number
+        method?: string
+        model?: string
+        parserVersion?: string
+      }
     },
     autoClose = true,
   ) => {
@@ -73,7 +100,13 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
         pace,
         calories,
         notes: (runDetails.notes ?? notes).trim() || undefined,
-        completedAt: runDetails.completedAt || new Date()
+        completedAt: runDetails.completedAt || new Date(),
+        ...(runDetails.importMeta?.requestId ? { importRequestId: runDetails.importMeta.requestId } : {}),
+        ...(typeof runDetails.importMeta?.confidence === "number" ? { importConfidencePct: runDetails.importMeta.confidence } : {}),
+        ...(runDetails.importMeta?.method ? { importMethod: runDetails.importMeta.method } : {}),
+        ...(runDetails.importMeta?.model ? { importModel: runDetails.importMeta.model } : {}),
+        ...(runDetails.importMeta?.parserVersion ? { importParserVersion: runDetails.importMeta.parserVersion } : {}),
+        ...(runDetails.importMeta ? { importSource: "image" } : {}),
       }
 
       await dbUtils.createRun(runData)
@@ -135,6 +168,7 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
       distanceKm,
       durationSeconds,
       notes,
+      importMeta: imageImportMeta ?? undefined,
     })
   }
 
@@ -143,28 +177,108 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
     event.target.value = ""
     if (!file) return
 
+    const maxSize = 6 * 1024 * 1024
+    const allowed = ["image/jpeg", "image/png", "image/webp"]
+    if (!allowed.includes(file.type)) {
+      toast({
+        title: "Unsupported File",
+        description: "Please upload a JPG, PNG, or WebP image.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (file.size > maxSize) {
+      toast({
+        title: "File Too Large",
+        description: "Please upload an image under 6MB.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current)
+      return URL.createObjectURL(file)
+    })
+
     setIsAnalyzing(true)
+    trackAnalyticsEvent("run_image_analysis_started", {
+      source: "manual_run_modal",
+      fileType: file.type,
+      fileSizeBytes: file.size,
+    }).catch(() => undefined)
     try {
       const result = await analyzeActivityImage(file)
       const durationSeconds = result.durationSeconds
+      const confidence = result.confidence ?? 0
 
       setDistance(result.distanceKm.toString())
       setDuration(formatDuration(durationSeconds))
       setType((result.type as Run['type']) || 'easy')
       setNotes((current) => current || result.notes || "")
+      setImageImportMeta({
+        requestId: result.requestId,
+        confidence,
+        method: result.method,
+        model: result.model,
+        parserVersion: result.parserVersion,
+      })
 
-      await saveRun(
-        {
-          distanceKm: result.distanceKm,
-          durationSeconds,
-          notes: result.notes,
-          typeOverride: (result.type as Run['type']) || 'easy',
-          completedAt: result.completedAt ? new Date(result.completedAt) : new Date(),
-        },
-        true,
-      )
+      trackAnalyticsEvent("run_image_analysis_succeeded", {
+        source: "manual_run_modal",
+        confidence,
+        requestId: result.requestId,
+        method: result.method,
+        model: result.model,
+        hasCompletedAt: Boolean(result.completedAt),
+        hasPace: Boolean(result.paceSecondsPerKm),
+      }).catch(() => undefined)
+
+      if (confidence >= 70) {
+        trackAnalyticsEvent("run_image_auto_saved", {
+          source: "manual_run_modal",
+          confidence,
+          requestId: result.requestId,
+          method: result.method,
+        }).catch(() => undefined)
+        await saveRun(
+          {
+            distanceKm: result.distanceKm,
+            durationSeconds,
+            notes: result.notes,
+            typeOverride: (result.type as Run["type"]) || "easy",
+            completedAt: result.completedAt ? new Date(result.completedAt) : new Date(),
+            importMeta: {
+              requestId: result.requestId,
+              confidence,
+              method: result.method,
+              model: result.model,
+              parserVersion: result.parserVersion,
+            },
+          },
+          true,
+        )
+      } else {
+        trackAnalyticsEvent("run_image_requires_review", {
+          source: "manual_run_modal",
+          confidence,
+          requestId: result.requestId,
+          method: result.method,
+        }).catch(() => undefined)
+        toast({
+          title: "Review and save",
+          description: "We pre-filled the form from your image. Please confirm the details before saving.",
+        })
+      }
     } catch (error) {
       console.error('AI upload failed', error)
+      trackAnalyticsEvent("run_image_analysis_failed", {
+        source: "manual_run_modal",
+        error: error instanceof Error ? error.message : "Unknown error",
+        requestId: error instanceof AiActivityAnalysisError ? error.requestId : undefined,
+        errorCode: error instanceof AiActivityAnalysisError ? error.errorCode : undefined,
+      }).catch(() => undefined)
       toast({
         title: "AI Analysis Failed",
         description: error instanceof Error ? error.message : "Unable to read the workout image.",
@@ -259,11 +373,20 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
               Upload screenshot
             </Label>
             <p className="text-xs text-gray-600 mt-1">Let AI extract your run from a workout photo.</p>
+            {previewUrl && (
+              <div className="mt-3">
+                <img
+                  src={previewUrl}
+                  alt="Uploaded workout preview"
+                  className="max-h-40 rounded-md border object-contain"
+                />
+              </div>
+            )}
             <div className="mt-3">
               <input
                 id="ai-run-upload"
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/webp"
                 onChange={handleAiUpload}
                 className="hidden"
               />

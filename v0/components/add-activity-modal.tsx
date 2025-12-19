@@ -1,8 +1,9 @@
 "use client"
 
 import type React from "react"
+import type { Run } from "@/lib/db"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,7 +15,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns"
 import { Heart, Watch, Camera, Edit, Upload, CalendarIcon, Zap, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { analyzeActivityImage } from "@/lib/ai-activity-client"
+import { AiActivityAnalysisError, analyzeActivityImage } from "@/lib/ai-activity-client"
+import { trackAnalyticsEvent } from "@/lib/analytics"
 
 interface AddActivityModalProps {
   open: boolean
@@ -25,6 +27,7 @@ interface AddActivityModalProps {
 export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddActivityModalProps) {
   const [step, setStep] = useState<"method" | "manual" | "upload">("method")
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [activityData, setActivityData] = useState({
     type: "run",
     distance: "",
@@ -36,7 +39,20 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [imageImportMeta, setImageImportMeta] = useState<{
+    requestId?: string
+    confidence?: number
+    method?: string
+    model?: string
+    parserVersion?: string
+  } | null>(null)
   const { toast } = useToast()
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
 
   const formattedSelectedDate = useMemo(() => (selectedDate ? format(selectedDate, "PPP") : "Pick a date"), [selectedDate])
 
@@ -96,15 +112,20 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
     })
     setSelectedDate(new Date())
     setError(null)
+    setImageImportMeta(null)
+    setPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current)
+      return null
+    })
   }
 
   const parsePaceToSeconds = (pace: string) => {
     if (!pace) return undefined
-    if (pace.includes(":")) {
-      const [minutes, seconds] = pace.split(":").map((part) => Number.parseInt(part, 10))
-      if (Number.isFinite(minutes) && Number.isFinite(seconds)) {
-        return minutes * 60 + seconds
-      }
+    const match = pace.trim().match(/(\d{1,2})\s*:\s*(\d{1,2})/)
+    if (match) {
+      const minutes = Number.parseInt(match[1], 10)
+      const seconds = Number.parseInt(match[2], 10)
+      if (Number.isFinite(minutes) && Number.isFinite(seconds)) return minutes * 60 + seconds
     }
 
     const numericPace = Number.parseFloat(pace)
@@ -118,7 +139,17 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
     return `${minutes}:${seconds.toString().padStart(2, "0")}`
   }
 
-  const persistActivity = async (data: typeof activityData, date: Date) => {
+  const persistActivity = async (
+    data: typeof activityData,
+    date: Date,
+    importMeta?: {
+      requestId?: string
+      confidence?: number
+      method?: string
+      model?: string
+      parserVersion?: string
+    },
+  ) => {
     const { dbUtils } = await import("@/lib/dbUtils")
     const user = await dbUtils.getCurrentUser()
 
@@ -141,15 +172,25 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
     const calories = data.calories ? Number.parseFloat(data.calories) : undefined
     const caloriesValue = Number.isFinite(calories) ? calories : undefined
 
-    const runData = {
+    const runDataBase = {
       userId: user.id,
       type: "other" as const,
       distance,
       duration: Math.round(durationMinutes * 60),
-      pace: paceSeconds,
-      calories: caloriesValue,
-      notes: data.notes,
       completedAt: date,
+    }
+
+    const runData: Omit<Run, "id" | "createdAt"> = {
+      ...runDataBase,
+      ...(typeof paceSeconds === "number" ? { pace: paceSeconds } : {}),
+      ...(typeof caloriesValue === "number" ? { calories: caloriesValue } : {}),
+      ...(data.notes.trim() ? { notes: data.notes.trim() } : {}),
+      ...(importMeta?.requestId ? { importRequestId: importMeta.requestId } : {}),
+      ...(typeof importMeta?.confidence === "number" ? { importConfidencePct: importMeta.confidence } : {}),
+      ...(importMeta?.method ? { importMethod: importMeta.method } : {}),
+      ...(importMeta?.model ? { importModel: importMeta.model } : {}),
+      ...(importMeta?.parserVersion ? { importParserVersion: importMeta.parserVersion } : {}),
+      ...(importMeta ? { importSource: "image" } : {}),
       updatedAt: new Date(),
     }
 
@@ -160,7 +201,7 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
     setIsSaving(true)
     setError(null)
     try {
-      await persistActivity(activityData, selectedDate)
+      await persistActivity(activityData, selectedDate, imageImportMeta ?? undefined)
       toast({ title: "Activity saved", description: "Your run was added to Today's feed." })
       resetForm()
       onOpenChange(false)
@@ -177,10 +218,12 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
+    event.target.value = ""
     if (!file) return
 
-    if (!file.type.startsWith("image/")) {
-      setError("Please upload an image file")
+    const allowed = ["image/jpeg", "image/png", "image/webp"]
+    if (!allowed.includes(file.type)) {
+      setError("Unsupported file type. Please upload a JPG, PNG, or WebP image.")
       return
     }
 
@@ -190,14 +233,40 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
       return
     }
 
+    setPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current)
+      return URL.createObjectURL(file)
+    })
+
     setIsAnalyzing(true)
     setError(null)
+    trackAnalyticsEvent("run_image_analysis_started", {
+      source: "add_activity_modal",
+      fileType: file.type,
+      fileSizeBytes: file.size,
+    }).catch(() => undefined)
 
     try {
       const result = await analyzeActivityImage(file)
+      trackAnalyticsEvent("run_image_analysis_succeeded", {
+        source: "add_activity_modal",
+        confidence: result.confidence ?? 0,
+        requestId: result.requestId,
+        method: result.method,
+        model: result.model,
+        hasCompletedAt: Boolean(result.completedAt),
+        hasPace: Boolean(result.paceSecondsPerKm),
+      }).catch(() => undefined)
 
       const normalizedDate = result.completedAt ? new Date(result.completedAt) : new Date()
       setSelectedDate(normalizedDate)
+      setImageImportMeta({
+        requestId: result.requestId,
+        confidence: result.confidence,
+        method: result.method,
+        model: result.model,
+        parserVersion: result.parserVersion,
+      })
 
       const updatedActivity = {
         type: result.type || "run",
@@ -211,7 +280,19 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
       setActivityData(updatedActivity)
 
       if (result.confidence && result.confidence >= 70 && result.distanceKm && result.durationSeconds) {
-        await persistActivity(updatedActivity, normalizedDate)
+        trackAnalyticsEvent("run_image_auto_saved", {
+          source: "add_activity_modal",
+          confidence: result.confidence,
+          requestId: result.requestId,
+          method: result.method,
+        }).catch(() => undefined)
+        await persistActivity(updatedActivity, normalizedDate, {
+          requestId: result.requestId,
+          confidence: result.confidence,
+          method: result.method,
+          model: result.model,
+          parserVersion: result.parserVersion,
+        })
         toast({ title: "Activity logged", description: "AI imported your run automatically." })
         resetForm()
         onOpenChange(false)
@@ -219,6 +300,12 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
           onActivityAdded()
         }
       } else {
+        trackAnalyticsEvent("run_image_requires_review", {
+          source: "add_activity_modal",
+          confidence: result.confidence ?? 0,
+          requestId: result.requestId,
+          method: result.method,
+        }).catch(() => undefined)
         toast({
           title: "Review details",
           description: "We pre-filled the form. Please confirm before saving.",
@@ -227,6 +314,12 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
       }
     } catch (err) {
       console.error("AI analysis failed", err)
+      trackAnalyticsEvent("run_image_analysis_failed", {
+        source: "add_activity_modal",
+        error: err instanceof Error ? err.message : "Unknown error",
+        requestId: err instanceof AiActivityAnalysisError ? err.requestId : undefined,
+        errorCode: err instanceof AiActivityAnalysisError ? err.errorCode : undefined,
+      }).catch(() => undefined)
       setError(err instanceof Error ? err.message : "Failed to analyze the image")
     } finally {
       setIsAnalyzing(false)
@@ -421,6 +514,16 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
                 Upload a photo of your workout from any fitness app or device
               </p>
 
+              {previewUrl && (
+                <div className="flex justify-center mb-4">
+                  <img
+                    src={previewUrl}
+                    alt="Uploaded activity preview"
+                    className="max-h-48 rounded-md border object-contain"
+                  />
+                </div>
+              )}
+
               {isAnalyzing ? (
                 <div className="flex items-center justify-center gap-2 text-gray-600">
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -430,7 +533,7 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
                 <>
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/png,image/jpeg,image/webp"
                     onChange={handleFileUpload}
                     className="hidden"
                     id="file-upload"

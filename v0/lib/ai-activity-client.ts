@@ -9,9 +9,29 @@ export const AiActivityResultSchema = z.object({
   completedAt: z.string().optional(),
   type: z.string().optional(),
   confidence: z.number().min(0).max(100).optional(),
+  requestId: z.string().optional(),
+  method: z.string().optional(),
+  model: z.string().optional(),
+  parserVersion: z.string().optional(),
+  preprocessing: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
 })
 
 export type AiActivityResult = z.infer<typeof AiActivityResultSchema>
+
+export class AiActivityAnalysisError extends Error {
+  requestId?: string
+  errorCode?: string
+  status?: number
+
+  constructor(message: string, options?: { requestId?: string; errorCode?: string; status?: number }) {
+    super(message)
+    this.name = "AiActivityAnalysisError"
+    this.requestId = options?.requestId
+    this.errorCode = options?.errorCode
+    this.status = options?.status
+  }
+}
 
 export async function analyzeActivityImage(file: File): Promise<AiActivityResult> {
   const formData = new FormData()
@@ -26,7 +46,11 @@ export async function analyzeActivityImage(file: File): Promise<AiActivityResult
 
   if (!response.ok) {
     const message = typeof payload?.error === "string" ? payload.error : "Unable to analyze image"
-    throw new Error(message)
+    throw new AiActivityAnalysisError(message, {
+      requestId: typeof payload?.requestId === "string" ? payload.requestId : undefined,
+      errorCode: typeof payload?.errorCode === "string" ? payload.errorCode : undefined,
+      status: response.status,
+    })
   }
 
   // API returns {activity: {...}, confidence: number}
@@ -36,16 +60,37 @@ export async function analyzeActivityImage(file: File): Promise<AiActivityResult
     throw new Error("No activity data in API response")
   }
 
+  const rawConfidence = payload.confidence
+  const normalizedConfidence =
+    typeof rawConfidence === "number" && Number.isFinite(rawConfidence)
+      ? rawConfidence <= 1
+        ? Math.round(rawConfidence * 100)
+        : rawConfidence
+      : undefined
+
+  const durationSeconds =
+    typeof activityData.durationSeconds === "number" && Number.isFinite(activityData.durationSeconds)
+      ? activityData.durationSeconds
+      : activityData.durationMinutes * 60 // Convert minutes to seconds
+
+  const meta = payload.meta || {}
+
   // Transform API response format to match our schema
   const transformed = {
     distanceKm: activityData.distance,
-    durationSeconds: activityData.durationMinutes * 60, // Convert minutes to seconds
+    durationSeconds,
     paceSecondsPerKm: activityData.paceSeconds,
     calories: activityData.calories,
     notes: activityData.notes,
     completedAt: activityData.date,
     type: activityData.type,
-    confidence: payload.confidence,
+    confidence: normalizedConfidence,
+    requestId: typeof payload.requestId === "string" ? payload.requestId : undefined,
+    method: typeof meta.method === "string" ? meta.method : undefined,
+    model: typeof meta.model === "string" ? meta.model : undefined,
+    parserVersion: typeof meta.parserVersion === "string" ? meta.parserVersion : undefined,
+    preprocessing: Array.isArray(meta.preprocessing) ? meta.preprocessing : undefined,
+    warnings: Array.isArray(meta.warnings) ? meta.warnings : undefined,
   }
 
   const parsed = AiActivityResultSchema.safeParse(transformed)
