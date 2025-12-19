@@ -154,18 +154,19 @@ export class SecurityMonitor {
     // Monitor for unusual navigation patterns
     let navigationCount = 0;
     const originalPushState = history.pushState;
+    const monitor = this;
     history.pushState = function(...args) {
       navigationCount++;
       if (navigationCount > 20) {
-        this.trackSecurityEvent({
+        monitor.trackSecurityEvent({
           type: 'excessive_navigation',
           severity: 'warning',
           message: 'Excessive navigation attempts detected',
           data: { navigationCount },
         });
       }
-      return originalPushState.apply(this, args);
-    }.bind(this);
+      return originalPushState.apply(history, args as any);
+    };
   }
 
   // Monitor for XSS attempts
@@ -175,11 +176,12 @@ export class SecurityMonitor {
     // Monitor innerHTML assignments
     const originalInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
     if (originalInnerHTML && originalInnerHTML.set) {
+      const monitor = this;
       Object.defineProperty(Element.prototype, 'innerHTML', {
-        set: function(value: string) {
+        set(value: string) {
           // Check for XSS patterns
-          if (this.detectSuspiciousContent(value)) {
-            this.trackSecurityEvent({
+          if (monitor.detectSuspiciousContent(value)) {
+            monitor.trackSecurityEvent({
               type: 'xss_attempt',
               severity: 'critical',
               message: 'Potential XSS attempt detected in innerHTML',
@@ -187,7 +189,7 @@ export class SecurityMonitor {
             });
           }
           return originalInnerHTML.set!.call(this, value);
-        }.bind(this),
+        },
         get: originalInnerHTML.get,
         configurable: true,
       });
@@ -195,11 +197,12 @@ export class SecurityMonitor {
 
     // Monitor for script injection attempts
     const originalCreateElement = document.createElement;
+    const monitor = this;
     document.createElement = function(tagName: string) {
-      const element = originalCreateElement.call(this, tagName);
+      const element = originalCreateElement.call(document, tagName);
       
       if (tagName.toLowerCase() === 'script') {
-        this.trackSecurityEvent({
+        monitor.trackSecurityEvent({
           type: 'script_creation',
           severity: 'warning',
           message: 'Dynamic script element creation detected',
@@ -208,7 +211,7 @@ export class SecurityMonitor {
       }
       
       return element;
-    }.bind(this);
+    };
   }
 
   // Monitor DOM manipulation

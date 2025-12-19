@@ -649,6 +649,7 @@ vi.mock("@/lib/db", () => {
   
   return {
     db: mockDb,
+    resetDatabaseInstance: vi.fn().mockResolvedValue(undefined),
     
     dbUtils: {
       getCurrentUser: vi.fn().mockResolvedValue(mockUser),

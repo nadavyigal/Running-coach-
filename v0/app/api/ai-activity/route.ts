@@ -274,11 +274,10 @@ EXIF date hint (optional): ${preprocessed.exifDateIso ?? "none"}`
             ],
           },
         ],
-        apiKey: process.env.OPENAI_API_KEY,
-        maxTokens: 800,
+        maxOutputTokens: 800,
       })
 
-      ocrText = ocrResult.text()
+      ocrText = ocrResult.text
       const parsedFromText = parseActivityFromText(ocrText)
       extracted = {
         type: extracted?.type || "run",

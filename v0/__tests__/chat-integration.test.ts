@@ -1,17 +1,40 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+vi.mock('ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('ai')>();
+  return {
+    ...actual,
+    generateText: vi.fn(),
+    streamText: vi.fn(),
+  };
+});
+
+vi.mock('@ai-sdk/openai', () => ({
+  openai: vi.fn((model) => ({ model })),
+}));
+
+vi.mock('@/lib/dbUtils', () => ({
+  dbUtils: {
+    getCurrentUser: vi.fn(),
+  },
+}));
+
 import { chatDriver } from '../lib/chatDriver';
 
 // Mock environment for testing
-const originalEnv = process.env;
+const originalEnv = { ...process.env };
 
 describe('Chat Integration Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     process.env = { ...originalEnv };
+    chatDriver.__resetForTests();
   });
   
   afterEach(() => {
     process.env = originalEnv;
+    vi.useRealTimers();
   });
 
   describe('Performance Targets', () => {

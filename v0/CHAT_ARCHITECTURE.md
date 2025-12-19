@@ -1,88 +1,53 @@
 # Chat Architecture: Predictable & Debuggable AI Chat
 
-This document outlines the new centralized chat architecture that provides predictable error handling, payload management, and comprehensive observability.
+This document outlines the centralized chat architecture that provides predictable error handling, payload management, and observability.
 
 ## Architecture Overview
 
 ### Core Components
 
-1. **ChatDriver (`lib/chatDriver.ts`)**: Centralized AI service wrapper
-2. **Server-Only Endpoints**: Client never talks directly to AI vendor APIs
-3. **Payload Management**: Automatic truncation and token limits
-4. **Typed Error Handling**: Comprehensive error mapping with retry guidance
-5. **Observability**: Request tracing, metrics, and performance monitoring
+1. **ChatDriver (`lib/chatDriver.ts`)**: centralized AI wrapper (payload caps, timeouts, typed errors)
+2. **Server-only endpoints**: clients never call vendor APIs directly
+3. **Payload management**: message truncation + token limits
+4. **Typed errors**: consistent error types with retry guidance
+5. **Observability**: request IDs, logs, health checks
 
 ### Key Features
 
-- ✅ Single server endpoint path (no client-to-vendor calls)
-- ✅ Strict payload caps with token metrics
-- ✅ Streaming toggle with non-streaming fallback
-- ✅ Typed error responses (401/429/5xx mapped to app errors)
-- ✅ RequestId tracing and comprehensive logging
-- ✅ Environment guards with graceful fallbacks
+- Single server endpoint path (no client-to-vendor calls)
+- Strict payload caps with token metrics
+- Streaming toggle with non-streaming fallback
+- Typed error responses (401/429/5xx mapped to app errors)
+- RequestId tracing and comprehensive logging
+- Environment guards with graceful fallbacks
+
+### SDK Versions
+
+- AI SDK: `ai` v5
+- OpenAI provider: `@ai-sdk/openai` v2
+- Streaming contract: server returns `toDataStreamResponse()` output (the `0:{...}` chunked format expected by `useChat`)
 
 ## API Endpoints
 
 ### 1. Health Check: `/api/chat/ping`
 
-**Purpose**: Quick health check for chat service availability
+Purpose: quick health check for chat availability and latency.
 
 ```bash
 curl http://localhost:3000/api/chat/ping
 ```
 
-**Response (Healthy)**:
-```json
-{
-  "success": true,
-  "available": true,
-  "model": "gpt-4o-mini",
-  "latency": 150,
-  "serviceLatency": 120,
-  "quota": {
-    "remaining": 180000,
-    "resetAt": "2025-01-15T10:30:00.000Z"
-  },
-  "timestamp": "2025-01-15T09:30:00.000Z"
-}
-```
-
-**Response (Unhealthy)**:
-```json
-{
-  "success": false,
-  "available": false,
-  "error": "OpenAI API key not configured",
-  "latency": 5,
-  "timestamp": "2025-01-15T09:30:00.000Z"
-}
-```
-
 ### 2. General Chat: `/api/chat`
 
-**GET**: Health check with detailed metrics
-**POST**: Send chat messages
+- `GET`: chat history (secured)
+- `POST`: send chat messages (streaming)
 
 ```bash
-# Health check
-curl http://localhost:3000/api/chat
-
-# Chat request (non-streaming)
 curl -X POST http://localhost:3000/api/chat \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
       {"role": "user", "content": "What should I eat before a long run?"}
-    ],
-    "streaming": false
-  }'
-
-# Chat request (streaming)
-curl -X POST http://localhost:3000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [
-      {"role": "user", "content": "Create a 10K training plan"}
     ],
     "streaming": true
   }'
@@ -90,15 +55,16 @@ curl -X POST http://localhost:3000/api/chat \
 
 ### 3. Onboarding Chat: `/api/onboarding/chat`
 
-**Purpose**: AI-guided onboarding with phase-specific prompts
+Purpose: AI-guided onboarding with phase-specific prompts.
 
 ```bash
 curl -X POST http://localhost:3000/api/onboarding/chat \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
-      {"role": "user", "content": "I want to start running but I'"'"'m a complete beginner"}
+      {"role": "user", "content": "I want to start running but I am a complete beginner"}
     ],
+    "userId": 123,
     "currentPhase": "motivation",
     "streaming": true
   }'
@@ -108,14 +74,14 @@ curl -X POST http://localhost:3000/api/onboarding/chat \
 
 ### Error Types and Responses
 
-| Error Type | HTTP Code | Retry Strategy | Example Response |
-|------------|-----------|----------------|------------------|
-| `auth` | 401/503 | Manual intervention | API key not configured |
-| `rate_limit` | 429 | Wait `retryAfter` seconds | Too many requests |
-| `timeout` | 408 | Retry with shorter message | Request timed out |
-| `quota` | 429 | Wait until quota reset | Monthly limit reached |
-| `server_error` | 500+ | Exponential backoff | AI service unavailable |
-| `validation` | 400 | Fix request format | Invalid message format |
+| Error Type | HTTP Code | Retry Strategy | Notes |
+|-----------|----------:|----------------|-------|
+| `auth` | 401/503 | manual intervention | key missing/invalid |
+| `rate_limit` | 429 | wait `retryAfter` | per-user rate limit |
+| `timeout` | 408 | retry shorter request | hard timeout via abort |
+| `quota` | 429 | wait until reset | monthly token budget |
+| `server_error` | 500+ | exponential backoff | upstream failures |
+| `validation` | 400 | fix request payload | invalid JSON/messages |
 
 ### Example Error Response
 
@@ -132,240 +98,133 @@ curl -X POST http://localhost:3000/api/onboarding/chat \
 ## Performance Targets
 
 ### Latency Targets
-- **P95 ≤ 1.5s** for local requests
-- **P99 ≤ 3.0s** for all requests
-- **Health check ≤ 100ms** (cached)
+
+- P95 <= 1.5s for local requests
+- P99 <= 3.0s for all requests
+- Health check <= 100ms (cached when possible)
 
 ### Payload Limits
-- **Max messages**: 10 per request (auto-truncated)
-- **Max tokens**: 1000 per response
-- **Profile summary**: ≤ 500 characters
-- **Context window**: Last 10 messages + system prompt
+
+- Max messages: 10 per request (auto-truncated)
+- Max output tokens: 1000 per response (configurable)
+- Profile summary: <= 500 characters
+- Context window: last N messages + system prompt
 
 ### Rate Limits
-- **Per user**: 50 requests/hour
-- **Monthly tokens**: 200,000 per user
-- **Concurrent requests**: 10 per user
+
+- Per user: 50 requests/hour
+- Monthly tokens: 200,000 per user
+- Concurrent requests: 10 per user
 
 ## Observability & Analytics
 
 ### Request Tracing
 
-Every request generates a unique `requestId` for full traceability:
+Every request generates a unique `requestId` for traceability:
 
 ```
 [chat:ask] requestId=chat_1755011234567_abc123 Starting chat request
 [chat:ask] requestId=chat_1755011234567_abc123 Messages count: 2, streaming: true
 [chat:payload] requestId=chat_1755011234567_abc123 Prepared payload: {...}
-[chat:ask] requestId=chat_1755011234567_abc123 ✅ Success - duration: 850ms, tokensIn: 45, tokensOut: 120
+[chat:ask] requestId=chat_1755011234567_abc123 OK - duration: 850ms, tokensIn: 45, tokensOut: 120
 ```
-
-### Metrics Captured
-
-- **Request duration** (end-to-end timing)
-- **Tokens in/out** (for cost tracking)
-- **Model used** (for performance analysis)
-- **Error codes** (for reliability monitoring)
-- **Context truncation** (for optimization)
 
 ### Log Patterns
 
 | Pattern | Purpose | Example |
 |---------|---------|---------|
-| `[chat:health]` | Service health | `[chat:health] ✅ Healthy - latency: 120ms` |
-| `[chat:ask]` | Request lifecycle | `[chat:ask] requestId=... Starting chat request` |
-| `[chat:payload]` | Payload processing | `[chat:payload] requestId=... Truncated to 8 messages` |
-| `[chat:error]` | Error handling | `[chat:error] requestId=... OpenAI error: Rate limit exceeded` |
+| `[chat:health]` | service health | `[chat:health] OK - latency: 120ms` |
+| `[chat:ask]` | request lifecycle | `[chat:ask] requestId=... Starting chat request` |
+| `[chat:payload]` | payload processing | `[chat:payload] requestId=... Truncated to 8 messages` |
+| `[chat:error]` | error handling | `[chat:error] requestId=... OpenAI error: Rate limit exceeded` |
 
 ## Environment Configuration
 
-### Required Environment Variables
+### Required
 
 ```bash
-# OpenAI Configuration
 OPENAI_API_KEY=sk-your-api-key-here
+```
 
-# Optional: Model Configuration
+### Optional: Chat Runtime Tuning
+
+These defaults are reflected in `V0/.env.example`.
+
+```bash
 CHAT_DEFAULT_MODEL=gpt-4o-mini
 CHAT_MAX_TOKENS=1000
 CHAT_TIMEOUT_MS=15000
+CHAT_MAX_MESSAGES=10
+CHAT_MAX_PROFILE_SUMMARY_CHARS=500
+CHAT_MONTHLY_TOKEN_BUDGET=200000
+CHAT_HOURLY_REQUEST_LIMIT=50
+CHAT_HEALTH_CACHE_TTL_MS=60000
 ```
 
 ### Graceful Fallbacks
 
-When `OPENAI_API_KEY` is missing:
-1. Health check returns `available: false`
-2. Chat requests return friendly fallback message
-3. Onboarding redirects to guided form
-4. No silent failures or cryptic errors
+When `OPENAI_API_KEY` is missing or invalid:
+
+1. `/api/chat/ping` returns `available: false`
+2. Chat endpoints return a friendly fallback error payload
+3. Onboarding returns `{ fallback: true, redirectToForm: true }`
+4. No silent failures or cryptic vendor errors
 
 ## Testing & Validation
 
 ### Unit Tests
 
 ```bash
-# Run ChatDriver tests
-npm run test -- --run chatDriver
+cd V0
+npm run test -- --run __tests__/chatDriver.test.ts
+```
 
-# Run API integration tests
-npm run test -- --run chat-integration
+### Integration Tests
 
-# Run API endpoint tests
-npm run test -- --run api-chat-ping
+```bash
+cd V0
+npm run test -- --run __tests__/chat-integration.test.ts __tests__/api-chat-ping.test.ts
 ```
 
 ### Smoke Tests
 
 ```bash
-# Health checks
-curl http://localhost:3000/api/health
+# Health
 curl http://localhost:3000/api/chat/ping
 
-# Chat functionality (with API key)
+# Chat (non-streaming)
 curl -X POST http://localhost:3000/api/chat \
   -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"Hello"}],"streaming":false}'
-
-# Onboarding chat
-curl -X POST http://localhost:3000/api/onboarding/chat \
-  -H "Content-Type: application/json" \
-  -d '{"messages":[{"role":"user","content":"test"}],"currentPhase":"motivation"}'
-
-# Error scenarios
-export OPENAI_API_KEY=""
-curl http://localhost:3000/api/chat/ping  # Should return error
-```
-
-### Performance Testing
-
-```bash
-# Load test with multiple concurrent requests
-for i in {1..10}; do
-  curl -X POST http://localhost:3000/api/chat \
-    -H "Content-Type: application/json" \
-    -d '{"messages":[{"role":"user","content":"Test '"$i"'"}],"streaming":false}' &
-done
-wait
-```
-
-## Debugging Guide
-
-### Common Issues
-
-**1. "AI coaching temporarily unavailable"**
-- Check: `OPENAI_API_KEY` environment variable
-- Verify: API key format (starts with `sk-`)
-- Test: `curl http://localhost:3000/api/chat/ping`
-
-**2. Request timeouts**
-- Check: Message length and complexity
-- Try: Shorter messages or non-streaming mode
-- Monitor: Request duration in logs
-
-**3. Rate limit errors**
-- Check: Request frequency per user
-- Wait: For `retryAfter` period
-- Monitor: Token usage in logs
-
-### Log Analysis
-
-Search logs by patterns:
-```bash
-# Find all errors for a request
-grep "requestId=chat_1755011234567_abc123" logs/app.log
-
-# Find all rate limit issues
-grep "rate_limit" logs/app.log
-
-# Monitor performance
-grep "✅ Success" logs/app.log | grep -o "duration: [0-9]*ms"
 ```
 
 ## Migration Guide
 
-### From Existing Chat Routes
+### From direct AI SDK calls to `ChatDriver`
 
-1. **Update imports**: Change from direct AI SDK to ChatDriver
-2. **Replace error handling**: Use typed ChatError responses
-3. **Add request IDs**: Include in all log messages
-4. **Update tests**: Mock ChatDriver instead of AI SDK
+Before:
 
-### Example Migration
+```ts
+import { streamText } from 'ai'
+import { openai } from '@ai-sdk/openai'
 
-**Before**:
-```typescript
-import { streamText } from 'ai';
-const result = await streamText({
-  model: openai("gpt-4"),
-  messages,
-});
+const result = await streamText({ model: openai('gpt-4o-mini'), messages })
+return result.toDataStreamResponse()
 ```
 
-**After**:
-```typescript
-import { chatDriver } from '@/lib/chatDriver';
-const response = await chatDriver.ask({
-  messages,
-  streaming: true,
-});
-if (!response.success) {
-  return handleError(response.error);
-}
+After:
+
+```ts
+import { chatDriver } from '@/lib/chatDriver'
+
+const result = await chatDriver.ask({ messages, streaming: true })
+if (!result.success) return Response.json({ error: result.error.message }, { status: result.error.code })
+return new Response(result.stream)
 ```
 
-## Monitoring & Alerts
+## Risk Notes
 
-### Key Metrics to Monitor
+- Streaming format: keep the `toDataStreamResponse()` / `0:{...}` contract stable for `useChat`.
+- Timeouts: hard timeouts can surface previously hidden hangs; tune via `CHAT_TIMEOUT_MS` if needed.
+- Token budgets: ensure limits align with expected conversation length and costs; tune via `CHAT_*`.
 
-1. **Availability**: Health check success rate
-2. **Latency**: P95/P99 response times
-3. **Error Rate**: 4xx/5xx response percentage
-4. **Token Usage**: Daily/monthly consumption
-5. **Rate Limits**: Users hitting limits
-
-### Recommended Alerts
-
-- Health check failure > 1 minute
-- P95 latency > 2 seconds
-- Error rate > 5%
-- Token usage > 80% of quota
-- High rate limit rejections
-
-## Security Considerations
-
-1. **API Key Protection**: Never expose in client code
-2. **Rate Limiting**: Prevent abuse and cost overruns
-3. **Input Validation**: Sanitize all user inputs
-4. **Request Logging**: Exclude sensitive data from logs
-5. **Error Messages**: Don't expose internal details
-
----
-
-## Quick Reference
-
-### Start Development
-```bash
-cd V0
-npm run dev
-```
-
-### Health Check
-```bash
-curl http://localhost:3000/api/chat/ping
-```
-
-### Test Chat
-```bash
-curl -X POST http://localhost:3000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"messages":[{"role":"user","content":"Hello"}]}'
-```
-
-### View Logs
-```bash
-# Follow real-time logs
-tail -f logs/app.log | grep chat
-
-# Search specific request
-grep "requestId=YOUR_REQUEST_ID" logs/app.log
-```

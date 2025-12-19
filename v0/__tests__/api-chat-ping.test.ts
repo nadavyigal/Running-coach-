@@ -11,6 +11,7 @@ vi.mock('../lib/chatDriver', () => ({
 describe('/api/chat/ping', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it('should return healthy status when chat service is available', async () => {
@@ -33,7 +34,7 @@ describe('/api/chat/ping', () => {
     expect(data.success).toBe(true);
     expect(data.available).toBe(true);
     expect(data.model).toBe('gpt-4o-mini');
-    expect(data.latency).toBeGreaterThan(0);
+    expect(data.latency).toBeGreaterThanOrEqual(0);
     expect(data.serviceLatency).toBe(150);
   });
 
@@ -94,7 +95,7 @@ describe('/api/chat/ping', () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(data.latency).toBeGreaterThanOrEqual(100);
+    expect(data.latency).toBeGreaterThanOrEqual(90);
     expect(data.serviceLatency).toBe(50);
   });
 

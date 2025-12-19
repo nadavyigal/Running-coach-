@@ -315,7 +315,7 @@ async function getAIGoalInsights(userProfile: UserProfile, context: GoalAnalysis
       prompt,
       schema: aiInsightsSchema,
       temperature: 0.7,
-      maxTokens: 2000
+      maxOutputTokens: 2000
     });
 
     return object;

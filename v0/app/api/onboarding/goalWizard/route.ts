@@ -429,7 +429,7 @@ export async function POST(req: NextRequest) {
         { role: "system", content: systemPrompt },
         ...messages.slice(-3) // Last 3 messages for context
       ],
-      maxTokens: 200,
+      maxOutputTokens: 200,
       temperature: 0.7,
     })
 

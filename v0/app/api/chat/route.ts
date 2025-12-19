@@ -47,7 +47,7 @@ function checkRateLimit(userId: string): boolean {
   return requests.count <= RATE_LIMIT_PER_USER_PER_HOUR
 }
 
-async function chatHandler(req: ApiRequest) {
+export async function chatHandler(req: ApiRequest) {
   logger.log('💬 Chat API: Starting request');
   
   try {
@@ -381,7 +381,7 @@ Keep responses concise but informative. Always be supportive and positive. Focus
           streamText({
             model: openai("gpt-4o"),
             messages: apiMessages,
-            maxTokens: 500, // Limit response length to control costs
+            maxOutputTokens: 500, // Limit response length to control costs
             temperature: 0.7,
           }),
           timeoutPromise
