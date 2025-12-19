@@ -7,15 +7,14 @@ import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertT
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RouteSelectionWizard } from "@/components/route-selection-wizard"
 import { ManualRunModal } from "@/components/manual-run-modal"
+import { AddActivityModal } from "@/components/add-activity-modal"
 import { type Run, type Workout, type User } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
-import { planAdjustmentService } from "@/lib/planAdjustmentService"
-import { planAdaptationEngine } from "@/lib/planAdaptationEngine"
 import { useRouter } from "next/navigation"
-import { trackPlanSessionCompleted } from "@/lib/analytics"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { GPSAccuracyIndicator } from "@/components/gps-accuracy-indicator"
+import { workoutTypeToRunType } from "@/lib/run-recording"
 import { GPSMonitoringService, type GPSAccuracyData } from "@/lib/gps-monitoring"
 import { routeRecommendationService, type Route } from "@/lib/route-recommendations"
 
@@ -42,6 +41,7 @@ export function RecordScreen() {
   const [showRoutesModal, setShowRoutesModal] = useState(false)
   const [showRouteWizard, setShowRouteWizard] = useState(false)
   const [showManualModal, setShowManualModal] = useState(false)
+  const [showAddActivityModal, setShowAddActivityModal] = useState(false)
   const [currentWorkout, setCurrentWorkout] = useState<Workout | null>(null)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
@@ -764,7 +764,7 @@ export function RecordScreen() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => setShowManualModal(true)}
+                  onClick={() => setShowAddActivityModal(true)}
                   className="w-full"
                 >
                   <Sparkles className="h-4 w-4 mr-2" />
@@ -844,6 +844,14 @@ export function RecordScreen() {
           }}
         />
       )}
+      <AddActivityModal
+        open={showAddActivityModal}
+        onOpenChange={setShowAddActivityModal}
+        initialStep="upload"
+        workoutId={currentWorkout?.type === "rest" ? undefined : currentWorkout?.id}
+        runTypeHint={currentWorkout ? workoutTypeToRunType(currentWorkout.type) : undefined}
+        onActivityAdded={() => router.push("/")}
+      />
     </div>
   )
 }

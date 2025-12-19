@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -72,25 +72,116 @@ export function PerformanceAnalyticsDashboard({ userId = 1, onClose }: Performan
     fetchAnalyticsData();
   }, [timeRange, userId]);
 
-  const fetchAnalyticsData = async () => {
+  const fetchAnalyticsData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`/api/performance/analytics?userId=${userId}&timeRange=${timeRange}`);
+      const { dbUtils } = await import('@/lib/dbUtils');
+
+      // Calculate date range
+      const endDate = new Date();
+      const startDate = new Date(endDate);
       
-      if (!response.ok) {
-        throw new Error('Failed to fetch analytics data');
+      switch (timeRange) {
+        case '7d':
+          startDate.setDate(endDate.getDate() - 7);
+          break;
+        case '30d':
+          startDate.setDate(endDate.getDate() - 30);
+          break;
+        case '90d':
+          startDate.setDate(endDate.getDate() - 90);
+          break;
+        case '1y':
+          startDate.setFullYear(endDate.getFullYear() - 1);
+          break;
+        case 'all-time':
+          startDate.setFullYear(2000); // Far back date
+          break;
       }
 
-      const analyticsData = await response.json();
+      const runs = await dbUtils.getRunsInTimeRange(userId, startDate, endDate);
+      const trends = await dbUtils.calculatePerformanceTrends(runs);
+      const personalRecords = await dbUtils.getPersonalRecords(userId);
+      const insights = await dbUtils.getPerformanceInsights(userId, startDate, endDate);
+
+      // Get period comparison data
+      const previousPeriodStart = new Date(startDate);
+      const previousPeriodEnd = new Date(endDate);
+      const rangeDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      previousPeriodStart.setDate(previousPeriodStart.getDate() - rangeDays);
+      previousPeriodEnd.setDate(previousPeriodEnd.getDate() - rangeDays);
+      
+      const previousPeriodRuns = await dbUtils.getRunsInTimeRange(userId, previousPeriodStart, previousPeriodEnd);
+      const previousPeriodTrends = await dbUtils.calculatePerformanceTrends(previousPeriodRuns);
+
+      const comparison = {
+        totalRuns: {
+          current: runs.length,
+          previous: previousPeriodRuns.length,
+          change: runs.length - previousPeriodRuns.length,
+        },
+        totalDistance: {
+          current: runs.reduce((sum: number, run: any) => sum + run.distance, 0),
+          previous: previousPeriodRuns.reduce((sum: number, run: any) => sum + run.distance, 0),
+          change:
+            runs.reduce((sum: number, run: any) => sum + run.distance, 0) -
+            previousPeriodRuns.reduce((sum: number, run: any) => sum + run.distance, 0),
+        },
+        averagePace: {
+          current: trends.averagePace,
+          previous: previousPeriodTrends.averagePace,
+          change: trends.averagePace - previousPeriodTrends.averagePace,
+        },
+        consistencyScore: {
+          current: trends.consistencyScore,
+          previous: previousPeriodTrends.consistencyScore,
+          change: trends.consistencyScore - previousPeriodTrends.consistencyScore,
+        },
+      };
+
+      const analyticsData: PerformanceAnalyticsData = {
+        timeRange,
+        dateRange: {
+          start: startDate.toISOString(),
+          end: endDate.toISOString(),
+        },
+        summary: {
+          totalRuns: runs.length,
+          totalDistance: runs.reduce((sum: number, run: any) => sum + run.distance, 0),
+          totalDuration: runs.reduce((sum: number, run: any) => sum + run.duration, 0),
+          averagePace: trends.averagePace,
+          consistencyScore: trends.consistencyScore,
+          performanceScore: trends.performanceScore,
+        },
+        trends: {
+          paceProgression: trends.paceProgression,
+          distanceProgression: trends.distanceProgression,
+          consistencyProgression: trends.consistencyProgression,
+          performanceProgression: trends.performanceProgression,
+        },
+        personalRecords,
+        insights,
+        comparison,
+      };
+
       setData(analyticsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
-  };
+  }, [timeRange, userId]);
+
+  useEffect(() => {
+    const handler = () => {
+      fetchAnalyticsData().catch(() => undefined);
+    };
+    window.addEventListener('run-saved', handler);
+    return () => window.removeEventListener('run-saved', handler);
+  }, [fetchAnalyticsData]);
 
   const handleExport = async (format: 'json' | 'csv') => {
     try {

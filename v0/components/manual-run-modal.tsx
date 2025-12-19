@@ -12,7 +12,6 @@ import { Clock, Activity, Save, Upload } from "lucide-react"
 import { type Run } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
-import { planAdjustmentService } from "@/lib/planAdjustmentService"
 import { AiActivityAnalysisError, analyzeActivityImage } from "@/lib/ai-activity-client"
 import { trackAnalyticsEvent } from "@/lib/analytics"
 
@@ -114,8 +113,6 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
       if (workoutId) {
         await dbUtils.markWorkoutCompleted(workoutId)
       }
-
-      await planAdjustmentService.afterRun(user.id)
 
       toast({
         title: "Run Saved! 🎉",

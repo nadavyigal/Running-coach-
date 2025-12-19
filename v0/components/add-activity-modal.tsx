@@ -17,14 +17,27 @@ import { Heart, Watch, Camera, Edit, Upload, CalendarIcon, Zap, Loader2 } from "
 import { useToast } from "@/hooks/use-toast"
 import { AiActivityAnalysisError, analyzeActivityImage } from "@/lib/ai-activity-client"
 import { trackAnalyticsEvent } from "@/lib/analytics"
+import { recordRunWithSideEffects } from "@/lib/run-recording"
 
 interface AddActivityModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onActivityAdded?: () => void
+  initialStep?: "method" | "manual" | "upload"
+  workoutId?: number
+  runTypeHint?: Run["type"]
+  autoMatchWorkout?: boolean
 }
 
-export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddActivityModalProps) {
+export function AddActivityModal({
+  open,
+  onOpenChange,
+  onActivityAdded,
+  initialStep,
+  workoutId,
+  runTypeHint,
+  autoMatchWorkout = true,
+}: AddActivityModalProps) {
   const [step, setStep] = useState<"method" | "manual" | "upload">("method")
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -53,6 +66,11 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
       if (previewUrl) URL.revokeObjectURL(previewUrl)
     }
   }, [previewUrl])
+
+  useEffect(() => {
+    if (!open) return
+    setStep(initialStep ?? "method")
+  }, [initialStep, open])
 
   const formattedSelectedDate = useMemo(() => (selectedDate ? format(selectedDate, "PPP") : "Pick a date"), [selectedDate])
 
@@ -123,8 +141,12 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
     if (!pace) return undefined
     const match = pace.trim().match(/(\d{1,2})\s*:\s*(\d{1,2})/)
     if (match) {
-      const minutes = Number.parseInt(match[1], 10)
-      const seconds = Number.parseInt(match[2], 10)
+      const minutesPart = match[1]
+      const secondsPart = match[2]
+      if (!minutesPart || !secondsPart) return undefined
+
+      const minutes = Number.parseInt(minutesPart, 10)
+      const seconds = Number.parseInt(secondsPart, 10)
       if (Number.isFinite(minutes) && Number.isFinite(seconds)) return minutes * 60 + seconds
     }
 
@@ -172,29 +194,30 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
     const calories = data.calories ? Number.parseFloat(data.calories) : undefined
     const caloriesValue = Number.isFinite(calories) ? calories : undefined
 
-    const runDataBase = {
-      userId: user.id,
-      type: "other" as const,
-      distance,
-      duration: Math.round(durationMinutes * 60),
-      completedAt: date,
-    }
+    const cleanedImportMeta = importMeta
+      ? {
+          ...(importMeta.requestId ? { requestId: importMeta.requestId } : {}),
+          ...(typeof importMeta.confidence === "number" ? { confidence: importMeta.confidence } : {}),
+          ...(importMeta.method ? { method: importMeta.method } : {}),
+          ...(importMeta.model ? { model: importMeta.model } : {}),
+          ...(importMeta.parserVersion ? { parserVersion: importMeta.parserVersion } : {}),
+        }
+      : undefined
 
-    const runData: Omit<Run, "id" | "createdAt"> = {
-      ...runDataBase,
-      ...(typeof paceSeconds === "number" ? { pace: paceSeconds } : {}),
+    await recordRunWithSideEffects({
+      userId: user.id,
+      ...(typeof workoutId === "number" ? { workoutId } : {}),
+      autoMatchWorkout,
+      ...(runTypeHint ? { type: runTypeHint } : {}),
+      distanceKm: distance,
+      durationSeconds: Math.round(durationMinutes * 60),
+      completedAt: date,
+      ...(typeof paceSeconds === "number" ? { paceSecondsPerKm: paceSeconds } : {}),
       ...(typeof caloriesValue === "number" ? { calories: caloriesValue } : {}),
       ...(data.notes.trim() ? { notes: data.notes.trim() } : {}),
-      ...(importMeta?.requestId ? { importRequestId: importMeta.requestId } : {}),
-      ...(typeof importMeta?.confidence === "number" ? { importConfidencePct: importMeta.confidence } : {}),
-      ...(importMeta?.method ? { importMethod: importMeta.method } : {}),
-      ...(importMeta?.model ? { importModel: importMeta.model } : {}),
-      ...(importMeta?.parserVersion ? { importParserVersion: importMeta.parserVersion } : {}),
-      ...(importMeta ? { importSource: "image" } : {}),
-      updatedAt: new Date(),
-    }
-
-    await dbUtils.recordRun(runData)
+      importSource: cleanedImportMeta ? "image" : "manual",
+      ...(cleanedImportMeta ? { importMeta: cleanedImportMeta } : {}),
+    })
   }
 
   const handleManualSave = async () => {
@@ -261,11 +284,11 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
       const normalizedDate = result.completedAt ? new Date(result.completedAt) : new Date()
       setSelectedDate(normalizedDate)
       setImageImportMeta({
-        requestId: result.requestId,
-        confidence: result.confidence,
-        method: result.method,
-        model: result.model,
-        parserVersion: result.parserVersion,
+        ...(result.requestId ? { requestId: result.requestId } : {}),
+        ...(typeof result.confidence === "number" ? { confidence: result.confidence } : {}),
+        ...(result.method ? { method: result.method } : {}),
+        ...(result.model ? { model: result.model } : {}),
+        ...(result.parserVersion ? { parserVersion: result.parserVersion } : {}),
       })
 
       const updatedActivity = {
@@ -287,11 +310,11 @@ export function AddActivityModal({ open, onOpenChange, onActivityAdded }: AddAct
           method: result.method,
         }).catch(() => undefined)
         await persistActivity(updatedActivity, normalizedDate, {
-          requestId: result.requestId,
-          confidence: result.confidence,
-          method: result.method,
-          model: result.model,
-          parserVersion: result.parserVersion,
+          ...(result.requestId ? { requestId: result.requestId } : {}),
+          ...(typeof result.confidence === "number" ? { confidence: result.confidence } : {}),
+          ...(result.method ? { method: result.method } : {}),
+          ...(result.model ? { model: result.model } : {}),
+          ...(result.parserVersion ? { parserVersion: result.parserVersion } : {}),
         })
         toast({ title: "Activity logged", description: "AI imported your run automatically." })
         resetForm()

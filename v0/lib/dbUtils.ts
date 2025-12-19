@@ -2545,11 +2545,11 @@ async function getRunsInTimeRange(userId: number, startDate: Date, endDate: Date
       .equals(userId)
       .toArray();
 
-    // Filter by date range in JavaScript since createdAt is not indexed
+    // Filter by date range in JavaScript since completedAt is not indexed
     return runs.filter(run => {
-      const runDate = new Date(run.createdAt);
+      const runDate = new Date(run.completedAt ?? run.createdAt);
       return runDate >= startDate && runDate <= endDate;
-    }).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    }).sort((a, b) => new Date(a.completedAt ?? a.createdAt).getTime() - new Date(b.completedAt ?? b.createdAt).getTime());
   }, 'getRunsInTimeRange', []);
 }
 
@@ -2579,7 +2579,9 @@ async function calculatePerformanceTrends(runs: Run[]) {
 
     // Calculate consistency score (based on regularity of runs)
     const daysSinceFirstRun = Math.ceil(
-      (new Date(runs[runs.length - 1].createdAt).getTime() - new Date(runs[0].createdAt).getTime()) / (1000 * 60 * 60 * 24)
+      (new Date(runs[runs.length - 1].completedAt ?? runs[runs.length - 1].createdAt).getTime() -
+        new Date(runs[0].completedAt ?? runs[0].createdAt).getTime()) /
+        (1000 * 60 * 60 * 24)
     );
     const expectedRuns = Math.max(1, Math.ceil(daysSinceFirstRun / 3)); // Expect run every 3 days
     const consistencyScore = Math.min(100, (runs.length / expectedRuns) * 100);
@@ -2603,12 +2605,12 @@ async function calculatePerformanceTrends(runs: Run[]) {
 
     // Generate progression data
     const paceProgression = runs.map(run => ({
-      date: new Date(run.createdAt),
+      date: new Date(run.completedAt ?? run.createdAt),
       pace: run.distance > 0 ? run.duration / run.distance : 0
     }));
 
     const distanceProgression = runs.map(run => ({
-      date: new Date(run.createdAt),
+      date: new Date(run.completedAt ?? run.createdAt),
       distance: run.distance
     }));
 
@@ -2622,7 +2624,7 @@ async function calculatePerformanceTrends(runs: Run[]) {
       const score = Math.min(100, (runsToDate.length / expected) * 100);
 
       return {
-        date: new Date(runs[index].createdAt),
+        date: new Date(runs[index].completedAt ?? runs[index].createdAt),
         consistency: score
       };
     });
@@ -2636,7 +2638,7 @@ async function calculatePerformanceTrends(runs: Run[]) {
 
       if (firstHalf.length === 0 || secondHalf.length === 0) {
         return {
-          date: new Date(runs[index].createdAt),
+          date: new Date(runs[index].completedAt ?? runs[index].createdAt),
           performance: 50
         };
       }
@@ -2646,7 +2648,7 @@ async function calculatePerformanceTrends(runs: Run[]) {
       const improvement = firstAvg > 0 ? ((firstAvg - secondAvg) / firstAvg) * 100 : 0;
 
       return {
-        date: new Date(runs[index].createdAt),
+        date: new Date(runs[index].completedAt ?? runs[index].createdAt),
         performance: Math.max(0, Math.min(100, 50 + improvement))
       };
     });
@@ -2864,7 +2866,7 @@ async function getPersonalRecordProgression(userId: number, distance: number) {
       const distanceDiff = Math.abs(run.distance - distance);
       const tolerance = distance * 0.05; // 5% tolerance
       return distanceDiff <= tolerance;
-    }).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    }).sort((a, b) => new Date(a.completedAt ?? a.createdAt).getTime() - new Date(b.completedAt ?? b.createdAt).getTime());
 
     if (relevantRuns.length === 0) {
       return [];
@@ -2880,7 +2882,7 @@ async function getPersonalRecordProgression(userId: number, distance: number) {
       if (pace < currentBest) {
         currentBest = pace;
         progression.push({
-          date: new Date(run.createdAt),
+          date: new Date(run.completedAt ?? run.createdAt),
           pace: pace,
           duration: run.duration,
           distance: run.distance,
