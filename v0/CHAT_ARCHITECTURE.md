@@ -154,6 +154,7 @@ These defaults are reflected in `V0/.env.example`.
 CHAT_DEFAULT_MODEL=gpt-4o-mini
 CHAT_MAX_TOKENS=1000
 CHAT_TIMEOUT_MS=15000
+CHAT_COACHING_MODEL=gpt-4o
 CHAT_MAX_MESSAGES=10
 CHAT_MAX_PROFILE_SUMMARY_CHARS=500
 CHAT_MONTHLY_TOKEN_BUDGET=200000
@@ -227,4 +228,3 @@ return new Response(result.stream)
 - Streaming format: keep the `toDataStreamResponse()` / `0:{...}` contract stable for `useChat`.
 - Timeouts: hard timeouts can surface previously hidden hangs; tune via `CHAT_TIMEOUT_MS` if needed.
 - Token budgets: ensure limits align with expected conversation length and costs; tune via `CHAT_*`.
-

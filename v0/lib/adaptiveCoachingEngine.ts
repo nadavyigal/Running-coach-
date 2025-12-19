@@ -31,6 +31,15 @@ export interface CoachingResponse {
   interactionId: string;
   contextUsed: string[];
   suggestedActions?: string[];
+  /**
+   * Indicates the engine could not generate a fully personalized response
+   * (e.g. upstream AI failure) and used a degraded fallback.
+   */
+  fallback?: boolean;
+  /**
+   * Optional machine-readable reason for fallback (safe to log).
+   */
+  fallbackReason?: string;
 }
 
 export interface AdaptiveRecommendation {
@@ -88,19 +97,26 @@ export class AdaptiveCoachingEngine {
   async generatePersonalizedResponse(
     userId: number,
     query: string,
-    context: UserContext
+    context: UserContext,
+    options?: { throwOnError?: boolean }
   ): Promise<CoachingResponse> {
     try {
       const profile = await dbUtils.getCoachingProfile(userId);
       const adaptedPrompt = await this.adaptPromptToProfile(query, profile, context);
       const interactionId = this.generateInteractionId();
+
+      const modelName =
+        process.env.CHAT_COACHING_MODEL ||
+        process.env.CHAT_DEFAULT_MODEL ||
+        'gpt-4o';
       
       // Generate structured response using AI
       const result = await generateObject({
-        model: openai('gpt-4'),
+        model: openai(modelName),
         schema: CoachingResponseSchema,
         prompt: adaptedPrompt,
         temperature: 0.7,
+        maxOutputTokens: 800,
       });
 
       const response: CoachingResponse = {
@@ -119,16 +135,22 @@ export class AdaptiveCoachingEngine {
       return response;
     } catch (error) {
       console.error('Error generating personalized response:', error);
+
+      if (options?.throwOnError) {
+        throw error;
+      }
       
       // Fallback response
       return {
         response: "I'm here to help you with your running goals. Could you tell me more about what you're looking for?",
-        confidence: 0.5,
+        confidence: 0,
         adaptations: [],
         requestFeedback: false,
         interactionId: this.generateInteractionId(),
         contextUsed: [],
-        suggestedActions: []
+        suggestedActions: [],
+        fallback: true,
+        fallbackReason: 'adaptive_coaching_error',
       };
     }
   }
@@ -146,12 +168,18 @@ export class AdaptiveCoachingEngine {
       const recentFeedback = await dbUtils.getCoachingFeedback(userId, 10);
       
       const recommendationPrompt = this.buildRecommendationPrompt(profile, patterns, recentFeedback, context);
+
+      const modelName =
+        process.env.CHAT_COACHING_MODEL ||
+        process.env.CHAT_DEFAULT_MODEL ||
+        'gpt-4o';
       
       const result = await generateObject({
-        model: openai('gpt-4'),
+        model: openai(modelName),
         schema: RecommendationSchema,
         prompt: recommendationPrompt,
         temperature: 0.6,
+        maxOutputTokens: 900,
       });
 
       return result.object.recommendations.map(rec => ({

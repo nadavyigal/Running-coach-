@@ -30,5 +30,27 @@ describe('Chat API Fallback', () => {
     expect(data).toHaveProperty('fallback', true);
     expect(typeof data.error).toBe('string');
   });
+
+  it('returns fallback JSON when userId is provided but OpenAI key is missing', async () => {
+    process.env.OPENAI_API_KEY = '';
+
+    const request = new NextRequest('http://localhost:3000/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userId: '1',
+        messages: [{ role: 'user', content: 'Hello from test' }],
+      }),
+    });
+
+    const response = await chatHandler(request as any);
+    const data = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(data).toHaveProperty('fallback', true);
+    expect(typeof data.error).toBe('string');
+  });
 });
 
