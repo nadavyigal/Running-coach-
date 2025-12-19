@@ -22,8 +22,8 @@ interface PerformanceInsight {
   description: string;
   priority: 'high' | 'medium' | 'low';
   actionable: boolean;
-  createdAt: Date;
-  validUntil?: Date;
+  createdAt?: Date | string;
+  validUntil?: Date | string;
 }
 
 interface PerformanceInsightsProps {
@@ -31,6 +31,25 @@ interface PerformanceInsightsProps {
 }
 
 export function PerformanceInsights({ insights }: PerformanceInsightsProps) {
+  const toValidDate = (value: unknown): Date | null => {
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(value as any);
+    if (Number.isNaN(date.getTime())) return null;
+    return date;
+  };
+
+  const toValidTime = (value: unknown): number => toValidDate(value)?.getTime() ?? 0;
+
+  const formatMaybeDate = (value: unknown, fmt: string): string => {
+    const date = toValidDate(value);
+    if (!date) return '--';
+    try {
+      return format(date, fmt);
+    } catch {
+      return '--';
+    }
+  };
+
   const getInsightIcon = (type: string) => {
     switch (type) {
       case 'improvement':
@@ -85,7 +104,7 @@ export function PerformanceInsights({ insights }: PerformanceInsightsProps) {
     if (priorityDiff !== 0) return priorityDiff;
     
     // Then by creation date (newest first)
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    return toValidTime(b.createdAt) - toValidTime(a.createdAt);
   });
 
   const actionableInsights = sortedInsights.filter(insight => insight.actionable);
@@ -155,7 +174,7 @@ export function PerformanceInsights({ insights }: PerformanceInsightsProps) {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-xs text-gray-500">
                         <Clock className="h-3 w-3" />
-                        {format(new Date(insight.createdAt), 'MMM dd, yyyy')}
+                        {formatMaybeDate(insight.createdAt, 'MMM dd, yyyy')}
                       </div>
                       {insight.actionable && (
                         <Button variant="outline" size="sm">
@@ -194,7 +213,7 @@ export function PerformanceInsights({ insights }: PerformanceInsightsProps) {
                     </p>
                     <div className="flex items-center gap-2 text-xs text-gray-500">
                       <Clock className="h-3 w-3" />
-                      {format(new Date(insight.createdAt), 'MMM dd, yyyy')}
+                      {formatMaybeDate(insight.createdAt, 'MMM dd, yyyy')}
                     </div>
                   </div>
                 ))}
@@ -209,7 +228,14 @@ export function PerformanceInsights({ insights }: PerformanceInsightsProps) {
                 {actionableInsights.length} actionable • {informationalInsights.length} informational
               </span>
               <span>
-                Last updated: {format(new Date(Math.max(...insights.map(i => new Date(i.createdAt).getTime()))), 'MMM dd')}
+                Last updated:{' '}
+                {(() => {
+                  const times = insights
+                    .map((insight) => toValidTime(insight.createdAt))
+                    .filter((time) => time > 0);
+                  const lastUpdated = times.length > 0 ? Math.max(...times) : 0;
+                  return lastUpdated ? format(new Date(lastUpdated), 'MMM dd') : '--';
+                })()}
               </span>
             </div>
           </div>

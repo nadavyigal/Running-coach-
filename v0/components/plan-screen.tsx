@@ -61,7 +61,9 @@ export function PlanScreen() {
   const getDaysRemaining = (goal?: Goal | null) => {
     if (!goal?.timeBound?.deadline) return null
     const deadline = new Date(goal.timeBound.deadline)
-    const diff = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    const deadlineTime = deadline.getTime()
+    if (Number.isNaN(deadlineTime)) return null
+    const diff = Math.ceil((deadlineTime - Date.now()) / (1000 * 60 * 60 * 24))
     return diff < 0 ? 0 : diff
   }
 
@@ -447,7 +449,15 @@ export function PlanScreen() {
               <div>
                 <p className="text-xs font-semibold text-emerald-600">Goal aligned</p>
                 <h3 className="text-lg font-bold text-gray-900">{primaryGoal.title}</h3>
-                <p className="text-sm text-gray-700">This plan is designed to help you achieve your goal by {primaryGoal.timeBound?.deadline ? new Date(primaryGoal.timeBound.deadline).toLocaleDateString() : 'the target date'}.</p>
+                <p className="text-sm text-gray-700">
+                  This plan is designed to help you achieve your goal by{' '}
+                  {(() => {
+                    if (!primaryGoal.timeBound?.deadline) return 'the target date'
+                    const deadline = new Date(primaryGoal.timeBound.deadline)
+                    return Number.isNaN(deadline.getTime()) ? 'the target date' : deadline.toLocaleDateString()
+                  })()}
+                  .
+                </p>
               </div>
               {getDaysRemaining(primaryGoal) !== null && (
                 <Badge variant="outline" className="text-xs">

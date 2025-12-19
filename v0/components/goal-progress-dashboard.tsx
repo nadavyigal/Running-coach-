@@ -248,7 +248,11 @@ export function GoalProgressDashboard({ userId, className = '' }: GoalProgressDa
                   <div className="flex items-center gap-4 text-sm text-gray-600">
                     <span className="flex items-center gap-1">
                       <Calendar className="h-4 w-4" />
-                      Due {new Date(goalData.goal.deadline).toLocaleDateString()}
+                      Due{' '}
+                      {(() => {
+                        const deadline = new Date(goalData.goal.deadline);
+                        return Number.isNaN(deadline.getTime()) ? '--' : deadline.toLocaleDateString();
+                      })()}
                     </span>
                     <span className="flex items-center gap-1">
                       <Trophy className="h-4 w-4" />

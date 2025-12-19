@@ -2756,22 +2756,42 @@ async function getPerformanceInsights(userId: number, startDate: Date, endDate: 
     const runs = await getRunsInTimeRange(userId, startDate, endDate);
     const trends = await calculatePerformanceTrends(runs);
 
-    const insights = [];
+    const now = new Date();
+    const validUntil = new Date(endDate);
+
+    const insights: Array<{
+      type: 'improvement' | 'warning' | 'achievement' | 'recommendation' | 'info';
+      title: string;
+      description: string;
+      priority: 'high' | 'medium' | 'low';
+      actionable: boolean;
+      createdAt: Date;
+      validUntil?: Date;
+      metric?: string;
+    }> = [];
 
     // Consistency insight
     if (trends.consistencyScore >= 80) {
       insights.push({
-        type: 'positive',
+        type: 'achievement',
         title: 'Excellent Consistency',
         description: 'You\'re maintaining a great running schedule! Keep it up!',
-        metric: `${trends.consistencyScore.toFixed(0)}% consistency`
+        metric: `${trends.consistencyScore.toFixed(0)}% consistency`,
+        priority: 'medium',
+        actionable: false,
+        createdAt: now,
+        validUntil
       });
     } else if (trends.consistencyScore < 50) {
       insights.push({
-        type: 'warning',
+        type: 'recommendation',
         title: 'Improve Consistency',
         description: 'Try to run more regularly to build momentum and see better results.',
-        metric: `${trends.consistencyScore.toFixed(0)}% consistency`
+        metric: `${trends.consistencyScore.toFixed(0)}% consistency`,
+        priority: 'high',
+        actionable: true,
+        createdAt: now,
+        validUntil
       });
     }
 
@@ -2787,17 +2807,25 @@ async function getPerformanceInsights(userId: number, startDate: Date, endDate: 
 
       if (improvement > 5) {
         insights.push({
-          type: 'positive',
+          type: 'improvement',
           title: 'Pace Improvement',
           description: `Your pace has improved by ${improvement.toFixed(1)}%! You're getting faster!`,
-          metric: formatPace(lastAvgPace)
+          metric: formatPace(lastAvgPace),
+          priority: 'medium',
+          actionable: false,
+          createdAt: now,
+          validUntil
         });
       } else if (improvement < -5) {
         insights.push({
-          type: 'info',
+          type: 'warning',
           title: 'Pace Variation',
           description: 'Your pace has slowed recently. Consider adjusting your training intensity or ensuring adequate recovery.',
-          metric: formatPace(lastAvgPace)
+          metric: formatPace(lastAvgPace),
+          priority: 'high',
+          actionable: true,
+          createdAt: now,
+          validUntil
         });
       }
     }
@@ -2806,10 +2834,14 @@ async function getPerformanceInsights(userId: number, startDate: Date, endDate: 
     const totalDistance = runs.reduce((sum, run) => sum + run.distance, 0);
     if (totalDistance > 50) {
       insights.push({
-        type: 'positive',
+        type: 'achievement',
         title: 'Distance Milestone',
         description: `You've run ${totalDistance.toFixed(1)} km in this period! Great work!`,
-        metric: `${totalDistance.toFixed(1)} km`
+        metric: `${totalDistance.toFixed(1)} km`,
+        priority: 'low',
+        actionable: false,
+        createdAt: now,
+        validUntil
       });
     }
 
@@ -2819,7 +2851,11 @@ async function getPerformanceInsights(userId: number, startDate: Date, endDate: 
         type: 'info',
         title: 'Keep Going',
         description: 'Every run counts! You\'re building a strong foundation.',
-        metric: `${runs.length} runs completed`
+        metric: `${runs.length} runs completed`,
+        priority: 'low',
+        actionable: false,
+        createdAt: now,
+        validUntil
       });
     }
 
