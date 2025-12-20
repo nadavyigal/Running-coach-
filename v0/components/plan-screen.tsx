@@ -512,12 +512,8 @@ export function PlanScreen() {
 
       {/* Recovery Status */}
       <RecoveryRecommendations
-        userId={1}
-        date={new Date()}
+        userId={plan?.userId}
         showBreakdown={false}
-        onRefresh={() => {
-          console.log('Refreshing recovery data for plan view...');
-        }}
       />
 
       {showAddRunModal && (

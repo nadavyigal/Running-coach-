@@ -729,7 +729,6 @@ export function TodayScreen() {
       {userId && (
         <RecoveryRecommendations
           userId={userId}
-          date={new Date()}
           showBreakdown={true}
           onRefresh={() => {
             console.log('Refreshing recovery recommendations and workouts...');

@@ -54,8 +54,10 @@ export function RecordScreen() {
   // GPS and tracking state
   const [gpsPath, setGpsPath] = useState<GPSCoordinate[]>([])
   const [currentPosition, setCurrentPosition] = useState<GPSCoordinate | null>(null)
+  const gpsPathRef = useRef<GPSCoordinate[]>([])
   const watchIdRef = useRef<number | null>(null)
   const startTimeRef = useRef<number>(0)
+  const elapsedRunMsRef = useRef<number>(0)
   const isRunningRef = useRef(false)
   const isPausedRef = useRef(false)
 
@@ -74,6 +76,35 @@ export function RecordScreen() {
 
   const { toast } = useToast()
   const router = useRouter()
+
+  const resolveCurrentUser = async (): Promise<User | null> => {
+    if (currentUser?.id) return currentUser
+
+    try {
+      const user = await dbUtils.getCurrentUser()
+      if (user) {
+        setCurrentUser(user)
+      }
+      return user
+    } catch (error) {
+      console.error("Error resolving current user:", error)
+      return null
+    }
+  }
+
+  const resolveRunType = (workoutType?: Workout["type"]): Run["type"] => {
+    switch (workoutType) {
+      case "easy":
+      case "tempo":
+      case "intervals":
+      case "long":
+      case "time-trial":
+      case "hill":
+        return workoutType
+      default:
+        return "other"
+    }
+  }
 
   // Initialize GPS - proactively request permission on mount
   const initializeGps = async () => {
@@ -128,7 +159,7 @@ export function RecordScreen() {
     if (isRunning && !isPaused && startTimeRef.current) {
       interval = setInterval(() => {
         const now = Date.now()
-        const duration = Math.floor((now - startTimeRef.current) / 1000)
+        const duration = Math.floor((elapsedRunMsRef.current + (now - startTimeRef.current)) / 1000)
         setMetrics(prev => ({
           ...prev,
           duration,
@@ -263,6 +294,7 @@ export function RecordScreen() {
           if (isRunningRef.current && !isPausedRef.current) {
             setGpsPath((previousPath) => {
               const nextPath = [...previousPath, newPosition]
+              gpsPathRef.current = nextPath
 
               if (nextPath.length > 1) {
                 const newDistance = calculateTotalDistance(nextPath)
@@ -344,6 +376,17 @@ export function RecordScreen() {
   }
 
   const startRun = async () => {
+    const user = await resolveCurrentUser()
+    if (!user?.id) {
+      toast({
+        title: "Error",
+        description: "User not found. Please complete onboarding first.",
+        variant: "destructive",
+      })
+      router.push("/")
+      return
+    }
+
     const gpsGranted = await requestGpsPermission()
     if (!gpsGranted) {
       toast({
@@ -355,6 +398,8 @@ export function RecordScreen() {
     }
 
     startTimeRef.current = Date.now()
+    elapsedRunMsRef.current = 0
+    gpsPathRef.current = []
     setGpsPath([])
     setMetrics({
       distance: 0,
@@ -386,6 +431,19 @@ export function RecordScreen() {
   }
 
   const pauseRun = () => {
+    if (startTimeRef.current) {
+      elapsedRunMsRef.current += Date.now() - startTimeRef.current
+      startTimeRef.current = 0
+      const duration = Math.floor(elapsedRunMsRef.current / 1000)
+      setMetrics((previousMetrics) => ({
+        ...previousMetrics,
+        duration,
+        pace: previousMetrics.distance > 0 ? duration / previousMetrics.distance : 0,
+        calories: estimateCalories(duration, previousMetrics.distance),
+      }))
+    }
+
+    stopGpsTracking()
     setIsPaused(true)
     isPausedRef.current = true
     toast({
@@ -397,6 +455,7 @@ export function RecordScreen() {
   const resumeRun = async () => {
     setIsPaused(false)
     isPausedRef.current = false
+    startTimeRef.current = Date.now()
     const trackingStarted = await startGpsTracking()
     if (!trackingStarted) {
       toast({
@@ -420,8 +479,14 @@ export function RecordScreen() {
     isRunningRef.current = false
     isPausedRef.current = false
 
-    const totalDistance = calculateTotalDistance(gpsPath)
-    const finalDuration = metrics.duration
+    if (startTimeRef.current) {
+      elapsedRunMsRef.current += Date.now() - startTimeRef.current
+      startTimeRef.current = 0
+    }
+
+    const finalGpsPath = gpsPathRef.current
+    const totalDistance = calculateTotalDistance(finalGpsPath)
+    const finalDuration = Math.floor(elapsedRunMsRef.current / 1000)
 
     if (totalDistance > 0 && finalDuration > 0) {
       await saveRun(totalDistance, finalDuration)
@@ -435,29 +500,29 @@ export function RecordScreen() {
 
   const saveRun = async (distance: number, duration: number) => {
     try {
-      const user = await dbUtils.getCurrentUser()
-      if (!user) {
+      const user = await resolveCurrentUser()
+      if (!user?.id) {
         toast({
           title: "Error",
-          description: "User not found. Please try again.",
+          description: "User not found. Please complete onboarding first.",
           variant: "destructive"
         })
         return
       }
 
       const runData = {
-        userId: user.id!,
-        type: currentWorkout?.type || 'easy',
+        userId: user.id,
+        type: resolveRunType(currentWorkout?.type),
         distance,
         duration,
         pace: duration / distance,
         calories: estimateCalories(duration, distance),
         notes: selectedRoute ? `Route: ${selectedRoute.name}` : undefined,
         route: selectedRoute?.name,
-        gpsPath: JSON.stringify(gpsPath),
+        gpsPath: JSON.stringify(gpsPathRef.current),
         gpsAccuracyData: JSON.stringify(gpsAccuracyHistory),
-        startAccuracy: gpsPath[0]?.accuracy,
-        endAccuracy: gpsPath[gpsPath.length - 1]?.accuracy,
+        startAccuracy: gpsPathRef.current[0]?.accuracy,
+        endAccuracy: gpsPathRef.current[gpsPathRef.current.length - 1]?.accuracy,
         averageAccuracy: gpsAccuracyHistory.length > 0 
           ? gpsAccuracyHistory.reduce((sum, acc) => sum + acc.accuracy, 0) / gpsAccuracyHistory.length
           : undefined,
@@ -776,7 +841,7 @@ export function RecordScreen() {
       </Card>
 
       {/* Route Visualization */}
-      {gpsPath.length > 0 && (
+      {(gpsPath.length > 0 || currentPosition) && (
         <Card>
           <CardContent className="p-4">
             <h3 className="font-medium mb-3">Route</h3>
@@ -808,12 +873,8 @@ export function RecordScreen() {
 
       {/* Recovery Status */}
       <RecoveryRecommendations
-        userId={1}
-        date={new Date()}
+        userId={currentUser?.id}
         showBreakdown={false}
-        onRefresh={() => {
-          console.log('Refreshing recovery data for record screen...');
-        }}
       />
 
       {/* Modals */}
@@ -858,50 +919,64 @@ function RouteVisualization({ gpsPath, currentPosition }: {
   gpsPath: GPSCoordinate[]
   currentPosition: GPSCoordinate | null 
 }) {
-  if (gpsPath.length === 0) return null
+  if (gpsPath.length === 0 && !currentPosition) return null
 
   // Calculate bounds for the route
-  const latitudes = gpsPath.map(p => p.latitude)
-  const longitudes = gpsPath.map(p => p.longitude)
-  const minLat = Math.min(...latitudes)
-  const maxLat = Math.max(...latitudes)
-  const minLng = Math.min(...longitudes)
-  const maxLng = Math.max(...longitudes)
+  const boundsPoints = currentPosition ? [...gpsPath, currentPosition] : gpsPath
+  const latitudes = boundsPoints.map(p => p.latitude)
+  const longitudes = boundsPoints.map(p => p.longitude)
+  const rawMinLat = Math.min(...latitudes)
+  const rawMaxLat = Math.max(...latitudes)
+  const rawMinLng = Math.min(...longitudes)
+  const rawMaxLng = Math.max(...longitudes)
+
+  const latPadding = (rawMaxLat - rawMinLat) * 0.1 || 0.0001
+  const lngPadding = (rawMaxLng - rawMinLng) * 0.1 || 0.0001
+
+  const minLat = rawMinLat - latPadding
+  const maxLat = rawMaxLat + latPadding
+  const minLng = rawMinLng - lngPadding
+  const maxLng = rawMaxLng + lngPadding
+
+  const toX = (longitude: number) => ((longitude - minLng) / (maxLng - minLng || 1)) * 220 + 20
+  const toY = (latitude: number) => ((maxLat - latitude) / (maxLat - minLat || 1)) * 220 + 20
 
   // Create path string for SVG
   const pathString = gpsPath.map((point, index) => {
-    const x = ((point.longitude - minLng) / (maxLng - minLng || 1)) * 220 + 20
-    const y = ((maxLat - point.latitude) / (maxLat - minLat || 1)) * 220 + 20
+    const x = toX(point.longitude)
+    const y = toY(point.latitude)
     return `${index === 0 ? 'M' : 'L'} ${x} ${y}`
   }).join(' ')
 
   return (
     <svg className="w-full h-full" viewBox="0 0 260 260">
       {/* Route path */}
-      <path
-        d={pathString}
-        stroke="rgb(34, 197, 94)"
-        strokeWidth="3"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      
+      {gpsPath.length > 1 && (
+        <path
+          d={pathString}
+          stroke="rgb(34, 197, 94)"
+          strokeWidth="3"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+       
       {/* Start point */}
       {gpsPath.length > 0 && (
         <circle
-          cx={((gpsPath[0].longitude - minLng) / (maxLng - minLng || 1)) * 220 + 20}
-          cy={((maxLat - gpsPath[0].latitude) / (maxLat - minLat || 1)) * 220 + 20}
+          cx={toX(gpsPath[0].longitude)}
+          cy={toY(gpsPath[0].latitude)}
           r="4"
           fill="rgb(34, 197, 94)"
         />
       )}
-      
+       
       {/* Current position */}
       {currentPosition && (
         <circle
-          cx={((currentPosition.longitude - minLng) / (maxLng - minLng || 1)) * 220 + 20}
-          cy={((maxLat - currentPosition.latitude) / (maxLat - minLat || 1)) * 220 + 20}
+          cx={toX(currentPosition.longitude)}
+          cy={toY(currentPosition.latitude)}
           r="6"
           fill="rgb(59, 130, 246)"
           stroke="white"
