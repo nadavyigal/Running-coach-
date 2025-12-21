@@ -8,8 +8,7 @@ import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RouteSelectionWizard } from "@/components/route-selection-wizard"
 import { ManualRunModal } from "@/components/manual-run-modal"
 import { RunMap } from "@/components/maps/RunMap"
-import { AddActivityModal } from "@/components/add-activity-modal"
-import { type Route, type Run, type Workout, type User } from "@/lib/db"
+import { type Run, type Workout, type User } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
@@ -849,7 +848,7 @@ export function RecordScreen() {
       </Card>
 
       {/* Live Map */}
-      {(isRunning || gpsPath.length > 0 || currentPosition) && (
+      {(isRunning || gpsPath.length > 0) && (
         <Card>
           <CardContent className="p-4">
             <h3 className="font-medium mb-3">Map</h3>
@@ -921,12 +920,6 @@ export function RecordScreen() {
 	          }}
         />
       )}
-      <AddActivityModal
-        open={showAddActivityModal}
-        onOpenChange={setShowAddActivityModal}
-        initialStep="upload"
-        onActivityAdded={() => router.push("/")}
-      />
     </div>
   )
 }
