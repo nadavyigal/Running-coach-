@@ -17,7 +17,12 @@ export async function preprocessActivityImage(
   const steps: string[] = []
 
   const allowed: ActivityImagePreprocessResult["mimeType"][] = ["image/jpeg", "image/png", "image/webp"]
-  const targetMimeType = allowed.includes(inputMimeType as any) ? (inputMimeType as any) : "image/jpeg"
+  const isAllowedMimeType = (value: string): value is ActivityImagePreprocessResult["mimeType"] =>
+    allowed.includes(value as ActivityImagePreprocessResult["mimeType"])
+
+  const targetMimeType: ActivityImagePreprocessResult["mimeType"] = isAllowedMimeType(inputMimeType)
+    ? inputMimeType
+    : "image/jpeg"
 
   if (process.env.NODE_ENV === "test") {
     return { buffer: input, mimeType: targetMimeType, steps: ["skipped(test)"] }
@@ -74,5 +79,10 @@ export async function preprocessActivityImage(
     buffer = await pipeline.jpeg({ quality: 85, mozjpeg: true }).toBuffer()
   }
 
-  return { buffer, mimeType, steps, exifDateIso }
+  return {
+    buffer,
+    mimeType,
+    steps,
+    ...(typeof exifDateIso === "string" ? { exifDateIso } : {}),
+  }
 }

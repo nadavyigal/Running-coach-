@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { calculateZoneDistribution, getHeartRateZoneFromBpm } from '@/lib/heartRateZones';
+import { calculateZoneDistribution } from '@/lib/heartRateZones';
 import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';

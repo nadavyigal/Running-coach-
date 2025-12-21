@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Alert, AlertDescription } from './ui/alert';
 import { Button } from './ui/button';
-import { RefreshCw, TrendingUp, TrendingDown, Activity, Moon, Heart, Brain, Zap } from 'lucide-react';
+import { RefreshCw, TrendingUp, Activity, Moon, Heart, Brain, Zap } from 'lucide-react';
 
 interface RecoveryRecommendation {
   recommendations: string[];

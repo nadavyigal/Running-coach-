@@ -232,7 +232,8 @@ export default function RunSmartApp() {
           
         } catch (initErr) {
           console.error('[app:init:error] ❌ Enhanced initialization failed:', initErr)
-          setErrorMessage(initErr.message || 'Initialization failed');
+          const initMessage = initErr instanceof Error ? initErr.message : 'Initialization failed'
+          setErrorMessage(initMessage || 'Initialization failed');
           setHasError(true);
           
           // Final fallback - just show onboarding

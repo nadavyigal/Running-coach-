@@ -15,7 +15,7 @@ export function ReminderSettings() {
       const user = await dbUtils.getCurrentUser()
       if (user && user.reminderTime) {
         setTime(user.reminderTime)
-        setEnabled(user.reminderEnabled)
+        setEnabled(user.reminderEnabled ?? false)
       }
     }
     fetchSettings()

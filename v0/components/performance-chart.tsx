@@ -79,7 +79,7 @@ export function PerformanceChart({
 
   const trend = showTrend ? calculateTrend() : null;
 
-  const customTooltip = ({ active, payload, label }: any) => {
+  const customTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
@@ -110,6 +110,9 @@ export function PerformanceChart({
     Math.max(0, minValue - padding),
     maxValue + padding
   ];
+
+  const firstPoint = chartData.at(0);
+  const lastPoint = chartData.at(-1);
 
     if (chartData.length === 0) {
       return (
@@ -187,11 +190,11 @@ export function PerformanceChart({
             />
             
             {/* Trend line */}
-            {trend && showTrend && (
+            {trend && showTrend && firstPoint && lastPoint && (
               <ReferenceLine
                 segment={[
-                  { x: chartData[0].date, y: trend.slope * chartData[0].date + trend.intercept },
-                  { x: chartData[chartData.length - 1].date, y: trend.slope * chartData[chartData.length - 1].date + trend.intercept }
+                  { x: firstPoint.date, y: trend.slope * firstPoint.date + trend.intercept },
+                  { x: lastPoint.date, y: trend.slope * lastPoint.date + trend.intercept }
                 ]}
                 stroke={color}
                 strokeDasharray="5 5"

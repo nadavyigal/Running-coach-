@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
 
     const recommendationId = await dbUtils.createGoalRecommendation(recommendationData);
 
-    const created = await dbUtils.goalRecommendations?.get(recommendationId);
+    const created = await dbUtils.getGoalRecommendationById(recommendationId);
 
     return NextResponse.json({
       recommendation: created,
@@ -205,8 +205,6 @@ async function generateDynamicRecommendations(userId: number): Promise<Partial<G
   
   // Get user's goals and their progress
   const activeGoals = await dbUtils.getUserGoals(userId, 'active');
-  const completedGoals = await dbUtils.getUserGoals(userId, 'completed');
-  const allGoals = await dbUtils.getUserGoals(userId);
   
   // Get recent runs for analysis
   const recentRuns = await dbUtils.getRunsByUser(userId);
@@ -380,7 +378,7 @@ async function generateDynamicRecommendations(userId: number): Promise<Partial<G
 }
 
 async function handleAcceptedRecommendation(recommendationId: number, modifications?: Record<string, any>): Promise<void> {
-  const recommendation = await dbUtils.goalRecommendations?.get(recommendationId);
+  const recommendation = await dbUtils.getGoalRecommendationById(recommendationId);
   if (!recommendation) return;
 
   try {

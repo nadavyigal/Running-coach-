@@ -47,7 +47,7 @@ function checkRateLimit(userId: string): boolean {
   return requests.count <= RATE_LIMIT_PER_USER_PER_HOUR
 }
 
-export async function chatHandler(req: ApiRequest) {
+async function chatHandler(req: ApiRequest) {
   logger.log('💬 Chat API: Starting request');
   
   try {
@@ -167,6 +167,8 @@ export async function chatHandler(req: ApiRequest) {
       }
     }
 
+    void validUserId;
+
     // Check if we should use adaptive coaching
     const useAdaptiveCoaching = normalizedUserId !== undefined && normalizedUserId > 0;
     logger.log(`🤖 Use adaptive coaching: ${useAdaptiveCoaching} (userId: ${userId})`);
@@ -234,7 +236,7 @@ export async function chatHandler(req: ApiRequest) {
         })
 
         if (!adaptiveResult.success || !adaptiveResult.data) {
-          logger.warn('В? П,? Adaptive coaching unavailable, falling back to standard chat')
+          logger.warn('⚠️ Adaptive coaching unavailable, falling back to standard chat')
           throw new Error('Adaptive coaching unavailable')
         }
 
@@ -245,7 +247,7 @@ export async function chatHandler(req: ApiRequest) {
           coachingResponse.response.trim().toLowerCase() === fallbackText.toLowerCase()
 
         if (coachingResponse?.fallback === true || isGenericFallback) {
-          logger.warn('В? П,? Adaptive coaching returned fallback response, falling back to standard chat')
+          logger.warn('⚠️ Adaptive coaching returned fallback response, falling back to standard chat')
           throw new Error('Adaptive coaching fallback')
         }
         

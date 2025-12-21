@@ -85,17 +85,21 @@ export interface SubjectiveWellness {
 export interface DataFusionRule {
   id?: number;
   userId: number;
-  name: string;
   dataType: string; // 'heart_rate', 'sleep', 'activity', etc.
-  priority: number; // 1-10, higher = more important
-  fusionMethod: 'average' | 'weighted_average' | 'median' | 'mode' | 'latest' | 'earliest' | 'custom';
-  weightFactors?: Record<string, number>; // deviceId -> weight
-  conflictResolution: 'highest_priority' | 'most_recent' | 'highest_quality' | 'manual';
+  primarySource: string;
+  fallbackSources?: string[];
+  conflictResolution: 'prefer_primary' | 'most_recent' | 'highest_accuracy' | 'average' | 'manual';
+  gapFillingEnabled: boolean;
   qualityThreshold: number; // 0-100
-  isActive: boolean;
-  customLogic?: string; // JSON string for custom fusion logic
   createdAt: Date;
   updatedAt: Date;
+  // Backward-compatible/optional fields
+  name?: string;
+  priority?: number;
+  isActive?: boolean;
+  fusionMethod?: 'average' | 'weighted_average' | 'median' | 'mode' | 'latest' | 'earliest' | 'custom';
+  weightFactors?: Record<string, number>; // deviceId -> weight
+  customLogic?: string; // JSON string for custom fusion logic
 }
 
 export interface FusedDataPoint {
@@ -104,14 +108,24 @@ export interface FusedDataPoint {
   dataType: string;
   timestamp: Date;
   value: number;
-  unit: string;
+  unit?: string;
   confidence: number; // 0-100
-  quality: number; // 0-100
-  fusionMethod: 'average' | 'weighted_average' | 'median' | 'mode' | 'latest' | 'earliest' | 'custom';
-  sourceDevices: string[]; // Array of device IDs that contributed
-  sourceWeights?: Record<string, number>; // deviceId -> weight used
-  conflicts: DataConflict[];
-  metadata?: Record<string, any>;
+  qualityScore: number; // 0-100
+  fusionMethod:
+    | 'average'
+    | 'weighted_average'
+    | 'median'
+    | 'mode'
+    | 'latest'
+    | 'earliest'
+    | 'custom'
+    | 'single_source'
+    | 'interpolated'
+    | 'manual_resolution';
+  primarySource: string; // deviceId used for primary value
+  contributingSources: string[]; // Array of device IDs that contributed
+  conflicts?: DataConflict[];
+  metadata?: Record<string, unknown>;
   createdAt: Date;
 }
 
@@ -119,33 +133,42 @@ export interface DataConflict {
   id?: number;
   userId: number;
   dataType: string;
-  conflictType: 'duplicate' | 'inconsistent' | 'outlier' | 'missing' | 'quality';
-  detectedAt: Date;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  description: string;
-  affectedDevices: string[];
-  conflictingValues: Record<string, any>;
-  resolution?: 'auto_resolved' | 'manual_resolution' | 'ignored' | 'pending';
-  resolutionMethod?: string;
-  resolvedAt?: Date;
   fusedDataPointId?: number;
+  sourceDevice1: string;
+  sourceDevice2: string;
+  value1: number;
+  value2: number;
+  difference: number;
+  resolvedValue?: number;
+  resolutionMethod?: string;
+  manuallyResolved: boolean;
+  detectedAt?: Date;
+  conflictType?: 'duplicate' | 'inconsistent' | 'outlier' | 'missing' | 'quality';
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  description?: string;
+  resolvedAt?: Date;
   createdAt: Date;
 }
 
 export interface DataSource {
   id?: number;
   userId: number;
-  name: string;
-  type: 'apple_watch' | 'garmin' | 'fitbit' | 'manual' | 'other';
-  deviceId?: string;
+  deviceId: string;
+  deviceType: string;
+  dataTypes: string[];
   priority: number; // 1-10, higher = more important
+  accuracy: number; // 0-100
+  reliability: number; // 0-100
   isActive: boolean;
-  lastSync?: Date;
-  syncFrequency: number; // minutes
-  dataTypes: string[]; // Array of data types this source provides
-  qualityScore: number; // 0-100
-  reliabilityScore: number; // 0-100
-  settings?: Record<string, any>;
+  lastSync: Date;
+  capabilities?: string[];
+  // Backward-compatible/optional fields
+  name?: string;
+  type?: 'apple_watch' | 'garmin' | 'fitbit' | 'manual' | 'other';
+  syncFrequency?: number; // minutes
+  qualityScore?: number; // 0-100
+  reliabilityScore?: number; // 0-100
+  settings?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -746,20 +769,28 @@ export interface Goal {
     metric: string;
     value: number;
     unit: string;
-    description: string;
+    description?: string;
   };
-  measurableOutcome: {
+  measurableMetrics?: string[];
+  achievableAssessment?: {
+    currentLevel: number;
+    targetLevel: number;
+    feasibilityScore: number; // 0-100 scale
+    recommendedAdjustments?: string[];
+  };
+  relevantContext?: string;
+  measurableOutcome?: {
     successCriteria: string[];
     trackingMethod: string;
     measurementFrequency: 'daily' | 'weekly' | 'monthly';
   };
-  achievabilityAssessment: {
+  achievabilityAssessment?: {
     difficultyRating: number; // 1-10 scale
     requiredResources: string[];
     potentialObstacles: string[];
     mitigationStrategies: string[];
   };
-  relevanceJustification: {
+  relevanceJustification?: {
     personalImportance: number; // 1-10 scale
     alignmentWithValues: string;
     motivationalFactors: string[];
@@ -768,14 +799,17 @@ export interface Goal {
     startDate: Date;
     deadline: Date;
     milestoneSchedule: number[]; // Percentage checkpoints [25, 50, 75]
-    estimatedDuration: number; // in days
+    totalDuration: number; // in days
+    estimatedDuration?: number; // in days (legacy)
   };
   baselineValue: number;
   targetValue: number;
   currentValue: number;
+  progressPercentage: number;
   isPrimary?: boolean; // Marks the primary/active goal
   planId?: number; // Linked training plan
-  lastUpdated: Date;
+  lastUpdated?: Date;
+  completedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -799,11 +833,15 @@ export interface GoalProgressHistory {
   id?: number;
   goalId: number;
   measurementDate: Date;
-  currentValue: number;
-  baselineValue: number;
-  targetValue: number;
+  measuredValue: number;
+  // Backward-compatible aliases for older schema/indexes
+  recordedAt?: Date;
+  progressValue?: number;
   progressPercentage: number;
   autoRecorded: boolean;
+  contributingActivityId?: number | null;
+  contributingActivityType?: string;
+  context?: Record<string, unknown>;
   notes?: string;
   createdAt: Date;
 }
@@ -811,18 +849,25 @@ export interface GoalProgressHistory {
 export interface GoalRecommendation {
   id?: number;
   userId: number;
-  goalId?: number; // Related to existing goal, or null for new goal suggestions
-  type: 'goal_creation' | 'goal_modification' | 'goal_achievement_strategy' | 'goal_timeline_adjustment';
+  recommendationType: 'new_goal' | 'adjustment' | 'milestone' | 'motivation' | 'priority_change';
   title: string;
   description: string;
   reasoning: string;
-  confidence: number; // 0-1 scale
-  priority: 'low' | 'medium' | 'high';
-  status: 'pending' | 'accepted' | 'rejected' | 'expired';
-  suggestedAction: string;
-  metadata: any; // JSON for additional context
+  confidenceScore: number; // 0-1 scale
+  priority?: 'low' | 'medium' | 'high';
+  status: 'pending' | 'accepted' | 'dismissed' | 'expired';
+  recommendationData: {
+    goalId?: number;
+    suggestedChanges?: Record<string, unknown>;
+    newGoalTemplate?: Record<string, unknown>;
+    actionRequired?: string;
+    benefits?: string[];
+    risks?: string[];
+  };
+  expiresAt?: Date;
+  validUntil?: Date;
   createdAt: Date;
-  updatedAt: Date;
+  updatedAt?: Date;
 }
 
 // Running shoes tracking
@@ -1204,29 +1249,13 @@ function createDatabaseInstance(): RunSmartDB | null {
         }
       });
       
-      // Handle database errors
-      db.on('error', (error: any) => {
-        console.error('❌ Database error:', error);
-      });
     } catch (eventWireError) {
       console.warn(
         '⚠️ Failed to attach Dexie event handlers; continuing with basic database instance:',
         eventWireError
       );
     }
-    
-    // Add transaction timeout handling
-    const originalTransaction = db.transaction.bind(db);
-    db.transaction = function(mode: any, tables: any, fn: any) {
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Transaction timeout after 30 seconds')), 30000);
-      });
-      
-      const transactionPromise = originalTransaction(mode, tables, fn);
-      
-      return Promise.race([transactionPromise, timeoutPromise]);
-    };
-    
+
     return db;
   } catch (error) {
     console.error('❌ Failed to create database instance:', error);

@@ -77,8 +77,8 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
   ) => {
     setIsSubmitting(true)
     try {
-      const user = await dbUtils.getCurrentUser()
-      if (!user?.id) {
+	      const user = await dbUtils.getCurrentUser()
+	      if (!user?.id) {
         toast({
           title: "Error",
           description: "User not found. Please complete onboarding first.",
@@ -87,23 +87,24 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
         return
       }
 
-      const pace = runDetails.durationSeconds / runDetails.distanceKm
-      const calories = Math.round(runDetails.distanceKm * 60 + (runDetails.durationSeconds / 60) * 3)
+	      const pace = runDetails.durationSeconds / runDetails.distanceKm
+	      const calories = Math.round(runDetails.distanceKm * 60 + (runDetails.durationSeconds / 60) * 3)
+	      const resolvedNotes = (runDetails.notes ?? notes).trim()
 
-      const runData: Omit<Run, 'id' | 'createdAt'> = {
-        userId: user.id,
-        workoutId,
-        type: runDetails.typeOverride || type,
-        distance: runDetails.distanceKm,
-        duration: runDetails.durationSeconds,
-        pace,
-        calories,
-        notes: (runDetails.notes ?? notes).trim() || undefined,
-        completedAt: runDetails.completedAt || new Date(),
-        ...(runDetails.importMeta?.requestId ? { importRequestId: runDetails.importMeta.requestId } : {}),
-        ...(typeof runDetails.importMeta?.confidence === "number" ? { importConfidencePct: runDetails.importMeta.confidence } : {}),
-        ...(runDetails.importMeta?.method ? { importMethod: runDetails.importMeta.method } : {}),
-        ...(runDetails.importMeta?.model ? { importModel: runDetails.importMeta.model } : {}),
+	      const runData: Omit<Run, 'id' | 'createdAt'> = {
+	        userId: user.id,
+	        type: runDetails.typeOverride || type,
+	        distance: runDetails.distanceKm,
+	        duration: runDetails.durationSeconds,
+	        pace,
+	        calories,
+	        completedAt: runDetails.completedAt || new Date(),
+	        ...(typeof workoutId === 'number' ? { workoutId } : {}),
+	        ...(resolvedNotes ? { notes: resolvedNotes } : {}),
+	        ...(runDetails.importMeta?.requestId ? { importRequestId: runDetails.importMeta.requestId } : {}),
+	        ...(typeof runDetails.importMeta?.confidence === "number" ? { importConfidencePct: runDetails.importMeta.confidence } : {}),
+	        ...(runDetails.importMeta?.method ? { importMethod: runDetails.importMeta.method } : {}),
+	        ...(runDetails.importMeta?.model ? { importModel: runDetails.importMeta.model } : {}),
         ...(runDetails.importMeta?.parserVersion ? { importParserVersion: runDetails.importMeta.parserVersion } : {}),
         ...(runDetails.importMeta ? { importSource: "image" } : {}),
       }
@@ -159,15 +160,15 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
         variant: "destructive"
       })
       return
-    }
+	    }
 
-    await saveRun({
-      distanceKm,
-      durationSeconds,
-      notes,
-      importMeta: imageImportMeta ?? undefined,
-    })
-  }
+	    await saveRun({
+	      distanceKm,
+	      durationSeconds,
+	      notes,
+	      ...(imageImportMeta ? { importMeta: imageImportMeta } : {}),
+	    })
+	  }
 
   const handleAiUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -212,15 +213,15 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
 
       setDistance(result.distanceKm.toString())
       setDuration(formatDuration(durationSeconds))
-      setType((result.type as Run['type']) || 'easy')
-      setNotes((current) => current || result.notes || "")
-      setImageImportMeta({
-        requestId: result.requestId,
-        confidence,
-        method: result.method,
-        model: result.model,
-        parserVersion: result.parserVersion,
-      })
+	      setType((result.type as Run['type']) || 'easy')
+	      setNotes((current) => current || result.notes || "")
+	      setImageImportMeta({
+	        confidence,
+	        ...(result.requestId ? { requestId: result.requestId } : {}),
+	        ...(result.method ? { method: result.method } : {}),
+	        ...(result.model ? { model: result.model } : {}),
+	        ...(result.parserVersion ? { parserVersion: result.parserVersion } : {}),
+	      })
 
       trackAnalyticsEvent("run_image_analysis_succeeded", {
         source: "manual_run_modal",
@@ -239,23 +240,23 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
           requestId: result.requestId,
           method: result.method,
         }).catch(() => undefined)
-        await saveRun(
-          {
-            distanceKm: result.distanceKm,
-            durationSeconds,
-            notes: result.notes,
-            typeOverride: (result.type as Run["type"]) || "easy",
-            completedAt: result.completedAt ? new Date(result.completedAt) : new Date(),
-            importMeta: {
-              requestId: result.requestId,
-              confidence,
-              method: result.method,
-              model: result.model,
-              parserVersion: result.parserVersion,
-            },
-          },
-          true,
-        )
+	        await saveRun(
+	          {
+	            distanceKm: result.distanceKm,
+	            durationSeconds,
+	            ...(result.notes ? { notes: result.notes } : {}),
+	            typeOverride: (result.type as Run["type"]) || "easy",
+	            completedAt: result.completedAt ? new Date(result.completedAt) : new Date(),
+	            importMeta: {
+	              confidence,
+	              ...(result.requestId ? { requestId: result.requestId } : {}),
+	              ...(result.method ? { method: result.method } : {}),
+	              ...(result.model ? { model: result.model } : {}),
+	              ...(result.parserVersion ? { parserVersion: result.parserVersion } : {}),
+	            },
+	          },
+	          true,
+	        )
       } else {
         trackAnalyticsEvent("run_image_requires_review", {
           source: "manual_run_modal",
@@ -292,17 +293,17 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
     
     if (parts.length === 1) {
       // Just seconds
-      return parseInt(parts[0]) || 0
+      return Number.parseInt(parts.at(0) ?? '', 10) || 0
     } else if (parts.length === 2) {
       // MM:SS
-      const minutes = parseInt(parts[0]) || 0
-      const seconds = parseInt(parts[1]) || 0
+      const minutes = Number.parseInt(parts.at(0) ?? '0', 10) || 0
+      const seconds = Number.parseInt(parts.at(1) ?? '0', 10) || 0
       return minutes * 60 + seconds
     } else if (parts.length === 3) {
       // HH:MM:SS
-      const hours = parseInt(parts[0]) || 0
-      const minutes = parseInt(parts[1]) || 0
-      const seconds = parseInt(parts[2]) || 0
+      const hours = Number.parseInt(parts.at(0) ?? '0', 10) || 0
+      const minutes = Number.parseInt(parts.at(1) ?? '0', 10) || 0
+      const seconds = Number.parseInt(parts.at(2) ?? '0', 10) || 0
       return hours * 3600 + minutes * 60 + seconds
     }
     

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { calculateMaxHRZones, calculateHRRZones, calculateLTZones } from '@/lib/heartRateZones';
 import { logger } from '@/lib/logger';
 
 // GET - Get zone-based workout recommendations
@@ -142,7 +141,7 @@ function generateZoneBasedWorkouts(
   zones: any[],
   targetZone: number | null,
   workoutType: string,
-  duration: number
+  _duration: number
 ): ZoneWorkoutRecommendation[] {
   const recommendations: ZoneWorkoutRecommendation[] = [];
   

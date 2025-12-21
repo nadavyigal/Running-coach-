@@ -142,11 +142,11 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
   // Calculate routes with distance from user
   const routesWithDistance = useMemo((): RouteWithDistance[] => {
     if (!userLocation) {
-      return routes.map(route => ({ ...route, distanceFromUser: undefined }))
+      return routes
     }
 
     return routes.map(route => {
-      const distanceFromUser = route.startLat && route.startLng
+      const distanceFromUser = typeof route.startLat === 'number' && typeof route.startLng === 'number'
         ? calculateDistance(
             userLocation.latitude,
             userLocation.longitude,
@@ -182,7 +182,16 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
       handleRouteSelect(route)
     } else {
       // Preview the route
-      setPreviewedRouteId(route.id)
+      if (typeof route.id === 'number') {
+        setPreviewedRouteId(route.id)
+        return
+      }
+
+      toast({
+        title: 'Error',
+        description: 'Cannot preview route without ID',
+        variant: 'destructive',
+      })
     }
   }
 
@@ -343,12 +352,9 @@ export function RouteSelectorModal({ isOpen, onClose, onRouteSelected }: RouteSe
               <MapErrorBoundary fallbackMessage="Map loading failed">
                 <RouteMap
                   routes={nearbyRoutes}
-                  userLocation={userLocation ? {
-                    lat: userLocation.latitude,
-                    lng: userLocation.longitude
-                  } : undefined}
+                  userLocation={userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : null}
                   onRouteClick={handleMapRouteClick}
-                  selectedRouteId={previewedRouteId ?? undefined}
+                  {...(typeof previewedRouteId === 'number' ? { selectedRouteId: previewedRouteId } : {})}
                   height="350px"
                   className="rounded-lg border mb-4"
                 />

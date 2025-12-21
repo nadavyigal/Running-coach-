@@ -177,7 +177,7 @@ export async function recordRunWithSideEffects(
         detail: {
           userId: input.userId,
           runId,
-          workoutId: resolvedWorkoutId,
+          ...(typeof resolvedWorkoutId === "number" ? { workoutId: resolvedWorkoutId } : {}),
         },
       })
     )
@@ -185,5 +185,5 @@ export async function recordRunWithSideEffects(
     // Ignore environments without window/custom events
   }
 
-  return { runId, workoutId: resolvedWorkoutId }
+  return { runId, ...(typeof resolvedWorkoutId === "number" ? { workoutId: resolvedWorkoutId } : {}) }
 }

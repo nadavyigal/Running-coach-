@@ -310,7 +310,7 @@ export class BackgroundSyncManager {
     });
   }
 
-  private async syncAppleWatchActivities(job: SyncJob, device: any) {
+  private async syncAppleWatchActivities(job: SyncJob, _device: any) {
     // Apple Watch sync would use HealthKit integration
     // This is a placeholder for the implementation
     console.log('Apple Watch activity sync not yet implemented');
@@ -357,7 +357,7 @@ export class BackgroundSyncManager {
     }
   }
 
-  private async syncHeartRateData(job: SyncJob, device: any) {
+  private async syncHeartRateData(job: SyncJob, _device: any) {
     // Implementation would fetch detailed heart rate data
     await db.syncJobs.update(job.id!, {
       progress: 66,
@@ -365,7 +365,7 @@ export class BackgroundSyncManager {
     });
   }
 
-  private async syncAdvancedMetrics(job: SyncJob, device: any) {
+  private async syncAdvancedMetrics(job: SyncJob, _device: any) {
     // Implementation would fetch and process advanced metrics
     await db.syncJobs.update(job.id!, {
       progress: 100,

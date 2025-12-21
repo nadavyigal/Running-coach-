@@ -559,7 +559,6 @@ class TestingExecutionPlan {
       console.log("📱 Testing offline behavior...");
       
       // Simulate offline state
-      const originalOnLine = navigator.onLine;
       
       // Note: Can't actually change navigator.onLine, but can test current state
       tests.push({

@@ -119,7 +119,7 @@ export class GPSMonitoringService {
     const signalStrength = Math.max(0, Math.min(100, 100 - (accuracy / 50) * 100));
     
     // Estimate satellite count based on accuracy and timing
-    const satellitesVisible = this.estimateSatelliteCount(accuracy, signalStrength);
+    const satellitesVisible = this.estimateSatelliteCount(accuracy);
     
     // Determine location quality
     const locationQuality = this.determineLocationQuality(accuracy);
@@ -134,9 +134,9 @@ export class GPSMonitoringService {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude
       },
-      altitude: position.coords.altitude || undefined,
-      heading: position.coords.heading || undefined,
-      speed: position.coords.speed || undefined
+      ...(typeof position.coords.altitude === 'number' ? { altitude: position.coords.altitude } : {}),
+      ...(typeof position.coords.heading === 'number' ? { heading: position.coords.heading } : {}),
+      ...(typeof position.coords.speed === 'number' ? { speed: position.coords.speed } : {}),
     };
 
     // Add to history
@@ -148,7 +148,7 @@ export class GPSMonitoringService {
     return accuracyData;
   }
 
-  private estimateSatelliteCount(accuracy: number, signalStrength: number): number {
+  private estimateSatelliteCount(accuracy: number): number {
     // Estimate satellite count based on accuracy and signal strength
     // This is an approximation since browser API doesn't provide actual satellite count
     
@@ -220,7 +220,7 @@ export class GPSMonitoringService {
       };
     }
 
-    const current = this.accuracyHistory[this.accuracyHistory.length - 1];
+    const current = this.accuracyHistory.at(-1) ?? null;
     const accuracies = this.accuracyHistory.map(a => a.accuracyRadius);
     
     const average = accuracies.reduce((sum, acc) => sum + acc, 0) / accuracies.length;
@@ -304,7 +304,7 @@ export class GPSMonitoringService {
     color: 'green' | 'yellow' | 'orange' | 'red';
     icon: 'excellent' | 'good' | 'fair' | 'poor';
   } {
-    const { locationQuality, accuracyRadius, signalStrength } = accuracyData;
+    const { locationQuality, accuracyRadius } = accuracyData;
 
     switch (locationQuality) {
       case 'excellent':
@@ -361,7 +361,14 @@ export class GPSMonitoringService {
       };
     }
 
-    const current = accuracyData || this.accuracyHistory[this.accuracyHistory.length - 1];
+    const current = accuracyData ?? this.accuracyHistory.at(-1);
+    if (!current) {
+      return {
+        ready: false,
+        reason: 'No GPS signal detected',
+        recommendation: 'Move to an open area and wait for GPS lock'
+      };
+    }
     
     if (current.accuracyRadius > this.config.minAccuracyThreshold) {
       return {
@@ -431,7 +438,7 @@ export class GPSMonitoringService {
       const runs = await db.runs
         .where('userId')
         .equals(userId)
-        .and(run => run.completedAt >= cutoffDate && run.gpsAccuracyData)
+        .and(run => run.completedAt >= cutoffDate && Boolean(run.gpsAccuracyData))
         .toArray();
 
       if (runs.length === 0) {
@@ -452,7 +459,7 @@ export class GPSMonitoringService {
             accuracyData.forEach(data => {
               allAccuracies.push(data.accuracyRadius);
             });
-          } catch (error) {
+          } catch {
             console.warn('Failed to parse GPS accuracy data for run:', run.id);
           }
         }
@@ -485,7 +492,7 @@ export class GPSMonitoringService {
           try {
             const data: GPSAccuracyData[] = JSON.parse(run.gpsAccuracyData);
             data.forEach(d => earlierAccuracies.push(d.accuracyRadius));
-          } catch (error) {
+          } catch {
             // Ignore parsing errors
           }
         }
@@ -496,7 +503,7 @@ export class GPSMonitoringService {
           try {
             const data: GPSAccuracyData[] = JSON.parse(run.gpsAccuracyData);
             data.forEach(d => laterAccuracies.push(d.accuracyRadius));
-          } catch (error) {
+          } catch {
             // Ignore parsing errors
           }
         }

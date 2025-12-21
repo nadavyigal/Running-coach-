@@ -35,12 +35,6 @@ export interface UserPreferences {
 }
 
 export class DataFusionEngine {
-  private db: typeof db;
-
-  constructor() {
-    this.db = db;
-  }
-
   /**
    * Main method to fuse data points from multiple sources
    */
@@ -50,11 +44,11 @@ export class DataFusionEngine {
     userPreferences: UserPreferences
   ): Promise<FusedDataPoint[]> {
     // Group data points by timestamp and type
-    const groupedData = this.groupDataByTimestampMain(dataPoints);
+    const groupedData = this.groupDataByTimestamp(dataPoints);
     
     const fusedPoints: FusedDataPoint[] = [];
     
-    for (const [timestamp, points] of groupedData) {
+    for (const [_timestamp, points] of groupedData) {
       const fusedPoint = await this.fusePointGroup(points, fusionRules, userPreferences);
       fusedPoints.push(fusedPoint);
     }
@@ -95,26 +89,6 @@ export class DataFusionEngine {
   }
 
   /**
-   * Group data points by timestamp for processing (main implementation)
-   */
-  private groupDataByTimestampMain(dataPoints: RawDataPoint[]): Map<Date, RawDataPoint[]> {
-    const grouped = new Map<Date, RawDataPoint[]>();
-    
-    for (const point of dataPoints) {
-      const timestamp = new Date(point.timestamp);
-      const key = new Date(timestamp.getFullYear(), timestamp.getMonth(), timestamp.getDate(), 
-                          timestamp.getHours(), timestamp.getMinutes(), timestamp.getSeconds());
-      
-      if (!grouped.has(key)) {
-        grouped.set(key, []);
-      }
-      grouped.get(key)!.push(point);
-    }
-    
-    return grouped;
-  }
-
-  /**
    * Fuse a group of data points at the same timestamp
    */
   private async fusePointGroup(
@@ -124,9 +98,13 @@ export class DataFusionEngine {
   ): Promise<FusedDataPoint> {
     // Sort by priority and accuracy
     const sortedPoints = this.sortByPriority(points, rules);
+    const primaryPoint = sortedPoints[0];
+    if (!primaryPoint) {
+      throw new Error('Cannot fuse empty data point group');
+    }
     
     // Detect conflicts
-    const conflicts = this.detectConflicts(sortedPoints);
+    const conflicts = this.detectConflicts(sortedPoints, rules.userId, rules.dataType);
     
     // Resolve conflicts based on rules
     const resolvedValue = await this.resolveConflicts(sortedPoints, conflicts, rules, userPreferences);
@@ -141,12 +119,11 @@ export class DataFusionEngine {
     const qualityScore = this.calculateQualityScore(sortedPoints, conflicts);
     
     return {
-      id: this.generateId(),
       userId: rules.userId,
       dataType: rules.dataType,
       value: resolvedValue,
-      timestamp: sortedPoints[0].timestamp,
-      primarySource: sortedPoints[0].deviceId,
+      timestamp: primaryPoint.timestamp,
+      primarySource: primaryPoint.deviceId,
       contributingSources: sortedPoints.map(p => p.deviceId),
       confidence,
       fusionMethod,
@@ -176,7 +153,7 @@ export class DataFusionEngine {
   /**
    * Detect conflicts between data points
    */
-  private detectConflicts(points: RawDataPoint[]): DataConflict[] {
+  private detectConflicts(points: RawDataPoint[], userId: number, dataType: string): DataConflict[] {
     const conflicts: DataConflict[] = [];
     
     if (points.length < 2) return conflicts;
@@ -185,21 +162,22 @@ export class DataFusionEngine {
       for (let j = i + 1; j < points.length; j++) {
         const point1 = points[i];
         const point2 = points[j];
+        if (!point1 || !point2) continue;
         
         const difference = Math.abs(point1.value - point2.value);
         const threshold = this.getConflictThreshold(point1.dataType);
         
         if (difference > threshold) {
           conflicts.push({
-            id: this.generateId(),
-            fusedDataPointId: '',
+            userId,
+            dataType,
             sourceDevice1: point1.deviceId,
             sourceDevice2: point2.deviceId,
             value1: point1.value,
             value2: point2.value,
             difference,
             resolutionMethod: '',
-            resolvedValue: 0,
+            resolvedValue: undefined,
             manuallyResolved: false,
             createdAt: new Date()
           });
@@ -234,15 +212,20 @@ export class DataFusionEngine {
     points: RawDataPoint[],
     conflicts: DataConflict[],
     rules: DataFusionRule,
-    userPreferences: UserPreferences
+    _userPreferences: UserPreferences
   ): Promise<number> {
     if (conflicts.length === 0) {
-      return points[0].value;
+      const primaryPoint = points[0];
+      if (!primaryPoint) throw new Error('No data points to resolve');
+      return primaryPoint.value;
     }
+
+    const primaryPoint = points[0];
+    if (!primaryPoint) throw new Error('No data points to resolve');
     
     switch (rules.conflictResolution) {
       case 'prefer_primary':
-        return points[0].value;
+        return primaryPoint.value;
         
       case 'most_recent':
         return this.getMostRecentValue(points);
@@ -256,10 +239,10 @@ export class DataFusionEngine {
       case 'manual':
         // For manual resolution, we'll need to store the conflict and wait for user input
         // For now, fall back to primary source
-        return points[0].value;
+        return primaryPoint.value;
         
       default:
-        return points[0].value;
+        return primaryPoint.value;
     }
   }
 
@@ -359,10 +342,11 @@ export class DataFusionEngine {
     const filledPoints: FusedDataPoint[] = [];
     
     for (let i = 0; i < fusedPoints.length - 1; i++) {
-      filledPoints.push(fusedPoints[i]);
-      
       const current = fusedPoints[i];
       const next = fusedPoints[i + 1];
+      if (!current || !next) continue;
+
+      filledPoints.push(current);
       
       // Check if there's a gap that needs filling
       const timeDiff = next.timestamp.getTime() - current.timestamp.getTime();
@@ -376,7 +360,8 @@ export class DataFusionEngine {
     }
     
     if (fusedPoints.length > 0) {
-      filledPoints.push(fusedPoints[fusedPoints.length - 1]);
+      const lastPoint = fusedPoints.at(-1);
+      if (lastPoint) filledPoints.push(lastPoint);
     }
     
     return filledPoints;
@@ -419,7 +404,6 @@ export class DataFusionEngine {
       const interpolatedValue = this.interpolateValue(start.value, end.value, progress, userPreferences.interpolationMethod);
       
       interpolatedPoints.push({
-        id: this.generateId(),
         userId: rules.userId,
         dataType: rules.dataType,
         value: interpolatedValue,
@@ -459,19 +443,14 @@ export class DataFusionEngine {
   }
 
   /**
-   * Generate a unique ID
+   * Fuse data for a user and data type (e.g., heart_rate, steps)
    */
-  private generateId(): string {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2);
-  }
-
-  // Fuse data for a user and data type (e.g., heart_rate, steps)
-  async fuseDataForUserAndType(userId: number, dataType: string, start: Date, end: Date): Promise<FusedDataPoint[]> {
+  async fuseDataForUserAndType(userId: number, dataType: string, _start: Date, _end: Date): Promise<FusedDataPoint[]> {
     // 1. Get fusion rule
     const rule = await this.getFusionRule(userId, dataType);
     if (!rule) throw new Error('No fusion rule defined');
     // 2. Get all active data sources for this user and type
-    const sources = await this.getDataSources(userId, dataType);
+    await this.getDataSources(userId, dataType);
     // 3. Fetch raw data from all sources in the time range (stub: to be implemented)
     // 4. Merge data according to rule
     // 5. Resolve conflicts
@@ -516,6 +495,7 @@ export class DataFusionEngine {
     } else {
       return await db.dataFusionRules.add({
         ...ruleData,
+        updatedAt: new Date(),
         createdAt: new Date()
       });
     }
@@ -523,7 +503,7 @@ export class DataFusionEngine {
 
 
   // Fill gaps in the data using interpolation/extrapolation
-  fillGaps(data: any[], rule: DataFusionRule): any[] {
+  fillGaps(data: any[], _rule: DataFusionRule): any[] {
     // (Stub)
     return data;
   }

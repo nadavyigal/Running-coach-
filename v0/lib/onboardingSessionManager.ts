@@ -1,4 +1,4 @@
-import { db, OnboardingSession, SmartGoal, User } from "./db";
+import { db, OnboardingSession, SmartGoal } from "./db";
 
 export class OnboardingSessionManager {
   private userId: number;

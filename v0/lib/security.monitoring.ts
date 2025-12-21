@@ -154,11 +154,10 @@ export class SecurityMonitor {
     // Monitor for unusual navigation patterns
     let navigationCount = 0;
     const originalPushState = history.pushState;
-    const monitor = this;
-    history.pushState = function(...args) {
+    history.pushState = (...args) => {
       navigationCount++;
       if (navigationCount > 20) {
-        monitor.trackSecurityEvent({
+        this.trackSecurityEvent({
           type: 'excessive_navigation',
           severity: 'warning',
           message: 'Excessive navigation attempts detected',
@@ -176,12 +175,13 @@ export class SecurityMonitor {
     // Monitor innerHTML assignments
     const originalInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
     if (originalInnerHTML && originalInnerHTML.set) {
-      const monitor = this;
+      const detectSuspiciousContent = this.detectSuspiciousContent.bind(this);
+      const trackSecurityEvent = this.trackSecurityEvent.bind(this);
       Object.defineProperty(Element.prototype, 'innerHTML', {
         set(value: string) {
           // Check for XSS patterns
-          if (monitor.detectSuspiciousContent(value)) {
-            monitor.trackSecurityEvent({
+          if (detectSuspiciousContent(value)) {
+            trackSecurityEvent({
               type: 'xss_attempt',
               severity: 'critical',
               message: 'Potential XSS attempt detected in innerHTML',
@@ -197,12 +197,12 @@ export class SecurityMonitor {
 
     // Monitor for script injection attempts
     const originalCreateElement = document.createElement;
-    const monitor = this;
+    const trackSecurityEvent = this.trackSecurityEvent.bind(this);
     document.createElement = function(tagName: string) {
       const element = originalCreateElement.call(document, tagName);
       
       if (tagName.toLowerCase() === 'script') {
-        monitor.trackSecurityEvent({
+        trackSecurityEvent({
           type: 'script_creation',
           severity: 'warning',
           message: 'Dynamic script element creation detected',

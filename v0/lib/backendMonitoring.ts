@@ -327,8 +327,8 @@ class BackendMonitoringService {
   private updateDatabaseLatency(latency: number): void {
     const recentOperations = this.operationMetrics.slice(-100);
     const totalLatency = recentOperations.reduce((sum, op) => sum + (op.duration || 0), 0);
-    this.databaseMetrics.averageLatency = recentOperations.length > 0 ? 
-      totalLatency / recentOperations.length : 0;
+    const avgLatencyFromOperations = recentOperations.length > 0 ? totalLatency / recentOperations.length : 0;
+    this.databaseMetrics.averageLatency = avgLatencyFromOperations || latency;
   }
 
   private calculateHealthScore(): number {

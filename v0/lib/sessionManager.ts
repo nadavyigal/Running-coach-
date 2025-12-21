@@ -89,7 +89,11 @@ export class SessionManager {
       }
 
       const sessionId = await db.onboardingSessions.add(newSession)
-      const session = { ...newSession, id: sessionId }
+      if (typeof sessionId !== 'number') {
+        throw new Error('Failed to create onboarding session id')
+      }
+
+      const session: OnboardingSession = { ...newSession, id: sessionId }
 
       // Cache the session
       this.activeSessionCache.set(userId, session)
@@ -383,7 +387,7 @@ export class SessionManager {
     failed: number
     errors: string[]
   }> {
-    const results = { resolved: 0, failed: 0, errors: [] }
+    const results: { resolved: number; failed: number; errors: string[] } = { resolved: 0, failed: 0, errors: [] }
 
     for (const conflict of conflicts) {
       try {
@@ -576,14 +580,15 @@ export class SessionManager {
       return // No sessions to resolve
     }
 
-    const sessionToKeep = strategy === 'newest' 
-      ? allActiveSessions[allActiveSessions.length - 1]
-      : allActiveSessions[0]
+    const sessionToKeep = strategy === 'newest' ? allActiveSessions.at(-1) : allActiveSessions.at(0)
+    if (!sessionToKeep?.id) {
+      return
+    }
 
     // Delete all other sessions
     for (const sessionToDelete of allActiveSessions) {
-      if (sessionToDelete.id !== sessionToKeep.id) {
-        await this.deleteSession(sessionToDelete.id!)
+      if (sessionToDelete.id && sessionToDelete.id !== sessionToKeep.id) {
+        await this.deleteSession(sessionToDelete.id)
       }
     }
   }

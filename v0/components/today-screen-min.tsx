@@ -75,7 +75,7 @@ export function TodayScreen() {
             <div className="text-sm text-gray-600">Preparing your plan...</div>
           )}
           <div className="pt-2">
-            <div className="font-semibold">Today's Workout</div>
+            <div className="font-semibold">Today&apos;s Workout</div>
             {todaysWorkout ? (
               <div className="text-sm text-gray-700">
                 {todaysWorkout.day}: {todaysWorkout.type} — {todaysWorkout.distance} km

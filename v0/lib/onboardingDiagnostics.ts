@@ -5,7 +5,7 @@
  * onboarding states that can prevent users from accessing the application.
  */
 
-import { type User, db } from './db'
+import { db } from './db'
 import { dbUtils } from '@/lib/dbUtils'
 
 export interface OnboardingDiagnosticReport {
@@ -57,18 +57,18 @@ export async function diagnoseOnboardingState(): Promise<OnboardingDiagnosticRep
     if (user) {
       report.indexedDBState = {
         hasUser: true,
-        userId: user.id,
-        username: user.name,
         onboardingComplete: user.onboardingComplete || false,
         hasPlan: false, // Will be set below
-        userCreatedAt: user.createdAt
+        userCreatedAt: user.createdAt,
+        ...(typeof user.id === 'number' ? { userId: user.id } : {}),
+        ...(typeof user.name === 'string' ? { username: user.name } : {}),
       }
 
       // Check if user has an active plan
       try {
-        const activePlan = await dbUtils.getActivePlan()
+        const activePlan = typeof user.id === 'number' ? await dbUtils.getActivePlan(user.id) : null
         report.indexedDBState.hasPlan = !!activePlan
-      } catch (e) {
+      } catch {
         report.indexedDBState.hasPlan = false
       }
     }
@@ -153,7 +153,7 @@ export async function resetOnboardingState(): Promise<{ success: boolean; error?
     localStorage.removeItem('user-preferences')
     
     // Clear all IndexedDB tables to start fresh
-    await db.transaction('rw', db.users, db.plans, db.workouts, db.runs, db.chatMessages, db.badges, db.cohorts, async () => {
+    await db.transaction('rw', [db.users, db.plans, db.workouts, db.runs, db.chatMessages, db.badges, db.cohorts], async () => {
       await db.users.clear()
       await db.plans.clear()
       await db.workouts.clear()

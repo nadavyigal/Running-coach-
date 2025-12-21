@@ -365,7 +365,6 @@ class EngagementOptimizationService {
 
   private analyzeRecentPerformance(run: Run): string {
     const pace = run.pace || 0;
-    const distance = run.distance;
     
     if (pace < 300) return 'excellent';
     if (pace < 360) return 'good';

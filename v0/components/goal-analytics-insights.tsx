@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import dynamic from 'next/dynamic';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+	import { useState, useEffect } from 'react';
+	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+	import { Button } from '@/components/ui/button';
+	import { Badge } from '@/components/ui/badge';
+	import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+	import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -25,14 +24,7 @@ import {
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
-type RechartsModule = typeof import('recharts');
-
-const LazyCharts = dynamic(async () => {
-  const mod = await import('recharts');
-  return {
-    default: mod,
-  };
-}, { ssr: false });
+	type RechartsModule = typeof import('recharts');
 
 interface GoalAnalyticsInsightsProps {
   userId: number;
@@ -209,7 +201,7 @@ export function GoalAnalyticsInsights({
         title: "Analytics Exported",
         description: "Your goal analytics have been downloaded.",
       });
-    } catch (error) {
+    } catch {
       toast({
         variant: "destructive",
         title: "Export Failed",
@@ -256,7 +248,7 @@ export function GoalAnalyticsInsights({
     );
   }
 
-  const { ResponsiveContainer, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, BarChart, Bar } = recharts;
+  const { ResponsiveContainer, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, BarChart, Bar, Area } = recharts;
 
   return (
     <div className={className}>

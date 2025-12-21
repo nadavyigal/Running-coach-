@@ -51,7 +51,7 @@ export default function WellnessInputModal({
       setError(null);
       await onSubmit(wellnessData);
       onOpenChange(false);
-    } catch (err) {
+    } catch {
       setError('Failed to save wellness data');
     }
   };

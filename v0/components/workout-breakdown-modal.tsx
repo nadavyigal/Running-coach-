@@ -51,7 +51,7 @@ export function WorkoutBreakdownModal({ isOpen, onClose }: WorkoutBreakdownModal
             </Button>
             <div className="text-center pt-4">
               <h1 className="text-2xl font-bold mb-2">Select target goal</h1>
-              <p className="text-white/90 text-sm">Set a total distance and we'll motivate you to the finish line</p>
+              <p className="text-white/90 text-sm">Set a total distance and we&apos;ll motivate you to the finish line</p>
             </div>
           </div>
         </div>
@@ -101,9 +101,9 @@ export function WorkoutBreakdownModal({ isOpen, onClose }: WorkoutBreakdownModal
 
           {/* Difficulty Selection */}
           <div className="space-y-3">
-            <p className="text-sm text-gray-600 text-center">
-              Select the difficulty of your long run. If you'd like a range of difficulty suggestions, select Open.
-            </p>
+              <p className="text-sm text-gray-600 text-center">
+              Select the difficulty of your long run. If you&apos;d like a range of difficulty suggestions, select Open.
+              </p>
 
             <div className="grid grid-cols-3 gap-3">
               {difficulties.map((difficulty) => (
@@ -124,10 +124,10 @@ export function WorkoutBreakdownModal({ isOpen, onClose }: WorkoutBreakdownModal
 
           {/* Description */}
           <div className="bg-gray-50 p-4 rounded-lg">
-            <p className="text-sm text-gray-700 text-center">
-              We'll build this workout off a current estimated race time from your plan. This will then inform the pace
+              <p className="text-sm text-gray-700 text-center">
+              We&apos;ll build this workout off a current estimated race time from your plan. This will then inform the pace
               of your run.
-            </p>
+              </p>
           </div>
 
           {/* Continue Button */}

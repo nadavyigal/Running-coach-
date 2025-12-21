@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -61,7 +61,7 @@ interface PerformanceAnalyticsDashboardProps {
   onClose?: () => void;
 }
 
-export function PerformanceAnalyticsDashboard({ userId = 1, onClose }: PerformanceAnalyticsDashboardProps) {
+export function PerformanceAnalyticsDashboard({ userId = 1 }: PerformanceAnalyticsDashboardProps) {
   const [data, setData] = useState<PerformanceAnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -210,16 +210,6 @@ export function PerformanceAnalyticsDashboard({ userId = 1, onClose }: Performan
     const minutes = Math.floor(paceSecondsPerKm / 60);
     const seconds = Math.floor(paceSecondsPerKm % 60);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
-
-  const formatDuration = (durationSeconds: number): string => {
-    const hours = Math.floor(durationSeconds / 3600);
-    const minutes = Math.floor((durationSeconds % 3600) / 60);
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    }
-    return `${minutes}m`;
   };
 
   const getChangeIcon = (change: number) => {

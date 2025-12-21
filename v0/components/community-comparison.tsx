@@ -156,7 +156,7 @@ export function CommunityComparison({ userId, timeRange }: CommunityComparisonPr
             <div className="flex justify-center mb-4">
               <Users className="h-12 w-12 text-gray-300" />
             </div>
-            <p className="text-gray-500 mb-2">You're not in a cohort yet</p>
+            <p className="text-gray-500 mb-2">You&apos;re not in a cohort yet</p>
             <p className="text-sm text-gray-400 mb-4">
               Join a community cohort to compare your performance with other runners
             </p>
@@ -343,7 +343,7 @@ export function CommunityComparison({ userId, timeRange }: CommunityComparisonPr
             <Calendar className="h-5 w-5" />
             Recent Cohort Activity
           </CardTitle>
-          <CardDescription>This week's highlights</CardDescription>
+          <CardDescription>This week&apos;s highlights</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">

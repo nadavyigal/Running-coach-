@@ -2,8 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Lightbulb, TrendingUp, AlertTriangle, Target, Zap } from 'lucide-react';
@@ -109,7 +107,7 @@ export function ZoneBasedCoaching({ userId, recentRuns = 10 }: ZoneCoachingProps
     let totalAccuracy = 0;
     let totalRuns = 0;
 
-    distributions.forEach(({ run, distribution }) => {
+    distributions.forEach(({ distribution }) => {
       // Simple accuracy calculation based on zone distribution
       // Higher accuracy if more time spent in zones 2-4 (typical training zones)
       const zone2to4Time = distribution.zone2Time + distribution.zone3Time + distribution.zone4Time;

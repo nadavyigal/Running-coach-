@@ -575,61 +575,6 @@ ${raceDate && !Number.isNaN(raceDate.getTime()) ? `- Race date: ${raceDate.toDat
 Generate a structured plan that will help this runner achieve their goals safely and effectively.`;
 }
 
-function buildPlanPrompt(user: any, planType?: string, targetDistance?: string, rookie_challenge?: boolean): string {
-  if (!user || !user.experience || !user.goal || !user.daysPerWeek || !user.preferredTimes) {
-    logger.warn('⚠️ Invalid user data provided, using fallback defaults');
-    // Provide fallback defaults instead of throwing
-    user = {
-      experience: 'beginner',
-      goal: 'habit',
-      daysPerWeek: 3,
-      preferredTimes: ['morning'],
-      ...user // Keep any valid properties from original user
-    };
-  }
-
-  const basePrompt = `Create a personalized running training plan for a runner with the following profile:
-
-**Runner Profile:**
-- Experience Level: ${user.experience}
-- Primary Goal: ${user.goal === 'habit' ? 'Build consistent running habit' : user.goal === 'distance' ? 'Increase running distance' : 'Improve running speed'}
-- Preferred Training Days: ${user.daysPerWeek} days per week
-- Preferred Times: ${user.preferredTimes.join(', ')}
-${planType ? `- Plan Type: ${planType}` : ''}
-${targetDistance ? `- Target Distance: ${targetDistance}` : ''}
-${rookie_challenge ? '\n- This user is a rookie and should receive a 14-day rookie challenge plan focused on habit-building and gradual progression.' : ''}
-
-**Requirements:**
-- Create a ${user.experience === 'beginner' ? '4-week' : user.experience === 'intermediate' ? '6-week' : '8-week'} progressive training plan
-- Include variety: easy runs, tempo runs, intervals, long runs, and rest days
-- Follow the 80/20 rule (80% easy, 20% hard efforts)
-- Progress gradually to avoid injury
-- Include specific distances in kilometers
-- Add helpful notes for each workout type
-
-**Workout Types to Include:**
-- easy: Comfortable pace runs for building aerobic base
-- tempo: Comfortably hard pace runs for lactate threshold
-- intervals: High-intensity interval training
-- long: Weekly long runs for endurance
-- time-trial: Occasional time trials for progress testing
-- hill: Hill repeats for strength (if appropriate)
-- rest: Complete rest days for recovery
-
-**Guidelines:**
-- Start conservatively and build gradually
-- Include at least 1-2 rest days per week
-- Long runs should be 20-30% of weekly volume
-- Tempo runs: 20-40 minutes at threshold pace
-- Intervals: 4-8 x 400m-1000m with recovery
-- Easy runs: 3-8km depending on experience
-- Include recovery notes and tips
-
-Generate a structured plan that will help this runner achieve their goals safely and effectively.`;
-
-  return basePrompt;
-}
-
 /**
  * Builds an enhanced prompt using comprehensive onboarding data
  * 

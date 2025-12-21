@@ -21,8 +21,6 @@ export interface NetworkErrorHandlingConfig {
 export function useNetworkErrorHandling(config: NetworkErrorHandlingConfig = {}) {
   const {
     enableOfflineMode = true,
-    enableAutoRetry = true,
-    maxRetries = 3,
     showToasts = true,
     fallbackToOfflineStorage = true
   } = config
@@ -151,7 +149,7 @@ export function useNetworkErrorHandling(config: NetworkErrorHandlingConfig = {})
           return await retryApiCall(apiCall, {
             operation,
             service,
-            onboardingStep
+            ...(typeof onboardingStep === 'string' ? { onboardingStep } : {})
           })
         })
       }
@@ -160,7 +158,7 @@ export function useNetworkErrorHandling(config: NetworkErrorHandlingConfig = {})
       return await retryApiCall(apiCall, {
         operation,
         service,
-        onboardingStep
+        ...(typeof onboardingStep === 'string' ? { onboardingStep } : {})
       })
     } catch (error) {
       // Save to offline storage if enabled and operation failed

@@ -59,50 +59,75 @@ const normalizeConfidencePct = (value: unknown) => {
   return Math.max(0, Math.min(100, Math.round(value)))
 }
 
-const normalizeStructured = (raw: any, exifDateIso?: string) => {
+type NormalizedExtraction = {
+  type: string
+  distanceKm: number | undefined
+  durationSeconds: number | undefined
+  paceSecondsPerKm: number | undefined
+  calories: number | undefined
+  notes: string | undefined
+  completedAtIso: string | undefined
+  confidencePct: number
+}
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {}
+
+const normalizeStructured = (raw: unknown, exifDateIso?: string): NormalizedExtraction => {
+  const record = asRecord(raw)
+
   const distanceKmValue =
-    (typeof raw?.distance_km === "number" ? raw.distance_km : parseLocaleNumber(raw?.distance_km)) ??
-    (typeof raw?.distanceKm === "number" ? raw.distanceKm : parseLocaleNumber(raw?.distanceKm))
+    (typeof record.distance_km === "number" ? record.distance_km : parseLocaleNumber(record.distance_km)) ??
+    (typeof record.distanceKm === "number" ? record.distanceKm : parseLocaleNumber(record.distanceKm))
   const milesValue =
-    (typeof raw?.distance_miles === "number" ? raw.distance_miles : parseLocaleNumber(raw?.distance_miles)) ??
-    (typeof raw?.distanceMiles === "number" ? raw.distanceMiles : parseLocaleNumber(raw?.distanceMiles))
+    (typeof record.distance_miles === "number" ? record.distance_miles : parseLocaleNumber(record.distance_miles)) ??
+    (typeof record.distanceMiles === "number" ? record.distanceMiles : parseLocaleNumber(record.distanceMiles))
 
   const distanceKm =
-    typeof distanceKmValue === "number" ? distanceKmValue : typeof milesValue === "number" ? milesValue * 1.60934 : undefined
+    typeof distanceKmValue === "number"
+      ? distanceKmValue
+      : typeof milesValue === "number"
+        ? milesValue * 1.60934
+        : undefined
 
   const durationSeconds =
-    (typeof raw?.duration_seconds === "number" ? raw.duration_seconds : parseLocaleNumber(raw?.duration_seconds)) ??
-    (typeof raw?.durationSeconds === "number" ? raw.durationSeconds : parseLocaleNumber(raw?.durationSeconds)) ??
-    (typeof raw?.duration_minutes === "number" ? raw.duration_minutes * 60 : undefined) ??
-    (typeof raw?.durationMinutes === "number" ? raw.durationMinutes * 60 : undefined) ??
-    (typeof raw?.duration_text === "string" ? parseDurationStringToSeconds(raw.duration_text) : undefined)
+    (typeof record.duration_seconds === "number" ? record.duration_seconds : parseLocaleNumber(record.duration_seconds)) ??
+    (typeof record.durationSeconds === "number" ? record.durationSeconds : parseLocaleNumber(record.durationSeconds)) ??
+    (typeof record.duration_minutes === "number" ? record.duration_minutes * 60 : undefined) ??
+    (typeof record.durationMinutes === "number" ? record.durationMinutes * 60 : undefined) ??
+    (typeof record.duration_text === "string" ? parseDurationStringToSeconds(record.duration_text) : undefined)
 
   const paceSeconds =
-    (typeof raw?.pace_seconds_per_km === "number" ? raw.pace_seconds_per_km : parseLocaleNumber(raw?.pace_seconds_per_km)) ??
-    (typeof raw?.paceSecondsPerKm === "number" ? raw.paceSecondsPerKm : parseLocaleNumber(raw?.paceSecondsPerKm)) ??
-    (typeof raw?.pace_text === "string" ? parsePaceToSecondsPerKm(raw.pace_text) : undefined)
+    (typeof record.pace_seconds_per_km === "number"
+      ? record.pace_seconds_per_km
+      : parseLocaleNumber(record.pace_seconds_per_km)) ??
+    (typeof record.paceSecondsPerKm === "number" ? record.paceSecondsPerKm : parseLocaleNumber(record.paceSecondsPerKm)) ??
+    (typeof record.pace_text === "string" ? parsePaceToSecondsPerKm(record.pace_text) : undefined)
 
   const calories =
-    (typeof raw?.calories === "number" ? raw.calories : parseLocaleNumber(raw?.calories)) ??
-    (typeof raw?.kcal === "number" ? raw.kcal : parseLocaleNumber(raw?.kcal))
+    (typeof record.calories === "number" ? record.calories : parseLocaleNumber(record.calories)) ??
+    (typeof record.kcal === "number" ? record.kcal : parseLocaleNumber(record.kcal))
 
   const dateIso =
-    (typeof raw?.date_iso === "string" ? raw.date_iso : undefined) ||
-    (typeof raw?.completedAtIso === "string" ? raw.completedAtIso : undefined) ||
+    (typeof record.date_iso === "string" ? record.date_iso : undefined) ||
+    (typeof record.completedAtIso === "string" ? record.completedAtIso : undefined) ||
     exifDateIso
 
   const confidence =
-    normalizeConfidencePct(raw?.confidence_pct) ??
-    normalizeConfidencePct(raw?.confidence) ??
-    normalizeConfidencePct(raw?.confidencePct)
+    normalizeConfidencePct(record.confidence_pct) ??
+    normalizeConfidencePct(record.confidence) ??
+    normalizeConfidencePct(record.confidencePct)
+
+  const runType =
+    typeof record.type === "string" ? record.type : typeof record.runType === "string" ? record.runType : "run"
 
   return {
-    type: typeof raw?.type === "string" ? raw.type : "run",
-    distanceKm,
-    durationSeconds,
+    type: runType,
+    distanceKm: typeof distanceKm === "number" ? distanceKm : undefined,
+    durationSeconds: typeof durationSeconds === "number" ? durationSeconds : undefined,
     paceSecondsPerKm: typeof paceSeconds === "number" ? paceSeconds : undefined,
     calories: typeof calories === "number" ? calories : undefined,
-    notes: typeof raw?.notes === "string" ? raw.notes : undefined,
+    notes: typeof record.notes === "string" ? record.notes : undefined,
     completedAtIso: dateIso,
     confidencePct: confidence ?? 50,
   }
@@ -200,51 +225,60 @@ export async function POST(req: Request) {
     const originalBuffer = Buffer.from(await file.arrayBuffer())
     const preprocessed = await preprocessActivityImage(originalBuffer, file.type)
 
-    const structuredSchema = {
-      type: "object",
-      properties: {
-        type: { type: "string" },
-        distance_km: { type: "number" },
-        distance_miles: { type: "number" },
-        duration_seconds: { type: "number" },
-        duration_minutes: { type: "number" },
-        duration_text: { type: "string" },
-        pace_seconds_per_km: { type: "number" },
-        pace_text: { type: "string" },
-        calories: { type: "number" },
-        notes: { type: "string" },
-        date_iso: { type: "string" },
-        confidence_pct: { type: "number" },
-      },
-      required: [],
-      additionalProperties: false,
-    } as const
+    const structuredSchema = z
+      .object({
+        type: z.string().optional(),
+        distance_km: z.union([z.number(), z.string()]).optional(),
+        distance_miles: z.union([z.number(), z.string()]).optional(),
+        duration_seconds: z.union([z.number(), z.string()]).optional(),
+        duration_minutes: z.union([z.number(), z.string()]).optional(),
+        duration_text: z.string().optional(),
+        pace_seconds_per_km: z.union([z.number(), z.string()]).optional(),
+        pace_text: z.string().optional(),
+        calories: z.union([z.number(), z.string()]).optional(),
+        notes: z.string().optional(),
+        date_iso: z.string().optional(),
+        confidence_pct: z.union([z.number(), z.string()]).optional(),
+        distanceKm: z.union([z.number(), z.string()]).optional(),
+        distanceMiles: z.union([z.number(), z.string()]).optional(),
+        durationSeconds: z.union([z.number(), z.string()]).optional(),
+        durationMinutes: z.union([z.number(), z.string()]).optional(),
+        paceSecondsPerKm: z.union([z.number(), z.string()]).optional(),
+        completedAtIso: z.string().optional(),
+        confidence: z.union([z.number(), z.string()]).optional(),
+        confidencePct: z.union([z.number(), z.string()]).optional(),
+        kcal: z.union([z.number(), z.string()]).optional(),
+        runType: z.string().optional(),
+      })
+      .passthrough()
 
     const prompt = `You are extracting a running activity from a fitness screenshot/photo.
-Return ONLY the fields you are confident about. Prefer totals (total distance, total time, average pace).
-
-Rules:
+ Return ONLY the fields you are confident about. Prefer totals (total distance, total time, average pace).
+ 
+ Rules:
 - If distance is shown in km, put it in distance_km. If miles, use distance_miles.
 - Duration should be total elapsed/moving time in duration_seconds. If only a text duration exists, use duration_text.
 - If average pace is shown, output pace_seconds_per_km or pace_text.
 - If a date is visible, output date_iso as ISO-8601. If no date is visible but EXIF exists, you may use it.
 - confidence_pct must be 0..100 (percentage).
-
-EXIF date hint (optional): ${preprocessed.exifDateIso ?? "none"}`
+ 
+ EXIF date hint (optional): ${preprocessed.exifDateIso ?? "none"}`
+    const imageUrl = `data:${preprocessed.mimeType};base64,${preprocessed.buffer.toString("base64")}`
 
     let method: ExtractionMethod = "vision_structured"
-    let structuredRaw: any | null = null
+    let structuredRaw: unknown | null = null
 
     try {
       const structured = await generateObject({
         model: openai(PRIMARY_MODEL),
         schema: structuredSchema,
-        prompt,
-        input: [
+        prompt: [
           {
-            type: "input_image",
-            image: preprocessed.buffer,
-            mimeType: preprocessed.mimeType,
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image", image: imageUrl },
+            ],
           },
         ],
       })
@@ -259,7 +293,6 @@ EXIF date hint (optional): ${preprocessed.exifDateIso ?? "none"}`
     let ocrText: string | undefined
     if (!hasMinimum) {
       method = "vision_text_fallback"
-      const imageUrl = `data:${preprocessed.mimeType};base64,${preprocessed.buffer.toString("base64")}`
       const ocrPrompt =
         "Transcribe all text visible in the image. Preserve line breaks. Do not infer missing values. Return plain text only."
 
@@ -291,7 +324,7 @@ EXIF date hint (optional): ${preprocessed.exifDateIso ?? "none"}`
       }
     }
 
-    if (!extracted?.distanceKm || !extracted?.durationSeconds) {
+    if (!extracted || typeof extracted.distanceKm !== "number" || typeof extracted.durationSeconds !== "number") {
       return NextResponse.json(
         {
           error: "Unable to extract distance and duration from the image. Please crop/zoom and try again, or enter manually.",
@@ -308,13 +341,27 @@ EXIF date hint (optional): ${preprocessed.exifDateIso ?? "none"}`
       )
     }
 
-    const { paceSecondsPerKm, confidencePct, warnings } = validateAndNormalizeExtracted({
+    const validationInput: {
+      distanceKm: number
+      durationSeconds: number
+      confidencePct: number
+      paceSecondsPerKm?: number
+      calories?: number
+    } = {
       distanceKm: extracted.distanceKm,
       durationSeconds: extracted.durationSeconds,
-      paceSecondsPerKm: extracted.paceSecondsPerKm,
-      calories: extracted.calories,
       confidencePct: extracted.confidencePct,
-    })
+    }
+
+    if (typeof extracted.paceSecondsPerKm === "number") {
+      validationInput.paceSecondsPerKm = extracted.paceSecondsPerKm
+    }
+
+    if (typeof extracted.calories === "number") {
+      validationInput.calories = extracted.calories
+    }
+
+    const { paceSecondsPerKm, confidencePct, warnings } = validateAndNormalizeExtracted(validationInput)
 
     const normalized = activitySchema.parse({
       type: extracted.type,

@@ -3,7 +3,7 @@
 import { useCallback } from 'react'
 import { db } from '@/lib/db'
 import { retryDbOperation, databaseCircuitBreaker } from '@/lib/retryMechanism'
-import { DatabaseError, offlineStorage } from '@/lib/errorHandling'
+import { offlineStorage } from '@/lib/errorHandling'
 import { useErrorToast } from '@/components/error-toast'
 
 export interface DatabaseOperation<T> {
@@ -88,7 +88,10 @@ export function useDatabaseErrorHandling() {
   // User operations with error handling
   const saveUser = useCallback(async (userData: Parameters<typeof db.users.add>[0]) => {
     return safeDbOperation({
-      operation: () => db.users.add(userData),
+      operation: async () => {
+        await db.users.add(userData)
+        return userData
+      },
       operationName: 'save_user',
       fallbackData: userData,
       critical: true
@@ -111,7 +114,7 @@ export function useDatabaseErrorHandling() {
           return await db.users.get(id)
         } else {
           const users = await db.users.toArray()
-          return users[0] || null
+          return users.at(0) ?? null
         }
       },
       operationName: 'get_user',
@@ -122,7 +125,10 @@ export function useDatabaseErrorHandling() {
   // Plan operations with error handling
   const savePlan = useCallback(async (planData: Parameters<typeof db.plans.add>[0]) => {
     return safeDbOperation({
-      operation: () => db.plans.add(planData),
+      operation: async () => {
+        await db.plans.add(planData)
+        return planData
+      },
       operationName: 'save_plan',
       fallbackData: planData,
       critical: true
@@ -149,7 +155,10 @@ export function useDatabaseErrorHandling() {
   // Workout operations with error handling
   const saveWorkout = useCallback(async (workoutData: Parameters<typeof db.workouts.add>[0]) => {
     return safeDbOperation({
-      operation: () => db.workouts.add(workoutData),
+      operation: async () => {
+        await db.workouts.add(workoutData)
+        return workoutData
+      },
       operationName: 'save_workout',
       fallbackData: workoutData,
       critical: true
@@ -168,7 +177,10 @@ export function useDatabaseErrorHandling() {
   // Run operations with error handling
   const saveRun = useCallback(async (runData: Parameters<typeof db.runs.add>[0]) => {
     return safeDbOperation({
-      operation: () => db.runs.add(runData),
+      operation: async () => {
+        await db.runs.add(runData)
+        return runData
+      },
       operationName: 'save_run',
       fallbackData: runData,
       critical: true
@@ -187,7 +199,10 @@ export function useDatabaseErrorHandling() {
   // Chat message operations
   const saveChatMessage = useCallback(async (messageData: Parameters<typeof db.chatMessages.add>[0]) => {
     return safeDbOperation({
-      operation: () => db.chatMessages.add(messageData),
+      operation: async () => {
+        await db.chatMessages.add(messageData)
+        return messageData
+      },
       operationName: 'save_chat_message',
       fallbackData: messageData,
       critical: false
@@ -197,7 +212,10 @@ export function useDatabaseErrorHandling() {
   // Badge operations
   const saveBadge = useCallback(async (badgeData: Parameters<typeof db.badges.add>[0]) => {
     return safeDbOperation({
-      operation: () => db.badges.add(badgeData),
+      operation: async () => {
+        await db.badges.add(badgeData)
+        return badgeData
+      },
       operationName: 'save_badge',
       fallbackData: badgeData,
       critical: false

@@ -61,7 +61,7 @@ export async function withRetry<T>(
   } = options
 
   const startTime = Date.now()
-  let lastError: Error
+  let lastError: Error = new Error('Retry failed')
   let attempt = 0
 
   while (attempt < maxRetries) {
@@ -311,33 +311,32 @@ export async function retryApiCall<T>(
     backoffFactor: 2,
     retryCondition: (error) => {
       // Log the error for analytics
-      trackOnboardingError({
-        errorType: isNetworkError(error) ? 'network_failure' : 
-                   isRateLimitError(error) ? 'api_timeout' :
-                   isAIServiceTempError(error) ? 'network_failure' : 'validation_error',
-        errorMessage: error.message,
-        errorContext: {
-          operation: context.operation,
-          service: context.service,
-          retryable: shouldRetry(error)
-        },
-        recoveryAttempted: true,
-        recoverySuccessful: false,
-        userImpact: 'medium',
-        onboardingStep: context.onboardingStep || 'unknown',
-        phase: undefined
-      })
+	      trackOnboardingError({
+	        errorType: isNetworkError(error) ? 'network_failure' : 
+	                   isRateLimitError(error) ? 'api_timeout' :
+	                   isAIServiceTempError(error) ? 'network_failure' : 'validation_error',
+	        errorMessage: error.message,
+	        errorContext: {
+	          operation: context.operation,
+	          service: context.service,
+	          retryable: shouldRetry(error)
+	        },
+	        recoveryAttempted: true,
+	        recoverySuccessful: false,
+	        userImpact: 'medium',
+	        onboardingStep: context.onboardingStep || 'unknown'
+	      })
       
       return shouldRetry(error)
     },
     onRetry: (error, attempt) => {
       console.warn(`Retry attempt ${attempt} for ${context.operation}:`, error.message)
     },
-    onSuccess: (result, attempts) => {
-      if (attempts > 1) {
-        console.log(`${context.operation} succeeded after ${attempts} attempts`)
-      }
-    },
+	    onSuccess: (_result, attempts) => {
+	      if (attempts > 1) {
+	        console.log(`${context.operation} succeeded after ${attempts} attempts`)
+	      }
+	    },
     onFailure: (error, attempts) => {
       console.error(`${context.operation} failed after ${attempts} attempts:`, error.message)
     }
@@ -379,7 +378,7 @@ export async function retryDbOperation<T>(
  */
 export class CircuitBreaker {
   private failureCount = 0
-  private lastFailureTime?: number
+  private lastFailureTime: number | undefined
   private state: 'closed' | 'open' | 'half-open' = 'closed'
   
   constructor(

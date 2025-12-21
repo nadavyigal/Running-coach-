@@ -98,13 +98,16 @@ export async function regenerateTrainingPlan(
       planData = await generatePlan({
         user,
         startDate,
-        targetDistance,
-        totalWeeks,
-        planPreferences,
+        ...(typeof targetDistance === 'string' ? { targetDistance } : {}),
+        ...(typeof totalWeeks === 'number' ? { totalWeeks } : {}),
+        ...(planPreferences ? { planPreferences } : {}),
       })
     } catch (error) {
       console.warn('[plan-regeneration] AI plan generation failed, falling back', error)
-      planData = await generateFallbackPlan(user, startDate, undefined, { totalWeeks, planPreferences })
+      planData = await generateFallbackPlan(user, startDate, undefined, {
+        ...(typeof totalWeeks === 'number' ? { totalWeeks } : {}),
+        ...(planPreferences ? { planPreferences } : {}),
+      })
     }
 
     // Deactivate any existing active plans to avoid multiple actives
@@ -115,7 +118,8 @@ export async function regenerateTrainingPlan(
     // Ensure the plan contains a race-day workout (time-trial) when raceDate is set.
     const workouts = [...planData.workouts]
     if (raceDate) {
-      const raceDayShort = (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const)[raceDate.getDay()]
+      const raceDayShort =
+        (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const).at(raceDate.getDay()) ?? 'Sat'
       const raceDistanceKm = mapTargetDistanceToKm(targetDistance)
       if (typeof raceDistanceKm === 'number') {
         const existingRaceWorkoutIndex = workouts.findIndex((w) =>
@@ -123,15 +127,17 @@ export async function regenerateTrainingPlan(
         )
 
         if (existingRaceWorkoutIndex >= 0) {
-          const existing = workouts[existingRaceWorkoutIndex]
-          workouts[existingRaceWorkoutIndex] = {
-            ...existing,
-            week: totalWeeks || existing.week,
-            day: raceDayShort,
-            type: 'time-trial',
-            distance: raceDistanceKm,
-            scheduledDate: raceDate,
-            notes: existing.notes || `Race day: run your ${raceDistanceKm}km effort!`,
+          const existing = workouts.at(existingRaceWorkoutIndex)
+          if (existing) {
+            workouts[existingRaceWorkoutIndex] = {
+              ...existing,
+              week: totalWeeks || existing.week,
+              day: raceDayShort,
+              type: 'time-trial',
+              distance: raceDistanceKm,
+              scheduledDate: raceDate,
+              notes: existing.notes || `Race day: run your ${raceDistanceKm}km effort!`,
+            }
           }
         } else {
           workouts.push({
@@ -153,14 +159,14 @@ export async function regenerateTrainingPlan(
       ? workouts.filter((w) => (w.scheduledDate ? new Date(w.scheduledDate).getTime() <= raceDate.getTime() : true))
       : workouts
 
-    const planId = await dbUtils.createPlan({
-      ...planData.plan,
-      goalId: goal.id,
-      startDate,
-      endDate: effectiveEndDate,
-      totalWeeks: totalWeeks || planData.plan.totalWeeks,
-      isActive: true,
-    })
+	    const planId = await dbUtils.createPlan({
+	      ...planData.plan,
+	      startDate,
+	      endDate: effectiveEndDate,
+	      totalWeeks: totalWeeks || planData.plan.totalWeeks,
+	      isActive: true,
+	      ...(typeof goal.id === 'number' ? { goalId: goal.id } : {}),
+	    })
 
     for (const workout of finalWorkouts) {
       await dbUtils.createWorkout({

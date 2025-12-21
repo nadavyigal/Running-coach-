@@ -106,7 +106,7 @@ const PHASE_PROMPTS = {
   Finalize their goals and prepare for the next step.`
 }
 
-const GOAL_TEMPLATES = {
+const _GOAL_TEMPLATES = {
   habit: {
     title: "Build a Consistent Running Habit",
     description: "Establish a sustainable running routine",
@@ -202,7 +202,7 @@ function analyzeUserResponse(
   return { coachingStyle }
 }
 
-function generateGoalsFromConversation(messages: any[], session: OnboardingSession): GoalData[] {
+function generateGoalsFromConversation(messages: any[]): GoalData[] {
   const goals: GoalData[] = []
   
   // Analyze conversation for goal indicators
@@ -401,10 +401,10 @@ export async function POST(req: NextRequest) {
       nextPhase = 'creation'
     } else if (currentPhase === 'creation' && messages.length >= 12) {
       nextPhase = 'refinement'
-      goals = generateGoalsFromConversation(messages, session)
+      goals = generateGoalsFromConversation(messages)
     } else if (currentPhase === 'refinement' && messages.length >= 14) {
       nextPhase = 'complete'
-      goals = generateGoalsFromConversation(messages, session)
+      goals = generateGoalsFromConversation(messages)
       
       // Generate user profile based on conversation
       userProfile = {

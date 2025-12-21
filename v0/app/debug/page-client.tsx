@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { dbUtils } from '@/lib/dbUtils'
 import { logger } from '@/lib/logger';
 
@@ -167,12 +168,12 @@ export default function DebugPage() {
           >
             🧹 Clear Logs
           </button>
-          <a
+          <Link
             href="/"
             className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded inline-block"
           >
             🏠 Back to App
-          </a>
+          </Link>
         </div>
         
         <div className="bg-gray-800 p-4 rounded max-h-96 overflow-y-auto">

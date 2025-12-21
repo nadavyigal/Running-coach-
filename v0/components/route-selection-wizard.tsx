@@ -226,13 +226,18 @@ export function RouteSelectionWizard({
       });
 
       // Calculate match scores and distances
-      const routesWithScores: RouteWithScore[] = filtered.map(route => ({
-        ...route,
-        matchScore: calculateMatchScore(route, preferences, userExperience),
-        distanceFromUser: route.startLat && route.startLng && userLocation
-          ? calculateDistance(userLocation.latitude, userLocation.longitude, route.startLat, route.startLng)
-          : undefined
-      }));
+      const routesWithScores: RouteWithScore[] = filtered.map((route) => {
+        const distanceFromUser =
+          userLocation && typeof route.startLat === 'number' && typeof route.startLng === 'number'
+            ? calculateDistance(userLocation.latitude, userLocation.longitude, route.startLat, route.startLng)
+            : null;
+
+        return {
+          ...route,
+          matchScore: calculateMatchScore(route, preferences, userExperience),
+          ...(typeof distanceFromUser === 'number' ? { distanceFromUser } : {}),
+        };
+      });
       
       // Sort by match score first, then by distance from user
       routesWithScores.sort((a, b) => {
@@ -264,7 +269,16 @@ export function RouteSelectionWizard({
       handleRouteSelect(route);
     } else {
       // Preview the route
-      setPreviewedRouteId(route.id);
+      if (typeof route.id === 'number') {
+        setPreviewedRouteId(route.id);
+        return;
+      }
+
+      toast({
+        title: 'Error',
+        description: 'Cannot preview route without ID',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -542,12 +556,9 @@ export function RouteSelectionWizard({
           <MapErrorBoundary fallbackMessage="Route map temporarily unavailable">
             <RouteMap
               routes={recommendedRoutes}
-              userLocation={userLocation ? {
-                lat: userLocation.latitude,
-                lng: userLocation.longitude
-              } : undefined}
+              userLocation={userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : null}
               onRouteClick={handleMapRouteClick}
-              selectedRouteId={previewedRouteId ?? undefined}
+              {...(typeof previewedRouteId === 'number' ? { selectedRouteId: previewedRouteId } : {})}
               height="400px"
               className="rounded-lg border"
             />

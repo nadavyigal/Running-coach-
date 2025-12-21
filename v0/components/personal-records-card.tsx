@@ -141,7 +141,7 @@ export function PersonalRecordsCard({ userId }: PersonalRecordsCardProps) {
           title: 'Personal Record Achievement',
           text: shareText,
         });
-      } catch (err) {
+      } catch {
         // Fallback to clipboard
         await navigator.clipboard.writeText(shareText);
       }

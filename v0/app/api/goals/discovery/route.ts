@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
       try {
         logger.log('🤖 Enhancing goals with AI insights...');
         const aiInsights = await getAIGoalInsights(userProfile, context);
-        enhancedResult = await enhanceGoalsWithAI(discoveryResult, aiInsights, userProfile);
+        enhancedResult = await enhanceGoalsWithAI(discoveryResult, aiInsights);
         logger.log('✅ AI enhancement completed');
       } catch (aiError) {
         logger.error('❌ AI enhancement failed, using core results:', aiError);
@@ -326,7 +326,7 @@ async function getAIGoalInsights(userProfile: UserProfile, context: GoalAnalysis
 }
 
 // Helper function to enhance goals with AI insights
-async function enhanceGoalsWithAI(discoveryResult: any, aiInsights: any, userProfile: UserProfile) {
+async function enhanceGoalsWithAI(discoveryResult: any, aiInsights: any) {
   const enhanced = { ...discoveryResult };
 
   // Apply AI insights to adjust goal confidence and properties

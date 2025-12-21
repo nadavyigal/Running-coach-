@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Shield, Download, Trash2, Eye, EyeOff, Settings, Info } from "lucide-react"
+import { Shield, Download, Trash2, Eye, Settings, Info } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 export interface UserPrivacySettings {
@@ -114,7 +114,7 @@ export function PrivacyDashboard({ user, onSettingsChange }: PrivacyDashboardPro
         title: "Data Exported",
         description: "Your privacy data has been downloaded successfully.",
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "Export Failed",
         description: "Failed to export your data. Please try again.",
@@ -149,7 +149,7 @@ export function PrivacyDashboard({ user, onSettingsChange }: PrivacyDashboardPro
         title: "Data Deletion Requested",
         description: "Your data deletion request has been submitted. This process may take up to 30 days.",
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "Deletion Failed",
         description: "Failed to submit deletion request. Please try again.",
@@ -200,7 +200,7 @@ export function PrivacyDashboard({ user, onSettingsChange }: PrivacyDashboardPro
           <h2 className="text-2xl font-bold">Privacy & Data Control</h2>
         </div>
         <p className="text-gray-600">
-          Control what data we collect and how it's used to improve your running experience
+          Control what data we collect and how it&apos;s used to improve your running experience
         </p>
       </div>
 

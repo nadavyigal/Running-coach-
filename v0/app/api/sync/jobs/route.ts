@@ -3,9 +3,6 @@ import { db } from '@/lib/db';
 import { backgroundSync } from '@/lib/backgroundSync';
 import { 
   validateRequired, 
-  validateEnum, 
-  NotFoundError, 
-  ValidationError,
   safeDbOperation,
   logRequest
 } from '@/lib/errorHandling';

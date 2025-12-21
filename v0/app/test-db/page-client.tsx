@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { dbUtils } from '@/lib/dbUtils'
 import { onboardingManager } from '@/lib/onboardingManager'
 import { logger } from '@/lib/logger';
@@ -153,17 +154,17 @@ export default function DatabaseTest() {
           >
             🧹 Clear Logs
           </button>
-          <a
+          <Link
             href="/"
             className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded inline-block"
           >
             🏠 Back to App
-          </a>
+          </Link>
         </div>
         
         <div className="bg-gray-800 p-4 rounded max-h-96 overflow-y-auto">
           {logs.length === 0 ? (
-            <div className="text-gray-500">No logs yet. Click "Run Test" to start.</div>
+            <div className="text-gray-500">No logs yet. Click &quot;Run Test&quot; to start.</div>
           ) : (
             logs.map((log, index) => (
               <div

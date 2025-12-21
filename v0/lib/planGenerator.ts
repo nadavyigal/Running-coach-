@@ -140,7 +140,7 @@ function calculateWorkoutDate(startDate: Date, week: number, day: string): Date 
 
   // Set to the correct day of the week
   const currentDay = workoutDate.getDay()
-  const targetDay = dayMap[day]
+  const targetDay = dayMap[day] ?? currentDay
   const dayDiff = (targetDay - currentDay + 7) % 7
 
   workoutDate.setDate(workoutDate.getDate() + dayDiff)

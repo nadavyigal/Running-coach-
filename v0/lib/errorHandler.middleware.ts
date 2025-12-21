@@ -5,7 +5,7 @@
  * across all API routes to eliminate duplicate error handling patterns.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { ApiRequest } from './security.middleware';
 
 // Error types for categorization

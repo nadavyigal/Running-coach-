@@ -20,7 +20,7 @@ export interface Route {
 
 export interface UserPreferences {
   maxDistance: number;
-  preferredDifficulty: 'beginner' | 'intermediate' | 'advanced';
+  preferredDifficulty: 'beginner' | 'intermediate' | 'advanced' | 'any';
   safetyImportance: number; // 0-100
   scenicImportance: number; // 0-100
   trafficPreference: 'low' | 'medium' | 'high';

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -80,15 +79,11 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete }: Onboardin
   
   // Error handling hooks
   const { showError } = useErrorToast()
-  const { 
-    aiChatWithFallback, 
-    getAIServiceStatus, 
-    enableFallbackMode 
-  } = useAIServiceErrorHandling({
+  const { aiChatWithFallback } = useAIServiceErrorHandling({
     enableFallbacks: true,
     showUserFeedback: true
   })
-  const { safeApiCall, isOnline } = useNetworkErrorHandling({
+  const { isOnline } = useNetworkErrorHandling({
     enableOfflineMode: false, // Chat requires internet
     enableAutoRetry: true,
     showToasts: true
@@ -361,23 +356,13 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete }: Onboardin
     
     setMessagesInCurrentPhase(prev => prev + 1)
     
-    try {
-      const context = await buildUserContext()
-      
-      const requestBody = {
-        messages: [
-          ...messages.map(msg => ({ role: msg.role, content: msg.content })),
-          { role: 'user', content: content.trim() }
-        ],
-        userId: user?.id?.toString(),
-        userContext: context,
-        currentPhase: currentPhase, // Pass current phase to API
-      };
-
-      // Check if online before attempting chat
-      if (!isOnline) {
-        throw new Error('Chat requires internet connection. Please check your connection and try again.')
-      }
+      try {
+        const context = await buildUserContext()
+        
+        // Check if online before attempting chat
+        if (!isOnline) {
+          throw new Error('Chat requires internet connection. Please check your connection and try again.')
+        }
 
       // Use AI chat with fallback
       const response = await aiChatWithFallback(
@@ -430,7 +415,7 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete }: Onboardin
               return
             }
           }
-        } catch (parseError) {
+        } catch {
           // If we can't parse the error response, use the status text
           errorText = response.statusText || errorText
         }
@@ -819,12 +804,6 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete }: Onboardin
   const extractGoalsFromConversation = (messages: ChatMessage[]): any[] => {
     const goals: any[] = [];
     
-    // Extract goals from conversation messages
-    const conversationText = messages
-      .filter(msg => msg.role === 'user')
-      .map(msg => msg.content.toLowerCase())
-      .join(' ');
-    
     // Create default goals based on extracted profile
     const profile = extractUserProfileFromConversation(messages);
     
@@ -972,7 +951,7 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete }: Onboardin
             <div>
               <h1 className="font-semibold text-lg">AI Onboarding Coach</h1>
               <p className="text-sm text-muted-foreground">
-                Let's set your personalized running goals
+                Let&apos;s set your personalized running goals
               </p>
             </div>
           </div>

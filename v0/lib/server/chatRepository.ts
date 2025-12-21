@@ -74,8 +74,8 @@ async function createChatMessage(input: ChatMessageCreateInput): Promise<ChatMes
     role: input.role,
     content: input.content,
     conversationId,
-    tokenCount: input.tokenCount,
-    aiContext: input.aiContext,
+    ...(typeof input.tokenCount === 'number' && Number.isFinite(input.tokenCount) ? { tokenCount: input.tokenCount } : {}),
+    ...(typeof input.aiContext === 'string' ? { aiContext: input.aiContext } : {}),
     timestamp,
   }
 

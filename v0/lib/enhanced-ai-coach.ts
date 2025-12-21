@@ -62,7 +62,7 @@ export async function generateContextAwareResponse(
       confidence: 0.9,
       contextUsed: ['recentRuns', 'userPreferences']
     }
-  } catch (error) {
+  } catch {
     return {
       response: 'Sorry, I could not generate a coaching response.',
       suggestedQuestions: [],

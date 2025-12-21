@@ -379,7 +379,7 @@ export class ErrorRecoveryManager {
   }
 
   // Recovery action implementations
-  private async retryNetworkRequest(context: RecoveryContext): Promise<boolean> {
+  private async retryNetworkRequest(_context: RecoveryContext): Promise<boolean> {
     // Implementation would retry the original network request
     // This is a placeholder - actual implementation would depend on the specific request
     try {
@@ -391,7 +391,7 @@ export class ErrorRecoveryManager {
     }
   }
 
-  private async switchToBackupEndpoint(context: RecoveryContext): Promise<boolean> {
+  private async switchToBackupEndpoint(_context: RecoveryContext): Promise<boolean> {
     // Switch to backup API endpoint
     try {
       // Simulate endpoint switch
@@ -402,7 +402,7 @@ export class ErrorRecoveryManager {
     }
   }
 
-  private async enableOfflineMode(context: RecoveryContext): Promise<boolean> {
+  private async enableOfflineMode(_context: RecoveryContext): Promise<boolean> {
     try {
       // Enable offline mode with cached data
       if (typeof localStorage !== 'undefined') {
@@ -415,7 +415,7 @@ export class ErrorRecoveryManager {
     }
   }
 
-  private async clearDatabaseCache(context: RecoveryContext): Promise<boolean> {
+  private async clearDatabaseCache(_context: RecoveryContext): Promise<boolean> {
     try {
       // Clear IndexedDB cache
       if (typeof indexedDB !== 'undefined') {
@@ -428,7 +428,7 @@ export class ErrorRecoveryManager {
     }
   }
 
-  private async rebuildDatabase(context: RecoveryContext): Promise<boolean> {
+  private async rebuildDatabase(_context: RecoveryContext): Promise<boolean> {
     try {
       // Rebuild database from backup
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -438,7 +438,7 @@ export class ErrorRecoveryManager {
     }
   }
 
-  private async useMemoryStorage(context: RecoveryContext): Promise<boolean> {
+  private async useMemoryStorage(_context: RecoveryContext): Promise<boolean> {
     try {
       // Fall back to memory storage
       return true;
@@ -447,7 +447,7 @@ export class ErrorRecoveryManager {
     }
   }
 
-  private async switchAIProvider(context: RecoveryContext): Promise<boolean> {
+  private async switchAIProvider(_context: RecoveryContext): Promise<boolean> {
     try {
       // Switch to backup AI provider
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -457,7 +457,7 @@ export class ErrorRecoveryManager {
     }
   }
 
-  private async useFallbackAIResponses(context: RecoveryContext): Promise<boolean> {
+  private async useFallbackAIResponses(_context: RecoveryContext): Promise<boolean> {
     try {
       // Use cached AI responses
       return true;
@@ -466,7 +466,7 @@ export class ErrorRecoveryManager {
     }
   }
 
-  private async switchToGuidedForm(context: RecoveryContext): Promise<boolean> {
+  private async switchToGuidedForm(_context: RecoveryContext): Promise<boolean> {
     try {
       // Switch to guided form
       return true;
@@ -475,7 +475,7 @@ export class ErrorRecoveryManager {
     }
   }
 
-  private async autoCorrectInput(context: RecoveryContext): Promise<boolean> {
+  private async autoCorrectInput(_context: RecoveryContext): Promise<boolean> {
     try {
       // Attempt to auto-correct common input errors
       return Math.random() > 0.3; // 70% success rate simulation
@@ -484,7 +484,7 @@ export class ErrorRecoveryManager {
     }
   }
 
-  private async applyDefaultValues(context: RecoveryContext): Promise<boolean> {
+  private async applyDefaultValues(_context: RecoveryContext): Promise<boolean> {
     try {
       // Apply default values for invalid fields
       return true;
@@ -493,7 +493,7 @@ export class ErrorRecoveryManager {
     }
   }
 
-  private async refreshComponent(context: RecoveryContext): Promise<boolean> {
+  private async refreshComponent(_context: RecoveryContext): Promise<boolean> {
     try {
       // Trigger component refresh
       return true;
@@ -502,7 +502,7 @@ export class ErrorRecoveryManager {
     }
   }
 
-  private async restoreFromBackup(context: RecoveryContext): Promise<boolean> {
+  private async restoreFromBackup(_context: RecoveryContext): Promise<boolean> {
     try {
       // Restore application state from backup
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -512,7 +512,7 @@ export class ErrorRecoveryManager {
     }
   }
 
-  private getUserInterventionActions(context: RecoveryContext): RecoveryAction[] {
+  private getUserInterventionActions(_context: RecoveryContext): RecoveryAction[] {
     return [
       {
         id: 'contact_support',

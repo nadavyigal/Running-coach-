@@ -11,15 +11,14 @@ import {
   MapPin,
   Signal,
   TrendingUp,
-  TrendingDown,
-  Minus,
-  AlertTriangle,
-  CheckCircle,
-  Info,
-  RefreshCw,
-  ChevronDown,
-  ChevronUp
-} from 'lucide-react';
+	  TrendingDown,
+	  Minus,
+	  AlertTriangle,
+	  CheckCircle,
+	  Info,
+	  ChevronDown,
+	  ChevronUp
+	} from 'lucide-react';
 import { GPSMonitoringService, type GPSAccuracyData } from '@/lib/gps-monitoring';
 
 interface GPSAccuracyIndicatorProps {

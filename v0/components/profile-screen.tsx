@@ -217,9 +217,10 @@ export function ProfileScreen() {
           console.log('[ProfileScreen] Attempting userId fallback...');
           const { db } = await import('@/lib/db');
           const users = await db.users.toArray();
-          if (users.length > 0 && users[0].id) {
-            console.log(`[ProfileScreen] ✅ Fallback found userId: ${users[0].id}`);
-            setUserId(users[0].id);
+          const firstUser = users.at(0);
+          if (firstUser?.id) {
+            console.log(`[ProfileScreen] ✅ Fallback found userId: ${firstUser.id}`);
+            setUserId(firstUser.id);
             setError(null);
           }
         } catch (fallbackError) {

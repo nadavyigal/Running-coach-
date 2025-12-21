@@ -139,7 +139,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     push: false,
   })
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
-  const [privacySettings, setPrivacySettings] = useState<UserPrivacySettings>({
+  const [privacySettings] = useState<UserPrivacySettings>({
     dataCollection: {
       location: true,
       performance: true,
@@ -435,7 +435,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           <div className="text-center space-y-6">
             <div className="space-y-2">
               <h2 className="text-2xl font-bold">Welcome to Run-Smart!</h2>
-              <p className="text-gray-600">Let's create your personalized running plan</p>
+              <p className="text-gray-600">Let&apos;s create your personalized running plan</p>
             </div>
             <Card className="bg-green-500 text-white border-green-600">
               <CardContent className="p-6">
@@ -454,7 +454,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       case 2:
         return (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-center">What's your running goal?</h2>
+            <h2 className="text-2xl font-bold text-center">What&apos;s your running goal?</h2>
 
             <div className="space-y-3">
               {[

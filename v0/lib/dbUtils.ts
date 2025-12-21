@@ -1,33 +1,31 @@
 import { db, isDatabaseAvailable, safeDbOperation, getDatabase, resetDatabaseInstance } from './db';
 import type {
   ChatMessage as ChatMessageEntity,
-  CoachingProfile,
   CoachingFeedback,
-  UserBehaviorPattern,
-  Run,
   CoachingInteraction,
-} from './db';
-import type { 
-  User, 
-  Plan, 
-  Workout, 
-  Run, 
-  Goal, 
-  GoalMilestone,
-  SleepData,
-  HRVMeasurement,
-  RecoveryScore,
-  SubjectiveWellness,
-  DataFusionRule,
-  FusedDataPoint,
+  CoachingProfile,
   DataConflict,
+  DataFusionRule,
   DataSource,
-  RaceGoal
+  FusedDataPoint,
+  Goal,
+  GoalMilestone,
+  GoalProgressHistory,
+  GoalRecommendation,
+  HRVMeasurement,
+  Plan,
+  RaceGoal,
+  RecoveryScore,
+  Run,
+  SleepData,
+  SubjectiveWellness,
+  User,
+  UserBehaviorPattern,
+  Workout,
 } from './db';
 import { 
   nowUTC, 
   addDaysUTC, 
-  addWeeksUTC,
   getUserTimezone,
   startOfDayUTC,
   migrateLocalDateToUTC
@@ -37,61 +35,6 @@ import {
  * Database Utilities - Comprehensive database operations with error handling
  * Provides safe, consistent database operations across the application
  */
-
-// ============================================================================
-// SECURITY UTILITIES - Input Sanitization
-// ============================================================================
-
-/**
- * Sanitize string input to prevent injection attacks
- * @param input - The string to sanitize
- * @param maxLength - Maximum allowed length (default: 1000)
- * @returns Sanitized string
- */
-function sanitizeString(input: string | undefined | null, maxLength: number = 1000): string {
-  if (!input) return '';
-
-  return String(input)
-    .replace(/[<>{}$;'"\\]/g, '') // Remove potential injection characters
-    .replace(/\0/g, '') // Remove null bytes
-    .replace(/\r?\n|\r/g, ' ') // Replace newlines with spaces
-    .trim()
-    .slice(0, maxLength);
-}
-
-/**
- * Sanitize numeric input with range validation
- * @param input - The number to sanitize
- * @param min - Minimum allowed value
- * @param max - Maximum allowed value
- * @param defaultValue - Default value if input is invalid
- * @returns Sanitized number
- */
-function sanitizeNumber(
-  input: number | string | undefined | null,
-  min: number,
-  max: number,
-  defaultValue: number
-): number {
-  if (input === undefined || input === null) return defaultValue;
-
-  const num = typeof input === 'string' ? parseFloat(input) : input;
-
-  if (isNaN(num) || !isFinite(num)) return defaultValue;
-
-  return Math.max(min, Math.min(max, num));
-}
-
-/**
- * Sanitize array input
- * @param input - The array to sanitize
- * @param maxLength - Maximum allowed array length
- * @returns Sanitized array
- */
-function sanitizeArray<T>(input: T[] | undefined | null, maxLength: number = 100): T[] {
-  if (!Array.isArray(input)) return [];
-  return input.slice(0, maxLength);
-}
 
 /**
  * Validate and sanitize user ID
@@ -296,7 +239,10 @@ export async function performStartupMigration(): Promise<boolean> {
         new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
 
       if (completedUsers.length > 0) {
-        const canonicalCompleted = completedUsers.sort(byUpdatedAtDesc)[0];
+        const canonicalCompleted = completedUsers.sort(byUpdatedAtDesc).at(0);
+        if (!canonicalCompleted || typeof canonicalCompleted.id !== 'number') {
+          return true;
+        }
         const idsToDelete: number[] = [];
 
         const redundantCompletedIds = completedUsers
@@ -317,7 +263,10 @@ export async function performStartupMigration(): Promise<boolean> {
         }
       } else if (draftUsers.length > 1) {
         // Keep the most recent draft; remove any redundant drafts.
-        const latestDraft = draftUsers.sort(byUpdatedAtDesc)[0];
+        const latestDraft = draftUsers.sort(byUpdatedAtDesc).at(0);
+        if (!latestDraft || typeof latestDraft.id !== 'number') {
+          return true;
+        }
         const redundantDraftIds = draftUsers
           .filter((u) => typeof u.id === 'number' && u.id !== latestDraft.id)
           .map((u) => u.id as number);
@@ -397,9 +346,6 @@ function validatePlanContract(candidate: Partial<Plan>): void {
   }
 }
 
-/** Sleep utility for exposing race conditions in dev. */
-function sleep(ms: number): Promise<void> { return new Promise(r => setTimeout(r, ms)); }
-
 /**
  * Atomically persist onboarding profile and a minimal active plan, idempotent.
  * Returns when profile is fully written and readable in the same transaction.
@@ -469,7 +415,7 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
       // setTimeout/sleep inside transactions is forbidden by Dexie.js
 
       // Ensure one active plan exists
-      let activePlan = await database.plans.where('userId').equals(userId).and(p => p.isActive).first();
+      const activePlan = await database.plans.where('userId').equals(userId).and(p => p.isActive).first();
       let planId: number;
       if (!activePlan) {
         const planData: Omit<Plan, 'id'> = {
@@ -738,6 +684,29 @@ export async function getBehaviorPatterns(userId: number): Promise<UserBehaviorP
 }
 
 /**
+ * Record a user behavior pattern for adaptive coaching.
+ */
+export async function recordBehaviorPattern(
+  data: Omit<UserBehaviorPattern, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<number> {
+  if (typeof window === 'undefined') {
+    return 0;
+  }
+
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+    const now = new Date();
+    const id = await database.userBehaviorPatterns.add({
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    } as Omit<UserBehaviorPattern, 'id'>);
+    return id as number;
+  }, 'recordBehaviorPattern', 0);
+}
+
+/**
  * Get coaching feedback for a user, most recent first
  */
 export async function getCoachingFeedback(userId: number, limit: number = 10): Promise<CoachingFeedback[]> {
@@ -888,6 +857,49 @@ export async function updateUser(userId: number, updates: Partial<User>): Promis
   }, 'updateUser');
 }
 
+export async function updateReminderSettings(
+  userId: number,
+  updates: Partial<Pick<User, 'reminderTime' | 'reminderEnabled' | 'reminderSnoozedUntil'>>
+): Promise<void> {
+  const sanitizedUpdates: Partial<User> = {}
+
+  if ('reminderTime' in updates && updates.reminderTime !== undefined) {
+    sanitizedUpdates.reminderTime = updates.reminderTime
+  }
+  if ('reminderEnabled' in updates && updates.reminderEnabled !== undefined) {
+    sanitizedUpdates.reminderEnabled = updates.reminderEnabled
+  }
+  if ('reminderSnoozedUntil' in updates && updates.reminderSnoozedUntil !== undefined) {
+    sanitizedUpdates.reminderSnoozedUntil = updates.reminderSnoozedUntil
+  }
+
+  if (Object.keys(sanitizedUpdates).length === 0) return
+
+  return updateUser(userId, sanitizedUpdates)
+}
+
+export async function getReminderSettings(userId: number): Promise<{
+  time: string
+  enabled: boolean
+  snoozedUntil: Date | null
+}> {
+  return safeDbOperation(
+    async () => {
+      const database = getDatabase()
+      if (!database) throw new Error('Database not available')
+
+      const user = await database.users.get(userId)
+      return {
+        time: user?.reminderTime ?? '',
+        enabled: Boolean(user?.reminderEnabled),
+        snoozedUntil: user?.reminderSnoozedUntil ?? null,
+      }
+    },
+    'getReminderSettings',
+    { time: '', enabled: false, snoozedUntil: null }
+  )
+}
+
 /**
  * Update plan with partial data
  */
@@ -936,11 +948,13 @@ export async function updatePlanWithAIWorkouts(planId: number, aiPlan: any): Pro
 
         await database.workouts.add({
           planId,
+          week: aiWorkout.week,
+          day: aiWorkout.day,
           type: aiWorkout.type,
           distance: aiWorkout.distance,
           duration: aiWorkout.duration,
           notes: aiWorkout.notes,
-          intensity: aiWorkout.type === 'easy' ? 'easy' : aiWorkout.type === 'tempo' ? 'moderate' : 'hard',
+          intensity: aiWorkout.type === 'easy' ? 'easy' : aiWorkout.type === 'tempo' ? 'threshold' : 'moderate',
           completed: false,
           scheduledDate,
           createdAt: new Date(),
@@ -1250,6 +1264,16 @@ export async function getActivePlan(userId: number): Promise<Plan | null> {
   }, 'getActivePlan', null);
 }
 
+export async function getPlan(planId: number): Promise<Plan | null> {
+  return safeDbOperation(async () => {
+    const database = getDatabase()
+    if (!database) throw new Error('Database not available')
+
+    const plan = await database.plans.get(planId)
+    return plan ?? null
+  }, 'getPlan', null)
+}
+
 // Race condition prevention for concurrent plan creation
 const activePlanCreationLocks = new Map<number, Promise<Plan>>();
 
@@ -1287,7 +1311,7 @@ export async function ensureUserHasActivePlan(userId: number): Promise<Plan> {
     }
     
     // Check for existing active plan (double-check after potential wait)
-    let activePlan = await database.plans.where('userId').equals(userId).and(plan => plan.isActive).first();
+    const activePlan = await database.plans.where('userId').equals(userId).and(plan => plan.isActive).first();
     
     if (activePlan) {
       return activePlan;
@@ -1949,7 +1973,6 @@ export async function createRunAndUpdateProgress(
           case 'time_improvement':
             // Calculate pace improvement
             if (runData.duration && runData.distance) {
-              const pace = runData.duration / runData.distance;
               // Custom logic for pace improvement tracking
             }
             break;
@@ -2300,7 +2323,7 @@ export async function checkDatabaseHealth(): Promise<{
 
     // Test read operation
     try {
-      const testRead = await database.users.limit(1).toArray();
+      await database.users.limit(1).toArray();
       canRead = true;
       details.push('Read operation successful');
     } catch (readError) {
@@ -2450,7 +2473,7 @@ export async function migrateDatabase(): Promise<boolean> {
  * This should be run once to migrate existing data
  */
 export async function migrateExistingPlansToUTC(): Promise<{ success: boolean; migratedPlans: number; migratedWorkouts: number; error?: any }> {
-  return safeDbOperation(async () => {
+  return safeDbOperation<{ success: boolean; migratedPlans: number; migratedWorkouts: number; error?: unknown }>(async () => {
     const database = getDatabase();
     if (!database) throw new Error('Database not available');
     
@@ -2540,6 +2563,7 @@ export async function migrateExistingPlansToUTC(): Promise<{ success: boolean; m
 async function getRunsInTimeRange(userId: number, startDate: Date, endDate: Date): Promise<Run[]> {
   return safeDbOperation(async () => {
     const database = getDatabase();
+    if (!database) return [];
     const runs = await database.runs
       .where('userId')
       .equals(userId)
@@ -2578,9 +2602,22 @@ async function calculatePerformanceTrends(runs: Run[]) {
     const averagePace = totalPace / runs.length;
 
     // Calculate consistency score (based on regularity of runs)
+    const firstRun = runs.at(0);
+    const lastRun = runs.at(-1);
+    if (!firstRun || !lastRun) {
+      return {
+        averagePace: 0,
+        consistencyScore: 0,
+        performanceScore: 0,
+        paceProgression: [],
+        distanceProgression: [],
+        consistencyProgression: [],
+        performanceProgression: []
+      };
+    }
     const daysSinceFirstRun = Math.ceil(
-      (new Date(runs[runs.length - 1].completedAt ?? runs[runs.length - 1].createdAt).getTime() -
-        new Date(runs[0].completedAt ?? runs[0].createdAt).getTime()) /
+      (new Date(lastRun.completedAt ?? lastRun.createdAt).getTime() -
+        new Date(firstRun.completedAt ?? firstRun.createdAt).getTime()) /
         (1000 * 60 * 60 * 24)
     );
     const expectedRuns = Math.max(1, Math.ceil(daysSinceFirstRun / 3)); // Expect run every 3 days
@@ -2593,12 +2630,12 @@ async function calculatePerformanceTrends(runs: Run[]) {
     const firstHalfAvgPace = firstHalfRuns.reduce((sum, run) => {
       const pace = run.distance > 0 ? run.duration / run.distance : 0;
       return sum + pace;
-    }, 0) / firstHalfRuns.length;
+    }, 0) / (firstHalfRuns.length || 1);
 
     const secondHalfAvgPace = secondHalfRuns.reduce((sum, run) => {
       const pace = run.distance > 0 ? run.duration / run.distance : 0;
       return sum + pace;
-    }, 0) / secondHalfRuns.length;
+    }, 0) / (secondHalfRuns.length || 1);
 
     const paceImprovement = firstHalfAvgPace > 0 ? ((firstHalfAvgPace - secondHalfAvgPace) / firstHalfAvgPace) * 100 : 0;
     const performanceScore = Math.max(0, Math.min(100, 50 + (consistencyScore * 0.3) + (paceImprovement * 0.7)));
@@ -2616,21 +2653,29 @@ async function calculatePerformanceTrends(runs: Run[]) {
 
     // Calculate rolling consistency
     const consistencyProgression = runs.map((_, index) => {
+      const runAtIndex = runs.at(index);
+      if (!runAtIndex) {
+        return { date: new Date(), consistency: 0 };
+      }
       const runsToDate = runs.slice(0, index + 1);
       const days = Math.ceil(
-        (new Date(runs[index].createdAt).getTime() - new Date(runs[0].createdAt).getTime()) / (1000 * 60 * 60 * 24)
+        (new Date(runAtIndex.createdAt).getTime() - new Date(firstRun.createdAt).getTime()) / (1000 * 60 * 60 * 24)
       );
       const expected = Math.max(1, Math.ceil(days / 3));
       const score = Math.min(100, (runsToDate.length / expected) * 100);
 
       return {
-        date: new Date(runs[index].completedAt ?? runs[index].createdAt),
+        date: new Date(runAtIndex.completedAt ?? runAtIndex.createdAt),
         consistency: score
       };
     });
 
     // Calculate rolling performance
     const performanceProgression = runs.map((_, index) => {
+      const runAtIndex = runs.at(index);
+      if (!runAtIndex) {
+        return { date: new Date(), performance: 50 };
+      }
       const runsToDate = runs.slice(0, index + 1);
       const halfPoint = Math.ceil(runsToDate.length / 2);
       const firstHalf = runsToDate.slice(0, halfPoint);
@@ -2638,7 +2683,7 @@ async function calculatePerformanceTrends(runs: Run[]) {
 
       if (firstHalf.length === 0 || secondHalf.length === 0) {
         return {
-          date: new Date(runs[index].completedAt ?? runs[index].createdAt),
+          date: new Date(runAtIndex.completedAt ?? runAtIndex.createdAt),
           performance: 50
         };
       }
@@ -2648,7 +2693,7 @@ async function calculatePerformanceTrends(runs: Run[]) {
       const improvement = firstAvg > 0 ? ((firstAvg - secondAvg) / firstAvg) * 100 : 0;
 
       return {
-        date: new Date(runs[index].completedAt ?? runs[index].createdAt),
+        date: new Date(runAtIndex.completedAt ?? runAtIndex.createdAt),
         performance: Math.max(0, Math.min(100, 50 + improvement))
       };
     });
@@ -2679,20 +2724,24 @@ async function calculatePerformanceTrends(runs: Run[]) {
 async function getPersonalRecords(userId: number) {
   return safeDbOperation(async () => {
     const database = getDatabase();
+    if (!database) return [];
     const runs = await database.runs.where('userId').equals(userId).toArray();
 
     if (runs.length === 0) {
       return [];
     }
 
+    const firstRun = runs.at(0);
+    if (!firstRun) return [];
+
     // Calculate various PRs
-    const longestRun = runs.reduce((max, run) => run.distance > max.distance ? run : max, runs[0]);
+    const longestRun = runs.reduce((max, run) => run.distance > max.distance ? run : max, firstRun);
     const fastestPace = runs.reduce((fastest, run) => {
       const pace = run.distance > 0 ? run.duration / run.distance : Infinity;
       const fastestPace = fastest.distance > 0 ? fastest.duration / fastest.distance : Infinity;
       return pace < fastestPace ? run : fastest;
-    }, runs[0]);
-    const longestDuration = runs.reduce((max, run) => run.duration > max.duration ? run : max, runs[0]);
+    }, firstRun);
+    const longestDuration = runs.reduce((max, run) => run.duration > max.duration ? run : max, firstRun);
 
     const records = [
       {
@@ -2895,6 +2944,7 @@ async function getPerformanceMetrics(userId: number, startDate: Date, endDate: D
 async function getPersonalRecordProgression(userId: number, distance: number) {
   return safeDbOperation(async () => {
     const database = getDatabase();
+    if (!database) return [];
     const runs = await database.runs.where('userId').equals(userId).toArray();
 
     // Filter runs for this specific distance (within 5% tolerance)
@@ -2945,16 +2995,19 @@ async function checkAndUpdatePersonalRecords(
   return safeDbOperation(async () => {
     const updatedRecords = [];
     const database = getDatabase();
+    if (!database) return [];
     const allRuns = await database.runs.where('userId').equals(userId).toArray();
+    const firstRun = allRuns.at(0);
+    if (!firstRun) return [];
 
     // Check various record types
-    const longestRun = allRuns.reduce((max, run) => run.distance > max.distance ? run : max, allRuns[0]);
+    const longestRun = allRuns.reduce((max, run) => run.distance > max.distance ? run : max, firstRun);
     const fastestPace = allRuns.reduce((fastest, run) => {
       const runPace = run.distance > 0 ? run.duration / run.distance : Infinity;
       const fastestPace = fastest.distance > 0 ? fastest.duration / fastest.distance : Infinity;
       return runPace < fastestPace ? run : fastest;
-    }, allRuns[0]);
-    const longestDuration = allRuns.reduce((max, run) => run.duration > max.duration ? run : max, allRuns[0]);
+    }, firstRun);
+    const longestDuration = allRuns.reduce((max, run) => run.duration > max.duration ? run : max, firstRun);
 
     // Check if this run set any records
     if (longestRun.id === runId) {
@@ -2991,10 +3044,11 @@ async function checkAndUpdatePersonalRecords(
 /**
  * Delete a personal record (admin functionality)
  */
-async function deletePersonalRecord(userId: number, recordId: number) {
+async function deletePersonalRecord(_userId: number, recordId: number) {
   return safeDbOperation(async () => {
     // Personal records are derived from runs, so this would delete the run
     const database = getDatabase();
+    if (!database) return false;
     await database.runs.delete(recordId);
     return true;
   }, 'deletePersonalRecord', false);
@@ -3005,9 +3059,170 @@ async function deletePersonalRecord(userId: number, recordId: number) {
  */
 async function getGoalProgressHistory(goalId: number, limit: number = 30) {
   return safeDbOperation(async () => {
-    // For now, return empty array - this would be implemented with a goal_progress_history table
-    return [];
+    const database = getDatabase();
+    if (!database) return [];
+
+    const history = await database.goalProgressHistory.where('goalId').equals(goalId).toArray();
+
+    const getDate = (entry: any): number => {
+      const date = entry.measurementDate ?? entry.recordedAt ?? entry.createdAt;
+      return date instanceof Date ? date.getTime() : new Date(date).getTime();
+    };
+
+    return history
+      .slice()
+      .sort((a, b) => getDate(b) - getDate(a))
+      .slice(0, Math.max(0, limit));
   }, 'getGoalProgressHistory', []);
+}
+
+function calculateGoalProgressPercentage(
+  baselineValue: number,
+  currentValue: number,
+  targetValue: number,
+  goalType: Goal['goalType']
+): number {
+  const clamp = (value: number) => Math.max(0, Math.min(100, value));
+
+  if (![baselineValue, currentValue, targetValue].every(Number.isFinite)) return 0;
+  if (baselineValue === targetValue) return clamp(currentValue === targetValue ? 100 : 0);
+
+  const raw =
+    goalType === 'time_improvement'
+      ? ((baselineValue - currentValue) / (baselineValue - targetValue)) * 100
+      : ((currentValue - baselineValue) / (targetValue - baselineValue)) * 100;
+
+  return clamp(raw);
+}
+
+type RecordGoalProgressInput = {
+  goalId: number;
+  measurementDate: Date;
+  measuredValue: number;
+  progressPercentage: number;
+  contributingActivityId?: number | null;
+  contributingActivityType?: string;
+  notes?: string;
+  autoRecorded: boolean;
+  context?: Record<string, unknown>;
+};
+
+async function recordGoalProgress(progress: RecordGoalProgressInput): Promise<number> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+
+    const goal = await database.goals.get(progress.goalId);
+    if (!goal) throw new Error('Goal not found');
+
+    const measurementDate = progress.measurementDate instanceof Date ? progress.measurementDate : new Date(progress.measurementDate);
+
+    const historyEntry: Omit<GoalProgressHistory, 'id'> = {
+      goalId: progress.goalId,
+      measurementDate,
+      recordedAt: measurementDate,
+      measuredValue: progress.measuredValue,
+      progressValue: progress.measuredValue,
+      progressPercentage: progress.progressPercentage,
+      autoRecorded: progress.autoRecorded,
+      contributingActivityId: progress.contributingActivityId ?? null,
+      createdAt: new Date(),
+      ...(typeof progress.contributingActivityType === 'string'
+        ? { contributingActivityType: progress.contributingActivityType }
+        : {}),
+      ...(progress.context ? { context: progress.context } : {}),
+      ...(typeof progress.notes === 'string' ? { notes: progress.notes } : {}),
+    };
+
+    const progressId = await database.goalProgressHistory.add(historyEntry);
+
+    const nextGoalStatus: Goal['status'] = progress.progressPercentage >= 100 ? 'completed' : goal.status;
+
+    const goalUpdate: Partial<Goal> = {
+      currentValue: progress.measuredValue,
+      progressPercentage: progress.progressPercentage,
+      status: nextGoalStatus,
+      updatedAt: new Date(),
+    };
+
+    if (nextGoalStatus === 'completed') {
+      goalUpdate.completedAt = measurementDate;
+    }
+
+    await database.goals.update(progress.goalId, goalUpdate);
+
+    return progressId as number;
+  }, 'recordGoalProgress');
+}
+
+async function getGoalRecommendations(
+  userId: number,
+  status?: GoalRecommendation['status']
+): Promise<GoalRecommendation[]> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) return [];
+
+    const all = await database.goalRecommendations.where('userId').equals(userId).toArray();
+    const filtered = status ? all.filter((r) => r.status === status) : all;
+
+    return filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, 'getGoalRecommendations', []);
+}
+
+async function getGoalRecommendationById(recommendationId: number): Promise<GoalRecommendation | null> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) return null;
+    const recommendation = await database.goalRecommendations.get(recommendationId);
+    return recommendation ?? null;
+  }, 'getGoalRecommendationById', null);
+}
+
+async function createGoalRecommendation(
+  recommendation: Omit<GoalRecommendation, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<number> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+
+    const validUntil = recommendation.validUntil ?? recommendation.expiresAt;
+
+    const data: Omit<GoalRecommendation, 'id'> = {
+      userId: recommendation.userId,
+      recommendationType: recommendation.recommendationType,
+      title: recommendation.title,
+      description: recommendation.description,
+      reasoning: recommendation.reasoning,
+      confidenceScore: recommendation.confidenceScore,
+      status: recommendation.status,
+      recommendationData: recommendation.recommendationData,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...(typeof recommendation.priority === 'string' ? { priority: recommendation.priority } : {}),
+      ...(recommendation.expiresAt ? { expiresAt: recommendation.expiresAt } : {}),
+      ...(validUntil ? { validUntil } : {}),
+    };
+
+    const id = await database.goalRecommendations.add(data);
+
+    return id as number;
+  }, 'createGoalRecommendation');
+}
+
+async function updateGoalRecommendation(recommendationId: number, updates: Partial<GoalRecommendation>): Promise<void> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+
+    const nextUpdates: Partial<GoalRecommendation> = { ...updates, updatedAt: new Date() };
+
+    if (updates.expiresAt && !updates.validUntil) {
+      nextUpdates.validUntil = updates.expiresAt;
+    }
+
+    await database.goalRecommendations.update(recommendationId, nextUpdates);
+  }, 'updateGoalRecommendation');
 }
 
 /**
@@ -3016,9 +3231,7 @@ async function getGoalProgressHistory(goalId: number, limit: number = 30) {
 async function getGoalMilestones(goalId: number): Promise<GoalMilestone[]> {
   return safeDbOperation(async () => {
     const database = getDatabase();
-    if (!database.goalMilestones) {
-      return [];
-    }
+    if (!database) return [];
     return await database.goalMilestones.where('goalId').equals(goalId).toArray();
   }, 'getGoalMilestones', []);
 }
@@ -3204,6 +3417,7 @@ export async function autoCompleteGoalFields(
   if (!completed.baselineValue && completed.goalType === 'time_improvement') {
     try {
       const database = getDatabase();
+      if (!database) throw new Error('Database not available');
       const recentRuns = await database.runs
         .where('userId')
         .equals(userId)
@@ -3282,10 +3496,139 @@ export async function autoCompleteGoalFields(
 
   // Set initial values
   completed.currentValue = completed.baselineValue;
+  if (typeof completed.progressPercentage !== 'number') {
+    completed.progressPercentage = 0;
+  }
   completed.status = 'active';
   completed.lastUpdated = new Date();
 
   return completed as Goal;
+}
+
+type CohortStats = {
+  cohortId: number;
+  cohortName?: string;
+  totalMembers: number;
+  activeMembers: number;
+  totalRuns: number;
+  totalDistance: number;
+  avgDistance: number;
+  weeklyRuns: number;
+  weeklyDistance: number;
+  performanceComparison?: unknown;
+};
+
+async function getCohortStats(cohortId: number): Promise<CohortStats> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) {
+      return {
+        cohortId,
+        totalMembers: 0,
+        activeMembers: 0,
+        totalRuns: 0,
+        totalDistance: 0,
+        avgDistance: 0,
+        weeklyRuns: 0,
+        weeklyDistance: 0,
+      };
+    }
+
+    const cohort = await database.cohorts.get(cohortId);
+    const members = await database.cohortMembers.where('cohortId').equals(cohortId).toArray();
+    const memberIds = members.map((m) => m.userId);
+
+    if (memberIds.length === 0) {
+      return {
+        cohortId,
+        ...(cohort?.name ? { cohortName: cohort.name } : {}),
+        totalMembers: 0,
+        activeMembers: 0,
+        totalRuns: 0,
+        totalDistance: 0,
+        avgDistance: 0,
+        weeklyRuns: 0,
+        weeklyDistance: 0,
+      };
+    }
+
+    const runs = await database.runs.where('userId').anyOf(memberIds).toArray();
+    const totalRuns = runs.length;
+    const totalDistance = runs.reduce((sum, run) => sum + run.distance, 0);
+    const avgDistance = totalRuns > 0 ? totalDistance / totalRuns : 0;
+
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const weeklyRunsList = runs.filter((run) => (run.completedAt ?? run.createdAt) >= oneWeekAgo);
+    const weeklyRuns = weeklyRunsList.length;
+    const weeklyDistance = weeklyRunsList.reduce((sum, run) => sum + run.distance, 0);
+
+    const activeMemberIds = new Set(weeklyRunsList.map((run) => run.userId));
+
+    return {
+      cohortId,
+      ...(cohort?.name ? { cohortName: cohort.name } : {}),
+      totalMembers: memberIds.length,
+      activeMembers: activeMemberIds.size,
+      totalRuns,
+      totalDistance,
+      avgDistance,
+      weeklyRuns,
+      weeklyDistance,
+    };
+  }, 'getCohortStats', {
+    cohortId,
+    totalMembers: 0,
+    activeMembers: 0,
+    totalRuns: 0,
+    totalDistance: 0,
+    avgDistance: 0,
+    weeklyRuns: 0,
+    weeklyDistance: 0,
+  });
+}
+
+async function getCohortPerformanceComparison(
+  cohortId: number,
+  userId: number,
+  timeRange: '7d' | '30d' | '90d' | '1y'
+): Promise<unknown> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) return null;
+
+    const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : timeRange === '90d' ? 90 : 365;
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const members = await database.cohortMembers.where('cohortId').equals(cohortId).toArray();
+    const memberIds = members.map((m) => m.userId);
+    if (memberIds.length === 0) return null;
+
+    const runs = await database.runs.where('userId').anyOf(memberIds).toArray();
+    const recentRuns = runs.filter((run) => (run.completedAt ?? run.createdAt) >= cutoff);
+
+    const cohortDistance = recentRuns.reduce((sum, run) => sum + run.distance, 0);
+    const cohortRunCount = recentRuns.length;
+    const cohortAvgDistance = cohortRunCount > 0 ? cohortDistance / cohortRunCount : 0;
+
+    const userRuns = recentRuns.filter((run) => run.userId === userId);
+    const userDistance = userRuns.reduce((sum, run) => sum + run.distance, 0);
+    const userRunCount = userRuns.length;
+    const userAvgDistance = userRunCount > 0 ? userDistance / userRunCount : 0;
+
+    return {
+      timeRange,
+      user: {
+        runs: userRunCount,
+        totalDistance: userDistance,
+        avgDistance: userAvgDistance,
+      },
+      cohort: {
+        runs: cohortRunCount,
+        totalDistance: cohortDistance,
+        avgDistance: cohortAvgDistance,
+      },
+    };
+  }, 'getCohortPerformanceComparison', null);
 }
 
 // ============================================================================
@@ -3307,16 +3650,22 @@ export const dbUtils = {
   ensureUserReady,
   getCurrentUser,
   performStartupMigration,
-  createUser,
-  getUserById,
-  updateUser,
-  upsertUser,
-  completeOnboardingAtomic,
+	  createUser,
+	  getUserById,
+	  updateUser,
+	  updateReminderSettings,
+	  getReminderSettings,
+	  upsertUser,
+	  completeOnboardingAtomic,
   
   getUser,
   getUsersByOnboardingStatus,
   migrateFromLocalStorage,
   cleanupUserData,
+
+  // Cohort stats
+  getCohortStats,
+  getCohortPerformanceComparison,
   
   // Chat management
   createChatMessage,
@@ -3325,6 +3674,7 @@ export const dbUtils = {
   // Adaptive coaching helpers
   getCoachingProfile,
   getBehaviorPatterns,
+  recordBehaviorPattern,
   getCoachingFeedback,
   getRunsByUser,
   ensureCoachingTablesExist,
@@ -3336,6 +3686,7 @@ export const dbUtils = {
   
   // Goal management
   createGoal,
+  deleteGoal,
   updateGoal,
   getUserGoals,
   getPrimaryGoal,
@@ -3343,6 +3694,13 @@ export const dbUtils = {
   getGoal,
   getGoalWithMilestones,
   getGoalMilestones,
+  getGoalProgressHistory,
+  calculateGoalProgressPercentage,
+  recordGoalProgress,
+  getGoalRecommendations,
+  getGoalRecommendationById,
+  createGoalRecommendation,
+  updateGoalRecommendation,
   validateSMARTGoal,
   autoCompleteGoalFields,
 
@@ -3357,10 +3715,11 @@ export const dbUtils = {
   
   // Plan management
   createPlan,
-  updatePlan,
-  updatePlanWithAIWorkouts,
-  getActivePlan,
-  ensureUserHasActivePlan,
+	  updatePlan,
+	  updatePlanWithAIWorkouts,
+	  getActivePlan,
+	  getPlan,
+	  ensureUserHasActivePlan,
   clearPlanCreationLocks,
   getPlanWithWorkouts,
   deactivateAllUserPlans,
@@ -3413,8 +3772,7 @@ export const dbUtils = {
   getPerformanceMetrics,
   getPersonalRecordProgression,
   checkAndUpdatePersonalRecords,
-  deletePersonalRecord,
-  getGoalProgressHistory
+  deletePersonalRecord
 };
 
 export default dbUtils; 

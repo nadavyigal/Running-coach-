@@ -328,7 +328,7 @@ export function PlanScreen() {
               <span className="text-white text-sm">🤖</span>
             </div>
             <div className="flex-1">
-              <h4 className="font-medium text-blue-900">Let's keep your progress going</h4>
+              <h4 className="font-medium text-blue-900">Let&apos;s keep your progress going</h4>
               <p className="text-sm text-blue-800 mt-1">Missed workouts? Skip or add them to this week.</p>
             </div>
           </div>
@@ -511,10 +511,12 @@ export function PlanScreen() {
       )}
 
       {/* Recovery Status */}
-      <RecoveryRecommendations
-        userId={plan?.userId}
-        showBreakdown={false}
-      />
+      {typeof plan?.userId === 'number' && (
+        <RecoveryRecommendations
+          userId={plan.userId}
+          showBreakdown={false}
+        />
+      )}
 
       {showAddRunModal && (
         <AddRunModal

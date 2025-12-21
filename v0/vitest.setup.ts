@@ -579,109 +579,6 @@ vi.mock("@/lib/serverErrorHandling", () => ({
   withErrorHandling: vi.fn().mockImplementation((handler: any) => handler),
 }));
 
-// Database Mock Configuration - Enhanced with comprehensive mocking
-vi.mock("@/lib/db", () => {
-  const mockUser = {
-    id: 1,
-    name: 'Test User',
-    email: 'test@example.com',
-    age: 30,
-    experience: 'intermediate',
-    goal: 'habit',
-    daysPerWeek: 3,
-    preferredTimes: ['morning'],
-    consents: { data: true, gdpr: true, push: true },
-    onboardingComplete: true,
-    currentStreak: 5,
-    longestStreak: 12,
-    lastActivityDate: new Date('2025-01-14'),
-    cohortId: 'cohort-1',
-    createdAt: new Date('2025-01-01'),
-    updatedAt: new Date('2025-01-01')
-  };
-  
-  const mockPlan = {
-    id: 1,
-    userId: 1,
-    name: 'Test Plan',
-    type: 'beginner',
-    duration: 12,
-    workouts: [],
-    createdAt: new Date(),
-    updatedAt: new Date()
-  };
-
-  const createMockTable = (data: any[]) => ({
-    toArray: vi.fn().mockResolvedValue(data),
-    get: vi.fn().mockResolvedValue(data[0]),
-    add: vi.fn().mockResolvedValue(1),
-    put: vi.fn().mockResolvedValue(1),
-    update: vi.fn().mockResolvedValue(1),
-    delete: vi.fn().mockResolvedValue(undefined),
-    clear: vi.fn().mockResolvedValue(undefined),
-    where: vi.fn().mockReturnThis(),
-    equals: vi.fn().mockReturnThis(),
-    first: vi.fn().mockResolvedValue(data[0]),
-    orderBy: vi.fn().mockReturnThis(),
-    reverse: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-    and: vi.fn().mockReturnThis(),
-    count: vi.fn().mockResolvedValue(data.length),
-  });
-  
-  const mockDb = {
-    users: createMockTable([mockUser]),
-    plans: createMockTable([mockPlan]),
-    workouts: createMockTable([]),
-    runs: createMockTable([]),
-    goals: createMockTable([]), // Add missing goals table
-    chatMessages: createMockTable([]),
-    conversationMessages: createMockTable([]),
-    onboardingSessions: createMockTable([]),
-    badges: createMockTable([]),
-    cohorts: createMockTable([]), // Fix typo: should be cohorts
-    cohortMembers: createMockTable([]), // Fix typo: should be cohortMembers
-    syncJobs: createMockTable([]),
-    wearableDevices: createMockTable([]),
-    delete: vi.fn().mockResolvedValue(undefined),
-    open: vi.fn().mockResolvedValue(undefined),
-  };
-  
-  return {
-    db: mockDb,
-    resetDatabaseInstance: vi.fn().mockResolvedValue(undefined),
-    
-    dbUtils: {
-      getCurrentUser: vi.fn().mockResolvedValue(mockUser),
-      createUser: vi.fn().mockResolvedValue(1),
-      updateUser: vi.fn().mockResolvedValue(1),
-      createPlan: vi.fn().mockResolvedValue(mockPlan),
-      updatePlan: vi.fn().mockResolvedValue(1),
-      createWorkout: vi.fn().mockResolvedValue(1),
-      createRun: vi.fn().mockResolvedValue(1),
-      createChatMessage: vi.fn().mockResolvedValue(1),
-      ensureCoachingTablesExist: vi.fn().mockResolvedValue(true),
-      handlePlanError: vi.fn().mockReturnValue({
-        title: 'Error',
-        description: 'Something went wrong'
-      }),
-      clearDatabase: vi.fn().mockResolvedValue(undefined),
-      calculateCurrentStreak: vi.fn().mockResolvedValue(0),
-      updateUserStreak: vi.fn().mockResolvedValue(undefined),
-      getStreakStats: vi.fn().mockResolvedValue({ currentStreak: 0, longestStreak: 0 }),
-      normalizeDate: vi.fn(date => date),
-      isSameDay: vi.fn(() => false),
-      getDaysDifference: vi.fn(() => 0),
-      markWorkoutCompleted: vi.fn().mockResolvedValue(undefined),
-      getUserBadges: vi.fn().mockResolvedValue([]),
-      deactivateAllUserPlans: vi.fn().mockResolvedValue(undefined),
-      getRunsByUser: vi.fn().mockResolvedValue([]),
-      getUserById: vi.fn().mockResolvedValue(mockUser),
-      getCohortStats: vi.fn().mockResolvedValue({}),
-    }
-  };
-});
-
 // Geolocation API Mock
 const mockGeolocation = {
   getCurrentPosition: vi.fn(),
@@ -701,20 +598,17 @@ Object.defineProperty(global.navigator, 'permissions', {
   },
   writable: true,
 });
-// MapLibre GL JS Mockvi.mock('maplibre-gl', () => {  const mockMap = {    on: vi.fn((event: string, callback: Function) => {      if (event === 'load') {        setTimeout(() => callback(), 0);      }      return mockMap;    }),    off: vi.fn(),    remove: vi.fn(),    addSource: vi.fn(),    removeSource: vi.fn(),    getSource: vi.fn(),    addLayer: vi.fn(),    removeLayer: vi.fn(),    getLayer: vi.fn(),    setStyle: vi.fn(),    fitBounds: vi.fn(),    flyTo: vi.fn(),    jumpTo: vi.fn(),    getCenter: vi.fn(() => ({ lng: 34.7818, lat: 32.0853 })),    getZoom: vi.fn(() => 13),    getBounds: vi.fn(),    addControl: vi.fn(),    removeControl: vi.fn(),    resize: vi.fn(),  };  const mockMarker = {    setLngLat: vi.fn().mockReturnThis(),    addTo: vi.fn().mockReturnThis(),    remove: vi.fn(),    setPopup: vi.fn().mockReturnThis(),    getElement: vi.fn(() => document.createElement('div')),  };  return {    default: {      Map: vi.fn(() => mockMap),      Marker: vi.fn(() => mockMarker),      NavigationControl: vi.fn(),      GeolocateControl: vi.fn(),      Popup: vi.fn(() => ({        setLngLat: vi.fn().mockReturnThis(),        setHTML: vi.fn().mockReturnThis(),        addTo: vi.fn().mockReturnThis(),        remove: vi.fn(),      })),    },  };});
 
 // Setup before/after each test hooks for cleanup
 beforeEach(() => {
+  vi.useRealTimers();
   vi.clearAllMocks();
   mockFetch.mockClear();
 });
 
 afterEach(() => {
-  vi.clearAllTimers();
+  vi.useRealTimers();
 });
-
-// Global test setup
-vi.useFakeTimers();
 
 // Make error boundary assertions globally available
 (global as any).ErrorBoundaryAssertions = ErrorBoundaryAssertions;

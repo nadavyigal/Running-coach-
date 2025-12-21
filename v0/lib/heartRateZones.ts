@@ -129,12 +129,10 @@ export function analyzeHeartRateData(
   const timeInZones: { [key: number]: number } = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
   const heartRates = heartRateData.map(d => d.heartRate);
   
-  let totalTime = 0;
   for (let i = 1; i < heartRateData.length; i++) {
     const timeDiff = heartRateData[i].timestamp.getTime() - heartRateData[i - 1].timestamp.getTime();
     const zone = getHeartRateZone(heartRateData[i].heartRate, zones);
     timeInZones[zone] += timeDiff;
-    totalTime += timeDiff;
   }
 
   const averageHR = Math.round(heartRates.reduce((sum, hr) => sum + hr, 0) / heartRates.length);

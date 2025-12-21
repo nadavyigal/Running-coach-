@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from "react"
-import { flushSync } from "react-dom"
-import dynamic from 'next/dynamic'
-import { useToast } from "@/hooks/use-toast"
-import { DATABASE } from '@/lib/constants'
-import { logger } from '@/lib/logger';
+	import { useState, useEffect, useRef } from "react"
+	import { flushSync } from "react-dom"
+	import dynamic from 'next/dynamic'
+	import { DATABASE } from '@/lib/constants'
+	import { logger } from '@/lib/logger';
 
 type MainScreen = 'today' | 'plan' | 'record' | 'chat' | 'profile'
 
@@ -218,8 +217,6 @@ export default function RunSmartApp() {
   // Ref to store dynamically loaded modules
   const dbUtilsRef = useRef<any>(null)
 
-  // Toast hook for notifications
-  const { toast } = useToast()
 
   logger.log('🚀 RunSmartApp component rendering...', { isLoading, isOnboardingComplete })
 

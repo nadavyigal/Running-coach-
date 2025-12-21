@@ -27,9 +27,16 @@ export class AiActivityAnalysisError extends Error {
   constructor(message: string, options?: { requestId?: string; errorCode?: string; status?: number }) {
     super(message)
     this.name = "AiActivityAnalysisError"
-    this.requestId = options?.requestId
-    this.errorCode = options?.errorCode
-    this.status = options?.status
+
+    if (typeof options?.requestId === "string") {
+      this.requestId = options.requestId
+    }
+    if (typeof options?.errorCode === "string") {
+      this.errorCode = options.errorCode
+    }
+    if (typeof options?.status === "number") {
+      this.status = options.status
+    }
   }
 }
 

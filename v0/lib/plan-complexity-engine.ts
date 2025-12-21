@@ -101,10 +101,10 @@ export class PlanComplexityEngineService {
     let paceImprovement = 0;
 
     if (lastFiveRuns.length >= 2) {
-      const firstRun = lastFiveRuns[0];
-      const lastRun = lastFiveRuns[lastFiveRuns.length - 1];
+      const firstRun = lastFiveRuns.at(0);
+      const lastRun = lastFiveRuns.at(-1);
       
-      if (firstRun.pace && lastRun.pace) {
+      if (firstRun?.pace && lastRun?.pace) {
         paceImprovement = (firstRun.pace - lastRun.pace) / firstRun.pace * 100;
       }
     }
@@ -288,6 +288,9 @@ export class PlanComplexityEngineService {
     plan: Plan, 
     complexity: PlanComplexityEngine
   ): Promise<string[]> {
+    void userId;
+    void plan;
+
     const suggestions: string[] = [];
 
     // Check if plan is too complex for user

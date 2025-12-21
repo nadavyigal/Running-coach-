@@ -1,5 +1,4 @@
 import { db } from './db'
-import { OnboardingPhase } from './onboardingAnalytics'
 
 // Analytics aggregation interfaces
 export interface CompletionRateMetrics {

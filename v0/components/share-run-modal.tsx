@@ -2,19 +2,17 @@
 
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "./ui/alert-dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Copy, Share2, MessageCircle, Facebook, Linkedin, Twitter } from "lucide-react";
+import { Copy, Share2, MessageCircle, Facebook, Twitter } from "lucide-react";
 import { useState, useEffect } from "react";
 import { dbUtils } from "@/lib/dbUtils";
 import { useToast } from "@/hooks/use-toast";

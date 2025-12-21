@@ -209,7 +209,7 @@ export default function RecoveryDashboard() {
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <Activity className="w-5 h-5" />
-              <span>Today's Recovery Score</span>
+              <span>Today&apos;s Recovery Score</span>
               <Badge variant={currentScore.overallScore >= 80 ? 'default' : 'secondary'}>
                 {getScoreLabel(currentScore.overallScore)}
               </Badge>

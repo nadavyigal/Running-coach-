@@ -3,31 +3,23 @@
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import {
-  Target,
-  TrendingUp,
-  TrendingDown,
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  Calendar,
-  Settings,
-  Trophy,
-  Zap,
-  Flag,
-  BarChart3,
-  Filter,
-  Sparkles,
-  Award
-} from 'lucide-react';
+	  Target,
+	  TrendingUp,
+	  TrendingDown,
+	  AlertTriangle,
+	  CheckCircle2,
+	  Calendar,
+	  Trophy,
+	  Flag,
+	  BarChart3,
+	  Award
+	} from 'lucide-react';
 import { GoalAnalyticsInsights } from './goal-analytics-insights';
-import { toast } from '@/components/ui/use-toast';
 
 const GoalProgressAnalyticsTab = dynamic(
   () => import('./goal-progress-analytics-tab').then(mod => mod.GoalProgressAnalyticsTab),
@@ -86,7 +78,6 @@ export function GoalProgressDashboard({ userId, className = '' }: GoalProgressDa
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [filterStatus, setFilterStatus] = useState('active');
-  const [selectedGoal, setSelectedGoal] = useState<GoalWithProgress | null>(null);
 
   useEffect(() => {
     loadGoalsProgress();
@@ -212,7 +203,7 @@ export function GoalProgressDashboard({ userId, className = '' }: GoalProgressDa
       {/* Goals List */}
       <div className="space-y-4">
         {goals.map((goalData) => (
-          <Card key={goalData.goal.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelectedGoal(goalData)}>
+          <Card key={goalData.goal.id} className="hover:shadow-md transition-shadow">
             <CardContent className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">

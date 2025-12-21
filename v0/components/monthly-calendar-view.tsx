@@ -13,11 +13,11 @@ import { dbUtils } from "@/lib/dbUtils"
 export function MonthlyCalendarView() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showAddRunModal, setShowAddRunModal] = useState(false)
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [, setSelectedDate] = useState<Date | null>(null)
   const [selectedDateWorkout, setSelectedDateWorkout] = useState<any>(null)
   const [showDateWorkoutModal, setShowDateWorkoutModal] = useState(false)
   const [workouts, setWorkouts] = useState<Workout[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [, setIsLoading] = useState(true)
   const [draggedWorkout, setDraggedWorkout] = useState<any>(null)
 
   const monthNames = [
@@ -182,7 +182,7 @@ export function MonthlyCalendarView() {
       // Update the workout in the database
       await dbUtils.updateWorkout(draggedWorkout.id, {
         scheduledDate: targetDate,
-        day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][targetDate.getDay()]
+        day: (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const).at(targetDate.getDay()) ?? 'Sun',
       })
 
       // Refresh the workouts
@@ -356,7 +356,7 @@ export function MonthlyCalendarView() {
               })
               .sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime())
               .slice(0, 3)
-              .map(([date, workout], index) => {
+              .map(([date, workout]) => {
                 const workoutDate = new Date(date)
                 const dayName = workoutDate.toLocaleDateString("en-US", { weekday: "short" })
                 const dayNum = workoutDate.getDate()
@@ -384,10 +384,10 @@ export function MonthlyCalendarView() {
 
       {showAddRunModal && (
         <AddRunModal
-          isOpen={showAddRunModal}
-          onClose={() => {
-            setShowAddRunModal(false)
-            setSelectedDate(null)
+          open={showAddRunModal}
+          onOpenChange={(open) => {
+            setShowAddRunModal(open)
+            if (!open) setSelectedDate(null)
           }}
         />
       )}

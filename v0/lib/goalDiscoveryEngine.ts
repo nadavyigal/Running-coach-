@@ -4,9 +4,6 @@
  * for helping users identify and set appropriate running goals
  */
 
-import { type User } from '@/lib/db';
-import { dbUtils } from '@/lib/dbUtils';
-
 // Core interfaces for goal discovery
 export interface DiscoveredGoal {
   id: string;
@@ -187,7 +184,7 @@ class GoalDiscoveryEngine {
       console.log('📈 Ranked goals:', rankedGoals.length);
 
       // Step 4: Select primary and supporting goals
-      const { primaryGoal, supportingGoals } = this.selectOptimalGoalSet(rankedGoals, userProfile);
+      const { primaryGoal, supportingGoals } = this.selectOptimalGoalSet(rankedGoals);
       console.log('✅ Selected primary goal:', primaryGoal.title);
 
       // Step 5: Generate recommendations and next steps
@@ -319,8 +316,7 @@ class GoalDiscoveryEngine {
    * Select optimal combination of primary and supporting goals
    */
   private selectOptimalGoalSet(
-    rankedGoals: DiscoveredGoal[],
-    userProfile: UserProfile
+    rankedGoals: DiscoveredGoal[]
   ): { primaryGoal: DiscoveredGoal; supportingGoals: DiscoveredGoal[] } {
     // Select highest confidence goal as primary
     const primaryGoal = rankedGoals[0];
@@ -597,18 +593,18 @@ class GoalDiscoveryEngine {
     return goals;
   }
 
-  private createRaceGoal(race: string, userProfile: UserProfile): DiscoveredGoal | null {
+  private createRaceGoal(_race: string, _userProfile: UserProfile): DiscoveredGoal | null {
     // Implementation for race-specific goal creation
     return null; // Placeholder
   }
 
-  private createMotivationGoal(motivation: string, userProfile: UserProfile): DiscoveredGoal | null {
+  private createMotivationGoal(_motivation: string, _userProfile: UserProfile): DiscoveredGoal | null {
     // Implementation for motivation-based goal creation
     return null; // Placeholder
   }
 
   private adjustTargetForUser(baseTarget: any, userProfile: UserProfile, category: string): any {
-    let adjustedTarget = { ...baseTarget };
+    const adjustedTarget = { ...baseTarget };
     
     // Adjust based on experience
     if (userProfile.experience === 'beginner') {
@@ -665,7 +661,7 @@ class GoalDiscoveryEngine {
     });
   }
 
-  private identifyRelevantBarriers(barriers: string[], category: string): string[] {
+  private identifyRelevantBarriers(barriers: string[], _category: string): string[] {
     // Filter barriers that are most relevant to this goal category
     return barriers;
   }
@@ -794,7 +790,7 @@ class GoalDiscoveryEngine {
     return Math.max(0.3, Math.min(0.95, probability));
   }
 
-  private generateFallbackGoalSet(userProfile: UserProfile): GoalDiscoveryResult {
+  private generateFallbackGoalSet(_userProfile: UserProfile): GoalDiscoveryResult {
     // Generate a basic goal set when main discovery fails
     const now = new Date();
     const deadline = new Date();

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, SubjectiveWellness } from '../../../../lib/db';
+import type { SubjectiveWellness } from '../../../../lib/db';
 import { RecoveryEngine } from '../../../../lib/recoveryEngine';
 import { logger } from '@/lib/logger';
 
