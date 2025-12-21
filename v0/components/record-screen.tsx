@@ -7,6 +7,7 @@ import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertT
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RouteSelectionWizard } from "@/components/route-selection-wizard"
 import { ManualRunModal } from "@/components/manual-run-modal"
+import { RunMap } from "@/components/maps/RunMap"
 import { type Run, type Workout, type User } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
@@ -776,13 +777,22 @@ export function RecordScreen() {
         </CardContent>
       </Card>
 
-      {/* Route Visualization */}
-      {gpsPath.length > 0 && (
+      {/* Live Map */}
+      {(isRunning || gpsPath.length > 0) && (
         <Card>
           <CardContent className="p-4">
-            <h3 className="font-medium mb-3">Route</h3>
-            <div className="h-64 bg-gray-100 rounded-lg overflow-hidden">
-              <RouteVisualization gpsPath={gpsPath} currentPosition={currentPosition} />
+            <h3 className="font-medium mb-3">Map</h3>
+            <div className="h-64 rounded-lg overflow-hidden">
+              <RunMap
+                height="100%"
+                userLocation={
+                  currentPosition
+                    ? { lat: currentPosition.latitude, lng: currentPosition.longitude }
+                    : null
+                }
+                path={gpsPath.map((p) => ({ lat: p.latitude, lng: p.longitude }))}
+                followUser={isRunning && !isPaused}
+              />
             </div>
           </CardContent>
         </Card>
@@ -845,64 +855,5 @@ export function RecordScreen() {
         />
       )}
     </div>
-  )
-}
-
-// Simple route visualization component
-function RouteVisualization({ gpsPath, currentPosition }: { 
-  gpsPath: GPSCoordinate[]
-  currentPosition: GPSCoordinate | null 
-}) {
-  if (gpsPath.length === 0) return null
-
-  // Calculate bounds for the route
-  const latitudes = gpsPath.map(p => p.latitude)
-  const longitudes = gpsPath.map(p => p.longitude)
-  const minLat = Math.min(...latitudes)
-  const maxLat = Math.max(...latitudes)
-  const minLng = Math.min(...longitudes)
-  const maxLng = Math.max(...longitudes)
-
-  // Create path string for SVG
-  const pathString = gpsPath.map((point, index) => {
-    const x = ((point.longitude - minLng) / (maxLng - minLng || 1)) * 220 + 20
-    const y = ((maxLat - point.latitude) / (maxLat - minLat || 1)) * 220 + 20
-    return `${index === 0 ? 'M' : 'L'} ${x} ${y}`
-  }).join(' ')
-
-  return (
-    <svg className="w-full h-full" viewBox="0 0 260 260">
-      {/* Route path */}
-      <path
-        d={pathString}
-        stroke="rgb(34, 197, 94)"
-        strokeWidth="3"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      
-      {/* Start point */}
-      {gpsPath.length > 0 && (
-        <circle
-          cx={((gpsPath[0].longitude - minLng) / (maxLng - minLng || 1)) * 220 + 20}
-          cy={((maxLat - gpsPath[0].latitude) / (maxLat - minLat || 1)) * 220 + 20}
-          r="4"
-          fill="rgb(34, 197, 94)"
-        />
-      )}
-      
-      {/* Current position */}
-      {currentPosition && (
-        <circle
-          cx={((currentPosition.longitude - minLng) / (maxLng - minLng || 1)) * 220 + 20}
-          cy={((maxLat - currentPosition.latitude) / (maxLat - minLat || 1)) * 220 + 20}
-          r="6"
-          fill="rgb(59, 130, 246)"
-          stroke="white"
-          strokeWidth="2"
-        />
-      )}
-    </svg>
   )
 }
