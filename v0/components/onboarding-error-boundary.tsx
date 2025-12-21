@@ -53,7 +53,7 @@ class OnboardingErrorBoundary extends Component<Props, State> {
         <div className="flex flex-col items-center justify-center min-h-screen bg-red-50 dark:bg-red-950 text-red-800 dark:text-red-200 p-4">
           <h1 className="text-2xl font-bold mb-4">Oops! Something went wrong.</h1>
           <p className="text-lg text-center mb-6">
-            We're sorry, but an unexpected error occurred during the onboarding process.
+            We&apos;re sorry, but an unexpected error occurred during the onboarding process.
             Please try again.
           </p>
           <button

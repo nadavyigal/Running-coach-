@@ -19,8 +19,8 @@ export async function migrateExistingGoals() {
 
     // Group goals by user
     const goalsByUser = goals.reduce((acc, goal) => {
-      if (!acc[goal.userId]) acc[goal.userId] = [];
-      acc[goal.userId].push(goal);
+      const bucket = acc[goal.userId] ?? (acc[goal.userId] = []);
+      bucket.push(goal);
       return acc;
     }, {} as Record<number, typeof goals>);
 
@@ -39,11 +39,14 @@ export async function migrateExistingGoals() {
           new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         );
 
-        const primaryGoal = activeGoals[0];
+        const primaryGoal = activeGoals.at(0);
+        if (!primaryGoal || typeof primaryGoal.id !== 'number') {
+          continue;
+        }
         console.log(`Setting goal "${primaryGoal.title}" as primary for user ${userId}`);
 
         // Set as primary
-        await dbUtils.setPrimaryGoal(Number(userId), primaryGoal.id!);
+        await dbUtils.setPrimaryGoal(Number(userId), primaryGoal.id);
 
         // Regenerate plan for this goal
         try {

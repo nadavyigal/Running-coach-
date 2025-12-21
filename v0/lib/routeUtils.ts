@@ -51,11 +51,15 @@ export function calculateWaypointDistance(points: LatLng[]): number {
 
   let totalDistance = 0;
   for (let i = 0; i < points.length - 1; i++) {
+    const current = points.at(i)
+    const next = points.at(i + 1)
+    if (!current || !next) continue
+
     totalDistance += calculateDistance(
-      points[i].lat,
-      points[i].lng,
-      points[i + 1].lat,
-      points[i + 1].lng
+      current.lat,
+      current.lng,
+      next.lat,
+      next.lng
     );
   }
 
@@ -85,11 +89,15 @@ export function simplifyPath(points: LatLng[], tolerance: number = 0.01): LatLng
   // Find point with maximum distance from line segment
   let maxDistance = 0;
   let maxIndex = 0;
-  const firstPoint = points[0];
-  const lastPoint = points[points.length - 1];
+  const firstPoint = points.at(0);
+  const lastPoint = points.at(-1);
+  if (!firstPoint || !lastPoint) return points;
 
   for (let i = 1; i < points.length - 1; i++) {
-    const distance = perpendicularDistance(points[i], firstPoint, lastPoint);
+    const point = points.at(i)
+    if (!point) continue
+
+    const distance = perpendicularDistance(point, firstPoint, lastPoint);
     if (distance > maxDistance) {
       maxDistance = distance;
       maxIndex = i;
@@ -138,10 +146,13 @@ function perpendicularDistance(point: LatLng, lineStart: LatLng, lineEnd: LatLng
 export function getRouteBounds(points: LatLng[]): MapBounds | null {
   if (points.length === 0) return null;
 
-  let minLat = points[0].lat;
-  let maxLat = points[0].lat;
-  let minLng = points[0].lng;
-  let maxLng = points[0].lng;
+  const firstPoint = points.at(0)
+  if (!firstPoint) return null
+
+  let minLat = firstPoint.lat;
+  let maxLat = firstPoint.lat;
+  let minLng = firstPoint.lng;
+  let maxLng = firstPoint.lng;
 
   points.forEach(point => {
     minLat = Math.min(minLat, point.lat);

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
 import { adaptiveCoachingEngine } from '@/lib/adaptiveCoachingEngine';
 import { logger } from '@/lib/logger';
+import type { CoachingFeedback } from '@/lib/db';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -45,7 +46,63 @@ export async function POST(request: NextRequest) {
     const feedbackData = FeedbackSchema.parse(body);
     
     // Process the feedback through the adaptive coaching engine
-    await adaptiveCoachingEngine.processFeedback(feedbackData.userId, feedbackData);
+    const context: CoachingFeedback['context'] = {}
+
+    if (typeof feedbackData.context.weather === 'string') {
+      context.weather = feedbackData.context.weather
+    }
+
+    if (typeof feedbackData.context.timeOfDay === 'string') {
+      context.timeOfDay = feedbackData.context.timeOfDay
+    }
+
+    if (typeof feedbackData.context.userMood === 'string') {
+      context.userMood = feedbackData.context.userMood
+    }
+
+    if (typeof feedbackData.context.recentPerformance === 'string') {
+      context.recentPerformance = feedbackData.context.recentPerformance
+    }
+
+    if (Array.isArray(feedbackData.context.situationalFactors)) {
+      context.situationalFactors = feedbackData.context.situationalFactors.filter(
+        (factor): factor is string => typeof factor === 'string',
+      )
+    }
+
+    const aspects = feedbackData.aspects
+    const normalizedAspects: CoachingFeedback['aspects'] | undefined =
+      aspects &&
+      typeof aspects.helpfulness === 'number' &&
+      typeof aspects.relevance === 'number' &&
+      typeof aspects.clarity === 'number' &&
+      typeof aspects.motivation === 'number' &&
+      typeof aspects.accuracy === 'number'
+        ? {
+            helpfulness: aspects.helpfulness,
+            relevance: aspects.relevance,
+            clarity: aspects.clarity,
+            motivation: aspects.motivation,
+            accuracy: aspects.accuracy,
+          }
+        : undefined
+
+    const feedbackForEngine: Omit<CoachingFeedback, 'id' | 'userId' | 'createdAt'> = {
+      interactionType: feedbackData.interactionType,
+      feedbackType: feedbackData.feedbackType,
+      context,
+      ...(typeof feedbackData.rating === 'number' ? { rating: feedbackData.rating } : {}),
+      ...(normalizedAspects ? { aspects: normalizedAspects } : {}),
+      ...(typeof feedbackData.feedbackText === 'string' ? { feedbackText: feedbackData.feedbackText } : {}),
+      ...(typeof feedbackData.coachingResponseId === 'string'
+        ? { coachingResponseId: feedbackData.coachingResponseId }
+        : {}),
+      ...(Array.isArray(feedbackData.improvementSuggestions)
+        ? { improvementSuggestions: feedbackData.improvementSuggestions }
+        : {}),
+    }
+
+    await adaptiveCoachingEngine.processFeedback(feedbackData.userId, feedbackForEngine);
     
     // Get updated coaching profile to show impact
     const updatedProfile = await dbUtils.getCoachingProfile(feedbackData.userId);
@@ -164,13 +221,13 @@ export async function GET(request: NextRequest) {
       : 0;
 
     // Group by interaction type
-    const byInteractionType = feedback.reduce((acc, f) => {
-      if (!acc[f.interactionType]) {
-        acc[f.interactionType] = [];
+    const byInteractionType: Record<string, typeof feedback> = {}
+    for (const item of feedback) {
+      if (!byInteractionType[item.interactionType]) {
+        byInteractionType[item.interactionType] = []
       }
-      acc[f.interactionType].push(f);
-      return acc;
-    }, {} as Record<string, typeof feedback>);
+      byInteractionType[item.interactionType]!.push(item)
+    }
 
     // Calculate trends (last 10 vs previous 10)
     const recent = feedback.slice(0, Math.min(10, feedback.length));
@@ -255,8 +312,8 @@ export async function GET(request: NextRequest) {
         userId,
         generatedAt: new Date().toISOString(),
         dateRange: {
-          earliest: feedback.length > 0 ? feedback[feedback.length - 1].createdAt : null,
-          latest: feedback.length > 0 ? feedback[0].createdAt : null,
+          earliest: feedback.at(-1)?.createdAt ?? null,
+          latest: feedback.at(0)?.createdAt ?? null,
         },
       },
     };

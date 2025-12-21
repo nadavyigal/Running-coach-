@@ -83,7 +83,9 @@ export function ProfileScreen() {
   const getDaysRemaining = (goal?: Goal | null) => {
     if (!goal?.timeBound?.deadline) return null;
     const deadline = new Date(goal.timeBound.deadline);
-    const diff = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    const deadlineTime = deadline.getTime();
+    if (Number.isNaN(deadlineTime)) return null;
+    const diff = Math.ceil((deadlineTime - Date.now()) / (1000 * 60 * 60 * 24));
     return diff < 0 ? 0 : diff;
   };
 
@@ -215,9 +217,10 @@ export function ProfileScreen() {
           console.log('[ProfileScreen] Attempting userId fallback...');
           const { db } = await import('@/lib/db');
           const users = await db.users.toArray();
-          if (users.length > 0 && users[0].id) {
-            console.log(`[ProfileScreen] ✅ Fallback found userId: ${users[0].id}`);
-            setUserId(users[0].id);
+          const firstUser = users.at(0);
+          if (firstUser?.id) {
+            console.log(`[ProfileScreen] ✅ Fallback found userId: ${firstUser.id}`);
+            setUserId(firstUser.id);
             setError(null);
           }
         } catch (fallbackError) {
@@ -388,7 +391,11 @@ export function ProfileScreen() {
                   )}
                   {primaryGoal.timeBound?.deadline && (
                     <div className="text-xs text-gray-500">
-                      Target date: {new Date(primaryGoal.timeBound.deadline).toLocaleDateString()}
+                      Target date:{' '}
+                      {(() => {
+                        const deadline = new Date(primaryGoal.timeBound.deadline);
+                        return Number.isNaN(deadline.getTime()) ? '--' : deadline.toLocaleDateString();
+                      })()}
                     </div>
                   )}
                 </div>

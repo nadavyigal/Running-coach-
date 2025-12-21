@@ -1,5 +1,4 @@
 import { db, type ConversationMessage, type OnboardingSession } from './db'
-import { validateOnboardingState } from './onboardingStateValidator'
 
 export interface ConversationData {
   messages: ConversationMessage[]
@@ -256,7 +255,7 @@ export class ConversationStorage {
     const warnings: string[] = []
 
     try {
-      let msgs = messages || await db.conversationMessages
+      const msgs = messages || await db.conversationMessages
         .where('conversationId')
         .equals(conversationId)
         .toArray()

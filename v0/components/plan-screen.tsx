@@ -61,7 +61,9 @@ export function PlanScreen() {
   const getDaysRemaining = (goal?: Goal | null) => {
     if (!goal?.timeBound?.deadline) return null
     const deadline = new Date(goal.timeBound.deadline)
-    const diff = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    const deadlineTime = deadline.getTime()
+    if (Number.isNaN(deadlineTime)) return null
+    const diff = Math.ceil((deadlineTime - Date.now()) / (1000 * 60 * 60 * 24))
     return diff < 0 ? 0 : diff
   }
 
@@ -326,7 +328,7 @@ export function PlanScreen() {
               <span className="text-white text-sm">🤖</span>
             </div>
             <div className="flex-1">
-              <h4 className="font-medium text-blue-900">Let's keep your progress going</h4>
+              <h4 className="font-medium text-blue-900">Let&apos;s keep your progress going</h4>
               <p className="text-sm text-blue-800 mt-1">Missed workouts? Skip or add them to this week.</p>
             </div>
           </div>
@@ -447,7 +449,15 @@ export function PlanScreen() {
               <div>
                 <p className="text-xs font-semibold text-emerald-600">Goal aligned</p>
                 <h3 className="text-lg font-bold text-gray-900">{primaryGoal.title}</h3>
-                <p className="text-sm text-gray-700">This plan is designed to help you achieve your goal by {primaryGoal.timeBound?.deadline ? new Date(primaryGoal.timeBound.deadline).toLocaleDateString() : 'the target date'}.</p>
+                <p className="text-sm text-gray-700">
+                  This plan is designed to help you achieve your goal by{' '}
+                  {(() => {
+                    if (!primaryGoal.timeBound?.deadline) return 'the target date'
+                    const deadline = new Date(primaryGoal.timeBound.deadline)
+                    return Number.isNaN(deadline.getTime()) ? 'the target date' : deadline.toLocaleDateString()
+                  })()}
+                  .
+                </p>
               </div>
               {getDaysRemaining(primaryGoal) !== null && (
                 <Badge variant="outline" className="text-xs">
@@ -501,14 +511,12 @@ export function PlanScreen() {
       )}
 
       {/* Recovery Status */}
-      <RecoveryRecommendations
-        userId={1}
-        date={new Date()}
-        showBreakdown={false}
-        onRefresh={() => {
-          console.log('Refreshing recovery data for plan view...');
-        }}
-      />
+      {typeof plan?.userId === 'number' && (
+        <RecoveryRecommendations
+          userId={plan.userId}
+          showBreakdown={false}
+        />
+      )}
 
       {showAddRunModal && (
         <AddRunModal

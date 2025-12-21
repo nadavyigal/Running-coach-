@@ -14,12 +14,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { 
-  ClientErrorInfo, 
-  analyzeError, 
-  getRecoveryActions,
-  networkStatus 
-} from '@/lib/errorHandling'
+	import { 
+	  ClientErrorInfo, 
+	  analyzeError, 
+	  networkStatus 
+	} from '@/lib/errorHandling'
 import { useToast } from '@/hooks/use-toast'
 
 export interface ErrorToastProps {

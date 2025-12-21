@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Alert, AlertDescription } from './ui/alert';
 import { Button } from './ui/button';
-import { RefreshCw, TrendingUp, TrendingDown, Activity, Moon, Heart, Brain, Zap } from 'lucide-react';
+import { RefreshCw, TrendingUp, Activity, Moon, Heart, Brain, Zap } from 'lucide-react';
 
 interface RecoveryRecommendation {
   recommendations: string[];
@@ -23,14 +23,14 @@ interface RecoveryRecommendation {
 
 interface RecoveryRecommendationsProps {
   userId?: number;
-  date?: Date;
+  date?: Date | string;
   showBreakdown?: boolean;
   onRefresh?: () => void;
 }
 
 export default function RecoveryRecommendations({ 
   userId = 1, 
-  date = new Date(),
+  date,
   showBreakdown = false,
   onRefresh 
 }: RecoveryRecommendationsProps) {
@@ -38,37 +38,70 @@ export default function RecoveryRecommendations({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadRecommendations = async () => {
+  const [defaultDate] = useState(() => new Date());
+  const inflightRequestRef = useRef<AbortController | null>(null);
+
+  const normalizedDate = useMemo(() => {
+    const raw = date ?? defaultDate;
+    const parsed = typeof raw === 'string' ? new Date(raw) : raw;
+
+    const normalized = new Date(parsed);
+    normalized.setHours(0, 0, 0, 0);
+    return normalized;
+  }, [date, defaultDate]);
+
+  const dateKey = normalizedDate.toISOString();
+
+  const loadRecommendations = useCallback(async () => {
+    inflightRequestRef.current?.abort();
+    const controller = new AbortController();
+    inflightRequestRef.current = controller;
+
     try {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`/api/recovery/recommendations?userId=${userId}&date=${date.toISOString()}`);
-      
+      const response = await fetch(
+        `/api/recovery/recommendations?userId=${userId}&date=${encodeURIComponent(dateKey)}`,
+        { signal: controller.signal }
+      );
+       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      
+       
       const data = await response.json();
-      
+       
       if (data.success) {
         setRecommendations(data.data);
       } else {
         setError(data.error || 'Failed to load recommendations');
       }
     } catch (err) {
+      if (controller.signal.aborted) return;
       // Provide more detailed error message
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
       setError(`Failed to load recovery recommendations: ${errorMessage}`);
       console.error('Error loading recommendations:', err);
     } finally {
+      if (inflightRequestRef.current === controller) {
+        inflightRequestRef.current = null;
+      }
       setLoading(false);
     }
-  };
+  }, [userId, dateKey]);
 
   useEffect(() => {
     loadRecommendations();
-  }, [userId, date]);
+    return () => {
+      inflightRequestRef.current?.abort();
+    };
+  }, [loadRecommendations]);
+
+  const handleRefresh = useCallback(async () => {
+    await loadRecommendations();
+    onRefresh?.();
+  }, [loadRecommendations, onRefresh]);
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-green-600';
@@ -162,7 +195,7 @@ export default function RecoveryRecommendations({
             <Button 
               variant="outline" 
               size="sm" 
-              onClick={onRefresh || loadRecommendations}
+              onClick={handleRefresh}
             >
               <RefreshCw className="w-4 h-4" />
             </Button>

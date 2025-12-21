@@ -111,7 +111,10 @@ export function calculateWorkoutStreak(workouts: Workout[]): number {
   today.setHours(0, 0, 0, 0);
 
   for (let i = 0; i < completedWorkouts.length; i++) {
-    const workoutDate = new Date(completedWorkouts[i].scheduledDate);
+    const workout = completedWorkouts[i]
+    if (!workout) break
+
+    const workoutDate = new Date(workout.scheduledDate);
     workoutDate.setHours(0, 0, 0, 0);
     const daysDiff = Math.floor((today.getTime() - workoutDate.getTime()) / (1000 * 60 * 60 * 24));
 

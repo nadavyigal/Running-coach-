@@ -284,7 +284,7 @@ export function PlanTemplateFlow({ isOpen, onClose, userId, onCompleted }: PlanT
     return Array.from(chosen)
       .map((d) => ({ d, idx: dayToIndex[d] }))
       .sort((a, b) => a.idx - b.idx)
-      .map((x) => indexToDay[x.idx])
+      .map((x) => indexToDay[x.idx] ?? 'Sun')
   }
 
   const formatTimeHms = (totalSeconds: number) => {
@@ -437,7 +437,7 @@ export function PlanTemplateFlow({ isOpen, onClose, userId, onCompleted }: PlanT
           <div className="relative">
             <PlanSetupWizard
               template={selectedTemplate}
-              initialDaysPerWeek={initialDaysPerWeek}
+              {...(typeof initialDaysPerWeek === 'number' ? { initialDaysPerWeek } : {})}
               onBackToDetail={() => setView('detail')}
               onClose={handleClose}
               onDistanceChange={(distanceKey) => {

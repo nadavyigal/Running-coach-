@@ -40,6 +40,8 @@ export function ServiceWorkerRegister() {
       window.addEventListener('load', register)
       return () => window.removeEventListener('load', register)
     }
+
+    return undefined
   }, [])
 
   return null // This component doesn't render anything

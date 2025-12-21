@@ -7,17 +7,15 @@ import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertT
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RouteSelectionWizard } from "@/components/route-selection-wizard"
 import { ManualRunModal } from "@/components/manual-run-modal"
-import { type Run, type Workout, type User } from "@/lib/db"
+import { RunMap } from "@/components/maps/RunMap"
+import { AddActivityModal } from "@/components/add-activity-modal"
+import { type Route, type Run, type Workout, type User } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
-import { planAdjustmentService } from "@/lib/planAdjustmentService"
-import { planAdaptationEngine } from "@/lib/planAdaptationEngine"
 import { useRouter } from "next/navigation"
-import { trackPlanSessionCompleted } from "@/lib/analytics"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { GPSAccuracyIndicator } from "@/components/gps-accuracy-indicator"
-import { GPSMonitoringService, type GPSAccuracyData } from "@/lib/gps-monitoring"
-import { routeRecommendationService, type Route } from "@/lib/route-recommendations"
+import type { GPSAccuracyData } from "@/lib/gps-monitoring"
 
 interface GPSCoordinate {
   latitude: number
@@ -42,21 +40,23 @@ export function RecordScreen() {
   const [showRoutesModal, setShowRoutesModal] = useState(false)
   const [showRouteWizard, setShowRouteWizard] = useState(false)
   const [showManualModal, setShowManualModal] = useState(false)
+  const [showAddActivityModal, setShowAddActivityModal] = useState(false)
   const [currentWorkout, setCurrentWorkout] = useState<Workout | null>(null)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
-  const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
-  
-  // GPS monitoring state
-  const [gpsMonitoringService] = useState(() => new GPSMonitoringService())
-  const [currentGPSAccuracy, setCurrentGPSAccuracy] = useState<GPSAccuracyData | null>(null)
-  const [gpsAccuracyHistory, setGpsAccuracyHistory] = useState<GPSAccuracyData[]>([])
-  const [showGPSDetails, setShowGPSDetails] = useState(false)
+	  const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
+	  
+	  // GPS monitoring state
+	  const [currentGPSAccuracy, setCurrentGPSAccuracy] = useState<GPSAccuracyData | null>(null)
+	  const [gpsAccuracyHistory, setGpsAccuracyHistory] = useState<GPSAccuracyData[]>([])
+	  const [showGPSDetails, setShowGPSDetails] = useState(false)
   
   // GPS and tracking state
   const [gpsPath, setGpsPath] = useState<GPSCoordinate[]>([])
   const [currentPosition, setCurrentPosition] = useState<GPSCoordinate | null>(null)
+  const gpsPathRef = useRef<GPSCoordinate[]>([])
   const watchIdRef = useRef<number | null>(null)
   const startTimeRef = useRef<number>(0)
+  const elapsedRunMsRef = useRef<number>(0)
   const isRunningRef = useRef(false)
   const isPausedRef = useRef(false)
 
@@ -75,6 +75,35 @@ export function RecordScreen() {
 
   const { toast } = useToast()
   const router = useRouter()
+
+  const resolveCurrentUser = async (): Promise<User | null> => {
+    if (currentUser?.id) return currentUser
+
+    try {
+      const user = await dbUtils.getCurrentUser()
+      if (user) {
+        setCurrentUser(user)
+      }
+      return user
+    } catch (error) {
+      console.error("Error resolving current user:", error)
+      return null
+    }
+  }
+
+  const resolveRunType = (workoutType?: Workout["type"]): Run["type"] => {
+    switch (workoutType) {
+      case "easy":
+      case "tempo":
+      case "intervals":
+      case "long":
+      case "time-trial":
+      case "hill":
+        return workoutType
+      default:
+        return "other"
+    }
+  }
 
   // Initialize GPS - proactively request permission on mount
   const initializeGps = async () => {
@@ -129,7 +158,7 @@ export function RecordScreen() {
     if (isRunning && !isPaused && startTimeRef.current) {
       interval = setInterval(() => {
         const now = Date.now()
-        const duration = Math.floor((now - startTimeRef.current) / 1000)
+        const duration = Math.floor((elapsedRunMsRef.current + (now - startTimeRef.current)) / 1000)
         setMetrics(prev => ({
           ...prev,
           duration,
@@ -196,23 +225,31 @@ export function RecordScreen() {
     }
   }
 
-  const requestGpsPermission = (): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        setGpsPermission('unsupported')
-        resolve(false)
-        return
-      }
+	  const requestGpsPermission = (): Promise<boolean> => {
+	    return new Promise((resolve) => {
+	      if (!navigator.geolocation) {
+	        setGpsPermission('unsupported')
+	        resolve(false)
+	        return
+	      }
 
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setGpsPermission('granted')
-          setGpsAccuracy(position.coords.accuracy)
-          resolve(true)
-        },
-        (error) => {
-          console.error('GPS permission denied:', error)
-          setGpsPermission('denied')
+	      navigator.geolocation.getCurrentPosition(
+	        (position) => {
+	          const newPosition: GPSCoordinate = {
+	            latitude: position.coords.latitude,
+	            longitude: position.coords.longitude,
+	            timestamp: position.timestamp,
+	            accuracy: position.coords.accuracy
+	          }
+
+	          setGpsPermission('granted')
+	          setGpsAccuracy(position.coords.accuracy)
+	          setCurrentPosition(newPosition)
+	          resolve(true)
+	        },
+	        (error) => {
+	          console.error('GPS permission denied:', error)
+	          setGpsPermission('denied')
           resolve(false)
         },
         {
@@ -264,6 +301,7 @@ export function RecordScreen() {
           if (isRunningRef.current && !isPausedRef.current) {
             setGpsPath((previousPath) => {
               const nextPath = [...previousPath, newPosition]
+              gpsPathRef.current = nextPath
 
               if (nextPath.length > 1) {
                 const newDistance = calculateTotalDistance(nextPath)
@@ -305,14 +343,16 @@ export function RecordScreen() {
     }
   }
 
-  const calculateTotalDistance = (path: GPSCoordinate[]): number => {
-    if (path.length < 2) return 0
-    
-    return path.reduce((total, point, index) => {
-      if (index === 0) return 0
-      return total + calculateDistanceBetweenPoints(path[index - 1], point)
-    }, 0)
-  }
+	  const calculateTotalDistance = (path: GPSCoordinate[]): number => {
+	    if (path.length < 2) return 0
+	    
+	    return path.reduce((total, point, index) => {
+	      if (index === 0) return total
+	      const previousPoint = path.at(index - 1)
+	      if (!previousPoint) return total
+	      return total + calculateDistanceBetweenPoints(previousPoint, point)
+	    }, 0)
+	  }
 
   const calculateDistanceBetweenPoints = (point1: GPSCoordinate, point2: GPSCoordinate): number => {
     const R = 6371 // Earth's radius in km
@@ -326,10 +366,10 @@ export function RecordScreen() {
     return R * c
   }
 
-  const estimateCalories = (durationSeconds: number, distanceKm: number): number => {
-    // Simple calorie estimation: ~60 calories per km for average runner
-    return Math.round(distanceKm * 60)
-  }
+	  const estimateCalories = (_durationSeconds: number, distanceKm: number): number => {
+	    // Simple calorie estimation: ~60 calories per km for average runner
+	    return Math.round(distanceKm * 60)
+	  }
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -337,14 +377,18 @@ export function RecordScreen() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
-  const formatPace = (paceSecondsPerKm: number) => {
-    if (paceSecondsPerKm === 0) return '--:--'
-    const mins = Math.floor(paceSecondsPerKm / 60)
-    const secs = Math.floor(paceSecondsPerKm % 60)
-    return `${mins}:${secs.toString().padStart(2, '0')}`
-  }
+	  const startRun = async () => {
+    const user = await resolveCurrentUser()
+    if (!user?.id) {
+      toast({
+        title: "Error",
+        description: "User not found. Please complete onboarding first.",
+        variant: "destructive",
+      })
+      router.push("/")
+      return
+    }
 
-  const startRun = async () => {
     const gpsGranted = await requestGpsPermission()
     if (!gpsGranted) {
       toast({
@@ -356,6 +400,8 @@ export function RecordScreen() {
     }
 
     startTimeRef.current = Date.now()
+    elapsedRunMsRef.current = 0
+    gpsPathRef.current = []
     setGpsPath([])
     setMetrics({
       distance: 0,
@@ -387,6 +433,19 @@ export function RecordScreen() {
   }
 
   const pauseRun = () => {
+    if (startTimeRef.current) {
+      elapsedRunMsRef.current += Date.now() - startTimeRef.current
+      startTimeRef.current = 0
+      const duration = Math.floor(elapsedRunMsRef.current / 1000)
+      setMetrics((previousMetrics) => ({
+        ...previousMetrics,
+        duration,
+        pace: previousMetrics.distance > 0 ? duration / previousMetrics.distance : 0,
+        calories: estimateCalories(duration, previousMetrics.distance),
+      }))
+    }
+
+    stopGpsTracking()
     setIsPaused(true)
     isPausedRef.current = true
     toast({
@@ -398,6 +457,7 @@ export function RecordScreen() {
   const resumeRun = async () => {
     setIsPaused(false)
     isPausedRef.current = false
+    startTimeRef.current = Date.now()
     const trackingStarted = await startGpsTracking()
     if (!trackingStarted) {
       toast({
@@ -421,8 +481,14 @@ export function RecordScreen() {
     isRunningRef.current = false
     isPausedRef.current = false
 
-    const totalDistance = calculateTotalDistance(gpsPath)
-    const finalDuration = metrics.duration
+    if (startTimeRef.current) {
+      elapsedRunMsRef.current += Date.now() - startTimeRef.current
+      startTimeRef.current = 0
+    }
+
+    const finalGpsPath = gpsPathRef.current
+    const totalDistance = calculateTotalDistance(finalGpsPath)
+    const finalDuration = Math.floor(elapsedRunMsRef.current / 1000)
 
     if (totalDistance > 0 && finalDuration > 0) {
       await saveRun(totalDistance, finalDuration)
@@ -434,44 +500,50 @@ export function RecordScreen() {
     }
   }
 
-  const saveRun = async (distance: number, duration: number) => {
-    try {
-      const user = await dbUtils.getCurrentUser()
-      if (!user) {
+	  const saveRun = async (distance: number, duration: number) => {
+	    try {
+	      const user = await resolveCurrentUser()
+	      if (!user?.id) {
         toast({
           title: "Error",
-          description: "User not found. Please try again.",
+          description: "User not found. Please complete onboarding first.",
           variant: "destructive"
         })
         return
       }
 
-      const runData = {
-        userId: user.id!,
-        type: currentWorkout?.type || 'easy',
-        distance,
-        duration,
-        pace: duration / distance,
-        calories: estimateCalories(duration, distance),
-        notes: selectedRoute ? `Route: ${selectedRoute.name}` : undefined,
-        route: selectedRoute?.name,
-        gpsPath: JSON.stringify(gpsPath),
-        gpsAccuracyData: JSON.stringify(gpsAccuracyHistory),
-        startAccuracy: gpsPath[0]?.accuracy,
-        endAccuracy: gpsPath[gpsPath.length - 1]?.accuracy,
-        averageAccuracy: gpsAccuracyHistory.length > 0 
-          ? gpsAccuracyHistory.reduce((sum, acc) => sum + acc.accuracy, 0) / gpsAccuracyHistory.length
-          : undefined,
-        completedAt: new Date(),
-        workoutId: currentWorkout?.id
-      }
+	      const startAccuracy = gpsPathRef.current.at(0)?.accuracy
+	      const endAccuracy = gpsPathRef.current.at(-1)?.accuracy
+	      const averageAccuracy =
+	        gpsAccuracyHistory.length > 0
+	          ? gpsAccuracyHistory.reduce((sum, acc) => sum + acc.accuracyRadius, 0) / gpsAccuracyHistory.length
+	          : undefined
 
-      const runId = await dbUtils.createRun(runData)
+	      const runData: Omit<Run, 'id' | 'createdAt'> = {
+	        userId: user.id,
+	        type: resolveRunType(currentWorkout?.type),
+	        distance,
+	        duration,
+	        pace: duration / distance,
+	        calories: estimateCalories(duration, distance),
+	        gpsPath: JSON.stringify(gpsPathRef.current),
+	        gpsAccuracyData: JSON.stringify(gpsAccuracyHistory),
+	        completedAt: new Date(),
+	        ...(selectedRoute
+	          ? { notes: `Route: ${selectedRoute.name}`, route: selectedRoute.name }
+	          : {}),
+	        ...(typeof startAccuracy === 'number' ? { startAccuracy } : {}),
+	        ...(typeof endAccuracy === 'number' ? { endAccuracy } : {}),
+	        ...(typeof averageAccuracy === 'number' ? { averageAccuracy } : {}),
+	        ...(typeof currentWorkout?.id === 'number' ? { workoutId: currentWorkout.id } : {}),
+	      }
 
-      // Mark workout as completed if it exists
-      if (currentWorkout) {
-        await dbUtils.markWorkoutCompleted(currentWorkout.id!)
-      }
+	      await dbUtils.createRun(runData)
+
+	      // Mark workout as completed if it exists
+	      if (currentWorkout?.id) {
+	        await dbUtils.markWorkoutCompleted(currentWorkout.id)
+	      }
 
       toast({
         title: "Run Saved",
@@ -637,7 +709,7 @@ export function RecordScreen() {
                     <li>Open your browser settings</li>
                     <li>Find location/privacy settings</li>
                     <li>Allow location access for this site</li>
-                    <li>Tap "Retry" above</li>
+                    <li>Tap &quot;Retry&quot; above</li>
                   </ol>
                 </div>
               </div>
@@ -652,7 +724,7 @@ export function RecordScreen() {
                 <div>
                   <p className="font-medium text-gray-800">GPS Unavailable</p>
                   <p className="text-sm text-gray-700 mt-1">
-                    GPS is not available on this device or browser. You can still use the "Add Manual Run" option below.
+                    GPS is not available on this device or browser. You can still use the &quot;Add Manual Run&quot; option below.
                   </p>
                 </div>
               </div>
@@ -764,7 +836,7 @@ export function RecordScreen() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => setShowManualModal(true)}
+                  onClick={() => setShowAddActivityModal(true)}
                   className="w-full"
                 >
                   <Sparkles className="h-4 w-4 mr-2" />
@@ -776,13 +848,22 @@ export function RecordScreen() {
         </CardContent>
       </Card>
 
-      {/* Route Visualization */}
-      {gpsPath.length > 0 && (
+      {/* Live Map */}
+      {(isRunning || gpsPath.length > 0 || currentPosition) && (
         <Card>
           <CardContent className="p-4">
-            <h3 className="font-medium mb-3">Route</h3>
-            <div className="h-64 bg-gray-100 rounded-lg overflow-hidden">
-              <RouteVisualization gpsPath={gpsPath} currentPosition={currentPosition} />
+            <h3 className="font-medium mb-3">Map</h3>
+            <div className="h-64 rounded-lg overflow-hidden">
+              <RunMap
+                height="100%"
+                userLocation={
+                  currentPosition
+                    ? { lat: currentPosition.latitude, lng: currentPosition.longitude }
+                    : null
+                }
+                path={gpsPath.map((p) => ({ lat: p.latitude, lng: p.longitude }))}
+                followUser={isRunning && !isPaused}
+              />
             </div>
           </CardContent>
         </Card>
@@ -807,15 +888,11 @@ export function RecordScreen() {
         </Card>
       )}
 
-      {/* Recovery Status */}
-      <RecoveryRecommendations
-        userId={1}
-        date={new Date()}
-        showBreakdown={false}
-        onRefresh={() => {
-          console.log('Refreshing recovery data for record screen...');
-        }}
-      />
+	      {/* Recovery Status */}
+	      <RecoveryRecommendations
+	        {...(currentUser?.id ? { userId: currentUser.id } : {})}
+	        showBreakdown={false}
+	      />
 
       {/* Modals */}
       {showRoutesModal && (
@@ -833,76 +910,23 @@ export function RecordScreen() {
           onRouteSelected={handleRouteSelected}
         />
       )}
-      {showManualModal && (
-        <ManualRunModal 
-          isOpen={showManualModal} 
-          onClose={() => setShowManualModal(false)}
-          workoutId={currentWorkout?.id}
-          onSaved={() => {
-            // Navigate back to today screen after saving manual run
-            router.push('/')
-          }}
+	      {showManualModal && (
+	        <ManualRunModal 
+	          isOpen={showManualModal} 
+	          onClose={() => setShowManualModal(false)}
+	          {...(currentWorkout?.id ? { workoutId: currentWorkout.id } : {})}
+	          onSaved={() => {
+	            // Navigate back to today screen after saving manual run
+	            router.push('/')
+	          }}
         />
       )}
-    </div>
-  )
-}
-
-// Simple route visualization component
-function RouteVisualization({ gpsPath, currentPosition }: { 
-  gpsPath: GPSCoordinate[]
-  currentPosition: GPSCoordinate | null 
-}) {
-  if (gpsPath.length === 0) return null
-
-  // Calculate bounds for the route
-  const latitudes = gpsPath.map(p => p.latitude)
-  const longitudes = gpsPath.map(p => p.longitude)
-  const minLat = Math.min(...latitudes)
-  const maxLat = Math.max(...latitudes)
-  const minLng = Math.min(...longitudes)
-  const maxLng = Math.max(...longitudes)
-
-  // Create path string for SVG
-  const pathString = gpsPath.map((point, index) => {
-    const x = ((point.longitude - minLng) / (maxLng - minLng || 1)) * 220 + 20
-    const y = ((maxLat - point.latitude) / (maxLat - minLat || 1)) * 220 + 20
-    return `${index === 0 ? 'M' : 'L'} ${x} ${y}`
-  }).join(' ')
-
-  return (
-    <svg className="w-full h-full" viewBox="0 0 260 260">
-      {/* Route path */}
-      <path
-        d={pathString}
-        stroke="rgb(34, 197, 94)"
-        strokeWidth="3"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+      <AddActivityModal
+        open={showAddActivityModal}
+        onOpenChange={setShowAddActivityModal}
+        initialStep="upload"
+        onActivityAdded={() => router.push("/")}
       />
-      
-      {/* Start point */}
-      {gpsPath.length > 0 && (
-        <circle
-          cx={((gpsPath[0].longitude - minLng) / (maxLng - minLng || 1)) * 220 + 20}
-          cy={((maxLat - gpsPath[0].latitude) / (maxLat - minLat || 1)) * 220 + 20}
-          r="4"
-          fill="rgb(34, 197, 94)"
-        />
-      )}
-      
-      {/* Current position */}
-      {currentPosition && (
-        <circle
-          cx={((currentPosition.longitude - minLng) / (maxLng - minLng || 1)) * 220 + 20}
-          cy={((maxLat - currentPosition.latitude) / (maxLat - minLat || 1)) * 220 + 20}
-          r="6"
-          fill="rgb(59, 130, 246)"
-          stroke="white"
-          strokeWidth="2"
-        />
-      )}
-    </svg>
+    </div>
   )
 }

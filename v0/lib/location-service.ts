@@ -5,6 +5,7 @@
 export interface LocationCoordinates {
   latitude: number;
   longitude: number;
+  accuracy: number;
 }
 
 export interface LocationError {
@@ -12,39 +13,73 @@ export interface LocationError {
   message: string;
 }
 
+export interface LocationOptions {
+  enableHighAccuracy?: boolean;
+  timeoutMs?: number;
+  maximumAgeMs?: number;
+}
+
+export type LocationStatus = 'granted' | 'denied' | 'unavailable';
+
+export interface LocationResult {
+  status: LocationStatus;
+  coords?: LocationCoordinates;
+  error?: LocationError;
+}
+
 /**
- * Get the user's current location using the browser's geolocation API
+ * Get the user's current location using the browser's geolocation API.
+ * Returns a status and optional coordinates/error (never rejects).
  */
-export async function getLocation(): Promise<LocationCoordinates> {
-  return new Promise((resolve, reject) => {
+export async function getLocation(options: LocationOptions = {}): Promise<LocationResult> {
+  return new Promise((resolve) => {
     if (!navigator.geolocation) {
-      reject({
-        code: 0,
-        message: 'Geolocation is not supported by this browser',
-      } as LocationError);
+      resolve({
+        status: 'unavailable',
+        error: {
+          code: 0,
+          message: 'Geolocation is not supported by this browser',
+        },
+      });
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
         resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
+          status: 'granted',
+          coords: {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+          },
         });
       },
       (error) => {
-        reject({
-          code: error.code,
-          message: error.message,
-        } as LocationError);
+        resolve({
+          status: error.code === 1 ? 'denied' : 'unavailable',
+          error: {
+            code: error.code,
+            message: error.message,
+          },
+        });
       },
       {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
+        enableHighAccuracy: options.enableHighAccuracy ?? true,
+        timeout: options.timeoutMs ?? 10000,
+        maximumAge: options.maximumAgeMs ?? 0,
       }
     );
   });
+}
+
+/**
+ * Convenience wrapper that returns coordinates or throws when unavailable.
+ */
+export async function getLocationCoordinates(options: LocationOptions = {}): Promise<LocationCoordinates> {
+  const result = await getLocation(options);
+  if (result.coords) return result.coords;
+  throw result.error ?? { code: 0, message: 'Location unavailable' };
 }
 
 /**
@@ -52,7 +87,8 @@ export async function getLocation(): Promise<LocationCoordinates> {
  */
 export function watchLocation(
   onSuccess: (coords: LocationCoordinates) => void,
-  onError: (error: LocationError) => void
+  onError: (error: LocationError) => void,
+  options: LocationOptions = {}
 ): number {
   if (!navigator.geolocation) {
     onError({
@@ -67,6 +103,7 @@ export function watchLocation(
       onSuccess({
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
       });
     },
     (error) => {
@@ -76,9 +113,9 @@ export function watchLocation(
       });
     },
     {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0,
+      enableHighAccuracy: options.enableHighAccuracy ?? true,
+      timeout: options.timeoutMs ?? 10000,
+      maximumAge: options.maximumAgeMs ?? 0,
     }
   );
 }
@@ -91,3 +128,4 @@ export function clearWatch(watchId: number): void {
     navigator.geolocation.clearWatch(watchId);
   }
 }
+

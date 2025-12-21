@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
-import { generateObject, generateText } from 'ai';
+import { generateObject } from 'ai';
 import { z } from 'zod';
-import { CoachingProfile, CoachingInteraction, CoachingFeedback } from './db';
+import { CoachingProfile, CoachingFeedback } from './db';
 import { dbUtils } from '@/lib/dbUtils';
 
 // Context interfaces
@@ -31,6 +31,15 @@ export interface CoachingResponse {
   interactionId: string;
   contextUsed: string[];
   suggestedActions?: string[];
+  /**
+   * Indicates the engine could not generate a fully personalized response
+   * (e.g. upstream AI failure) and used a degraded fallback.
+   */
+  fallback?: boolean;
+  /**
+   * Optional machine-readable reason for fallback (safe to log).
+   */
+  fallbackReason?: string;
 }
 
 export interface AdaptiveRecommendation {
@@ -88,47 +97,60 @@ export class AdaptiveCoachingEngine {
   async generatePersonalizedResponse(
     userId: number,
     query: string,
-    context: UserContext
+    context: UserContext,
+    options?: { throwOnError?: boolean }
   ): Promise<CoachingResponse> {
     try {
-      const profile = await dbUtils.getCoachingProfile(userId);
+      const profile = (await dbUtils.getCoachingProfile(userId)) ?? undefined;
       const adaptedPrompt = await this.adaptPromptToProfile(query, profile, context);
       const interactionId = this.generateInteractionId();
+
+      const modelName =
+        process.env.CHAT_COACHING_MODEL ||
+        process.env.CHAT_DEFAULT_MODEL ||
+        'gpt-4o';
       
       // Generate structured response using AI
       const result = await generateObject({
-        model: openai('gpt-4'),
+        model: openai(modelName),
         schema: CoachingResponseSchema,
         prompt: adaptedPrompt,
         temperature: 0.7,
+        maxOutputTokens: 800,
       });
 
       const response: CoachingResponse = {
         response: result.object.response,
         confidence: result.object.confidence,
         adaptations: this.getAppliedAdaptations(profile),
-        requestFeedback: this.shouldRequestFeedback(userId, profile),
+        requestFeedback: this.shouldRequestFeedback(profile),
         interactionId,
         contextUsed: this.getContextFactors(context),
         suggestedActions: result.object.actionableAdvice
       };
 
       // Record the interaction for learning
-      await this.recordInteraction(userId, query, response, context, adaptedPrompt);
+      await this.recordInteraction(userId, response, context, adaptedPrompt);
       
       return response;
     } catch (error) {
       console.error('Error generating personalized response:', error);
+
+      if (options?.throwOnError) {
+        throw error;
+      }
       
       // Fallback response
       return {
         response: "I'm here to help you with your running goals. Could you tell me more about what you're looking for?",
-        confidence: 0.5,
+        confidence: 0,
         adaptations: [],
         requestFeedback: false,
         interactionId: this.generateInteractionId(),
         contextUsed: [],
-        suggestedActions: []
+        suggestedActions: [],
+        fallback: true,
+        fallbackReason: 'adaptive_coaching_error',
       };
     }
   }
@@ -141,17 +163,23 @@ export class AdaptiveCoachingEngine {
     context: UserContext
   ): Promise<AdaptiveRecommendation[]> {
     try {
-      const profile = await dbUtils.getCoachingProfile(userId);
+      const profile = (await dbUtils.getCoachingProfile(userId)) ?? undefined;
       const patterns = await dbUtils.getBehaviorPatterns(userId);
       const recentFeedback = await dbUtils.getCoachingFeedback(userId, 10);
       
       const recommendationPrompt = this.buildRecommendationPrompt(profile, patterns, recentFeedback, context);
+
+      const modelName =
+        process.env.CHAT_COACHING_MODEL ||
+        process.env.CHAT_DEFAULT_MODEL ||
+        'gpt-4o';
       
       const result = await generateObject({
-        model: openai('gpt-4'),
+        model: openai(modelName),
         schema: RecommendationSchema,
         prompt: recommendationPrompt,
         temperature: 0.6,
+        maxOutputTokens: 900,
       });
 
       return result.object.recommendations.map(rec => ({
@@ -346,7 +374,7 @@ Remember to be consistent with previous coaching interactions while adapting to 
     ];
   }
 
-  private shouldRequestFeedback(userId: number, profile: CoachingProfile | undefined): boolean {
+  private shouldRequestFeedback(profile: CoachingProfile | undefined): boolean {
     if (!profile) return true; // Always request feedback for new users
     
     // Request feedback based on frequency preference and recent interactions
@@ -373,7 +401,6 @@ Remember to be consistent with previous coaching interactions while adapting to 
 
   private async recordInteraction(
     userId: number,
-    query: string,
     response: CoachingResponse,
     context: UserContext,
     adaptedPrompt: string
@@ -388,9 +415,9 @@ Remember to be consistent with previous coaching interactions while adapting to 
         userContext: {
           currentGoals: context.currentGoals,
           recentActivity: context.recentActivity,
-          mood: context.mood,
-          environment: context.environment,
-          timeConstraints: context.timeConstraints
+          ...(context.mood ? { mood: context.mood } : {}),
+          ...(context.environment ? { environment: context.environment } : {}),
+          ...(context.timeConstraints ? { timeConstraints: context.timeConstraints } : {}),
         },
         adaptationsApplied: response.adaptations,
         userEngagement: {
@@ -452,8 +479,8 @@ Generate recommendations that:
       // Analyze feedback by interaction type
       const typeRatings: Record<string, number[]> = {};
       recentFeedback.forEach(f => {
-        if (!typeRatings[f.interactionType]) typeRatings[f.interactionType] = [];
-        if (f.rating) typeRatings[f.interactionType].push(f.rating);
+        const bucket = typeRatings[f.interactionType] ?? (typeRatings[f.interactionType] = []);
+        if (typeof f.rating === 'number') bucket.push(f.rating);
       });
       
       // Identify areas for improvement
@@ -483,7 +510,8 @@ Generate recommendations that:
             }
           },
           confidenceScore: Math.min(90, recentFeedback.length * 4),
-          lastObserved: new Date()
+          lastObserved: new Date(),
+          observationCount: recentFeedback.length,
         });
       }
     } catch (error) {

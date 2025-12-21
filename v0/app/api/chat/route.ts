@@ -167,6 +167,8 @@ async function chatHandler(req: ApiRequest) {
       }
     }
 
+    void validUserId;
+
     // Check if we should use adaptive coaching
     const useAdaptiveCoaching = normalizedUserId !== undefined && normalizedUserId > 0;
     logger.log(`🤖 Use adaptive coaching: ${useAdaptiveCoaching} (userId: ${userId})`);
@@ -219,15 +221,35 @@ async function chatHandler(req: ApiRequest) {
         logger.log('📝 User message:', userMessage);
         logger.log('🎯 Adaptive context:', adaptiveContext);
         
-        // Generate adaptive coaching response with timeout
-        const coachingResponse = await Promise.race([
-          adaptiveCoachingEngine.generatePersonalizedResponse(
-            validUserId!,
-            userMessage,
-            adaptiveContext
-          ),
-          timeoutPromise
-        ]) as any;
+        // Generate adaptive coaching response with timeout + secure key handling.
+        // If anything fails (missing key / model issue / upstream error), fall back to the standard chat path.
+        const adaptiveResult = await withSecureOpenAI(async () => {
+          return (await Promise.race([
+            adaptiveCoachingEngine.generatePersonalizedResponse(
+              normalizedUserId!,
+              userMessage,
+              adaptiveContext,
+              { throwOnError: true }
+            ),
+            timeoutPromise
+          ])) as any
+        })
+
+        if (!adaptiveResult.success || !adaptiveResult.data) {
+          logger.warn('⚠️ Adaptive coaching unavailable, falling back to standard chat')
+          throw new Error('Adaptive coaching unavailable')
+        }
+
+        const coachingResponse = adaptiveResult.data as any
+        const fallbackText = "I'm here to help you with your running goals. Could you tell me more about what you're looking for?"
+        const isGenericFallback =
+          typeof coachingResponse?.response === 'string' &&
+          coachingResponse.response.trim().toLowerCase() === fallbackText.toLowerCase()
+
+        if (coachingResponse?.fallback === true || isGenericFallback) {
+          logger.warn('⚠️ Adaptive coaching returned fallback response, falling back to standard chat')
+          throw new Error('Adaptive coaching fallback')
+        }
         
         logger.log('✅ Adaptive coaching response generated successfully');
         logger.log('📊 Response confidence:', coachingResponse.confidence);
@@ -381,7 +403,7 @@ Keep responses concise but informative. Always be supportive and positive. Focus
           streamText({
             model: openai("gpt-4o"),
             messages: apiMessages,
-            maxTokens: 500, // Limit response length to control costs
+            maxOutputTokens: 500, // Limit response length to control costs
             temperature: 0.7,
           }),
           timeoutPromise

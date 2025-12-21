@@ -42,7 +42,6 @@ interface DateWorkoutModalProps {
 export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalProps) {
   const [showWorkoutBreakdown, setShowWorkoutBreakdown] = useState(false)
   const [breakdown, setBreakdown] = useState<any>(null)
-  const [userExperience, setUserExperience] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner')
 
   // Fetch workout breakdown based on user experience
   useEffect(() => {
@@ -50,13 +49,11 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
       const fetchBreakdown = async () => {
         try {
           const user = await getCurrentUser()
-          if (user) {
-            const experience = await getUserExperience(user.id)
-            setUserExperience(experience)
+          if (!user?.id) return
 
-            const workoutBreakdown = getRunBreakdown(workout.type, experience)
-            setBreakdown(workoutBreakdown)
-          }
+          const experience = await getUserExperience(user.id)
+          const workoutBreakdown = getRunBreakdown(workout.type, experience)
+          setBreakdown(workoutBreakdown)
         } catch (error) {
           console.error('Error fetching workout breakdown:', error)
         }

@@ -16,14 +16,11 @@ import {
   Calendar,
   MapPin,
   Trophy,
-  Clock,
   Mountain,
   Route,
   CalendarDays,
   Play,
   CheckCircle,
-  AlertCircle,
-  Star,
   MoreHorizontal
 } from "lucide-react"
 import {
@@ -36,12 +33,6 @@ import {
 
 interface RaceGoalsScreenProps {
   userId: number
-}
-
-const priorityConfig = {
-  A: { label: "A Race", color: "bg-red-500 text-white", description: "Primary Goal" },
-  B: { label: "B Race", color: "bg-orange-500 text-white", description: "Secondary Goal" },
-  C: { label: "C Race", color: "bg-blue-500 text-white", description: "Tune-up Race" }
 }
 
 const raceTypeIcons = {

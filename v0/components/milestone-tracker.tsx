@@ -13,16 +13,11 @@ import {
   Clock, 
   Target, 
   Flag, 
-  Calendar,
   Star,
-  TrendingUp,
   Award,
   AlertCircle,
-  Plus,
   Edit3,
-  Trash2,
-  Play,
-  Pause
+  Play
 } from 'lucide-react';
 import { MilestoneCelebration, useMilestoneCelebration } from './milestone-celebration';
 import { toast } from '@/components/ui/use-toast';
@@ -56,9 +51,9 @@ interface Milestone {
 export function MilestoneTracker({ 
   goalId, 
   goalTitle, 
-  goalType, 
+  goalType: _goalType, 
   targetUnit,
-  userId, 
+  userId: _userId, 
   className = '' 
 }: MilestoneTrackerProps) {
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -159,7 +154,7 @@ export function MilestoneTracker({
       });
 
       if (response.ok) {
-        const data = await response.json();
+        await response.json();
         setMilestones(prev => prev.map(m => 
           m.id === milestoneId ? { ...m, ...updates } : m
         ));
@@ -254,7 +249,7 @@ export function MilestoneTracker({
             Milestone Tracker
           </CardTitle>
           <CardDescription>
-            Track your progress through key milestones for "{goalTitle}"
+            Track your progress through key milestones for &quot;{goalTitle}&quot;
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -285,7 +280,7 @@ export function MilestoneTracker({
 
           {/* Milestones List */}
           <div className="space-y-4">
-            {milestones.map((milestone, index) => (
+            {milestones.map((milestone) => (
               <div
                 key={milestone.id}
                 className={`p-4 rounded-lg border-2 transition-all ${getStatusColor(milestone.status)}`}
@@ -330,7 +325,7 @@ export function MilestoneTracker({
                       <span>Achieved on {new Date(milestone.achievedAt).toLocaleDateString()}</span>
                     </div>
                     {milestone.notes && (
-                      <p className="text-sm text-green-600 mt-1 italic">"{milestone.notes}"</p>
+                      <p className="text-sm text-green-600 mt-1 italic">&quot;{milestone.notes}&quot;</p>
                     )}
                   </div>
                 )}
@@ -358,7 +353,7 @@ export function MilestoneTracker({
                         <DialogHeader>
                           <DialogTitle>Mark Milestone as Achieved</DialogTitle>
                           <DialogDescription>
-                            Congratulations on reaching "{milestone.title}"! Add any notes about this achievement.
+                            Congratulations on reaching &quot;{milestone.title}&quot;! Add any notes about this achievement.
                           </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4">

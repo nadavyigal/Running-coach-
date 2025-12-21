@@ -5,6 +5,7 @@ import { aiServiceCircuitBreaker, retryApiCall } from '@/lib/retryMechanism'
 import { AIServiceError } from '@/lib/errorHandling'
 import { useErrorToast } from '@/components/error-toast'
 import { generateFallbackPlan } from '@/lib/planGenerator'
+import type { User } from '@/lib/db'
 
 export interface AIServiceConfig {
   maxRetries?: number
@@ -15,10 +16,8 @@ export interface AIServiceConfig {
 
 export function useAIServiceErrorHandling(config: AIServiceConfig = {}) {
   const {
-    maxRetries = 3,
     enableFallbacks = true,
     showUserFeedback = true,
-    circuitBreakerThreshold = 3
   } = config
 
   const [isAIServiceAvailable, setIsAIServiceAvailable] = useState(true)
@@ -63,13 +62,13 @@ export function useAIServiceErrorHandling(config: AIServiceConfig = {}) {
 
     try {
       // Use circuit breaker and retry mechanism
-      const result = await aiServiceCircuitBreaker.execute(async () => {
-        return await retryApiCall(aiCall, {
-          operation,
-          service,
-          onboardingStep
+       const result = await aiServiceCircuitBreaker.execute(async () => {
+          return await retryApiCall(aiCall, {
+            operation,
+            service,
+            ...(typeof onboardingStep === 'string' ? { onboardingStep } : {})
+          })
         })
-      })
 
       // Reset error state on success
       if (lastAIServiceError) {
@@ -123,10 +122,13 @@ export function useAIServiceErrorHandling(config: AIServiceConfig = {}) {
           // Don't retry invalid requests
           if (showUserFeedback) {
             showError(aiError, {
-              onFallback: enableFallbacks && fallbackFunction ? async () => {
-                const result = await fallbackFunction()
-                return result
-              } : undefined
+              ...(enableFallbacks && fallbackFunction
+                ? {
+                    onFallback: () => {
+                      void fallbackFunction()
+                    },
+                  }
+                : {}),
             })
           }
           break
@@ -134,11 +136,16 @@ export function useAIServiceErrorHandling(config: AIServiceConfig = {}) {
         default:
           if (showUserFeedback) {
             showError(aiError, {
-              onRetry: () => safeAICall(aiCall, fallbackFunction, context),
-              onFallback: enableFallbacks && fallbackFunction ? async () => {
-                const result = await fallbackFunction()
-                return result
-              } : undefined
+              onRetry: () => {
+                void safeAICall(aiCall, fallbackFunction, context)
+              },
+              ...(enableFallbacks && fallbackFunction
+                ? {
+                    onFallback: () => {
+                      void fallbackFunction()
+                    },
+                  }
+                : {}),
             })
           }
       }
@@ -250,9 +257,43 @@ export function useAIServiceErrorHandling(config: AIServiceConfig = {}) {
 
         return await response.json()
       },
-      () => {
+      async () => {
         // Fallback: generate plan locally
-        return generateFallbackPlan(userData)
+        const toGoal = (value: string): User['goal'] => {
+          if (value === 'habit' || value === 'distance' || value === 'speed') return value
+          return 'habit'
+        }
+
+        const toExperience = (value: string): User['experience'] => {
+          if (value === 'beginner' || value === 'intermediate' || value === 'advanced') return value
+          return 'beginner'
+        }
+
+        let userId = 1
+        try {
+          const { dbUtils } = await import('@/lib/dbUtils')
+          const currentUser = await dbUtils.getCurrentUser()
+          if (typeof currentUser?.id === 'number') {
+            userId = currentUser.id
+          }
+        } catch {
+          // ignore
+        }
+
+        const fallbackUser: User = {
+          id: userId,
+          goal: toGoal(userData.goal),
+          experience: toExperience(userData.experience),
+          preferredTimes: userData.preferredTimes ?? [],
+          daysPerWeek: userData.daysPerWeek,
+          consents: { data: true, gdpr: true, push: true },
+          onboardingComplete: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          ...(typeof userData.age === 'number' ? { age: userData.age } : {}),
+        }
+
+        return generateFallbackPlan(fallbackUser)
       },
       {
         operation: 'plan_generation',

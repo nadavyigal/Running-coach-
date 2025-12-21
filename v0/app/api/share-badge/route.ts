@@ -3,17 +3,6 @@ import { db } from '@/lib/db';
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';
 
-interface ShareToken {
-  id?: number;
-  badgeId: number;
-  userId: number;
-  token: string;
-  shareableLink: string;
-  viewCount: number;
-  createdAt: Date;
-  expiresAt?: Date;
-}
-
 export async function POST(request: Request) {
   try {
     const { badgeId, userId } = await request.json();
@@ -50,13 +39,6 @@ export async function POST(request: Request) {
         { status: 404 }
       );
     }
-
-    // Check if a share token already exists for this badge
-    const existingShareTokens = await db.transaction('r', [db.badges], async () => {
-      // Since we don't have a shareTokens table, we'll create a simple approach
-      // using localStorage or generate a new token each time
-      return [];
-    });
 
     // Generate a unique token for this share
     const token = crypto.randomBytes(16).toString('hex');

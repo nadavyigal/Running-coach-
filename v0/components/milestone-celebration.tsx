@@ -1,27 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import {
   Trophy,
-  Target,
   CheckCircle2,
   Star,
   Award,
   Sparkles,
-  Zap,
   Fire,
   Crown,
   Medal,
-  PartyPopper,
-  Rocket,
   TrendingUp,
-  Heart,
-  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -31,19 +24,6 @@ interface MilestoneCelebrationProps {
   isOpen: boolean;
   onClose: () => void;
   onShare?: () => void;
-}
-
-interface MilestoneAchievement {
-  id: number;
-  title: string;
-  description: string;
-  category: string;
-  targetValue: number;
-  unit: string;
-  achievedAt: Date;
-  celebrationLevel: 'bronze' | 'silver' | 'gold' | 'diamond';
-  streakCount?: number;
-  personalBest?: boolean;
 }
 
 const celebrationIcons = {
@@ -92,12 +72,10 @@ export function MilestoneCelebration({
 }: MilestoneCelebrationProps) {
   const [currentMilestoneIndex, setCurrentMilestoneIndex] = useState(0);
   const [showConfetti, setShowConfetti] = useState(false);
-  const [playSound, setPlaySound] = useState(false);
 
   useEffect(() => {
     if (isOpen && milestones.length > 0) {
       setShowConfetti(true);
-      setPlaySound(true);
       
       // Reset confetti after animation
       const confettiTimer = setTimeout(() => setShowConfetti(false), 3000);

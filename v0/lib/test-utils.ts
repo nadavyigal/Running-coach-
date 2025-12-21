@@ -4,7 +4,7 @@ import { vi } from 'vitest';
 
 // Error boundary for testing error scenarios
 interface ErrorBoundaryProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   fallback: React.ComponentType<{ error: Error }>;
 }
 
@@ -115,7 +115,7 @@ export const ErrorBoundaryAssertions = {
   }
 };
 
-export const simulateError = (component: HTMLElement, error: Error) => {
+export const simulateError = (_component: HTMLElement, error: Error) => {
   const errorEvent = new ErrorEvent('error', { 
     error,
     message: error.message,

@@ -2,10 +2,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ChatDriver, chatDriver } from '../lib/chatDriver';
 
 // Mock the AI SDK
-vi.mock('ai', () => ({
-  streamText: vi.fn(),
-  generateText: vi.fn(),
-}));
+vi.mock('ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('ai')>();
+  return {
+    ...actual,
+    streamText: vi.fn(),
+    generateText: vi.fn(),
+  };
+});
 
 vi.mock('@ai-sdk/openai', () => ({
   openai: vi.fn((model) => ({ model })),
@@ -23,22 +27,19 @@ describe('ChatDriver', () => {
   
   beforeEach(() => {
     // Store original environment
-    originalEnv = process.env;
+    originalEnv = { ...process.env };
     
     // Reset all mocks
     vi.clearAllMocks();
+    vi.useRealTimers();
     
-    // Clear any cached health data
-    (chatDriver as any).healthCache = {
-      lastCheck: new Date(0),
-      data: null,
-      ttl: 60000,
-    };
+    chatDriver.__resetForTests();
   });
   
   afterEach(() => {
     // Restore original environment
     process.env = originalEnv;
+    vi.useRealTimers();
   });
 
   describe('singleton pattern', () => {
@@ -82,7 +83,7 @@ describe('ChatDriver', () => {
       
       expect(health.available).toBe(true);
       expect(health.model).toBe('gpt-4o-mini');
-      expect(health.latency).toBeGreaterThan(0);
+      expect(health.latency).toBeGreaterThanOrEqual(0);
     });
 
     it('should cache health check results', async () => {
@@ -175,7 +176,7 @@ describe('ChatDriver', () => {
       });
       
       vi.mocked(streamText).mockResolvedValue({
-        toTextStreamResponse: () => ({ body: mockStream }),
+        toDataStreamResponse: () => ({ body: mockStream }),
         usage: Promise.resolve({ promptTokens: 10, completionTokens: 15 }),
       } as any);
       

@@ -433,17 +433,17 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
         completed: false,
         scheduledDate: selectedDateTime
       }
-      if (selectedGoal === 'duration') {
-        workoutData.duration = Number.parseFloat(targetValue)
-      }
+	      if (selectedGoal === 'duration') {
+	        workoutData.duration = Number.parseFloat(targetValue)
+	      }
 
-      // Save workout to database
-      const workoutId = await dbUtils.createWorkout(workoutData)
+	      // Save workout to database
+	      await dbUtils.createWorkout(workoutData)
 
-      toast({
-        title: "Workout Scheduled! \ud83c\udf89",
-        description: `${selectedWorkout.name} added to your ${selectedDate.toLocaleDateString()} plan`,
-      })
+	      toast({
+	        title: "Workout Scheduled! \ud83c\udf89",
+	        description: `${selectedWorkout.name} added to your ${selectedDate.toLocaleDateString()} plan`,
+	      })
 
       // Reset and close
       setStep("select")
@@ -576,7 +576,7 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
                     />
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-medium text-blue-900 mb-1">Let's keep your progress going</h4>
+                    <h4 className="font-medium text-blue-900 mb-1">Let&apos;s keep your progress going</h4>
                     <p className="text-sm text-blue-800">Missed workouts? Skip or add them to this week.</p>
                   </div>
                 </div>

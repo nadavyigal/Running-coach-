@@ -147,7 +147,7 @@ export function HeartRateZonesConfig({ userId, onSave, onCancel }: HeartRateZone
       await db.heartRateZones.where('userId').equals(userId).delete()
 
       // Save new zones
-      const zonesToSave = Object.entries(zones).map(([zoneKey, zoneConfig], index) => ({
+      const zonesToSave = Object.entries(zones).map(([_zoneKey, zoneConfig], index) => ({
         userId,
         zoneNumber: index + 1,
         zoneName: getZoneInfo(index + 1).name,

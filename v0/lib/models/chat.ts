@@ -43,22 +43,23 @@ export function dexieChatMessageToDTO(message: DexieChatMessage): ChatMessageDTO
     userId: message.userId,
     role: message.role,
     content: message.content,
-    conversationId: message.conversationId,
-    tokenCount: message.tokenCount,
-    aiContext: message.aiContext,
+    ...(typeof message.conversationId === 'string' ? { conversationId: message.conversationId } : {}),
+    ...(typeof message.tokenCount === 'number' ? { tokenCount: message.tokenCount } : {}),
+    ...(typeof message.aiContext === 'string' ? { aiContext: message.aiContext } : {}),
     timestamp: (message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp)).toISOString(),
   }
 }
 
 export function dtoToDexieChatMessage(dto: ChatMessageDTO): DexieChatMessage {
+  const parsedId = Number(dto.id)
   return {
-    id: Number.isNaN(Number(dto.id)) ? undefined : Number(dto.id),
     userId: dto.userId,
     role: dto.role,
     content: dto.content,
-    conversationId: dto.conversationId,
-    tokenCount: dto.tokenCount,
-    aiContext: dto.aiContext,
+    ...(Number.isFinite(parsedId) ? { id: parsedId } : {}),
+    ...(typeof dto.conversationId === 'string' ? { conversationId: dto.conversationId } : {}),
+    ...(typeof dto.tokenCount === 'number' ? { tokenCount: dto.tokenCount } : {}),
+    ...(typeof dto.aiContext === 'string' ? { aiContext: dto.aiContext } : {}),
     timestamp: new Date(dto.timestamp),
   }
 }
@@ -70,7 +71,7 @@ export function dexieUserToChatProfile(user: DexieUser): ChatUserProfile {
 
   return {
     id: user.id,
-    name: user.name,
+    ...(typeof user.name === 'string' ? { name: user.name } : {}),
     goal: user.goal,
     experience: user.experience,
     preferredTimes: user.preferredTimes,

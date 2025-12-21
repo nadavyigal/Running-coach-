@@ -2,14 +2,12 @@
 
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +34,10 @@ export function ShareBadgeModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+
+  const canShareViaWebApi =
+    typeof navigator !== "undefined" &&
+    typeof (navigator as unknown as { share?: unknown }).share === "function";
 
   // Get current user ID when component mounts
   useEffect(() => {
@@ -99,7 +101,7 @@ export function ShareBadgeModal({
           title: "Copied!",
           description: "Share link copied to clipboard.",
         });
-      } catch (err) {
+      } catch {
         // Fallback for browsers that don't support clipboard API
         const textArea = document.createElement('textarea');
         textArea.value = shareableLink;
@@ -180,7 +182,7 @@ export function ShareBadgeModal({
                 <Facebook className="h-4 w-4 mr-2" />
                 Facebook
               </Button>
-              {navigator.share && (
+              {canShareViaWebApi && (
                 <Button variant="outline" size="sm" onClick={shareViaWebAPI}>
                   <Share2 className="h-4 w-4 mr-2" />
                   Share

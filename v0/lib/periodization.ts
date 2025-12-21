@@ -1,4 +1,4 @@
-import { PeriodizationPhase, RaceGoal, Workout, WorkoutTemplate } from './db';
+import { PeriodizationPhase, RaceGoal, Workout } from './db';
 
 export interface PeriodizationConfig {
   totalWeeks: number;
@@ -217,7 +217,7 @@ export class PeriodizationEngine {
   private static selectWorkoutType(
     dayIndex: number,
     phase: PeriodizationPhase,
-    config: PeriodizationConfig
+    _config: PeriodizationConfig
   ): Workout['type'] {
     const { phase: phaseName } = phase;
     
@@ -256,8 +256,6 @@ export class PeriodizationEngine {
     weeklyVolume: number,
     config: PeriodizationConfig
   ): number {
-    const { fitnessLevel } = config;
-    
     switch (workoutType) {
       case 'easy':
         return weeklyVolume * 0.25; // 25% of weekly volume
@@ -350,7 +348,7 @@ export class PeriodizationEngine {
   private static generateWorkoutNotes(
     workoutType: Workout['type'],
     phase: PeriodizationPhase,
-    config: PeriodizationConfig
+    _config: PeriodizationConfig
   ): string {
     const baseNotes = {
       easy: 'Comfortable aerobic pace. You should be able to hold a conversation.',
@@ -421,7 +419,7 @@ export class PeriodizationEngine {
     volumeReduction: number[];
     intensityMaintenance: boolean;
   } {
-    const { totalWeeks, fitnessLevel } = config;
+    const { fitnessLevel } = config;
     
     // Taper duration based on fitness level
     let taperWeeks = 2;

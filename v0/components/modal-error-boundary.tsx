@@ -30,7 +30,7 @@ class ModalErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): Partial<State> {
-    return { hasError: true };
+    return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
@@ -39,11 +39,7 @@ class ModalErrorBoundary extends Component<Props, State> {
       error,
       errorInfo
     );
-    this.state = {
-      hasError: true,
-      error,
-      errorInfo,
-    };
+    this.setState({ hasError: true, error, errorInfo });
   }
 
   handleReset = () => {

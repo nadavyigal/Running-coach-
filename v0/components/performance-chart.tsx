@@ -40,11 +40,26 @@ export function PerformanceChart({
   }, []);
 
   // Transform data for chart
-  const chartData = data.map(item => ({
-    ...item,
-    date: new Date(item.date).getTime(),
-    formattedDate: format(new Date(item.date), 'MMM dd'),
-  }));
+  const chartData = data
+    .map((item) => {
+      const date = new Date(item.date);
+      const timestamp = date.getTime();
+      if (!Number.isFinite(timestamp)) return null;
+
+      let formattedDate = '--';
+      try {
+        formattedDate = format(date, 'MMM dd');
+      } catch {
+        // ignore
+      }
+
+      return {
+        ...item,
+        date: timestamp,
+        formattedDate,
+      };
+    })
+    .filter(Boolean) as Array<{ date: number; formattedDate: string; [key: string]: any }>;
 
   // Calculate trend line
   const calculateTrend = () => {
@@ -64,7 +79,7 @@ export function PerformanceChart({
 
   const trend = showTrend ? calculateTrend() : null;
 
-  const customTooltip = ({ active, payload, label }: any) => {
+  const customTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
@@ -96,9 +111,12 @@ export function PerformanceChart({
     maxValue + padding
   ];
 
-  if (chartData.length === 0) {
-    return (
-      <Card>
+  const firstPoint = chartData.at(0);
+  const lastPoint = chartData.at(-1);
+
+    if (chartData.length === 0) {
+      return (
+        <Card>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
         </CardHeader>
@@ -143,7 +161,15 @@ export function PerformanceChart({
               dataKey="date"
               type="number"
               domain={['dataMin', 'dataMax']}
-              tickFormatter={(value) => format(new Date(value), 'MMM dd')}
+              tickFormatter={(value) => {
+                const date = new Date(value);
+                if (Number.isNaN(date.getTime())) return '--';
+                try {
+                  return format(date, 'MMM dd');
+                } catch {
+                  return '--';
+                }
+              }}
               className="text-xs"
             />
             <YAxis 
@@ -164,11 +190,11 @@ export function PerformanceChart({
             />
             
             {/* Trend line */}
-            {trend && showTrend && (
+            {trend && showTrend && firstPoint && lastPoint && (
               <ReferenceLine
                 segment={[
-                  { x: chartData[0].date, y: trend.slope * chartData[0].date + trend.intercept },
-                  { x: chartData[chartData.length - 1].date, y: trend.slope * chartData[chartData.length - 1].date + trend.intercept }
+                  { x: firstPoint.date, y: trend.slope * firstPoint.date + trend.intercept },
+                  { x: lastPoint.date, y: trend.slope * lastPoint.date + trend.intercept }
                 ]}
                 stroke={color}
                 strokeDasharray="5 5"

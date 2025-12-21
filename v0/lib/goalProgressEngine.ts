@@ -1,6 +1,6 @@
 'use client';
 
-import { Goal, GoalMilestone, GoalProgressHistory, Run } from './db';
+import { Goal, GoalMilestone, GoalProgressHistory } from './db';
 import { dbUtils } from '@/lib/dbUtils';
 
 export interface GoalProgress {

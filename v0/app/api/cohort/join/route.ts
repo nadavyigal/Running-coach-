@@ -30,19 +30,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'User is already a member of this cohort' }, { status: 409 });
     }
 
+    const cohortId = cohort.id
+    if (typeof cohortId !== 'number') {
+      logger.error('Cohort is missing an id:', cohort)
+      return NextResponse.json({ message: 'Invalid cohort data' }, { status: 500 })
+    }
+
     // Add the user to the cohort
     await db.cohortMembers.add({
       userId,
-      cohortId: cohort.id!,
+      cohortId,
       joinDate: new Date(),
     });
 
     // Update the user's cohortId if they can only be in one cohort
     // This assumes a 1:1 relationship between user and cohort.
     // If a user can be in multiple cohorts, this update should be removed.
-    await db.users.update(userId, { cohortId: cohort.id });
+    await db.users.update(userId, { cohortId });
 
-    return NextResponse.json({ message: 'Successfully joined cohort', cohortId: cohort.id }, { status: 200 });
+    return NextResponse.json({ message: 'Successfully joined cohort', cohortId }, { status: 200 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ message: 'Invalid request data', errors: error.errors }, { status: 400 });

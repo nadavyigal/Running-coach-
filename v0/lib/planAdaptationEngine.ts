@@ -55,11 +55,11 @@ export class PlanAdaptationEngine {
       // Get current goals
       const currentGoals = await dbUtils.getUserGoals(userId, 'active');
 
-      // Get current plan
-      const currentPlan = await dbUtils.getActivePlan(userId);
-
-      // Analyze completion patterns
-      const completionAnalysis = this.analyzeCompletionPatterns(recentRuns, currentPlan);
+	      // Get current plan
+	      const currentPlan = await dbUtils.getActivePlan(userId);
+	 
+	      // Analyze completion patterns
+	      const completionAnalysis = this.analyzeCompletionPatterns(recentRuns, currentPlan ?? undefined);
       
       // Analyze goal progress
       const goalAnalysis = this.analyzeGoalProgress(currentGoals, recentRuns);
@@ -96,22 +96,19 @@ export class PlanAdaptationEngine {
    * @param adaptationReason - Reason for adaptation
    * @returns Promise<Plan> The adapted plan
    */
-  async adaptExistingPlan(planId: number, adaptationReason: string): Promise<Plan> {
-    try {
-      // Get current plan
-      const currentPlan = await dbUtils.getPlan(planId);
+	  async adaptExistingPlan(planId: number, adaptationReason: string): Promise<Plan> {
+	    try {
+	      // Get current plan
+	      const currentPlan = await dbUtils.getPlan(planId);
       if (!currentPlan) {
         throw new Error('Plan not found');
       }
 
-      // Get user context
-      const user = await dbUtils.getCurrentUser();
-      if (!user) {
-        throw new Error('User not found');
-      }
-
-      // Generate personalized prompt for adaptation
-      const personalizedPrompt = await this.generatePersonalizedPrompt(user);
+	      // Get user context
+	      const user = await dbUtils.getCurrentUser();
+	      if (!user?.id) {
+	        throw new Error('User not found');
+	      }
 
       // Call the enhanced plan generation API
       const response = await fetch('/api/generate-plan', {
@@ -121,21 +118,21 @@ export class PlanAdaptationEngine {
         },
         body: JSON.stringify({
           userId: user.id,
-          userContext: {
-            goal: user.goal,
-            experience: user.experience,
-            daysPerWeek: user.daysPerWeek,
-            preferredTimes: user.preferredTimes,
-            age: user.age,
-            motivations: user.motivations || [],
-            barriers: user.barriers || [],
-            coachingStyle: user.coachingStyle || 'supportive'
-          },
-          adaptationTrigger: 'completion',
-          recentRuns: await this.getRecentRunsForAdaptation(user.id!),
-          currentGoals: await this.getCurrentGoalsForAdaptation(user.id!)
-        })
-      });
+	          userContext: {
+	            goal: user.goal,
+	            experience: user.experience,
+	            daysPerWeek: user.daysPerWeek,
+	            preferredTimes: user.preferredTimes,
+	            age: user.age,
+	            motivations: user.motivations || [],
+	            barriers: user.barriers || [],
+	            coachingStyle: user.coachingStyle || 'supportive'
+	          },
+	          adaptationTrigger: 'completion',
+	          recentRuns: await this.getRecentRunsForAdaptation(user.id),
+	          currentGoals: await this.getCurrentGoalsForAdaptation(user.id)
+	        })
+	      });
 
       if (!response.ok) {
         throw new Error('Failed to generate adapted plan');
@@ -157,23 +154,24 @@ export class PlanAdaptationEngine {
       // Create new plan
       const newPlanId = await dbUtils.createPlan(adaptedPlanData);
 
-      // Create workouts for the new plan
-      for (const workout of plan.workouts) {
-        await dbUtils.createWorkout({
-          planId: newPlanId,
-          week: workout.week,
-          day: workout.day,
-          type: workout.type,
-          distance: workout.distance,
-          duration: workout.duration,
-          notes: workout.notes,
-          completed: false,
-          scheduledDate: new Date(), // Will be calculated based on plan start date
-          createdAt: new Date()
-        });
-      }
+	      // Create workouts for the new plan
+	      for (const workout of plan.workouts) {
+	        await dbUtils.createWorkout({
+	          planId: newPlanId,
+	          week: workout.week,
+	          day: workout.day,
+	          type: workout.type,
+	          distance: workout.distance,
+	          completed: false,
+	          scheduledDate: new Date(), // Will be calculated based on plan start date
+	          ...(typeof workout.duration === 'number' ? { duration: workout.duration } : {}),
+	          ...(workout.notes ? { notes: workout.notes } : {}),
+	        });
+	      }
 
-      return await dbUtils.getPlan(newPlanId) as Plan;
+	      const newPlan = await dbUtils.getPlan(newPlanId)
+	      if (!newPlan) throw new Error('Failed to load adapted plan')
+	      return newPlan
 
     } catch (error) {
       console.error('Error adapting plan:', error);
@@ -258,7 +256,7 @@ Generate a plan that will help this runner overcome their barriers and achieve t
    * @param recentRuns - Recent run data
    * @returns Object with goal analysis
    */
-  private analyzeGoalProgress(currentGoals: Goal[], recentRuns: Run[]) {
+	  private analyzeGoalProgress(currentGoals: Goal[], _recentRuns: Run[]) {
     if (currentGoals.length === 0) {
       return { averageProgress: 0, goalsBehind: 0, goalsAhead: 0 };
     }

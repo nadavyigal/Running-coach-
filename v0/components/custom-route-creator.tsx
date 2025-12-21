@@ -5,14 +5,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { MapPin, Trash2, Save, ListChecks } from 'lucide-react';
-import { RouteMap } from '@/components/maps/RouteMap';
-import { MapErrorBoundary } from '@/components/maps/MapErrorBoundary';
-import { db, type Route } from '@/lib/db';
-import { useToast } from '@/hooks/use-toast';
+	import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+	import { Card, CardContent } from '@/components/ui/card';
+	import { Trash2, Save, ListChecks } from 'lucide-react';
+	import { RouteMap } from '@/components/maps/RouteMap';
+	import { MapErrorBoundary } from '@/components/maps/MapErrorBoundary';
+	import { db, type Route } from '@/lib/db';
+	import { useToast } from '@/hooks/use-toast';
 import {
   calculateWaypointDistance,
   stringifyGpsPath,
@@ -49,15 +48,19 @@ export function CustomRouteCreator({ isOpen, onClose, onRouteSaved }: CustomRout
   const [isSaving, setIsSaving] = useState(false);
 
   const distance = waypoints.length >= 2 ? calculateWaypointDistance(waypoints) : 0;
-  const estimatedTime = distance > 0 ? estimateRouteTime(distance) : 0;
+	const estimatedTime = distance > 0 ? estimateRouteTime(distance) : 0;
 
-  const previewRoute: Route | null = useMemo(() => {
-    if (waypoints.length < 2) return null;
+	const previewRoute: Route | null = useMemo(() => {
+	    if (waypoints.length < 2) return null;
 
-    return {
-      id: Number.MAX_SAFE_INTEGER, // map-only preview id
-      name: routeName || 'Custom Route Preview',
-      distance,
+	    const start = waypoints.at(0)
+	    const end = waypoints.at(-1)
+	    if (!start || !end) return null
+
+	    return {
+	      id: Number.MAX_SAFE_INTEGER, // map-only preview id
+	      name: routeName || 'Custom Route Preview',
+	      distance,
       difficulty,
       safetyScore: 50,
       popularity: 0,
@@ -67,18 +70,18 @@ export function CustomRouteCreator({ isOpen, onClose, onRouteSaved }: CustomRout
       lowTraffic: false,
       scenicScore: 50,
       estimatedTime,
-      description: notes || 'Custom route preview',
-      tags: ['custom'],
-      gpsPath: stringifyGpsPath(waypoints),
-      location: 'Custom Route',
-      startLat: waypoints[0].lat,
-      startLng: waypoints[0].lng,
-      endLat: waypoints[waypoints.length - 1].lat,
-      endLng: waypoints[waypoints.length - 1].lng,
-      routeType: 'custom',
-      createdBy: 'user',
-      isActive: true,
-      createdAt: new Date(0),
+	      description: notes || 'Custom route preview',
+	      tags: ['custom'],
+	      gpsPath: stringifyGpsPath(waypoints),
+	      location: 'Custom Route',
+	      startLat: start.lat,
+	      startLng: start.lng,
+	      endLat: end.lat,
+	      endLng: end.lng,
+	      routeType: 'custom',
+	      createdBy: 'user',
+	      isActive: true,
+	      createdAt: new Date(0),
       updatedAt: new Date(0),
     };
   }, [waypoints, routeName, difficulty, notes, surfaceType, distance, estimatedTime]);
@@ -172,11 +175,22 @@ export function CustomRouteCreator({ isOpen, onClose, onRouteSaved }: CustomRout
 
     setIsSaving(true);
 
-    try {
-      const newRoute: Omit<Route, 'id'> = {
-        name: routeName.trim(),
-        distance,
-        difficulty,
+	    try {
+	      const start = waypoints.at(0)
+	      const end = waypoints.at(-1)
+	      if (!start || !end) {
+	        toast({
+	          title: 'Add Waypoints',
+	          description: 'Please add at least a start and end point.',
+	          variant: 'destructive',
+	        })
+	        return
+	      }
+
+	      const newRoute: Omit<Route, 'id'> = {
+	        name: routeName.trim(),
+	        distance,
+	        difficulty,
         safetyScore: 50,
         popularity: 0,
         elevationGain: 0,
@@ -185,23 +199,27 @@ export function CustomRouteCreator({ isOpen, onClose, onRouteSaved }: CustomRout
         lowTraffic: false,
         scenicScore: 50,
         estimatedTime,
-        description: notes || `Custom ${formatDistance(distance, 1)} route`,
-        tags: ['custom'],
-        gpsPath: stringifyGpsPath(waypoints),
-        location: 'Custom Route',
-        startLat: waypoints[0].lat,
-        startLng: waypoints[0].lng,
-        endLat: waypoints[waypoints.length - 1].lat,
-        endLng: waypoints[waypoints.length - 1].lng,
-        routeType: 'custom',
-        createdBy: 'user',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+	        description: notes || `Custom ${formatDistance(distance, 1)} route`,
+	        tags: ['custom'],
+	        gpsPath: stringifyGpsPath(waypoints),
+	        location: 'Custom Route',
+	        startLat: start.lat,
+	        startLng: start.lng,
+	        endLat: end.lat,
+	        endLng: end.lng,
+	        routeType: 'custom',
+	        createdBy: 'user',
+	        isActive: true,
+	        createdAt: new Date(),
+	        updatedAt: new Date(),
+	      };
 
-      const routeId = await db.routes.add(newRoute);
-      const savedRoute = { ...newRoute, id: routeId };
+	      const routeId = await db.routes.add(newRoute);
+	      if (typeof routeId !== 'number') {
+	        throw new Error('Failed to save route')
+	      }
+
+	      const savedRoute: Route = { ...newRoute, id: routeId };
 
       // Await analytics tracking
       try {
@@ -217,13 +235,13 @@ export function CustomRouteCreator({ isOpen, onClose, onRouteSaved }: CustomRout
         }
       }
 
-      toast({
-        title: 'Route Saved',
-        description: `"${newRoute.name}" has been added to your routes.`,
-      });
+	      toast({
+	        title: 'Route Saved',
+	        description: `"${newRoute.name}" has been added to your routes.`,
+	      });
 
-      // Call onRouteSaved before clearing state
-      onRouteSaved(savedRoute);
+	      // Call onRouteSaved before clearing state
+	      onRouteSaved(savedRoute);
 
       // Clear state
       setWaypoints([]);

@@ -76,14 +76,18 @@ function getDefaultRaceTimeSeconds(distanceKey: PlanDistanceKey) {
 }
 
 function getDefaultAvailableDays(daysPerWeek: number): Weekday[] {
-  const patterns: Record<number, Weekday[]> = {
+  type PatternKey = 2 | 3 | 4 | 5 | 6
+
+  const patterns: Record<PatternKey, Weekday[]> = {
     2: ['Wed', 'Sat'],
     3: ['Mon', 'Wed', 'Fri'],
     4: ['Mon', 'Wed', 'Fri', 'Sun'],
     5: ['Mon', 'Tue', 'Thu', 'Fri', 'Sun'],
     6: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sun'],
   }
-  return patterns[clampNumber(daysPerWeek, 2, 6)] || patterns[3]
+
+  const key = clampNumber(daysPerWeek, 2, 6) as PatternKey
+  return patterns[key]
 }
 
 function getWeekdayLabel(day: Weekday) {
@@ -225,7 +229,7 @@ export function PlanSetupWizard(props: {
   onBackToDetail: () => void
   onClose: () => void
   onDistanceChange?: (distanceKey: PlanDistanceKey) => void
-  onSubmit: (result: PlanTemplateWizardResult) => void
+  onSubmit: (result: PlanTemplateWizardResult) => void | Promise<void>
 }) {
   const { template, initialDaysPerWeek, onBackToDetail, onClose, onDistanceChange, onSubmit } = props
   const [step, setStep] = useState(1)
@@ -241,7 +245,7 @@ export function PlanSetupWizard(props: {
   const [daysPerWeek, setDaysPerWeek] = useState<number>(clampNumber(initialDaysPerWeek || 3, 2, 6))
   const [availableDays, setAvailableDays] = useState<Weekday[]>(() => getDefaultAvailableDays(daysPerWeek))
   const [longRunDay, setLongRunDay] = useState<Weekday>(() =>
-    availableDays.includes('Sat') ? 'Sat' : availableDays[availableDays.length - 1]
+    availableDays.includes('Sat') ? 'Sat' : availableDays.at(-1) ?? 'Sun'
   )
 
   const [startDate, setStartDate] = useState<Date>(() => new Date())
@@ -283,7 +287,7 @@ export function PlanSetupWizard(props: {
 
   useEffect(() => {
     if (!availableDays.includes(longRunDay)) {
-      setLongRunDay(availableDays.includes('Sat') ? 'Sat' : availableDays[availableDays.length - 1])
+      setLongRunDay(availableDays.includes('Sat') ? 'Sat' : availableDays.at(-1) ?? 'Sun')
     }
   }, [availableDays, longRunDay])
 
@@ -363,7 +367,7 @@ export function PlanSetupWizard(props: {
   const handleContinue = () => {
     if (!canContinue) return
     if (step === 9) {
-      onSubmit({
+      void onSubmit({
         distanceKey,
         currentRaceTimeSeconds,
         daysPerWeek,

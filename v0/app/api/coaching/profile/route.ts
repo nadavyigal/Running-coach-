@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { type CoachingProfile } from '@/lib/db';
+import { type CoachingFeedback, type CoachingInteraction, type CoachingProfile, type UserBehaviorPattern } from '@/lib/db';
 import { dbUtils } from '@/lib/dbUtils';
 import { logger } from '@/lib/logger';
 
@@ -157,7 +157,7 @@ async function buildProfileResponse(profile: CoachingProfile, userId: number) {
 
     // Get behavior patterns with error handling
     logger.log('Step 3: Fetching behavior patterns...');
-    let patterns = [];
+    let patterns: UserBehaviorPattern[] = [];
     try {
       patterns = await dbUtils.getBehaviorPatterns(userId);
       logger.log('Behavior patterns retrieved:', patterns.length);
@@ -168,7 +168,7 @@ async function buildProfileResponse(profile: CoachingProfile, userId: number) {
     
     // Get recent feedback for effectiveness metrics with error handling
     logger.log('Step 4: Fetching coaching feedback...');
-    let recentFeedback = [];
+    let recentFeedback: CoachingFeedback[] = [];
     try {
       recentFeedback = await dbUtils.getCoachingFeedback(userId, 20);
       logger.log('Coaching feedback retrieved:', recentFeedback.length);
@@ -184,7 +184,7 @@ async function buildProfileResponse(profile: CoachingProfile, userId: number) {
 
     // Calculate engagement metrics with error handling
     logger.log('Step 5: Fetching coaching interactions...');
-    let recentInteractions = [];
+    let recentInteractions: CoachingInteraction[] = [];
     try {
       recentInteractions = await dbUtils.getCoachingInteractions(userId, 30);
       logger.log('Coaching interactions retrieved:', recentInteractions.length);
@@ -315,7 +315,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Record adaptation if communication style changed
-    const adaptations = [];
+    const adaptations: string[] = [];
     if (data.communicationStyle) {
       Object.entries(data.communicationStyle).forEach(([key, value]) => {
         if (value !== (currentProfile.communicationStyle as any)[key]) {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { analyzeError, getRecoveryActions } from '@/lib/errorHandling';
+import { analyzeError } from '@/lib/errorHandling';
 
 interface ErrorFallbackProps {
   error?: Error;
@@ -8,9 +8,7 @@ interface ErrorFallbackProps {
 }
 
 // Network Error Fallback
-export const NetworkErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onRetry }) => {
-  const errorInfo = error ? analyzeError(error) : null;
-
+export const NetworkErrorFallback: React.FC<ErrorFallbackProps> = ({ error: _error, onRetry }) => {
   return (
     <div className="flex flex-col items-center justify-center min-h-[300px] p-6 bg-orange-50 border border-orange-200 rounded-lg">
       <div className="text-orange-600 mb-4">
@@ -20,7 +18,7 @@ export const NetworkErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onRe
       </div>
       <h3 className="text-xl font-semibold text-orange-800 mb-2">Connection Problem</h3>
       <p className="text-orange-700 text-center mb-4 max-w-md">
-        We're having trouble connecting to our servers. Please check your internet connection and try again.
+        We&apos;re having trouble connecting to our servers. Please check your internet connection and try again.
       </p>
       <div className="flex flex-col sm:flex-row gap-3">
         <button
@@ -40,7 +38,7 @@ export const NetworkErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onRe
         <p>Still having issues? Try:</p>
         <ul className="list-disc list-inside mt-2 space-y-1">
           <li>Check your internet connection</li>
-          <li>Disable VPN if you're using one</li>
+          <li>Disable VPN if you&apos;re using one</li>
           <li>Clear your browser cache</li>
         </ul>
       </div>
@@ -59,7 +57,7 @@ export const DatabaseErrorFallback: React.FC<ErrorFallbackProps> = ({ onRetry })
       </div>
       <h3 className="text-xl font-semibold text-blue-800 mb-2">Data Sync Issue</h3>
       <p className="text-blue-700 text-center mb-4 max-w-md">
-        We're having trouble saving your data right now. Don't worry - your progress will be saved when the connection is restored.
+        We&apos;re having trouble saving your data right now. Don&apos;t worry - your progress will be saved when the connection is restored.
       </p>
       <div className="flex flex-col sm:flex-row gap-3">
         <button
@@ -154,7 +152,7 @@ export const OfflineErrorFallback: React.FC<ErrorFallbackProps> = ({ onRetry }) 
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M12 2v6m0 8v6M2 12h6m8 0h6" />
         </svg>
       </div>
-      <h3 className="text-xl font-semibold text-gray-800 mb-2">You're Offline</h3>
+      <h3 className="text-xl font-semibold text-gray-800 mb-2">You&apos;re Offline</h3>
       <p className="text-gray-700 text-center mb-4 max-w-md">
         You appear to be offline. Some features may not be available, but you can still view your existing data and continue training.
       </p>
@@ -166,7 +164,10 @@ export const OfflineErrorFallback: React.FC<ErrorFallbackProps> = ({ onRetry }) 
           Continue Offline
         </button>
         <button
-          onClick={() => window.location.reload()}
+          onClick={() => {
+            onRetry();
+            window.location.reload();
+          }}
           className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
         >
           Check Connection
@@ -174,7 +175,7 @@ export const OfflineErrorFallback: React.FC<ErrorFallbackProps> = ({ onRetry }) 
       </div>
       <div className="mt-4 p-3 bg-gray-100 rounded-lg">
         <p className="text-sm text-gray-700">
-          📱 Your training data is stored locally and will sync when you're back online.
+          📱 Your training data is stored locally and will sync when you&apos;re back online.
         </p>
       </div>
     </div>

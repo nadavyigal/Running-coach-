@@ -125,7 +125,6 @@ function setupStreamingMonitor(messagesContainer, streamingTest) {
   
   let updateCount = 0;
   let lastMessageContent = '';
-  let lastMessageElement = null;
   
   // Create mutation observer to detect message updates
   const messageObserver = new MutationObserver((mutations) => {
@@ -149,7 +148,6 @@ function setupStreamingMonitor(messagesContainer, streamingTest) {
             console.log(`📨 New message detected #${updateCount}:`, update);
             streamingTest.streamUpdates.push(update);
             
-            lastMessageElement = node;
             lastMessageContent = node.textContent;
           }
         });
@@ -615,7 +613,7 @@ function testChatMessagePersistence() {
         refreshTest.previousTimestamp = parsed.timestamp;
         
         console.log("✅ Previous persistence test found:", parsed);
-      } catch (parseError) {
+      } catch {
         refreshTest.previousTestFound = false;
         console.warn("⚠️ Could not parse previous test data");
       }
