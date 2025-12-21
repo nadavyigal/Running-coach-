@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Info, Loader2, X } from 'lucide-react'
+import { ArrowLeft, Footprints, Info, Loader2, X } from 'lucide-react'
 
 import { PLAN_TEMPLATES, type PlanTemplateFilter, type PlanTemplate } from '@/lib/plan-templates'
 import { cn } from '@/lib/utils'
@@ -31,20 +31,78 @@ const FILTERS: Array<{ id: PlanTemplateFilter; label: string }> = [
   { id: 'marathon', label: 'Marathon' },
 ]
 
+const ACCENT_STYLES = {
+  'border-yellow-300': {
+    ring: 'ring-yellow-300/25',
+    badge: 'text-yellow-300',
+    cardGlow: 'before:from-yellow-300/10',
+  },
+  'border-blue-300': {
+    ring: 'ring-blue-300/25',
+    badge: 'text-blue-300',
+    cardGlow: 'before:from-blue-300/10',
+  },
+  'border-emerald-300': {
+    ring: 'ring-emerald-300/25',
+    badge: 'text-emerald-300',
+    cardGlow: 'before:from-emerald-300/10',
+  },
+  'border-violet-300': {
+    ring: 'ring-violet-300/25',
+    badge: 'text-violet-300',
+    cardGlow: 'before:from-violet-300/10',
+  },
+  'border-orange-300': {
+    ring: 'ring-orange-300/25',
+    badge: 'text-orange-300',
+    cardGlow: 'before:from-orange-300/10',
+  },
+} as const
+
+function getAccentStyle(accentClassName: string) {
+  return (
+    ACCENT_STYLES[accentClassName as keyof typeof ACCENT_STYLES] ?? ACCENT_STYLES['border-emerald-300']
+  )
+}
+
 function formatDistanceKm(distanceKm: number) {
   if (Number.isInteger(distanceKm)) return `${distanceKm.toFixed(1)} km`
   return `${distanceKm.toFixed(1)} km`
 }
 
+function getPlanBadgeLabel(template: PlanTemplate) {
+  if (template.id === 'half-marathon-plan') return '13.1'
+  if (template.id === 'marathon-plan') return '26.2'
+  if (template.id === '10-mile-plan') return '10'
+  return template.distanceLabel
+}
+
 function PlanBadge({ label, accentClassName }: { label: string; accentClassName: string }) {
+  const accent = getAccentStyle(accentClassName)
   return (
-    <div
-      className={cn(
-        'h-14 w-14 shrink-0 rounded-2xl border-2 bg-white/5 flex items-center justify-center',
-        accentClassName
-      )}
-    >
-      <div className="text-sm font-semibold">{label}</div>
+    <div className="relative h-16 w-16 shrink-0">
+      <svg
+        viewBox="0 0 64 64"
+        aria-hidden="true"
+        className={cn('absolute inset-0 drop-shadow-[0_10px_22px_rgba(0,0,0,0.55)]', accent.badge)}
+      >
+        <path
+          d="M20 6H44L54 16V34L32 58L10 34V16L20 6Z"
+          fill="rgba(255,255,255,0.06)"
+          stroke="currentColor"
+          strokeWidth="2.25"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M23 11H41L49 19V33L32 52L15 33V19L23 11Z"
+          fill="rgba(255,255,255,0.03)"
+        />
+      </svg>
+
+      <div className="relative h-full w-full flex flex-col items-center justify-center text-white">
+        <div className="text-[15px] font-semibold leading-none tracking-tight">{label}</div>
+        <Footprints className="mt-1 h-3.5 w-3.5 text-white/80" />
+      </div>
     </div>
   )
 }
@@ -59,8 +117,10 @@ function CatalogView(props: {
   const { filter, onFilterChange, templates, onClose, onSelectTemplate } = props
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-neutral-950 text-white">
-      <div className="px-4 pt-4 pb-2">
+    <div className="relative h-[100dvh] flex flex-col bg-neutral-950 text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(110%_70%_at_50%_0%,rgba(16,185,129,0.16),rgba(0,0,0,0))]" />
+
+      <div className="relative px-5 pt-4 pb-2">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" className="text-white" onClick={onClose}>
             <ArrowLeft className="h-5 w-5" />
@@ -71,10 +131,10 @@ function CatalogView(props: {
           </Button>
         </div>
 
-        <h1 className="mt-4 text-3xl font-semibold">All plans</h1>
+        <h1 className="mt-4 text-4xl font-semibold tracking-tight">All plans</h1>
       </div>
 
-      <div className="px-4 pb-3">
+      <div className="relative px-5 pb-4">
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
           {FILTERS.map((f) => (
             <Button
@@ -82,10 +142,10 @@ function CatalogView(props: {
               type="button"
               onClick={() => onFilterChange(f.id)}
               className={cn(
-                'rounded-full h-10 px-5 shrink-0',
+                'h-9 rounded-full px-5 shrink-0 text-sm font-medium border transition-colors',
                 filter === f.id
-                  ? 'bg-emerald-400 text-neutral-950 hover:bg-emerald-300'
-                  : 'bg-white/10 text-white hover:bg-white/15'
+                  ? 'bg-emerald-400 text-neutral-950 border-emerald-300 shadow-[0_10px_24px_rgba(16,185,129,0.22)] hover:bg-emerald-300'
+                  : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10 hover:text-white'
               )}
             >
               {f.label}
@@ -94,30 +154,39 @@ function CatalogView(props: {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-3">
-        {templates.map((template) => (
-          <Card
-            key={template.id}
-            className={cn(
-              'cursor-pointer border bg-white/5 text-white hover:bg-white/10 transition',
-              template.accentClassName
-            )}
-            onClick={() => onSelectTemplate(template)}
-          >
-            <CardContent className="p-4 flex items-center gap-4 overflow-hidden">
-              <PlanBadge label={template.distanceLabel} accentClassName={template.accentClassName} />
-              <div className="min-w-0 flex-1">
-                <div className="text-lg font-semibold truncate">{template.name}</div>
-                <div className="text-sm text-white/70">
-                  {template.recommendedWeeks} weeks • {formatDistanceKm(template.distanceKm)}
+      <div className="relative flex-1 overflow-y-auto px-5 pb-8 space-y-4">
+        {templates.map((template) => {
+          const accent = getAccentStyle(template.accentClassName)
+          return (
+            <Card
+              key={template.id}
+              className={cn(
+                'group relative cursor-pointer overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/10 via-white/[0.06] to-white/[0.02] text-white shadow-[0_12px_30px_rgba(0,0,0,0.55)] ring-1 ring-inset transition-colors active:scale-[0.99]',
+                'before:content-[""] before:absolute before:inset-0 before:bg-gradient-to-r before:via-transparent before:to-transparent before:opacity-0 before:transition-opacity',
+                'hover:border-white/20 hover:bg-white/10 hover:before:opacity-100',
+                accent.ring,
+                accent.cardGlow,
+                template.isComingSoon && 'opacity-70'
+              )}
+              onClick={() => onSelectTemplate(template)}
+            >
+              <CardContent className="relative p-5 flex items-center gap-4 overflow-hidden">
+                <PlanBadge label={getPlanBadgeLabel(template)} accentClassName={template.accentClassName} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xl font-semibold tracking-tight truncate">{template.name}</div>
+                  <div className="text-sm text-white/70 mt-1">
+                    {template.recommendedWeeks} weeks • {formatDistanceKm(template.distanceKm)}
+                  </div>
+                  {template.isComingSoon && (
+                    <div className="mt-3 inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">
+                      Coming soon
+                    </div>
+                  )}
                 </div>
-                {template.isComingSoon && (
-                  <div className="text-xs text-white/60 mt-1">Coming soon</div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
     </div>
   )
@@ -155,7 +224,7 @@ function DetailView(props: {
 
         <div className="absolute inset-x-0 bottom-10 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
-            <PlanBadge label={template.distanceLabel} accentClassName={template.accentClassName} />
+            <PlanBadge label={getPlanBadgeLabel(template)} accentClassName={template.accentClassName} />
             <div className="text-center">
               <div className="text-3xl font-semibold">{template.name}</div>
               <div className="text-white/70 mt-1">

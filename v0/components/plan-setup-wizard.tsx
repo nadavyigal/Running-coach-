@@ -111,7 +111,7 @@ function buildRaceDayOptions(raceWeekStart: Date) {
   }))
 }
 
-const WHEEL_ITEM_HEIGHT = 40
+const WHEEL_ITEM_HEIGHT = 48
 const WHEEL_PADDING_ITEMS = 2
 
 function WheelColumn(props: {
@@ -119,10 +119,11 @@ function WheelColumn(props: {
   min: number
   max: number
   padTo2?: boolean
+  suffix?: string
   ariaLabel: string
   onChange: (value: number) => void
 }) {
-  const { value, min, max, padTo2, ariaLabel, onChange } = props
+  const { value, min, max, padTo2, suffix, ariaLabel, onChange } = props
   const ref = useRef<HTMLDivElement | null>(null)
   const scrollTimeout = useRef<number | null>(null)
 
@@ -158,12 +159,12 @@ function WheelColumn(props: {
   }
 
   return (
-    <div className="relative w-20">
+    <div className="relative w-24">
       <div
         ref={ref}
         aria-label={ariaLabel}
         role="listbox"
-        className="h-40 overflow-y-auto no-scrollbar snap-y snap-mandatory"
+        className="h-60 overflow-y-auto no-scrollbar snap-y snap-mandatory"
         onScroll={handleScroll}
       >
         {items.map((item, idx) => {
@@ -173,9 +174,9 @@ function WheelColumn(props: {
               key={`${ariaLabel}-${idx}`}
               type="button"
               className={cn(
-                'w-full h-10 snap-center flex items-center justify-center text-xl',
-                item === null ? 'opacity-0 pointer-events-none' : 'opacity-60',
-                isSelected && 'opacity-100 font-semibold'
+                'w-full h-12 snap-center flex items-center justify-center text-2xl transition',
+                item === null ? 'opacity-0 pointer-events-none' : 'opacity-40',
+                isSelected && 'opacity-100 font-semibold text-white'
               )}
               onClick={() => {
                 if (typeof item !== 'number') return
@@ -184,15 +185,15 @@ function WheelColumn(props: {
               }}
             >
               {typeof item === 'number'
-                ? padTo2
-                  ? String(item).padStart(2, '0')
-                  : item
+                ? `${padTo2 ? String(item).padStart(2, '0') : item}${suffix ?? ''}`
                 : '00'}
             </button>
           )
         })}
       </div>
-      <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-10 border-y border-white/20" />
+      <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-12 rounded-xl border border-white/10 bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-neutral-950 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-neutral-950 to-transparent" />
     </div>
   )
 }
@@ -209,8 +210,8 @@ function SelectCard(props: {
     <button type="button" onClick={onClick} className="w-full text-left">
       <Card
         className={cn(
-          'border bg-white/5 text-white rounded-2xl px-5 py-4 flex items-center justify-between',
-          selected ? 'border-emerald-400' : 'border-white/10'
+          'relative overflow-hidden border text-white rounded-3xl px-5 py-4 flex items-center justify-between bg-gradient-to-br from-white/10 via-white/[0.06] to-white/[0.02] shadow-[0_12px_30px_rgba(0,0,0,0.55)] transition-colors',
+          selected ? 'border-emerald-300/60 ring-1 ring-inset ring-emerald-300/20' : 'border-white/10 hover:border-white/20'
         )}
       >
         <div>
@@ -326,6 +327,13 @@ export function PlanSetupWizard(props: {
   const currentRaceTimeSeconds = hours * 3600 + minutes * 60 + seconds
   const progressPercent = Math.round(((step - 1) / (WIZARD_TOTAL_STEPS - 1)) * 100)
 
+  const startPresetDate = useMemo(() => {
+    const today = new Date()
+    if (startPreset === 'tomorrow') return addDays(today, 1)
+    if (startPreset === 'monday') return nextMonday(today)
+    return today
+  }, [startPreset])
+
   const actualWeeks = useMemo(() => {
     const diffDays = Math.max(0, Math.ceil((raceDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)))
     return Math.max(1, Math.ceil((diffDays + 1) / 7))
@@ -392,8 +400,11 @@ export function PlanSetupWizard(props: {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex-1 flex items-center justify-center">
-            <div className="h-1 w-40 bg-white/15 rounded-full overflow-hidden">
-              <div className="h-full bg-white/70" style={{ width: `${progressPercent}%` }} />
+            <div className="h-1 w-44 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-300 to-sky-300"
+                style={{ width: `${progressPercent}%` }}
+              />
             </div>
           </div>
           <Button variant="ghost" size="icon" className="text-white" onClick={onClose}>
@@ -407,11 +418,11 @@ export function PlanSetupWizard(props: {
           <div className="pt-6 space-y-6">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-3xl font-semibold">
+                <h2 className="text-4xl font-semibold tracking-tight">
                   What&apos;s your estimated <span className="text-emerald-300">current</span> race time?
                 </h2>
-                <p className="text-white/70 mt-3">
-                  Choose a time reflective of your current fitness level — don&apos;t use an out of date PB or goal time!
+                <p className="text-white/70 mt-3 leading-relaxed">
+                  Choose a time reflective of your <span className="text-emerald-300">current</span> fitness level — don&apos;t use an out of date PB or goal time!
                 </p>
               </div>
               <Button variant="ghost" size="icon" className="text-white/70" aria-label="Help">
@@ -419,7 +430,7 @@ export function PlanSetupWizard(props: {
               </Button>
             </div>
 
-            <div className="flex gap-2 overflow-x-auto no-scrollbar">
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
               {DISTANCE_CHIPS.map((chip) => {
                 const active = distanceKey === chip.key
                 return (
@@ -432,10 +443,10 @@ export function PlanSetupWizard(props: {
                       onDistanceChange?.(chip.key)
                     }}
                     className={cn(
-                      'rounded-full h-10 px-6 shrink-0',
+                      'h-10 rounded-full px-6 shrink-0 text-sm font-medium border transition-colors',
                       active
-                        ? 'bg-emerald-400 text-neutral-950 hover:bg-emerald-300'
-                        : 'bg-white/10 text-white hover:bg-white/15'
+                        ? 'bg-emerald-400 text-neutral-950 border-emerald-300 shadow-[0_10px_24px_rgba(16,185,129,0.22)] hover:bg-emerald-300'
+                        : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10 hover:text-white'
                     )}
                   >
                     {chip.label}
@@ -449,35 +460,38 @@ export function PlanSetupWizard(props: {
               <span className="text-white font-semibold">{formatTimeHms(currentRaceTimeSeconds)}</span>
             </div>
 
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-3 pt-2">
               <WheelColumn
                 value={hours}
                 min={0}
                 max={10}
+                suffix="h"
                 ariaLabel="Hours"
                 onChange={(value) => {
                   setTimeSeeded(false)
                   setHours(value)
                 }}
               />
-              <div className="text-2xl pb-2 text-white/60">:</div>
+              <div className="text-2xl -mt-1 text-white/40">:</div>
               <WheelColumn
                 value={minutes}
                 min={0}
                 max={59}
                 padTo2
+                suffix="m"
                 ariaLabel="Minutes"
                 onChange={(value) => {
                   setTimeSeeded(false)
                   setMinutes(value)
                 }}
               />
-              <div className="text-2xl pb-2 text-white/60">:</div>
+              <div className="text-2xl -mt-1 text-white/40">:</div>
               <WheelColumn
                 value={seconds}
                 min={0}
                 max={59}
                 padTo2
+                suffix="s"
                 ariaLabel="Seconds"
                 onChange={(value) => {
                   setTimeSeeded(false)
@@ -595,7 +609,7 @@ export function PlanSetupWizard(props: {
           <div className="pt-6 space-y-6">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-3xl font-semibold">When do you want to start your plan?</h2>
+                <h2 className="text-4xl font-semibold tracking-tight">When do you want to start your plan?</h2>
                 <p className="text-white/70 mt-3">Pick a start date that suits you best (you can change this later)</p>
               </div>
               <Button variant="ghost" size="icon" className="text-white/70" aria-label="Help">
@@ -604,13 +618,18 @@ export function PlanSetupWizard(props: {
             </div>
 
             <div className="space-y-3">
-              <SelectCard
-                selected={startPreset !== 'custom'}
-                onClick={() => setStartPreset('today')}
-                title="Now"
-                subtitle={format(new Date(), 'PPP')}
-                right={
-                  <div className="flex gap-2">
+              <button type="button" onClick={() => setStartPreset('today')} className="w-full text-left">
+                <Card
+                  className={cn(
+                    'relative overflow-hidden rounded-3xl border px-5 py-4 text-white shadow-[0_12px_30px_rgba(0,0,0,0.55)]',
+                    startPreset !== 'custom'
+                      ? 'border-emerald-300/60 bg-emerald-300/5 ring-1 ring-inset ring-emerald-300/20'
+                      : 'border-white/10 bg-white/5'
+                  )}
+                >
+                  <div className="text-sm text-white/60">{format(startPresetDate, 'MMM d, yyyy')}</div>
+                  <div className="mt-1 text-2xl font-semibold tracking-tight">Now</div>
+                  <div className="mt-4 flex gap-2 overflow-x-auto no-scrollbar pb-1">
                     {[
                       { id: 'today', label: 'Today' },
                       { id: 'tomorrow', label: 'Tomorrow' },
@@ -625,18 +644,18 @@ export function PlanSetupWizard(props: {
                           setStartPreset(chip.id as any)
                         }}
                         className={cn(
-                          'rounded-full h-9 px-4',
+                          'h-10 rounded-full px-6 shrink-0 text-sm font-medium border transition-colors',
                           startPreset === chip.id
-                            ? 'bg-emerald-400 text-neutral-950 hover:bg-emerald-300'
-                            : 'bg-white/10 text-white hover:bg-white/15'
+                            ? 'bg-emerald-400 text-neutral-950 border-emerald-300 shadow-[0_10px_24px_rgba(16,185,129,0.22)] hover:bg-emerald-300'
+                            : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10 hover:text-white'
                         )}
                       >
                         {chip.label}
                       </Button>
                     ))}
                   </div>
-                }
-              />
+                </Card>
+              </button>
 
               <SelectCard selected={startPreset === 'custom'} onClick={() => setStartPreset('custom')} title="Custom" />
 
