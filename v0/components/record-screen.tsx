@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertTriangle, Info, Loader2, RefreshCw, Sparkles } from "lucide-react"
+import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertTriangle, Info, Loader2, Sparkles } from "lucide-react"
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RouteSelectionWizard } from "@/components/route-selection-wizard"
 import { ManualRunModal } from "@/components/manual-run-modal"
@@ -14,7 +14,8 @@ import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { GPSAccuracyIndicator } from "@/components/gps-accuracy-indicator"
-import type { GPSAccuracyData } from "@/lib/gps-monitoring"
+import { GPSMonitoringService, type GPSAccuracyData } from "@/lib/gps-monitoring"
+import { calculateDistance } from "@/lib/routeUtils"
 
 interface GPSCoordinate {
   latitude: number
@@ -26,7 +27,9 @@ interface GPSCoordinate {
 interface RunMetrics {
   distance: number // in km
   duration: number // in seconds
-  pace: number // in seconds per km
+  pace: number // average seconds per km
+  currentPace: number // rolling seconds per km
+  currentSpeed: number // rolling m/s
   calories: number // estimated
 }
 
@@ -54,6 +57,9 @@ export function RecordScreen() {
   const [currentPosition, setCurrentPosition] = useState<GPSCoordinate | null>(null)
   const gpsPathRef = useRef<GPSCoordinate[]>([])
   const watchIdRef = useRef<number | null>(null)
+  const totalDistanceKmRef = useRef(0)
+  const lastRecordedPointRef = useRef<GPSCoordinate | null>(null)
+  const gpsMonitoringRef = useRef<GPSMonitoringService | null>(null)
   const startTimeRef = useRef<number>(0)
   const elapsedRunMsRef = useRef<number>(0)
   const isRunningRef = useRef(false)
@@ -69,6 +75,8 @@ export function RecordScreen() {
     distance: 0,
     duration: 0,
     pace: 0,
+    currentPace: 0,
+    currentSpeed: 0,
     calories: 0
   })
 
@@ -104,50 +112,19 @@ export function RecordScreen() {
     }
   }
 
-  // Initialize GPS - proactively request permission on mount
-  const initializeGps = async () => {
-    if (isInitializingGps) return
-    
-    setIsInitializingGps(true)
-    console.log('[GPS] Starting GPS initialization...')
-    
-    try {
-      const granted = await requestGpsPermission()
-      if (granted) {
-        console.log('[GPS] GPS initialized successfully')
-        toast({
-          title: "GPS Ready",
-          description: "Location access granted. You can now start your run.",
-        })
-      } else {
-        console.warn('[GPS] GPS initialization failed')
-      }
-    } catch (error) {
-      console.error('[GPS] Error during GPS initialization:', error)
-    } finally {
-      setIsInitializingGps(false)
-    }
-  }
-
   // Load today's workout and user data on mount
   useEffect(() => {
     loadTodaysWorkout()
     loadCurrentUser()
     
-    // Check GPS support and then initialize GPS
+    // Check GPS support but do not request permission until the run starts (Start/Resume).
     const setupGps = async () => {
       await checkGpsSupport()
-      // After checking support, proactively request GPS permission
-      if (navigator.geolocation) {
-        initializeGps()
-      }
     }
     setupGps()
     
     return () => {
-      if (watchIdRef.current) {
-        navigator.geolocation.clearWatch(watchIdRef.current)
-      }
+      stopGpsTracking()
     }
   }, [])
 
@@ -224,40 +201,88 @@ export function RecordScreen() {
     }
   }
 
-	  const requestGpsPermission = (): Promise<boolean> => {
-	    return new Promise((resolve) => {
-	      if (!navigator.geolocation) {
-	        setGpsPermission('unsupported')
-	        resolve(false)
-	        return
-	      }
-
-	      navigator.geolocation.getCurrentPosition(
-	        (position) => {
-	          const newPosition: GPSCoordinate = {
-	            latitude: position.coords.latitude,
-	            longitude: position.coords.longitude,
-	            timestamp: position.timestamp,
-	            accuracy: position.coords.accuracy
-	          }
-
-	          setGpsPermission('granted')
-	          setGpsAccuracy(position.coords.accuracy)
-	          setCurrentPosition(newPosition)
-	          resolve(true)
-	        },
-	        (error) => {
-	          console.error('GPS permission denied:', error)
-	          setGpsPermission('denied')
-          resolve(false)
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 60000
-        }
-      )
+  const resetRunTrackingState = () => {
+    gpsPathRef.current = []
+    setGpsPath([])
+    totalDistanceKmRef.current = 0
+    lastRecordedPointRef.current = null
+    gpsMonitoringRef.current = null
+    setCurrentGPSAccuracy(null)
+    setGpsAccuracyHistory([])
+    setMetrics({
+      distance: 0,
+      duration: 0,
+      pace: 0,
+      currentPace: 0,
+      currentSpeed: 0,
+      calories: 0
     })
+  }
+
+  const recordPointForActiveRun = (nextPoint: GPSCoordinate) => {
+    const lastPoint = lastRecordedPointRef.current
+
+    // Accuracy filtering: ignore noisy fixes before they can affect distance accumulation.
+    // Typical outdoor running is < ~20m; beyond ~40m tends to add lots of jitter/overcount.
+    const MAX_ACCEPTABLE_ACCURACY_METERS = 40
+    const nextAccuracy = typeof nextPoint.accuracy === 'number' ? nextPoint.accuracy : Number.POSITIVE_INFINITY
+    if (nextAccuracy > MAX_ACCEPTABLE_ACCURACY_METERS) return
+
+    // First accepted fix becomes our baseline (no distance added yet).
+    if (!lastPoint) {
+      lastRecordedPointRef.current = nextPoint
+      setGpsPath((previousPath) => {
+        const nextPath = [...previousPath, nextPoint]
+        gpsPathRef.current = nextPath
+        return nextPath
+      })
+      return
+    }
+
+    const timeDeltaMs = nextPoint.timestamp - lastPoint.timestamp
+    if (!Number.isFinite(timeDeltaMs) || timeDeltaMs <= 0) return
+    if (timeDeltaMs < 400) return
+
+    const segmentDistanceKm = calculateDistance(
+      lastPoint.latitude,
+      lastPoint.longitude,
+      nextPoint.latitude,
+      nextPoint.longitude
+    )
+    const segmentDistanceMeters = segmentDistanceKm * 1000
+    const timeDeltaSeconds = timeDeltaMs / 1000
+    const segmentSpeedMps = segmentDistanceMeters / timeDeltaSeconds
+
+    // Basic GPS filtering:
+    // - Jump rejection: ignore implausible speed spikes ("teleports").
+    // - Jitter rejection: ignore very small deltas likely caused by GPS noise.
+    const MAX_REASONABLE_SPEED_MPS = 9 // ~32 km/h (beyond elite running, filters car/GPS jumps)
+    const MIN_DISTANCE_METERS = Math.max(2, nextAccuracy * 0.1)
+
+    if (segmentSpeedMps > MAX_REASONABLE_SPEED_MPS) return
+    if (segmentDistanceMeters < MIN_DISTANCE_METERS) return
+
+    lastRecordedPointRef.current = nextPoint
+    // Incremental accumulation: only add this accepted segment (do not recompute over full path).
+    totalDistanceKmRef.current += segmentDistanceKm
+
+    // Current speed/pace: derived from the last accepted GPS segment (timestamp-to-timestamp).
+    // (Avoid deriving instantaneous pace from total duration/total distance on every GPS update.)
+    const currentSpeedMps = segmentSpeedMps
+    const currentPaceSecondsPerKm = currentSpeedMps > 0 ? 1000 / currentSpeedMps : 0
+
+    setGpsPath((previousPath) => {
+      const nextPath = [...previousPath, nextPoint]
+      gpsPathRef.current = nextPath
+      return nextPath
+    })
+
+    setMetrics((previousMetrics) => ({
+      ...previousMetrics,
+      distance: totalDistanceKmRef.current,
+      currentPace: currentPaceSecondsPerKm,
+      currentSpeed: currentSpeedMps,
+    }))
   }
 
   const startGpsTracking = (): Promise<boolean> => {
@@ -287,47 +312,44 @@ export function RecordScreen() {
           clearTimeout(timeoutId)
           settle(true)
 
+          const timestamp = Number.isFinite(position.timestamp) ? position.timestamp : Date.now()
           const newPosition: GPSCoordinate = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
-            timestamp: position.timestamp,
+            timestamp,
             accuracy: position.coords.accuracy
           }
 
           setCurrentPosition(newPosition)
           setGpsAccuracy(position.coords.accuracy)
+          setGpsPermission('granted')
+
+          const gpsService = gpsMonitoringRef.current ?? new GPSMonitoringService()
+          gpsMonitoringRef.current = gpsService
+          const accuracyData = gpsService.calculateAccuracyMetrics(position)
+          setCurrentGPSAccuracy(accuracyData)
+          setGpsAccuracyHistory((prev) => [...prev.slice(-99), accuracyData])
 
           if (isRunningRef.current && !isPausedRef.current) {
-            setGpsPath((previousPath) => {
-              const nextPath = [...previousPath, newPosition]
-              gpsPathRef.current = nextPath
-
-              if (nextPath.length > 1) {
-                const newDistance = calculateTotalDistance(nextPath)
-                setMetrics((previousMetrics) => ({
-                  ...previousMetrics,
-                  distance: newDistance,
-                  pace: previousMetrics.duration > 0 ? previousMetrics.duration / newDistance : 0,
-                  calories: estimateCalories(previousMetrics.duration, newDistance),
-                }))
-              }
-
-              return nextPath
-            })
+            recordPointForActiveRun(newPosition)
           }
         },
         (error) => {
-          clearTimeout(timeoutId)
-          console.error('GPS tracking error:', error)
-          if (!settled) {
+          console.error('[GPS] GPS tracking error:', error)
+          if (error.code === 1) {
+            clearTimeout(timeoutId)
+            setGpsPermission('denied')
             stopGpsTracking()
-            settle(false)
+            if (!settled) {
+              settle(false)
+            }
+            return
           }
         },
         {
           enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 1000
+          timeout: 20_000,
+          maximumAge: 0
         }
       )
 
@@ -336,33 +358,11 @@ export function RecordScreen() {
   }
 
   const stopGpsTracking = () => {
-    if (watchIdRef.current) {
+    // Explicit null check (watchId can be `0`, so truthy checks break cleanup).
+    if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current)
       watchIdRef.current = null
     }
-  }
-
-	  const calculateTotalDistance = (path: GPSCoordinate[]): number => {
-	    if (path.length < 2) return 0
-	    
-	    return path.reduce((total, point, index) => {
-	      if (index === 0) return total
-	      const previousPoint = path.at(index - 1)
-	      if (!previousPoint) return total
-	      return total + calculateDistanceBetweenPoints(previousPoint, point)
-	    }, 0)
-	  }
-
-  const calculateDistanceBetweenPoints = (point1: GPSCoordinate, point2: GPSCoordinate): number => {
-    const R = 6371 // Earth's radius in km
-    const dLat = (point2.latitude - point1.latitude) * Math.PI / 180
-    const dLon = (point2.longitude - point1.longitude) * Math.PI / 180
-    const a = 
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(point1.latitude * Math.PI / 180) * Math.cos(point2.latitude * Math.PI / 180) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2)
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    return R * c
   }
 
 	  const estimateCalories = (_durationSeconds: number, distanceKm: number): number => {
@@ -376,7 +376,14 @@ export function RecordScreen() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
-	  const startRun = async () => {
+  const formatPace = (secondsPerKm: number) => {
+    if (!Number.isFinite(secondsPerKm) || secondsPerKm <= 0) return '--:--'
+    const mins = Math.floor(secondsPerKm / 60)
+    const secs = Math.round(secondsPerKm % 60)
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
+ 	  const startRun = async () => {
     const user = await resolveCurrentUser()
     if (!user?.id) {
       toast({
@@ -388,35 +395,25 @@ export function RecordScreen() {
       return
     }
 
-    const gpsGranted = await requestGpsPermission()
-    if (!gpsGranted) {
-      toast({
-        title: "GPS Required",
-        description: "Please enable location access to track your run.",
-        variant: "destructive"
-      })
-      return
-    }
-
     startTimeRef.current = Date.now()
     elapsedRunMsRef.current = 0
-    gpsPathRef.current = []
-    setGpsPath([])
-    setMetrics({
-      distance: 0,
-      duration: 0,
-      pace: 0,
-      calories: 0
-    })
+    resetRunTrackingState()
 
     setIsRunning(true)
     setIsPaused(false)
     isRunningRef.current = true
     isPausedRef.current = false
-    const trackingStarted = await startGpsTracking()
+    setIsInitializingGps(true)
+    let trackingStarted = false
+    try {
+      trackingStarted = await startGpsTracking()
+    } finally {
+      setIsInitializingGps(false)
+    }
     if (!trackingStarted) {
       setIsRunning(false)
       isRunningRef.current = false
+      startTimeRef.current = 0
       toast({
         title: "GPS Error",
         description: "Unable to start GPS tracking. Please try again.",
@@ -440,11 +437,16 @@ export function RecordScreen() {
         ...previousMetrics,
         duration,
         pace: previousMetrics.distance > 0 ? duration / previousMetrics.distance : 0,
+        currentPace: 0,
+        currentSpeed: 0,
         calories: estimateCalories(duration, previousMetrics.distance),
       }))
     }
 
     stopGpsTracking()
+    setIsInitializingGps(false)
+    // Break distance accumulation between paused segments (avoid counting movement while paused).
+    lastRecordedPointRef.current = null
     setIsPaused(true)
     isPausedRef.current = true
     toast({
@@ -457,8 +459,18 @@ export function RecordScreen() {
     setIsPaused(false)
     isPausedRef.current = false
     startTimeRef.current = Date.now()
-    const trackingStarted = await startGpsTracking()
+    lastRecordedPointRef.current = null
+    setIsInitializingGps(true)
+    let trackingStarted = false
+    try {
+      trackingStarted = await startGpsTracking()
+    } finally {
+      setIsInitializingGps(false)
+    }
     if (!trackingStarted) {
+      setIsPaused(true)
+      isPausedRef.current = true
+      startTimeRef.current = 0
       toast({
         title: "GPS Error",
         description: "Unable to resume GPS tracking.",
@@ -475,18 +487,19 @@ export function RecordScreen() {
 
   const stopRun = async () => {
     stopGpsTracking()
+    setIsInitializingGps(false)
     setIsRunning(false)
     setIsPaused(false)
     isRunningRef.current = false
     isPausedRef.current = false
+    lastRecordedPointRef.current = null
 
     if (startTimeRef.current) {
       elapsedRunMsRef.current += Date.now() - startTimeRef.current
       startTimeRef.current = 0
     }
 
-    const finalGpsPath = gpsPathRef.current
-    const totalDistance = calculateTotalDistance(finalGpsPath)
+    const totalDistance = totalDistanceKmRef.current
     const finalDuration = Math.floor(elapsedRunMsRef.current / 1000)
 
     if (totalDistance > 0 && finalDuration > 0) {
@@ -563,7 +576,10 @@ export function RecordScreen() {
 
   const getGpsStatusColor = () => {
     switch (gpsPermission) {
-      case 'granted': return gpsAccuracy < 10 ? 'text-green-500' : 'text-yellow-500'
+      case 'granted': {
+        if (gpsAccuracy <= 0) return 'text-gray-400'
+        return gpsAccuracy < 10 ? 'text-green-500' : 'text-yellow-500'
+      }
       case 'denied': return 'text-red-500'
       case 'unsupported': return 'text-gray-500'
       default: return 'text-gray-400'
@@ -571,7 +587,7 @@ export function RecordScreen() {
   }
 
   const getGpsStatusText = () => {
-    if (gpsPermission === 'granted') return 'GPS Active'
+    if (gpsPermission === 'granted') return watchIdRef.current !== null ? 'GPS Tracking' : 'GPS Ready'
     if (gpsPermission === 'denied') return 'GPS Denied - Allow in browser settings'
     if (gpsPermission === 'unsupported') {
       const isSecure = typeof window !== 'undefined' && 
@@ -581,7 +597,7 @@ export function RecordScreen() {
       }
       return 'GPS Unsupported'
     }
-    return 'GPS Pending - Tap to enable'
+    return 'GPS Pending - Starts when you start a run'
   }
 
   const handleRouteSelected = (route: Route) => {
@@ -655,40 +671,19 @@ export function RecordScreen() {
                     ? 'Please allow location access when prompted'
                     : gpsAccuracy > 0 
                       ? `Accuracy: ${gpsAccuracy.toFixed(1)}m` 
-                      : 'Accuracy: Waiting for signal'
+                      : watchIdRef.current !== null
+                        ? 'Accuracy: Waiting for signal'
+                        : 'Accuracy: Start a run to begin tracking'
                   }
                 </p>
               </div>
             </div>
-            <div className="flex gap-2">
-              {/* Enable GPS button for prompt state */}
-              {gpsPermission === 'prompt' && !isInitializingGps && (
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={initializeGps}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  Enable GPS
-                </Button>
-              )}
-              {/* Retry button for denied state */}
-              {gpsPermission === 'denied' && !isInitializingGps && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={initializeGps}
-                  className="border-red-300 text-red-700 hover:bg-red-100"
-                >
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  Retry
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowGPSDetails(!showGPSDetails)}
-              >
+             <div className="flex gap-2">
+               <Button
+                 variant="outline"
+                 size="sm"
+                 onClick={() => setShowGPSDetails(!showGPSDetails)}
+               >
                 {showGPSDetails ? 'Hide' : 'Details'}
               </Button>
             </div>
@@ -704,15 +699,15 @@ export function RecordScreen() {
                   <p className="text-sm text-red-700 mt-1">
                     To record your run with GPS tracking, please:
                   </p>
-                  <ol className="text-sm text-red-700 mt-2 list-decimal list-inside space-y-1">
-                    <li>Open your browser settings</li>
-                    <li>Find location/privacy settings</li>
-                    <li>Allow location access for this site</li>
-                    <li>Tap &quot;Retry&quot; above</li>
-                  </ol>
+                    <ol className="text-sm text-red-700 mt-2 list-decimal list-inside space-y-1">
+                      <li>Open your browser settings</li>
+                      <li>Find location/privacy settings</li>
+                      <li>Allow location access for this site</li>
+                      <li>Return here and tap &quot;Start Run&quot; again</li>
+                    </ol>
+                  </div>
                 </div>
               </div>
-            </div>
           )}
 
           {/* GPS Unsupported Warning */}
@@ -736,10 +731,6 @@ export function RecordScreen() {
               {currentGPSAccuracy ? (
                 <GPSAccuracyIndicator 
                   accuracy={currentGPSAccuracy}
-                  onAccuracyChange={(data: GPSAccuracyData) => {
-                    setCurrentGPSAccuracy(data)
-                    setGpsAccuracyHistory(prev => [...prev.slice(-10), data])
-                  }}
                   showTroubleshooting={true}
                 />
               ) : (
@@ -770,6 +761,18 @@ export function RecordScreen() {
                   {formatTime(metrics.duration)}
                 </p>
                 <p className="text-sm text-gray-600">Duration</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-purple-600">
+                  {formatPace(metrics.pace)}
+                </p>
+                <p className="text-sm text-gray-600">Pace (min/km)</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-orange-600">
+                  {Number.isFinite(metrics.currentSpeed) ? (metrics.currentSpeed * 3.6).toFixed(1) : '0.0'}
+                </p>
+                <p className="text-sm text-gray-600">Speed (km/h)</p>
               </div>
             </div>
 
@@ -848,25 +851,32 @@ export function RecordScreen() {
       </Card>
 
       {/* Live Map */}
-      {(isRunning || gpsPath.length > 0) && (
-        <Card>
-          <CardContent className="p-4">
-            <h3 className="font-medium mb-3">Map</h3>
-            <div className="h-64 rounded-lg overflow-hidden">
-              <RunMap
-                height="100%"
-                userLocation={
-                  currentPosition
-                    ? { lat: currentPosition.latitude, lng: currentPosition.longitude }
-                    : null
-                }
-                path={gpsPath.map((p) => ({ lat: p.latitude, lng: p.longitude }))}
-                followUser={isRunning && !isPaused}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardContent className="p-4">
+          <h3 className="font-medium mb-3">Map</h3>
+          <div className="relative h-64 rounded-lg overflow-hidden">
+            <RunMap
+              height="100%"
+              userLocation={
+                isRunning && currentPosition
+                  ? { lat: currentPosition.latitude, lng: currentPosition.longitude }
+                  : null
+              }
+              path={gpsPath.map((p) => ({ lat: p.latitude, lng: p.longitude }))}
+              followUser={isRunning && !isPaused}
+            />
+            {!isRunning && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/10 backdrop-blur-[1px]">
+                <div className="bg-white/90 dark:bg-slate-800/90 rounded-lg px-3 py-2 shadow">
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                    Start a run to enable live GPS tracking
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Running Tips */}
       {isRunning && (

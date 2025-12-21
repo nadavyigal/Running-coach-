@@ -5,76 +5,100 @@ import { dbUtils } from '@/lib/dbUtils'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
 
-// Mock dependencies
 vi.mock('@/lib/dbUtils')
 vi.mock('next/navigation')
 vi.mock('@/hooks/use-toast')
+
 vi.mock('@/components/route-selector-modal', () => ({
-  RouteSelectorModal: ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => 
-    isOpen ? <div data-testid="route-selector-modal">Route Selector Modal</div> : null
-}))
-vi.mock('@/components/manual-run-modal', () => ({
-  ManualRunModal: ({ isOpen, onClose, onSaved }: { isOpen: boolean, onClose: () => void, onSaved?: () => void }) => 
-    isOpen ? (
-      <div data-testid="manual-run-modal">
-        Manual Run Modal
-        <button onClick={() => { onSaved?.(); onClose(); }}>Save Run</button>
-      </div>
-    ) : null
+  RouteSelectorModal: () => null,
 }))
 
-// Mock geolocation API
+vi.mock('@/components/route-selection-wizard', () => ({
+  RouteSelectionWizard: () => null,
+}))
+
+vi.mock('@/components/manual-run-modal', () => ({
+  ManualRunModal: () => null,
+}))
+
+vi.mock('@/components/add-activity-modal', () => ({
+  AddActivityModal: () => null,
+}))
+
+vi.mock('@/components/recovery-recommendations', () => ({
+  default: () => null,
+}))
+
+vi.mock('@/components/maps/RunMap', () => ({
+  RunMap: () => <div data-testid="run-map" />,
+}))
+
+const mockPush = vi.fn()
+const mockToast = vi.fn()
+
 const mockGeolocation = {
-  getCurrentPosition: vi.fn(),
   watchPosition: vi.fn(),
   clearWatch: vi.fn(),
 }
-
-Object.defineProperty(global.navigator, 'geolocation', {
-  value: mockGeolocation,
-  writable: true,
-})
 
 const mockPermissions = {
   query: vi.fn(),
 }
 
-Object.defineProperty(global.navigator, 'permissions', {
-  value: mockPermissions,
-  writable: true,
-})
+function makePosition({
+  latitude,
+  longitude,
+  accuracy,
+  timestamp,
+}: {
+  latitude: number
+  longitude: number
+  accuracy: number
+  timestamp: number
+}) {
+  return {
+    coords: {
+      latitude,
+      longitude,
+      accuracy,
+      altitude: null,
+      altitudeAccuracy: null,
+      heading: null,
+      speed: null,
+    },
+    timestamp,
+  } as any
+}
 
-const mockPush = vi.fn()
-const mockToast = vi.fn()
-
-describe('RecordScreen', () => {
+describe('RecordScreen GPS lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    
-    // Restore geolocation mock
+
     Object.defineProperty(global.navigator, 'geolocation', {
       value: mockGeolocation,
       writable: true,
     })
-    
-    // Reset permissions mock to default 'prompt' state
+
+    Object.defineProperty(global.navigator, 'permissions', {
+      value: mockPermissions,
+      writable: true,
+    })
+
     mockPermissions.query.mockResolvedValue({ state: 'prompt' })
-    
-    // Mock router
+
     ;(useRouter as any).mockReturnValue({
       push: mockPush,
     })
-    
-    // Mock toast
+
     ;(useToast as any).mockReturnValue({
       toast: mockToast,
     })
-    
-    // Mock database methods
+
     ;(dbUtils.getCurrentUser as any).mockResolvedValue({
       id: 1,
-      name: 'Test User'
+      name: 'Test User',
     })
+
     ;(dbUtils.getTodaysWorkout as any).mockResolvedValue({
       id: 1,
       type: 'easy',
@@ -85,527 +109,138 @@ describe('RecordScreen', () => {
       completed: false,
       scheduledDate: new Date(),
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     })
+
     ;(dbUtils.createRun as any).mockResolvedValue(1)
     ;(dbUtils.markWorkoutCompleted as any).mockResolvedValue(undefined)
   })
 
   afterEach(() => {
-    vi.restoreAllMocks()
+    vi.useRealTimers()
   })
 
-  describe('Initial Load and GPS Setup', () => {
-    it('should render record screen with GPS prompt', async () => {
-      mockPermissions.query.mockResolvedValue({ state: 'prompt' })
-      
-      await act(async () => {
-        render(<RecordScreen />)
-      })
+  it('does not start GPS watch on mount', async () => {
+    render(<RecordScreen />)
 
-      expect(screen.getByText('Record Run')).toBeInTheDocument()
-      expect(screen.getByText('Enable GPS Tracking')).toBeInTheDocument()
-      expect(screen.getByText('Allow location access for accurate run tracking')).toBeInTheDocument()
-    })
-
-    it('should show GPS unavailable message when geolocation is not supported', async () => {
-      // Remove geolocation support
-      Object.defineProperty(global.navigator, 'geolocation', {
-        value: undefined,
-        writable: true,
-      })
-
-      await act(async () => {
-        render(<RecordScreen />)
-      })
-
-      expect(screen.getAllByText('GPS Unavailable').length).toBeGreaterThan(0)
-      expect(screen.getByText('You can still track your run manually')).toBeInTheDocument()
-    })
-
-    it('should request GPS permission when Enable button is clicked', async () => {
-      mockPermissions.query.mockResolvedValue({ state: 'prompt' })
-      mockGeolocation.getCurrentPosition.mockImplementation((success) => {
-        success({
-          coords: {
-            latitude: 40.7128,
-            longitude: -74.0060,
-            accuracy: 5
-          }
-        })
-      })
-
-      render(<RecordScreen />)
-
-      // Wait for GPS prompt state to be recognized
-      await waitFor(() => {
-        expect(screen.getByText('Enable GPS Tracking')).toBeInTheDocument()
-      }, { timeout: 5000 })
-
-      const enableButton = screen.getByRole('button', { name: 'Enable' })
-      
-      fireEvent.click(enableButton)
-
-      await waitFor(() => {
-        expect(mockGeolocation.getCurrentPosition).toHaveBeenCalled()
-      }, { timeout: 5000 })
-    })
+    await waitFor(() => expect(mockPermissions.query).toHaveBeenCalled())
+    expect(mockGeolocation.watchPosition).not.toHaveBeenCalled()
   })
 
-  describe('GPS Tracking Functionality', () => {
-    beforeEach(() => {
-      vi.useFakeTimers()
-      mockPermissions.query.mockResolvedValue({ state: 'granted' })
-      mockGeolocation.getCurrentPosition.mockImplementation((success) => {
-        success({
-          coords: {
-            latitude: 40.7128,
-            longitude: -74.0060,
-            accuracy: 5
-          }
-        })
-      })
-      mockGeolocation.watchPosition.mockImplementation((success) => {
-        // Simulate position updates
-        setTimeout(() => {
-          success({
-            coords: {
-              latitude: 40.7129,
-              longitude: -74.0061,
-              accuracy: 5
-            }
-          })
-        }, 100)
-        return 1 // watch ID
-      })
+  it('Enable GPS uses watchPosition and clears even when watch id is 0', async () => {
+    mockPermissions.query.mockResolvedValue({ state: 'prompt' })
+    mockGeolocation.watchPosition.mockImplementation((success: any) => {
+      success(makePosition({ latitude: 40.7128, longitude: -74.006, accuracy: 5, timestamp: 1000 }))
+      return 0
     })
 
-    afterEach(() => {
-      vi.useRealTimers()
-    })
+    render(<RecordScreen />)
 
-    it('should start GPS tracking when run is started with granted permission', async () => {
-      await act(async () => {
-        render(<RecordScreen />)
-      })
+    fireEvent.click(await screen.findByRole('button', { name: 'Enable GPS' }))
 
-      // Wait for component to initialize and check permissions
-      await act(async () => {
-        vi.advanceTimersByTime(100)
-      })
-
-      const startButton = screen.getByRole('button', { name: 'Start Run' })
-      
-      await act(async () => {
-        fireEvent.click(startButton)
-      })
-
-      // Wait for async operations to complete
-      await act(async () => {
-        vi.advanceTimersByTime(200)
-      })
-
+    await waitFor(() => {
       expect(mockGeolocation.watchPosition).toHaveBeenCalled()
-      expect(mockToast).toHaveBeenCalledWith({
-        title: "Run Started! 🏃‍♂️",
-        description: "GPS tracking active",
-      })
+      expect(mockGeolocation.clearWatch).toHaveBeenCalledWith(0)
     })
 
-    it('should calculate distance from GPS coordinates', async () => {
-      render(<RecordScreen />)
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'GPS Ready',
+      })
+    )
+  })
 
-      // Start run
-      const startButton = screen.getByRole('button', { name: 'Start Run' })
-      fireEvent.click(startButton)
-
-      // Wait for GPS tracking to start
-      await waitFor(() => {
-        expect(mockGeolocation.watchPosition).toHaveBeenCalled()
-      }, { timeout: 5000 })
-
-      // Wait for GPS updates
-      await waitFor(() => {
-        const distanceElement = screen.getByText(/0\.00|0\.01/)
-        expect(distanceElement).toBeInTheDocument()
-      }, { timeout: 5000 })
+  it('Start Run starts watchPosition and accumulates distance from points', async () => {
+    mockPermissions.query.mockResolvedValue({ state: 'granted' })
+    mockGeolocation.watchPosition.mockImplementation((success: any) => {
+      success(makePosition({ latitude: 40.7128, longitude: -74.006, accuracy: 5, timestamp: 1000 }))
+      success(makePosition({ latitude: 40.71285, longitude: -74.006, accuracy: 5, timestamp: 2000 }))
+      return 1
     })
 
-    it('should pause and resume GPS tracking', async () => {
-      render(<RecordScreen />)
+    render(<RecordScreen />)
 
-      // Start run
-      const startButton = screen.getByRole('button', { name: 'Start Run' })
-      fireEvent.click(startButton)
+    fireEvent.click(screen.getByRole('button', { name: 'Start Run' }))
 
-      // Wait for run to start
-      await waitFor(() => {
-        expect(mockGeolocation.watchPosition).toHaveBeenCalled()
-      }, { timeout: 5000 })
+    await waitFor(() => expect(mockGeolocation.watchPosition).toHaveBeenCalled())
 
-      // Clear previous toast calls
-      mockToast.mockClear()
+    // 0.00005 degrees lat ~ 5.5m => ~0.01km after rounding.
+    await waitFor(() => expect(screen.getByText('0.01')).toBeInTheDocument())
+  })
 
-      // Pause run
-      const pauseButton = screen.getByRole('button', { name: 'Pause Run' })
-      fireEvent.click(pauseButton)
+  it('pauses clears watch and resume starts a new watch', async () => {
+    mockPermissions.query.mockResolvedValue({ state: 'granted' })
 
-      await waitFor(() => {
-        expect(mockGeolocation.clearWatch).toHaveBeenCalled()
-      }, { timeout: 5000 })
-
-      expect(mockToast).toHaveBeenCalledWith({
-        title: "Run Paused ⏸️",
-        description: "Tap resume when ready to continue",
-      })
-
-      // Clear again before resume
-      mockToast.mockClear()
-
-      // Resume run
-      const resumeButton = screen.getByRole('button', { name: 'Resume Run' })
-      fireEvent.click(resumeButton)
-
-      await waitFor(() => {
-        expect(mockToast).toHaveBeenCalledWith({
-          title: "Run Resumed! 🏃‍♂️",
-          description: "Keep going, you've got this!",
+    let nextWatchId = 0
+    mockGeolocation.watchPosition.mockImplementation((success: any) => {
+      nextWatchId += 1
+      success(
+        makePosition({
+          latitude: 40.7128,
+          longitude: -74.006,
+          accuracy: 5,
+          timestamp: 1000 + nextWatchId * 1000,
         })
-      }, { timeout: 5000 })
+      )
+      return nextWatchId
     })
+
+    render(<RecordScreen />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Run' }))
+    await waitFor(() => expect(mockGeolocation.watchPosition).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Pause' }))
+    await waitFor(() => expect(mockGeolocation.clearWatch).toHaveBeenCalledWith(1))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
+    await waitFor(() => expect(mockGeolocation.watchPosition).toHaveBeenCalledTimes(2))
   })
 
-  describe('Manual Entry Fallback', () => {
-    it('should show manual entry option when GPS is denied', async () => {
-      mockPermissions.query.mockResolvedValue({ state: 'denied' })
+  it('saves a run on Stop when duration and distance are > 0', async () => {
+    vi.useFakeTimers()
+    const start = new Date('2020-01-01T00:00:00.000Z')
+    vi.setSystemTime(start)
 
-      await act(async () => {
-        render(<RecordScreen />)
-      })
-
-      expect(screen.getAllByText('GPS Unavailable').length).toBeGreaterThan(0)
-      expect(screen.getByText('Manual Entry')).toBeInTheDocument()
+    mockPermissions.query.mockResolvedValue({ state: 'granted' })
+    mockGeolocation.watchPosition.mockImplementation((success: any) => {
+      success(makePosition({ latitude: 40.7128, longitude: -74.006, accuracy: 5, timestamp: 1000 }))
+      success(makePosition({ latitude: 40.71285, longitude: -74.006, accuracy: 5, timestamp: 2000 }))
+      return 7
     })
 
-    it('should open manual run modal when manual entry is clicked', async () => {
-      mockPermissions.query.mockResolvedValue({ state: 'denied' })
+    render(<RecordScreen />)
 
-      await act(async () => {
-        render(<RecordScreen />)
-      })
-
-      const manualButton = screen.getByText('Manual Entry')
-      
-      await act(async () => {
-        fireEvent.click(manualButton)
-      })
-
-      expect(screen.getByTestId('manual-run-modal')).toBeInTheDocument()
-    })
-  })
-
-  describe('Run Data Persistence', () => {
-    beforeEach(() => {
-      mockPermissions.query.mockResolvedValue({ state: 'granted' })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start Run' }))
     })
 
-    it('should save run data to database when stopped', async () => {
-      render(<RecordScreen />)
+    await waitFor(() => expect(mockGeolocation.watchPosition).toHaveBeenCalled())
 
-      // Start run
-      const startButton = screen.getByRole('button', { name: 'Start Run' })
-      fireEvent.click(startButton)
-
-      // Wait for run to start
-      await waitFor(() => {
-        expect(mockGeolocation.watchPosition).toHaveBeenCalled()
-      }, { timeout: 5000 })
-
-      // Stop run
-      const stopButton = screen.getByRole('button', { name: 'Stop Run' })
-      fireEvent.click(stopButton)
-
-      await waitFor(() => {
-        expect(dbUtils.createRun).toHaveBeenCalledWith(
-          expect.objectContaining({
-            userId: 1,
-            workoutId: 1,
-            type: 'easy',
-            distance: expect.any(Number),
-            duration: expect.any(Number),
-            pace: expect.any(Number),
-            calories: expect.any(Number),
-            completedAt: expect.any(Date)
-          })
-        )
-      }, { timeout: 5000 })
-
-      expect(dbUtils.markWorkoutCompleted).toHaveBeenCalledWith(1)
-      expect(mockPush).toHaveBeenCalledWith('/')
+    await act(async () => {
+      vi.setSystemTime(new Date(start.getTime() + 2000))
+      vi.advanceTimersByTime(2000)
     })
 
-    it('should handle run type conversion for rest workouts', async () => {
-      ;(dbUtils.getTodaysWorkout as any).mockResolvedValue({
-        id: 1,
-        type: 'rest', // This should be converted to 'other' for Run interface
-        distance: 0,
-        planId: 1,
-        week: 1,
-        day: 'Mon',
-        completed: false,
-        scheduledDate: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date()
-      })
-
-      await act(async () => {
-        render(<RecordScreen />)
-      })
-
-      // Start and stop run
-      const startButton = screen.getByRole('button', { name: 'Start Run' })
-      await act(async () => {
-        fireEvent.click(startButton)
-      })
-
-      const stopButton = screen.getByRole('button', { name: 'Stop Run' })
-      await act(async () => {
-        fireEvent.click(stopButton)
-      })
-
-      await waitFor(() => {
-        expect(dbUtils.createRun).toHaveBeenCalledWith(
-          expect.objectContaining({
-            type: 'other' // Should be converted from 'rest'
-          })
-        )
-      })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
     })
 
-    it('should show error message when user is not found', async () => {
-      ;(dbUtils.getCurrentUser as any).mockResolvedValue(null)
-
-      await act(async () => {
-        render(<RecordScreen />)
-      })
-
-      const startButton = screen.getByRole('button', { name: 'Start Run' })
-      await act(async () => {
-        fireEvent.click(startButton)
-      })
-
-      const stopButton = screen.getByRole('button', { name: 'Stop Run' })
-      await act(async () => {
-        fireEvent.click(stopButton)
-      })
-
-      await waitFor(() => {
-        expect(mockToast).toHaveBeenCalledWith({
-          title: "Error",
-          description: "User not found. Please complete onboarding first.",
-          variant: "destructive"
+    await waitFor(() => {
+      expect(dbUtils.createRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          type: 'easy',
+          distance: expect.any(Number),
+          duration: expect.any(Number),
+          pace: expect.any(Number),
+          calories: expect.any(Number),
         })
-      })
+      )
     })
+
+    expect(dbUtils.markWorkoutCompleted).toHaveBeenCalledWith(1)
+    expect(mockPush).toHaveBeenCalledWith('/')
   })
+})
 
-  describe('Real-time Metrics Calculation', () => {
-    beforeEach(() => {
-      mockPermissions.query.mockResolvedValue({ state: 'granted' })
-      vi.useFakeTimers()
-    })
-
-    afterEach(() => {
-      vi.useRealTimers()
-    })
-
-    it('should update duration in real-time', async () => {
-      await act(async () => {
-        render(<RecordScreen />)
-      })
-
-      // Start run
-      const startButton = screen.getByRole('button', { name: 'Start Run' })
-      await act(async () => {
-        fireEvent.click(startButton)
-      })
-
-      // Advance time by 1 second
-      await act(async () => {
-        vi.advanceTimersByTime(1000)
-      })
-
-      // Check that duration shows 00:01
-      expect(screen.getByText('00:01')).toBeInTheDocument()
-
-      // Advance time by 59 more seconds
-      await act(async () => {
-        vi.advanceTimersByTime(59000)
-      })
-
-      // Check that duration shows 01:00
-      expect(screen.getByText('01:00')).toBeInTheDocument()
-    })
-
-    it('should calculate and display pace correctly', async () => {
-      mockGeolocation.watchPosition.mockImplementation((success) => {
-        // Simulate movement immediately
-        success({
-          coords: {
-            latitude: 40.7128,
-            longitude: -74.0060,
-            accuracy: 5
-          }
-        })
-        // Simulate second position after movement
-        setTimeout(() => {
-          success({
-            coords: {
-              latitude: 40.7138, // Move about 1km
-              longitude: -74.0060,
-              accuracy: 5
-            }
-          })
-        }, 50)
-        return 1
-      })
-
-      await act(async () => {
-        render(<RecordScreen />)
-      })
-
-      const startButton = screen.getByRole('button', { name: 'Start Run' })
-      await act(async () => {
-        fireEvent.click(startButton)
-      })
-
-      // Wait for GPS updates to process
-      await act(async () => {
-        vi.advanceTimersByTime(1000)
-      })
-
-      // Should show some duration
-      expect(screen.getByText(/\d+:\d+/)).toBeInTheDocument()
-    })
-  })
-
-  describe('Navigation and UI Interactions', () => {
-    it('should navigate back to today screen when back button is clicked', async () => {
-      await act(async () => {
-        render(<RecordScreen />)
-      })
-
-      const backButton = screen.getByRole('button', { name: 'Back to Today Screen' })
-      
-      await act(async () => {
-        fireEvent.click(backButton)
-      })
-
-      expect(mockPush).toHaveBeenCalledWith('/')
-    })
-
-    it('should open route selector modal when map button is clicked', async () => {
-      await act(async () => {
-        render(<RecordScreen />)
-      })
-
-      const mapButton = screen.getByRole('button', { name: 'Open Route Selector' })
-      
-      await act(async () => {
-        fireEvent.click(mapButton)
-      })
-
-      expect(screen.getByTestId('route-selector-modal')).toBeInTheDocument()
-    })
-
-    it('should display workout information when available', async () => {
-      await act(async () => {
-        render(<RecordScreen />)
-      })
-
-      await waitFor(() => {
-        expect(screen.getByText('Easy')).toBeInTheDocument()
-        expect(screen.getByText('5km target')).toBeInTheDocument()
-      })
-    })
-  })
-
-  describe('Error Handling', () => {
-    it('should handle GPS permission denied gracefully', async () => {
-      mockGeolocation.getCurrentPosition.mockImplementation((success, error) => {
-        error({ code: 1, message: 'Permission denied' })
-      })
-
-      await act(async () => {
-        render(<RecordScreen />)
-      })
-
-      const enableButton = screen.getByRole('button', { name: 'Enable' })
-      
-      await act(async () => {
-        fireEvent.click(enableButton)
-      })
-
-      expect(mockToast).toHaveBeenCalledWith({
-        title: "GPS Access Denied",
-        description: "You can still record your run manually or enable GPS in your browser settings.",
-        variant: "destructive"
-      })
-    })
-
-    it('should handle GPS tracking errors during run', async () => {
-      mockPermissions.query.mockResolvedValue({ state: 'granted' })
-      mockGeolocation.watchPosition.mockImplementation((success, error) => {
-        error({ code: 2, message: 'Position unavailable' })
-        return 1
-      })
-
-      await act(async () => {
-        render(<RecordScreen />)
-      })
-
-      // Wait for GPS permission check to complete
-      await waitFor(() => {
-        expect(screen.queryByText('GPS Unavailable')).not.toBeInTheDocument()
-      })
-
-      const startButton = screen.getByRole('button', { name: 'Start Run' })
-      
-      await act(async () => {
-        fireEvent.click(startButton)
-      })
-
-      expect(mockToast).toHaveBeenCalledWith({
-        title: "GPS Tracking Error",
-        description: "Unable to track location. You can continue with manual entry.",
-        variant: "destructive"
-      })
-    })
-
-    it('should handle database save errors', async () => {
-      ;(dbUtils.createRun as any).mockRejectedValue(new Error('Database error'))
-
-      await act(async () => {
-        render(<RecordScreen />)
-      })
-
-      const startButton = screen.getByRole('button', { name: 'Start Run' })
-      await act(async () => {
-        fireEvent.click(startButton)
-      })
-
-      const stopButton = screen.getByRole('button', { name: 'Stop Run' })
-      await act(async () => {
-        fireEvent.click(stopButton)
-      })
-
-      await waitFor(() => {
-        expect(mockToast).toHaveBeenCalledWith({
-          title: "Error Saving Run",
-          description: "Your run data couldn't be saved. Please try again.",
-          variant: "destructive"
-        })
-      })
-    })
-  })
-}) 

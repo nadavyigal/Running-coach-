@@ -337,7 +337,7 @@ export function RunMap({
         </div>
       )}
 
-      {mapReady && !userLocation && (
+      {mapReady && !userLocation && followUser && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/10 backdrop-blur-sm rounded-lg">
           <div className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-lg">
             <div className="flex items-center gap-3">
