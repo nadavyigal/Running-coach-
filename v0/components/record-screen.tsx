@@ -4,17 +4,18 @@ import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertTriangle, Info, Loader2, RefreshCw, Sparkles } from "lucide-react"
-	import { RouteSelectorModal } from "@/components/route-selector-modal"
-	import { RouteSelectionWizard } from "@/components/route-selection-wizard"
-	import { ManualRunModal } from "@/components/manual-run-modal"
-	import { AddActivityModal } from "@/components/add-activity-modal"
-	import { type Route, type Run, type Workout, type User } from "@/lib/db"
-	import { dbUtils } from "@/lib/dbUtils"
-	import { useToast } from "@/hooks/use-toast"
-	import { useRouter } from "next/navigation"
-	import RecoveryRecommendations from "@/components/recovery-recommendations"
-	import { GPSAccuracyIndicator } from "@/components/gps-accuracy-indicator"
-	import type { GPSAccuracyData } from "@/lib/gps-monitoring"
+import { RouteSelectorModal } from "@/components/route-selector-modal"
+import { RouteSelectionWizard } from "@/components/route-selection-wizard"
+import { ManualRunModal } from "@/components/manual-run-modal"
+import { RunMap } from "@/components/maps/RunMap"
+import { AddActivityModal } from "@/components/add-activity-modal"
+import { type Route, type Run, type Workout, type User } from "@/lib/db"
+import { dbUtils } from "@/lib/dbUtils"
+import { useToast } from "@/hooks/use-toast"
+import { useRouter } from "next/navigation"
+import RecoveryRecommendations from "@/components/recovery-recommendations"
+import { GPSAccuracyIndicator } from "@/components/gps-accuracy-indicator"
+import type { GPSAccuracyData } from "@/lib/gps-monitoring"
 
 interface GPSCoordinate {
   latitude: number
@@ -847,13 +848,22 @@ export function RecordScreen() {
         </CardContent>
       </Card>
 
-      {/* Route Visualization */}
-      {(gpsPath.length > 0 || currentPosition) && (
+      {/* Live Map */}
+      {(isRunning || gpsPath.length > 0 || currentPosition) && (
         <Card>
           <CardContent className="p-4">
-            <h3 className="font-medium mb-3">Route</h3>
-            <div className="h-64 bg-gray-100 rounded-lg overflow-hidden">
-              <RouteVisualization gpsPath={gpsPath} currentPosition={currentPosition} />
+            <h3 className="font-medium mb-3">Map</h3>
+            <div className="h-64 rounded-lg overflow-hidden">
+              <RunMap
+                height="100%"
+                userLocation={
+                  currentPosition
+                    ? { lat: currentPosition.latitude, lng: currentPosition.longitude }
+                    : null
+                }
+                path={gpsPath.map((p) => ({ lat: p.latitude, lng: p.longitude }))}
+                followUser={isRunning && !isPaused}
+              />
             </div>
           </CardContent>
         </Card>
@@ -918,80 +928,5 @@ export function RecordScreen() {
         onActivityAdded={() => router.push("/")}
       />
     </div>
-  )
-}
-
-// Simple route visualization component
-function RouteVisualization({ gpsPath, currentPosition }: { 
-  gpsPath: GPSCoordinate[]
-  currentPosition: GPSCoordinate | null 
-}) {
-  if (gpsPath.length === 0 && !currentPosition) return null
-
-  // Calculate bounds for the route
-  const boundsPoints = currentPosition ? [...gpsPath, currentPosition] : gpsPath
-  const latitudes = boundsPoints.map(p => p.latitude)
-  const longitudes = boundsPoints.map(p => p.longitude)
-  const rawMinLat = Math.min(...latitudes)
-  const rawMaxLat = Math.max(...latitudes)
-  const rawMinLng = Math.min(...longitudes)
-  const rawMaxLng = Math.max(...longitudes)
-
-  const latPadding = (rawMaxLat - rawMinLat) * 0.1 || 0.0001
-  const lngPadding = (rawMaxLng - rawMinLng) * 0.1 || 0.0001
-
-  const minLat = rawMinLat - latPadding
-  const maxLat = rawMaxLat + latPadding
-  const minLng = rawMinLng - lngPadding
-  const maxLng = rawMaxLng + lngPadding
-
-  const toX = (longitude: number) => ((longitude - minLng) / (maxLng - minLng || 1)) * 220 + 20
-  const toY = (latitude: number) => ((maxLat - latitude) / (maxLat - minLat || 1)) * 220 + 20
-
-	  // Create path string for SVG
-	  const pathString = gpsPath.map((point, index) => {
-	    const x = toX(point.longitude)
-	    const y = toY(point.latitude)
-	    return `${index === 0 ? 'M' : 'L'} ${x} ${y}`
-	  }).join(' ')
-
-	  const startPoint = gpsPath.at(0)
-
-	  return (
-	    <svg className="w-full h-full" viewBox="0 0 260 260">
-      {/* Route path */}
-      {gpsPath.length > 1 && (
-        <path
-          d={pathString}
-          stroke="rgb(34, 197, 94)"
-          strokeWidth="3"
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      )}
-       
-	      {/* Start point */}
-	      {startPoint && (
-	        <circle
-	          cx={toX(startPoint.longitude)}
-	          cy={toY(startPoint.latitude)}
-	          r="4"
-	          fill="rgb(34, 197, 94)"
-	        />
-	      )}
-       
-      {/* Current position */}
-      {currentPosition && (
-        <circle
-          cx={toX(currentPosition.longitude)}
-          cy={toY(currentPosition.latitude)}
-          r="6"
-          fill="rgb(59, 130, 246)"
-          stroke="white"
-          strokeWidth="2"
-        />
-      )}
-    </svg>
   )
 }
