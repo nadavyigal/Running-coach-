@@ -388,8 +388,8 @@ export function RouteMap({
         error={errorMessage}
         onRetry={handleRetry}
         routes={routes}
-        userLocation={userLocation}
-        onRouteClick={onRouteClick}
+        userLocation={userLocation ?? null}
+        {...(onRouteClick ? { onRouteClick } : {})}
       />
     );
   }

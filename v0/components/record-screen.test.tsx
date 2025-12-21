@@ -154,6 +154,7 @@ describe('RecordScreen', () => {
 
   describe('GPS Tracking Functionality', () => {
     beforeEach(() => {
+      vi.useFakeTimers()
       mockPermissions.query.mockResolvedValue({ state: 'granted' })
       mockGeolocation.getCurrentPosition.mockImplementation((success) => {
         success({
@@ -177,6 +178,10 @@ describe('RecordScreen', () => {
         }, 100)
         return 1 // watch ID
       })
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
     })
 
     it('should start GPS tracking when run is started with granted permission', async () => {

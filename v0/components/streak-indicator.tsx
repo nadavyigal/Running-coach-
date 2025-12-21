@@ -7,7 +7,6 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 import { Switch } from "@/components/ui/switch"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Flame } from "lucide-react"
-import { User } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 
 export interface StreakIndicatorProps {
@@ -17,7 +16,6 @@ export interface StreakIndicatorProps {
 }
 
 export function StreakIndicator({ userId, animationEnabled = true, onAnimationToggle }: StreakIndicatorProps) {
-  const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [streak, setStreak] = useState<number>(0)
@@ -35,7 +33,6 @@ export function StreakIndicator({ userId, animationEnabled = true, onAnimationTo
       try {
         const u = userId ? await dbUtils.getCurrentUser() : await dbUtils.getCurrentUser()
         if (!u) throw new Error("User not found")
-        setUser(u)
         setStreak(u.currentStreak || 0)
         setLongest(u.longestStreak || 0)
       } catch (e: any) {

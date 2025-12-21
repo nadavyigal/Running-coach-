@@ -1,25 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { isDatabaseAvailable, safeDbOperation, getDatabase } from '../db';
 import { initializeDatabase, getCurrentUser, upsertUser } from '@/lib/dbUtils';
-
-// Mock window for testing
-Object.defineProperty(globalThis, 'window', {
-  value: {
-    indexedDB: {
-      open: () => ({}),
-      deleteDatabase: () => ({})
-    },
-    navigator: {
-      platform: 'test'
-    }
-  },
-  writable: true
-});
 
 describe('Database Initialization', () => {
   beforeEach(() => {
     // Reset any cached database instances
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should initialize database successfully in browser environment', async () => {
@@ -76,12 +62,12 @@ describe('Server-side behavior', () => {
 
   beforeEach(() => {
     // Mock server environment (no window)
-    delete (globalThis as any).window;
+    (globalThis as any).window = undefined;
   });
 
   afterEach(() => {
     // Restore window
-    globalThis.window = originalWindow;
+    (globalThis as any).window = originalWindow;
   });
 
   it('should return false for isDatabaseAvailable on server', () => {

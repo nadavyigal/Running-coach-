@@ -46,7 +46,7 @@ export class MapErrorBoundary extends Component<Props, State> {
           fatal: false,
         });
       }
-    } catch (analyticsError) {
+    } catch {
       // Ignore analytics errors
     }
   }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -30,9 +30,7 @@ export function RealtimeHeartRateMonitor({
 }: RealtimeHeartRateMonitorProps) {
   const [heartRateHistory, setHeartRateHistory] = useState<number[]>([])
   const [currentZone, setCurrentZone] = useState<number>(1)
-  const [previousZone, setPreviousZone] = useState<number>(1)
   const [trend, setTrend] = useState<'up' | 'down' | 'stable'>('stable')
-  const intervalRef = useRef<NodeJS.Timeout>()
 
   useEffect(() => {
     // Update heart rate history
@@ -44,7 +42,6 @@ export function RealtimeHeartRateMonitor({
     // Calculate current zone
     const newZone = getHeartRateZone(currentHeartRate, zones)
     if (newZone !== currentZone) {
-      setPreviousZone(currentZone)
       setCurrentZone(newZone)
       onZoneChange?.(newZone, currentZone)
     }

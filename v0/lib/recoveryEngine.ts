@@ -1,4 +1,4 @@
-import { db, SleepData, HRVMeasurement, RecoveryScore, SubjectiveWellness, User } from './db';
+import { db, SleepData, HRVMeasurement, RecoveryScore, SubjectiveWellness } from './db';
 
 /**
  * Recovery score calculation algorithms and data structures.
@@ -192,8 +192,8 @@ export class RecoveryEngine {
     if (!sleepData) return 50; // Neutral score when no data available
     
     // Research-based optimal sleep targets
-    const targetDuration = 480; // 8 hours in minutes (Sleep Foundation recommendation)
-    const targetEfficiency = 85; // 85% efficiency (clinical sleep medicine standard)
+    const targetDuration = baseline.avgSleepDuration || 480; // Default to 8 hours when baseline unavailable
+    const targetEfficiency = baseline.avgSleepEfficiency || 85; // Default to 85% when baseline unavailable
     
     // Duration Score (0-40 points): Penalize deviations from 8-hour target
     // Every hour deviation reduces score by 5 points (60min / 12 = 5 points per hour)

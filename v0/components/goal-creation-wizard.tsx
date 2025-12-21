@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -647,9 +646,9 @@ export function GoalCreationWizard({ isOpen, onClose, userId, onGoalCreated }: G
           <div className="space-y-6">
             <div className="text-center">
               <TrendingUp className="h-12 w-12 text-orange-500 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Ensure it's Achievable</h3>
+              <h3 className="text-lg font-semibold mb-2">Ensure it&apos;s Achievable</h3>
               <p className="text-gray-600 text-sm">
-                Let's assess if this goal is realistic based on your current fitness level.
+                Let&apos;s assess if this goal is realistic based on your current fitness level.
               </p>
             </div>
 
@@ -834,7 +833,7 @@ export function GoalCreationWizard({ isOpen, onClose, userId, onGoalCreated }: G
               <div>
                 <Label>Milestone Schedule</Label>
                 <p className="text-sm text-gray-600 mb-2">
-                  Choose when you'd like to check your progress:
+                  Choose when you&apos;d like to check your progress:
                 </p>
                 <div className="space-y-2">
                   {[25, 50, 75].map((percentage) => (

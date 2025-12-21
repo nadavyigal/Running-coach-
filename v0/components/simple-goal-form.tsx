@@ -350,7 +350,7 @@ export function SimpleGoalForm({ isOpen, onClose, userId, onGoalCreated }: Simpl
                 Goal Details
               </CardTitle>
               <CardDescription>
-                Fill in the basics - we'll auto-generate the rest
+                Fill in the basics - we&apos;ll auto-generate the rest
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

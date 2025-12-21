@@ -7,7 +7,7 @@ import { vi } from 'vitest';
 
 export const createMapLibreMock = () => {
   const mockMap = {
-    on: vi.fn((event: string, callback: Function) => {
+    on: vi.fn((event: string, callback: () => void) => {
       // Auto-trigger 'load' event for tests
       if (event === 'load') {
         setTimeout(() => callback(), 0);

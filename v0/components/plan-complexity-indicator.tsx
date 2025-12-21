@@ -5,9 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Info, TrendingUp, TrendingDown, Target, CheckCircle, AlertCircle } from 'lucide-react';
-import { planComplexityEngine, type PlanComplexityEngine, type AdaptationFactor } from '@/lib/plan-complexity-engine';
-import { type Plan } from '@/lib/db';
+import { Info, TrendingUp, Target, CheckCircle, AlertCircle } from 'lucide-react';
+import { planComplexityEngine, type PlanComplexityEngine } from '@/lib/plan-complexity-engine';
+import { type AdaptationFactor, type Plan } from '@/lib/db';
 
 interface PlanComplexityIndicatorProps {
   plan: Plan;

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Users, TrendingUp, Activity, Trophy } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface CohortStats {
   totalMembers: number;
@@ -16,12 +17,14 @@ interface CohortStats {
 
 interface CommunityStatsWidgetProps {
   userId: number;
+  className?: string;
 }
 
-export const CommunityStatsWidget: React.FC<CommunityStatsWidgetProps> = ({ userId }) => {
+export const CommunityStatsWidget: React.FC<CommunityStatsWidgetProps> = ({ userId, className }) => {
   const [stats, setStats] = useState<CohortStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const cardClassName = cn('w-full', className);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -56,7 +59,7 @@ export const CommunityStatsWidget: React.FC<CommunityStatsWidgetProps> = ({ user
 
   if (loading) {
     return (
-      <Card className="w-full">
+      <Card className={cardClassName}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
@@ -74,7 +77,7 @@ export const CommunityStatsWidget: React.FC<CommunityStatsWidgetProps> = ({ user
 
   if (error) {
     return (
-      <Card className="w-full">
+      <Card className={cardClassName}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
@@ -92,7 +95,7 @@ export const CommunityStatsWidget: React.FC<CommunityStatsWidgetProps> = ({ user
 
   if (!stats) {
     return (
-      <Card className="w-full">
+      <Card className={cardClassName}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
@@ -109,7 +112,7 @@ export const CommunityStatsWidget: React.FC<CommunityStatsWidgetProps> = ({ user
   }
 
   return (
-    <Card className="w-full">
+    <Card className={cardClassName}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Users className="h-5 w-5" />

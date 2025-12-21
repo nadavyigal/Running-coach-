@@ -10,7 +10,6 @@ import { Slider } from "@/components/ui/slider"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
 import {
   Target,
   Clock,
@@ -28,7 +27,7 @@ import {
   ArrowRight
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { goalDiscoveryEngine, type UserProfile, type DiscoveredGoal, type GoalDiscoveryResult } from "@/lib/goalDiscoveryEngine"
+import { goalDiscoveryEngine, type UserProfile, type GoalDiscoveryResult } from "@/lib/goalDiscoveryEngine"
 
 interface GoalDiscoveryWizardProps {
   isOpen: boolean
@@ -193,11 +192,6 @@ export function GoalDiscoveryWizard({
     steps[currentStepIndex].isComplete = isComplete
   }
 
-  const canProceed = () => {
-    // Never hard-block progression; rely on validations later
-    return true
-  }
-
   const handleNext = async () => {
     if (currentStep.id === 'discovery') {
       await runGoalDiscovery()
@@ -256,7 +250,7 @@ export function GoalDiscoveryWizard({
           <div className="space-y-6">
             <div className="text-center space-y-2">
               <TrendingUp className="h-12 w-12 mx-auto text-primary" />
-              <h3 className="text-xl font-semibold">What's your running experience?</h3>
+              <h3 className="text-xl font-semibold">What&apos;s your running experience?</h3>
               <p className="text-muted-foreground">This helps us recommend appropriate goals for your level</p>
             </div>
             
@@ -289,11 +283,11 @@ export function GoalDiscoveryWizard({
       case 'fitness':
         return (
           <div className="space-y-6">
-            <div className="text-center space-y-2">
-              <Heart className="h-12 w-12 mx-auto text-red-500" />
-              <h3 className="text-xl font-semibold">How's your current fitness?</h3>
-              <p className="text-muted-foreground">Rate your overall fitness level (1 = Very unfit, 10 = Very fit)</p>
-            </div>
+              <div className="text-center space-y-2">
+                <Heart className="h-12 w-12 mx-auto text-red-500" />
+                <h3 className="text-xl font-semibold">How&apos;s your current fitness?</h3>
+                <p className="text-muted-foreground">Rate your overall fitness level (1 = Very unfit, 10 = Very fit)</p>
+              </div>
             
             <div className="space-y-4">
               <div className="px-4">
@@ -729,7 +723,7 @@ export function GoalDiscoveryWizard({
               </Card>
 
               {/* Supporting Goals */}
-              {discoveryResult.supportingGoals.map((goal, index) => (
+              {discoveryResult.supportingGoals.map((goal) => (
                 <Card key={goal.id} className="border-dashed">
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">

@@ -5,44 +5,31 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
-import { format } from "date-fns"
+import type { PeriodizationPhase, Plan, RaceGoal, Workout } from "@/lib/db"
 import {
-  Calendar,
   Target,
   Activity,
-  TrendingUp,
-  Settings,
-  Play,
   Edit,
-  Clock,
-  MapPin,
   BarChart3,
-  LineChart,
   Zap,
   Mountain,
   Route,
   Timer,
   CheckCircle,
-  AlertTriangle,
-  Info,
-  Flame,
   Trophy,
   Heart,
-  ArrowRight,
   Plus,
-  Move,
   Trash2
 } from "lucide-react"
 
 interface PlanCustomizationDashboardProps {
   userId: number
-  plan: any
-  raceGoal: any
-  onUpdatePlan: (planData: any) => void
+  plan: Plan
+  raceGoal: RaceGoal
+  onUpdatePlan?: (planData: Plan) => void
 }
 
 const phaseColors = {
@@ -72,13 +59,12 @@ const workoutTypeIcons = {
   rest: CheckCircle
 }
 
-export function PlanCustomizationDashboard({ userId, plan, raceGoal, onUpdatePlan }: PlanCustomizationDashboardProps) {
+export function PlanCustomizationDashboard({ userId, plan, raceGoal }: PlanCustomizationDashboardProps) {
   const [selectedWeek, setSelectedWeek] = useState(1)
-  const [workouts, setWorkouts] = useState<any[]>([])
+  const [workouts, setWorkouts] = useState<Workout[]>([])
   const [loading, setLoading] = useState(true)
-  const [editingWorkout, setEditingWorkout] = useState<any>(null)
+  const [editingWorkout, setEditingWorkout] = useState<Workout | { week: number; day: string } | null>(null)
   const [showWorkoutEditor, setShowWorkoutEditor] = useState(false)
-  const [draggedWorkout, setDraggedWorkout] = useState<any>(null)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -154,7 +140,7 @@ export function PlanCustomizationDashboard({ userId, plan, raceGoal, onUpdatePla
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message || "Failed to update workout"
+        description: error instanceof Error ? error.message : "Failed to update workout"
       })
     }
   }
@@ -223,41 +209,8 @@ export function PlanCustomizationDashboard({ userId, plan, raceGoal, onUpdatePla
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message || "Failed to add workout"
+        description: error instanceof Error ? error.message : "Failed to add workout"
       })
-    }
-  }
-
-  const handleWorkoutDragStart = (workout: any) => {
-    setDraggedWorkout(workout)
-  }
-
-  const handleWorkoutDrop = async (targetDay: string, targetWeek: number) => {
-    if (!draggedWorkout) return
-
-    try {
-      await handleWorkoutUpdate(draggedWorkout.id, {
-        day: targetDay,
-        week: targetWeek
-      })
-    } finally {
-      setDraggedWorkout(null)
-    }
-  }
-
-  const generatePlanPreview = async () => {
-    try {
-      const response = await fetch(`/api/training-plan/preview?userId=${userId}&raceGoalId=${raceGoal.id}&trainingDaysPerWeek=${plan.trainingDaysPerWeek}`)
-      const data = await response.json()
-      
-      if (response.ok) {
-        return data.preview
-      } else {
-        throw new Error(data.error || 'Failed to generate preview')
-      }
-    } catch (error) {
-      console.error('Error generating preview:', error)
-      return null
     }
   }
 
@@ -265,7 +218,7 @@ export function PlanCustomizationDashboard({ userId, plan, raceGoal, onUpdatePla
     return workouts.filter(w => w.week === week)
   }
 
-  const getPhaseForWeek = (week: number) => {
+  const getPhaseForWeek = (week: number): PeriodizationPhase | null => {
     if (!plan.periodization) return null
     
     let currentWeek = 1
@@ -278,7 +231,7 @@ export function PlanCustomizationDashboard({ userId, plan, raceGoal, onUpdatePla
     return null
   }
 
-  const calculateWeeklyStats = (weekWorkouts: any[]) => {
+  const calculateWeeklyStats = (weekWorkouts: Workout[]) => {
     const runningWorkouts = weekWorkouts.filter(w => w.type !== 'rest')
     const totalDistance = runningWorkouts.reduce((sum, w) => sum + w.distance, 0)
     const totalDuration = runningWorkouts.reduce((sum, w) => sum + (w.duration || 0), 0)
@@ -295,7 +248,6 @@ export function PlanCustomizationDashboard({ userId, plan, raceGoal, onUpdatePla
   const renderPeriodizationVisualization = () => {
     if (!plan.periodization) return null
 
-    const totalWeeks = plan.totalWeeks
     let currentWeek = 1
 
     return (
@@ -303,7 +255,6 @@ export function PlanCustomizationDashboard({ userId, plan, raceGoal, onUpdatePla
         <h3 className="text-lg font-semibold">Training Periodization</h3>
         <div className="grid gap-4">
           {plan.periodization.map((phase, index) => {
-            const phaseWeeks = Array.from({ length: phase.duration }, (_, i) => currentWeek + i)
             const phaseStartWeek = currentWeek
             currentWeek += phase.duration
 
@@ -445,7 +396,7 @@ export function PlanCustomizationDashboard({ userId, plan, raceGoal, onUpdatePla
 
         {/* Workouts List */}
         <div className="grid gap-3">
-          {weekWorkouts.map((workout, index) => {
+          {weekWorkouts.map((workout) => {
             const WorkoutIcon = workoutTypeIcons[workout.type as keyof typeof workoutTypeIcons] || Activity
             
             return (

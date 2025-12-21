@@ -136,7 +136,7 @@ export function AdvancedMetricsDashboard({
 
   // Normalize DB AdvancedMetrics into the shape this component expects
   function normalizeAdvancedMetrics(m: any): AdvancedMetrics {
-    let rp = m.racePredictor;
+    const rp = m.racePredictor;
     let rpObj: any = undefined;
     if (Array.isArray(rp)) {
       const byDist: Record<number, number> = {};

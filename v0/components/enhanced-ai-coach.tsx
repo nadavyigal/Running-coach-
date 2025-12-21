@@ -476,7 +476,7 @@ export function SimpleEnhancedAICoach({ user, onResponse }: { user: User; onResp
       }
       setResponse(fallback)
       onResponse(fallback)
-    } catch (e) {
+    } catch {
       const fallback = {
         response: 'Unable to generate response.',
         suggestedQuestions: [],

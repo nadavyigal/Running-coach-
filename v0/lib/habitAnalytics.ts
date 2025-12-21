@@ -1,5 +1,5 @@
 import { db, type User, type Run, type Workout, type Goal } from './db';
-import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, differenceInDays, isAfter, isBefore } from 'date-fns';
+import { subDays, startOfWeek, endOfWeek, differenceInDays } from 'date-fns';
 
 export interface HabitAnalytics {
   // Core habit metrics
@@ -96,7 +96,7 @@ export class HabitAnalyticsService {
     const suggestions = this.generateSuggestions(user, weeklyConsistency, riskLevel, preferredDays);
     
     // Progress metrics
-    const goalAlignment = await this.calculateGoalAlignment(userId, goals, runs);
+    const goalAlignment = await this.calculateGoalAlignment(goals);
     const planAdherence = this.calculatePlanAdherence(workouts);
     
     // Comparative analysis
@@ -196,7 +196,7 @@ export class HabitAnalyticsService {
     
     return Array.from(dayStats.entries()).map(([dayOfWeek, stats]) => ({
       dayOfWeek,
-      dayName: dayNames[dayOfWeek],
+      dayName: dayNames.at(dayOfWeek) ?? 'Unknown',
       frequency: stats.count / totalRuns,
       avgPerformance: stats.count > 0 ? stats.totalDuration / stats.count : 0,
       consistency: this.calculateDayConsistency(runs, dayOfWeek)
@@ -366,7 +366,7 @@ export class HabitAnalyticsService {
     return suggestions;
   }
 
-  private async calculateGoalAlignment(userId: number, goals: Goal[], runs: Run[]): Promise<number> {
+  private async calculateGoalAlignment(goals: Goal[]): Promise<number> {
     if (goals.length === 0) return 50; // Neutral if no goals
     
     const activeGoals = goals.filter(g => g.status === 'active');
@@ -398,8 +398,9 @@ export class HabitAnalyticsService {
     
     if (thisWeekData.length === 0 || lastWeekData.length < 2) return 0;
     
-    const thisWeek = thisWeekData[0].consistency;
-    const lastWeek = lastWeekData[1].consistency;
+    const thisWeek = thisWeekData.at(0)?.consistency ?? 0;
+    const lastWeek = lastWeekData.at(1)?.consistency ?? 0;
+    if (lastWeek === 0) return 0;
     
     return Math.round(((thisWeek - lastWeek) / lastWeek) * 100) || 0;
   }

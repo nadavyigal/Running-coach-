@@ -23,7 +23,7 @@ describe('GoalDiscoveryWizard', () => {
   let mockOnClose: ReturnType<typeof vi.fn>;
   let mockGoalDiscoveryResult: GoalDiscoveryResult;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockOnComplete = vi.fn();
     mockOnClose = vi.fn();
 
@@ -106,7 +106,7 @@ describe('GoalDiscoveryWizard', () => {
     };
 
     // Mock the goal discovery engine
-    const { goalDiscoveryEngine } = require('@/lib/goalDiscoveryEngine');
+    const { goalDiscoveryEngine } = await import('@/lib/goalDiscoveryEngine');
     goalDiscoveryEngine.discoverGoals.mockResolvedValue(mockGoalDiscoveryResult);
 
     vi.clearAllMocks();
@@ -428,7 +428,7 @@ describe('GoalDiscoveryWizard', () => {
       const user = userEvent.setup();
       
       // Mock goal discovery to fail
-      const { goalDiscoveryEngine } = require('@/lib/goalDiscoveryEngine');
+      const { goalDiscoveryEngine } = await import('@/lib/goalDiscoveryEngine');
       goalDiscoveryEngine.discoverGoals.mockRejectedValue(new Error('Discovery failed'));
 
       render(

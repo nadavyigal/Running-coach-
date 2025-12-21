@@ -1,0 +1,3 @@
+export const ENABLE_PLAN_TEMPLATE_FLOW =
+  process.env.NEXT_PUBLIC_ENABLE_PLAN_TEMPLATE_FLOW === 'true'
+

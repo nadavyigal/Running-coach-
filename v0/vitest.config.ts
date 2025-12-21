@@ -38,9 +38,8 @@ export default defineConfig({
     silent: false,
     reporters: ['default'],
     logHeapUsage: true,
-    isolate: false,
+    isolate: true,
     passWithNoTests: true,
-    memoryLimit: '512MB'
   },
   resolve: {
     alias: {

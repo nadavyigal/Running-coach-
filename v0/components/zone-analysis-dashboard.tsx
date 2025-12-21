@@ -29,14 +29,7 @@ interface ZoneAnalysisDashboardProps {
   onLoadDistribution?: (distribution: ZoneDistribution) => void;
 }
 
-export function ZoneAnalysisDashboard({ 
-  runId, 
-  userId, 
-  zones, 
-  distribution, 
-  targetDistribution,
-  onLoadDistribution 
-}: ZoneAnalysisDashboardProps) {
+export function ZoneAnalysisDashboard(_props: ZoneAnalysisDashboardProps) {
   // Temporary simplified version to fix chunk loading issue
   return (
     <div className="space-y-6">

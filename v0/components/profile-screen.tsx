@@ -41,9 +41,8 @@ import { CoachingPreferencesSettings } from "@/components/coaching-preferences-s
 import { GoalProgressDashboard } from "@/components/goal-progress-dashboard";
 import { PerformanceAnalyticsDashboard } from "@/components/performance-analytics-dashboard";
 import { Brain, Target } from "lucide-react";
-import { GoalCreationWizard } from "@/components/goal-creation-wizard";
+import { PlanTemplateFlow } from "@/components/plan-template-flow";
 import { type Goal } from "@/lib/db";
-import { regenerateTrainingPlan } from "@/lib/plan-regeneration";
 
 export function ProfileScreen() {
   // Add state for the shoes modal at the top of the component
@@ -57,7 +56,7 @@ export function ProfileScreen() {
   const [selectedBadge, setSelectedBadge] = useState<{ id: string; name: string } | null>(null);
   const [showJoinCohortModal, setShowJoinCohortModal] = useState(false);
   const [showCoachingPreferences, setShowCoachingPreferences] = useState(false);
-  const [showGoalWizard, setShowGoalWizard] = useState(false);
+  const [showPlanTemplateFlow, setShowPlanTemplateFlow] = useState(false);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [primaryGoal, setPrimaryGoal] = useState<Goal | null>(null);
 
@@ -84,7 +83,9 @@ export function ProfileScreen() {
   const getDaysRemaining = (goal?: Goal | null) => {
     if (!goal?.timeBound?.deadline) return null;
     const deadline = new Date(goal.timeBound.deadline);
-    const diff = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    const deadlineTime = deadline.getTime();
+    if (Number.isNaN(deadlineTime)) return null;
+    const diff = Math.ceil((deadlineTime - Date.now()) / (1000 * 60 * 60 * 24));
     return diff < 0 ? 0 : diff;
   };
 
@@ -99,29 +100,6 @@ export function ProfileScreen() {
       setGoals(activeGoals);
     } catch (goalError) {
       console.warn('[ProfileScreen] Failed to load goals:', goalError);
-    }
-  };
-
-  const handleGoalCreated = async (goal?: Goal) => {
-    if (!goal?.id || !userId) return;
-    try {
-      await dbUtils.setPrimaryGoal(userId, goal.id);
-      const updatedGoal = await dbUtils.getGoal(goal.id);
-      if (updatedGoal) {
-        await regenerateTrainingPlan(userId, updatedGoal);
-      }
-      await loadGoals();
-      toast({
-        title: 'Goal created',
-        description: 'Training plan regenerated to target your new goal.',
-      });
-    } catch (goalError) {
-      console.error('[ProfileScreen] Goal creation flow failed:', goalError);
-      toast({
-        title: 'Plan update failed',
-        description: 'Goal saved, but the training plan could not be regenerated.',
-        variant: 'destructive',
-      });
     }
   };
 
@@ -239,9 +217,10 @@ export function ProfileScreen() {
           console.log('[ProfileScreen] Attempting userId fallback...');
           const { db } = await import('@/lib/db');
           const users = await db.users.toArray();
-          if (users.length > 0 && users[0].id) {
-            console.log(`[ProfileScreen] ✅ Fallback found userId: ${users[0].id}`);
-            setUserId(users[0].id);
+          const firstUser = users.at(0);
+          if (firstUser?.id) {
+            console.log(`[ProfileScreen] ✅ Fallback found userId: ${firstUser.id}`);
+            setUserId(firstUser.id);
             setError(null);
           }
         } catch (fallbackError) {
@@ -389,7 +368,7 @@ export function ProfileScreen() {
       <div className="space-y-3">
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-bold">Goals</h2>
-          <Button size="sm" className="gap-2" onClick={() => setShowGoalWizard(true)}>
+          <Button size="sm" className="gap-2" onClick={() => setShowPlanTemplateFlow(true)}>
             <Plus className="h-4 w-4" />
             Create Goal
           </Button>
@@ -412,7 +391,11 @@ export function ProfileScreen() {
                   )}
                   {primaryGoal.timeBound?.deadline && (
                     <div className="text-xs text-gray-500">
-                      Target date: {new Date(primaryGoal.timeBound.deadline).toLocaleDateString()}
+                      Target date:{' '}
+                      {(() => {
+                        const deadline = new Date(primaryGoal.timeBound.deadline);
+                        return Number.isNaN(deadline.getTime()) ? '--' : deadline.toLocaleDateString();
+                      })()}
                     </div>
                   )}
                 </div>
@@ -431,19 +414,19 @@ export function ProfileScreen() {
             </CardContent>
           </Card>
         ) : (
-          <Card>
-            <CardContent className="p-5 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold">No active goal</h3>
-                <p className="text-sm text-gray-600">Set a goal to get a tailored training plan.</p>
-              </div>
-              <Button size="sm" onClick={() => setShowGoalWizard(true)} className="gap-2">
+           <Card>
+             <CardContent className="p-5 flex items-center justify-between">
+               <div>
+                 <h3 className="text-lg font-semibold">No active goal</h3>
+                 <p className="text-sm text-gray-600">Set a goal to get a tailored training plan.</p>
+               </div>
+              <Button size="sm" onClick={() => setShowPlanTemplateFlow(true)} className="gap-2">
                 <Plus className="h-4 w-4" />
                 Create Goal
               </Button>
-            </CardContent>
-          </Card>
-        )}
+             </CardContent>
+           </Card>
+          )}
 
         {goals.filter(g => !primaryGoal || g.id !== primaryGoal.id).length > 0 && (
           <Card>
@@ -763,11 +746,11 @@ export function ProfileScreen() {
       )}
 
       {userId && (
-        <GoalCreationWizard
-          isOpen={showGoalWizard}
-          onClose={() => setShowGoalWizard(false)}
+        <PlanTemplateFlow
+          isOpen={showPlanTemplateFlow}
+          onClose={() => setShowPlanTemplateFlow(false)}
           userId={userId}
-          onGoalCreated={handleGoalCreated}
+          onCompleted={loadGoals}
         />
       )}
 

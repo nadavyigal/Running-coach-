@@ -33,6 +33,18 @@ export async function POST(req: Request) {
       )
     }
 
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your_openai_api_key_here') {
+      return NextResponse.json(
+        {
+          error: 'AI service temporarily unavailable',
+          message: 'AI onboarding is temporarily unavailable. Please use the guided form.',
+          fallback: true,
+          redirectToForm: true
+        },
+        { status: 503 }
+      )
+    }
+
     if (!userId) {
       return NextResponse.json(
         { error: 'User ID is required', fallback: true },
@@ -44,13 +56,6 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: 'Current phase is required', fallback: true },
         { status: 400 }
-      )
-    }
-
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your_openai_api_key_here') {
-      return NextResponse.json(
-        { error: 'AI service temporarily unavailable', fallback: true },
-        { status: 503 }
       )
     }
 
@@ -88,7 +93,7 @@ export async function POST(req: Request) {
           { role: 'system' as const, content: onboardingPrompt },
           { role: 'user' as const, content: userMessage.content }
         ],
-        maxTokens: 300,
+        maxOutputTokens: 300,
         temperature: 0.7
       })
     } catch (error: any) {

@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+	import { Badge } from '@/components/ui/badge';
+	import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+	import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Lightbulb, 
   TrendingUp, 
@@ -16,15 +16,13 @@ import {
   X,
   ThumbsUp,
   ThumbsDown,
-  Settings,
-  Sparkles,
-  ArrowRight,
-  Calendar,
-  Zap,
-  Award,
-  Users,
-  RefreshCw
-} from 'lucide-react';
+	  Settings,
+	  Sparkles,
+	  ArrowRight,
+	  Zap,
+	  Award,
+	  RefreshCw
+	} from 'lucide-react';
 import { SimpleGoalForm } from './simple-goal-form';
 import { toast } from '@/components/ui/use-toast';
 
@@ -76,10 +74,10 @@ export function GoalRecommendations({ userId, className = '' }: GoalRecommendati
     dynamic: Partial<GoalRecommendation>[];
     summary: any;
   }>({ stored: [], dynamic: [], summary: {} });
-  const [loading, setLoading] = useState(true);
-  const [selectedRecommendation, setSelectedRecommendation] = useState<GoalRecommendation | Partial<GoalRecommendation> | null>(null);
-  const [showGoalWizard, setShowGoalWizard] = useState(false);
-  const [wizardTemplate, setWizardTemplate] = useState<any>(null);
+	  const [loading, setLoading] = useState(true);
+	  const [selectedRecommendation, setSelectedRecommendation] = useState<GoalRecommendation | Partial<GoalRecommendation> | null>(null);
+	  const [showGoalWizard, setShowGoalWizard] = useState(false);
+	  const [, setWizardTemplate] = useState<any>(null);
 
   useEffect(() => {
     loadRecommendations();
@@ -151,13 +149,14 @@ export function GoalRecommendations({ userId, className = '' }: GoalRecommendati
             : "Thanks for the feedback.",
         });
 
-        if (action === 'accepted' && recommendation.recommendationType === 'new_goal') {
-          // Trigger goal wizard with template
-          if (recommendation.recommendationData.newGoalTemplate) {
-            setWizardTemplate(recommendation.recommendationData.newGoalTemplate);
-            setShowGoalWizard(true);
-          }
-        }
+	        if (action === 'accepted' && recommendation.recommendationType === 'new_goal') {
+	          // Trigger goal wizard with template
+	          const template = recommendation.recommendationData?.newGoalTemplate
+	          if (template) {
+	            setWizardTemplate(template);
+	            setShowGoalWizard(true);
+	          }
+	        }
       } else {
         const error = await response.json();
         toast({
@@ -390,7 +389,7 @@ export function GoalRecommendations({ userId, className = '' }: GoalRecommendati
               <Sparkles className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">No Recommendations</h3>
               <p className="text-gray-600 mb-4">
-                You're all caught up! Check back later for new suggestions.
+                You&apos;re all caught up! Check back later for new suggestions.
               </p>
               <Button variant="outline" onClick={loadRecommendations}>
                 <RefreshCw className="h-4 w-4 mr-2" />

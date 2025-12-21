@@ -1,11 +1,56 @@
 'use client';
 
-import { useState, useEffect, useRef } from "react"
-import { flushSync } from "react-dom"
-import dynamic from 'next/dynamic'
-import { useToast } from "@/hooks/use-toast"
-import { DATABASE } from '@/lib/constants'
-import { logger } from '@/lib/logger';
+	import { useState, useEffect, useRef } from "react"
+	import { flushSync } from "react-dom"
+	import dynamic from 'next/dynamic'
+	import { DATABASE } from '@/lib/constants'
+	import { logger } from '@/lib/logger';
+
+type MainScreen = 'today' | 'plan' | 'record' | 'chat' | 'profile'
+
+const MAIN_SCREENS: ReadonlySet<MainScreen> = new Set(['today', 'plan', 'record', 'chat', 'profile'])
+
+function parseMainScreen(value: string | null | undefined): MainScreen | null {
+  if (!value) return null
+  const normalized = value.trim().toLowerCase()
+  return MAIN_SCREENS.has(normalized as MainScreen) ? (normalized as MainScreen) : null
+}
+
+function getRequestedMainScreen(): MainScreen | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const usp = new URLSearchParams(window.location.search)
+    const fromQuery = parseMainScreen(usp.get('screen'))
+    if (fromQuery) return fromQuery
+  } catch {
+    // ignore
+  }
+
+  try {
+    const fromHash = parseMainScreen(window.location.hash.replace(/^#/, ''))
+    if (fromHash) return fromHash
+  } catch {
+    // ignore
+  }
+
+  try {
+    const pathSegment = window.location.pathname.split('/').filter(Boolean)[0] ?? null
+    const fromPath = parseMainScreen(pathSegment)
+    if (fromPath) return fromPath
+  } catch {
+    // ignore
+  }
+
+  try {
+    const fromSession = parseMainScreen(sessionStorage.getItem('last-screen'))
+    if (fromSession) return fromSession
+  } catch {
+    // ignore
+  }
+
+  return null
+}
 
 // Safer dynamic imports with comprehensive error handling
 const OnboardingScreen = dynamic(
@@ -111,7 +156,48 @@ const ChatScreen = dynamic(
     )
   }
 )
-const ProfileScreen = dynamic(() => import("@/components/profile-screen").then(m => ({ default: m.ProfileScreen })), { ssr: false })
+const ProfileScreen = dynamic(
+  () =>
+    import("@/components/profile-screen")
+      .then((module) => {
+        logger.log('[ProfileScreen] module loaded:', { exports: Object.keys(module) })
+        if (!module.ProfileScreen) {
+          throw new Error(`ProfileScreen export not found. Available: ${Object.keys(module).join(', ')}`)
+        }
+        return { default: module.ProfileScreen }
+      })
+      .catch((error) => {
+        logger.error('[ProfileScreen] Failed to load:', error)
+        return {
+          default: () => (
+            <div className="p-6 text-center space-y-3">
+              <h2 className="text-xl font-semibold text-gray-900">Profile unavailable</h2>
+              <p className="text-sm text-gray-600">
+                We couldn&apos;t load the Profile screen. This can happen after an update. Try refreshing the app.
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+              >
+                Refresh
+              </button>
+              <details className="text-left">
+                <summary className="cursor-pointer text-sm text-gray-600">Error Details</summary>
+                <pre className="text-xs bg-gray-100 p-2 mt-2 rounded overflow-auto">{error.message}</pre>
+              </details>
+            </div>
+          ),
+        }
+      }),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="p-6 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500" />
+      </div>
+    ),
+  },
+)
 const BottomNavigation = dynamic(() => import("@/components/bottom-navigation").then(m => ({ default: m.BottomNavigation })), { ssr: false })
 const OnboardingDebugPanel = dynamic(() => import("@/components/onboarding-debug-panel").then(m => ({ default: m.OnboardingDebugPanel })), { ssr: false })
 
@@ -131,8 +217,6 @@ export default function RunSmartApp() {
   // Ref to store dynamically loaded modules
   const dbUtilsRef = useRef<any>(null)
 
-  // Toast hook for notifications
-  const { toast } = useToast()
 
   logger.log('🚀 RunSmartApp component rendering...', { isLoading, isOnboardingComplete })
 
@@ -150,6 +234,8 @@ export default function RunSmartApp() {
     }
     
     logger.log('🔍 [INIT] Mounted! Starting initialization...')
+
+    const requestedMainScreen = getRequestedMainScreen()
 
     // Prevent double initialization in React Strict Mode
     if (initRef.current) {
@@ -170,7 +256,7 @@ export default function RunSmartApp() {
       if (localComplete && localUserData) {
         logger.log('[app:safety] ✅ Restoring from localStorage on timeout');
         setIsOnboardingComplete(true);
-        setCurrentScreen('today');
+        setCurrentScreen(requestedMainScreen ?? 'today');
       }
       
       setIsLoading(false)
@@ -281,7 +367,7 @@ export default function RunSmartApp() {
             logger.log(`[app:init:user] ✅ User ready: id=${user.id}, onboarding=${user.onboardingComplete}`);
             if (user.onboardingComplete) {
               setIsOnboardingComplete(true);
-              setCurrentScreen("today");
+              setCurrentScreen(requestedMainScreen ?? "today");
               // SYNC: Ensure localStorage matches database state
               localStorage.setItem('onboarding-complete', 'true');
               localStorage.setItem('user-data', JSON.stringify({
@@ -330,6 +416,29 @@ export default function RunSmartApp() {
     };
   }, [mounted])
 
+  // Persist active screen in URL/session so reloads return to the same tab (important for /profile deep links and chunk reloads)
+  useEffect(() => {
+    if (!mounted) return
+    if (!isOnboardingComplete) return
+
+    const mainScreen = parseMainScreen(currentScreen)
+    if (!mainScreen) return
+
+    try {
+      sessionStorage.setItem('last-screen', mainScreen)
+    } catch {
+      // ignore
+    }
+
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.set('screen', mainScreen)
+      window.history.replaceState({}, '', url.toString())
+    } catch {
+      // ignore
+    }
+  }, [currentScreen, isOnboardingComplete, mounted])
+
   // Separate useEffect for event listeners to avoid SSR issues
   useEffect(() => {
     // Only run on client side
@@ -347,6 +456,11 @@ export default function RunSmartApp() {
       setCurrentScreen("chat")
     }
 
+    const handleNavigateToPlan = () => {
+      logger.log('Navigating to plan screen')
+      setCurrentScreen("plan")
+    }
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.shiftKey && event.key === 'D') {
         event.preventDefault()
@@ -356,12 +470,14 @@ export default function RunSmartApp() {
 
     window.addEventListener("navigate-to-record", handleNavigateToRecord)
     window.addEventListener("navigate-to-chat", handleNavigateToChat)
+    window.addEventListener("navigate-to-plan", handleNavigateToPlan)
     window.addEventListener("keydown", handleKeyDown)
 
     return () => {
       logger.log('🧹 Cleaning up navigation event listeners...')
       window.removeEventListener("navigate-to-record", handleNavigateToRecord)
       window.removeEventListener("navigate-to-chat", handleNavigateToChat)
+      window.removeEventListener("navigate-to-plan", handleNavigateToPlan)
       window.removeEventListener("keydown", handleKeyDown)
     }
   }, []) // Empty dependency array - event listeners should only be set up once

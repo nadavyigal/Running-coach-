@@ -7,10 +7,12 @@ export interface ApiError extends Error {
 export class ValidationError extends Error implements ApiError {
   statusCode = 400;
   code = 'VALIDATION_ERROR';
+  details: Record<string, unknown>;
   
-  constructor(message: string, public details?: Record<string, unknown>) {
+  constructor(message: string, details: Record<string, unknown> = {}) {
     super(message);
     this.name = 'ValidationError';
+    this.details = details;
   }
 }
 
@@ -57,6 +59,7 @@ export class ExternalServiceError extends Error implements ApiError {
 export class RateLimitError extends Error implements ApiError {
   statusCode = 429;
   code = 'RATE_LIMIT_EXCEEDED';
+  details: Record<string, unknown>;
   
   constructor(resetTime?: Date) {
     super('Rate limit exceeded');
@@ -68,6 +71,7 @@ export class RateLimitError extends Error implements ApiError {
 export class DatabaseError extends Error implements ApiError {
   statusCode = 500;
   code = 'DATABASE_ERROR';
+  details: Record<string, unknown>;
   
   constructor(operation: string, originalError?: Error) {
     super(`Database ${operation} failed`);
@@ -456,11 +460,11 @@ export function analyzeError(error: unknown): ClientErrorInfo {
     };
   }
 
-  const errorObj = error as Error;
+  const errorObj = error instanceof Error ? error : new Error('Unknown error');
   // Network errors
   if (isNetworkErrorClient(error)) {
     return {
-      error,
+      error: errorObj,
       errorType: 'network',
       userMessage: 'Connection failed. Please check your internet connection.',
       canRetry: true,
@@ -472,7 +476,7 @@ export function analyzeError(error: unknown): ClientErrorInfo {
   // Offline errors
   if (isOfflineError(error) || !navigator.onLine) {
     return {
-      error,
+      error: errorObj,
       errorType: 'offline',
       userMessage: 'You appear to be offline. Some features may not be available.',
       canRetry: false,
@@ -484,7 +488,7 @@ export function analyzeError(error: unknown): ClientErrorInfo {
   // AI service errors
   if (isAIServiceError(error)) {
     return {
-      error,
+      error: errorObj,
       errorType: 'ai_service',
       userMessage: 'AI service is temporarily unavailable.',
       canRetry: true,
@@ -496,7 +500,7 @@ export function analyzeError(error: unknown): ClientErrorInfo {
   // Database errors
   if (isDatabaseError(error)) {
     return {
-      error,
+      error: errorObj,
       errorType: 'database',
       userMessage: 'Unable to save your data right now.',
       canRetry: true,
@@ -508,7 +512,7 @@ export function analyzeError(error: unknown): ClientErrorInfo {
   // Validation errors
   if (isValidationError(error)) {
     return {
-      error,
+      error: errorObj,
       errorType: 'validation',
       userMessage: getValidationErrorMessage(error),
       canRetry: false,
@@ -519,7 +523,7 @@ export function analyzeError(error: unknown): ClientErrorInfo {
 
   // Default unknown error
   return {
-    error,
+    error: errorObj,
     errorType: 'unknown',
     userMessage: 'Something went wrong. Please try again.',
     canRetry: true,

@@ -284,7 +284,6 @@ export async function createRunWithMetrics(
           case 'time_improvement':
             // Calculate pace improvement
             if (runData.duration && runData.distance) {
-              const pace = runData.duration / runData.distance;
               // Custom logic for pace improvement tracking
             }
             break;

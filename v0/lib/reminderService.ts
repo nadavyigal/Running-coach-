@@ -1,7 +1,6 @@
 import { dbUtils } from '@/lib/dbUtils'
 import { toast } from '@/hooks/use-toast'
-import posthog from 'posthog-js'
-import { trackReminderEvent, trackReminderClicked } from './analytics'
+import { trackReminderEvent } from './analytics'
 
 export interface ReminderSettings {
   time: string
@@ -14,13 +13,14 @@ class ReminderService {
 
   async init() {
     const user = await dbUtils.getCurrentUser()
-    if (!user) return
+    const userId = user?.id
+    if (!user || typeof userId !== 'number') return
     if (user.reminderEnabled && user.reminderTime) {
       if (user.reminderSnoozedUntil && new Date(user.reminderSnoozedUntil) > new Date()) {
         const delay = new Date(user.reminderSnoozedUntil).getTime() - Date.now()
-        this.timeout = setTimeout(() => this.trigger(user.id!), delay)
+        this.timeout = setTimeout(() => this.trigger(userId), delay)
       } else {
-        this.scheduleNext(user.id!, user.reminderTime)
+        this.scheduleNext(userId, user.reminderTime)
       }
     }
   }
@@ -34,10 +34,14 @@ class ReminderService {
 
   private scheduleNext(userId: number, time: string) {
     this.clear()
-    const [h, m] = time.split(':').map(Number)
+    const parts = time.split(':')
+    const hour = Number(parts.at(0))
+    const minute = Number(parts.at(1))
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) return
+
     const now = new Date()
     const next = new Date()
-    next.setHours(h, m, 0, 0)
+    next.setHours(hour, minute, 0, 0)
     if (next <= now) next.setDate(next.getDate() + 1)
     const delay = next.getTime() - now.getTime()
     this.timeout = setTimeout(() => this.trigger(userId), delay)
@@ -56,28 +60,31 @@ class ReminderService {
 
   async setReminder(time: string) {
     const user = await dbUtils.getCurrentUser()
-    if (!user) return
-    await dbUtils.updateReminderSettings(user.id!, { reminderTime: time, reminderEnabled: true, reminderSnoozedUntil: null })
+    const userId = user?.id
+    if (typeof userId !== 'number') return
+    await dbUtils.updateReminderSettings(userId, { reminderTime: time, reminderEnabled: true, reminderSnoozedUntil: null })
     trackReminderEvent('reminder_set', { time })
-    this.scheduleNext(user.id!, time)
+    this.scheduleNext(userId, time)
   }
 
   async disableReminder() {
     const user = await dbUtils.getCurrentUser()
-    if (!user) return
+    const userId = user?.id
+    if (typeof userId !== 'number') return
     this.clear()
-    await dbUtils.updateReminderSettings(user.id!, { reminderEnabled: false, reminderSnoozedUntil: null })
+    await dbUtils.updateReminderSettings(userId, { reminderEnabled: false, reminderSnoozedUntil: null })
     trackReminderEvent('reminder_disabled')
   }
 
   async snooze(minutes: number) {
     const user = await dbUtils.getCurrentUser()
-    if (!user) return
+    const userId = user?.id
+    if (typeof userId !== 'number') return
     const until = new Date(Date.now() + minutes * 60000)
     this.clear()
-    await dbUtils.updateReminderSettings(user.id!, { reminderSnoozedUntil: until })
+    await dbUtils.updateReminderSettings(userId, { reminderSnoozedUntil: until })
     trackReminderEvent('reminder_snoozed', { minutes })
-    this.timeout = setTimeout(() => this.trigger(user.id!), minutes * 60000)
+    this.timeout = setTimeout(() => this.trigger(userId), minutes * 60000)
   }
 }
 

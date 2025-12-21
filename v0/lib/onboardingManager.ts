@@ -1,7 +1,6 @@
 import { type User } from '@/lib/db'
 import { dbUtils } from '@/lib/dbUtils'
 import { generatePlan, generateFallbackPlan, type PlanData } from '@/lib/planGenerator'
-import { trackEngagementEvent } from '@/lib/analytics'
 import { validateOnboardingState } from '@/lib/onboardingStateValidator'
 
 export interface OnboardingResult {
@@ -43,6 +42,24 @@ export class OnboardingManager {
   private operationTimeout = 60000; // 60 seconds timeout for operations
 
   private constructor() {}
+
+  private buildUserPatch(profile: OnboardingProfile): Partial<User> {
+    return {
+      goal: profile.goal,
+      experience: profile.experience,
+      preferredTimes: profile.preferredTimes,
+      daysPerWeek: profile.daysPerWeek,
+      consents: profile.consents,
+      onboardingComplete: profile.onboardingComplete,
+      ...(typeof profile.rpe === 'number' ? { rpe: profile.rpe } : {}),
+      ...(typeof profile.age === 'number' ? { age: profile.age } : {}),
+      ...(Array.isArray(profile.motivations) ? { motivations: profile.motivations } : {}),
+      ...(Array.isArray(profile.barriers) ? { barriers: profile.barriers } : {}),
+      ...(typeof profile.coachingStyle === 'string' ? { coachingStyle: profile.coachingStyle } : {}),
+      ...(typeof profile.goalInferred === 'boolean' ? { goalInferred: profile.goalInferred } : {}),
+      ...(profile.privacySettings ? { privacySettings: profile.privacySettings } : {}),
+    }
+  }
 
   public static getInstance(): OnboardingManager {
     if (!OnboardingManager.instance) {
@@ -234,7 +251,6 @@ export class OnboardingManager {
     }
 
     this.onboardingInProgress = true;
-    const errors: string[] = [];
 
     try {
       console.log('🚀 Starting centralized user creation with profile:', profile);
@@ -263,7 +279,7 @@ export class OnboardingManager {
       // Step 3: Create user with retry logic
       let userId: number;
       try {
-        userId = await dbUtils.createUser(profile);
+        userId = await dbUtils.createUser(this.buildUserPatch(profile));
         this.currentUserId = userId;
         console.log('✅ User created successfully with ID:', userId);
       } catch (error) {
@@ -351,7 +367,7 @@ export class OnboardingManager {
     try {
       const user = await dbUtils.getCurrentUser();
       return user || null;
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -360,13 +376,17 @@ export class OnboardingManager {
    * Update existing user with new profile data
    */
   private async updateExistingUser(existingUser: User, profile: OnboardingProfile): Promise<User> {
-    const updateData = {
-      ...profile,
+    if (typeof existingUser.id !== 'number') {
+      throw new Error('Cannot update existing user without an id')
+    }
+
+    const updateData: Partial<User> = {
+      ...this.buildUserPatch(profile),
       updatedAt: new Date(),
       onboardingComplete: true
     };
 
-    await dbUtils.updateUser(existingUser.id!, updateData);
+    await dbUtils.updateUser(existingUser.id, updateData);
     
     // Get the updated user
     const updatedUser = await dbUtils.getCurrentUser();
@@ -407,17 +427,6 @@ export class OnboardingManager {
     }
   }
 
-
-  /**
-   * Get current user or throw error
-   */
-  private async getCurrentUserOrFail(): Promise<User> {
-    const user = await dbUtils.getCurrentUser();
-    if (!user) {
-      throw new Error('No user found');
-    }
-    return user;
-  }
 
   /**
    * Check if onboarding is currently in progress
@@ -492,11 +501,11 @@ export class OnboardingManager {
       preferredTimes: formData.selectedTimes,
       daysPerWeek: formData.daysPerWeek,
       consents: formData.consents,
-      rpe: formData.rpe || undefined,
-      age: formData.age || undefined,
       goalInferred: false,
       onboardingComplete: true,
-      privacySettings: formData.privacySettings
+      ...(typeof formData.rpe === 'number' ? { rpe: formData.rpe } : {}),
+      ...(typeof formData.age === 'number' ? { age: formData.age } : {}),
+      ...(formData.privacySettings ? { privacySettings: formData.privacySettings } : {}),
     };
 
     return await this.createUserWithProfile(profile);

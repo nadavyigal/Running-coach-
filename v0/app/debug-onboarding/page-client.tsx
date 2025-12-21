@@ -37,13 +37,14 @@ export default function DebugOnboardingPage() {
         },
         mismatch: user ? (user.onboardingComplete && localOnboarding !== 'true') : false
       });
-    } catch (error) {
-      logger.error('Debug error:', error);
-      setStatus({ error: error.message });
-    } finally {
-      setLoading(false);
-    }
-  }
+	    } catch (error) {
+	      logger.error('Debug error:', error);
+	      const message = error instanceof Error ? error.message : String(error)
+	      setStatus({ error: message });
+	    } finally {
+	      setLoading(false);
+	    }
+	  }
 
   async function forceCompleteOnboarding() {
     setFixing(true);
@@ -69,13 +70,14 @@ export default function DebugOnboardingPage() {
         alert('✅ Onboarding forced to complete! Refreshing...');
         window.location.href = '/';
       }
-    } catch (error) {
-      logger.error('Fix error:', error);
-      alert('❌ Failed to fix: ' + error.message);
-    } finally {
-      setFixing(false);
-    }
-  }
+	    } catch (error) {
+	      logger.error('Fix error:', error);
+	      const message = error instanceof Error ? error.message : String(error)
+	      alert('❌ Failed to fix: ' + message);
+	    } finally {
+	      setFixing(false);
+	    }
+	  }
 
   if (loading) {
     return (
@@ -130,7 +132,7 @@ export default function DebugOnboardingPage() {
                 </div>
                 {status?.mismatch && (
                   <div className="p-3 rounded bg-yellow-100 text-yellow-800">
-                    <strong>⚠️ State Mismatch Detected!</strong> Database says complete but localStorage doesn't match.
+                    <strong>⚠️ State Mismatch Detected!</strong> Database says complete but localStorage doesn&apos;t match.
                   </div>
                 )}
               </div>
@@ -163,9 +165,9 @@ export default function DebugOnboardingPage() {
             <div className="mt-6 p-4 bg-blue-50 rounded">
               <h3 className="font-semibold mb-2">📝 Instructions:</h3>
               <ol className="list-decimal list-inside space-y-1 text-sm">
-                <li>Check if "Database onboardingComplete" is false - this is the issue</li>
-                <li>Click "Force Complete Onboarding" to fix the database</li>
-                <li>You'll be redirected to home - try clicking Profile again</li>
+                <li>Check if &quot;Database onboardingComplete&quot; is false - this is the issue</li>
+                <li>Click &quot;Force Complete Onboarding&quot; to fix the database</li>
+                <li>You&apos;ll be redirected to home - try clicking Profile again</li>
                 <li>If issue persists, check the console for errors</li>
               </ol>
             </div>

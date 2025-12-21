@@ -35,7 +35,7 @@ export function formatErrorResponse(error: ApiError | Error): NextResponse {
     statusCode = error.statusCode!;
     code = error.code!;
     message = error.message;
-    details = error.details;
+    details = (error as ApiError).details;
   } else {
     // Log unexpected errors
     // eslint-disable-next-line no-console

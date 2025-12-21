@@ -134,7 +134,7 @@ export function AddShoesModal({ isOpen, onClose }: AddShoesModalProps) {
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">km</span>
             </div>
-            <p className="text-xs text-gray-600">If you've already used these shoes, enter the current mileage</p>
+            <p className="text-xs text-gray-600">If you&apos;ve already used these shoes, enter the current mileage</p>
           </div>
 
           {/* Max Kilometers */}

@@ -13,7 +13,6 @@ import {
   CircleCheckBig, 
   Clock, 
   BarChart3, 
-  PieChart, 
   Activity,
   RefreshCw
 } from 'lucide-react'

@@ -6,13 +6,9 @@ import { logger } from '@/lib/logger';
 export const dynamic = 'force-dynamic';
 
 const cohortStatsSchema = z.object({
-  userId: z.string().nullable().refine((val) => {
-    if (!val) return false;
-    const parsed = parseInt(val);
-    return !isNaN(parsed) && parsed > 0;
-  }, 'User ID must be a valid positive number'),
-  includePerformance: z.string().nullable().transform(val => val === 'true').optional().default(false),
-  timeRange: z.enum(['7d', '30d', '90d', '1y']).nullable().optional().default('30d'),
+  userId: z.coerce.number().int().positive(),
+  includePerformance: z.string().optional().default('false').transform((val) => val === 'true'),
+  timeRange: z.enum(['7d', '30d', '90d', '1y']).optional().default('30d'),
 });
 
 export async function GET(req: NextRequest) {
@@ -27,13 +23,13 @@ export async function GET(req: NextRequest) {
     }
 
     const validatedData = cohortStatsSchema.parse({ 
-      userId, 
-      includePerformance,
-      timeRange 
+      userId,
+      includePerformance: includePerformance ?? undefined,
+      timeRange: timeRange ?? undefined,
     });
 
     // Get the user's cohort information
-    const user = await dbUtils.getUserById(parseInt(validatedData.userId));
+    const user = await dbUtils.getUserById(validatedData.userId);
     if (!user || !user.cohortId) {
       return NextResponse.json({ message: 'User not in a cohort' }, { status: 404 });
     }
@@ -45,7 +41,7 @@ export async function GET(req: NextRequest) {
     if (validatedData.includePerformance) {
       const performanceComparison = await dbUtils.getCohortPerformanceComparison(
         user.cohortId,
-        parseInt(validatedData.userId),
+        validatedData.userId,
         validatedData.timeRange
       );
       

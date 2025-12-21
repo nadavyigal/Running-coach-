@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { openai } from "@ai-sdk/openai"
 import { generateObject } from "ai"
 import { logger } from "@/lib/logger"
+import { z } from "zod"
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
@@ -34,26 +35,32 @@ export async function POST(req: Request) {
 
     const buffer = Buffer.from(await file.arrayBuffer())
 
+    const extractedRunSchema = z
+      .object({
+        distanceKm: z.number(),
+        durationSeconds: z.number(),
+        runType: z.enum(["easy", "tempo", "intervals", "long", "time-trial", "hill", "other"]),
+        notes: z.string().optional(),
+      })
+      .strict()
+
     const result = await generateObject({
       model: openai("gpt-4o-mini"),
-      schema: {
-        type: "object",
-        properties: {
-          distanceKm: { type: "number" },
-          durationSeconds: { type: "number" },
-          runType: { type: "string" },
-          notes: { type: "string" }
-        },
-        required: ["distanceKm", "durationSeconds", "runType"],
-        additionalProperties: false
-      },
-      prompt: `You are analyzing a photo or screenshot of a running activity. Extract the total distance in kilometers, total duration in seconds, classify the run type (easy, tempo, intervals, long, time-trial, hill, other), and provide any relevant notes to prefill a manual run form. Return concise values only.`,
-      input: [
+      schema: extractedRunSchema,
+      prompt: [
         {
-          type: "input_image",
-          image: buffer,
-          mimeType: file.type
-        }
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "You are analyzing a photo or screenshot of a running activity. Extract the total distance in kilometers, total duration in seconds, classify the run type (easy, tempo, intervals, long, time-trial, hill, other), and provide any relevant notes to prefill a manual run form. Return concise values only.",
+            },
+            {
+              type: "image",
+              image: `data:${file.type};base64,${buffer.toString("base64")}`,
+            },
+          ],
+        },
       ],
     })
 

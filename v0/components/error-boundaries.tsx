@@ -277,7 +277,7 @@ export function withErrorBoundary<P extends object>(
   Component: React.ComponentType<P>,
   fallback?: React.ComponentType<{ error: Error | undefined; onRetry: () => void }>
 ) {
-  const WrappedComponent = React.forwardRef<any, P>((props, ref) => (
+  const WrappedComponent = React.forwardRef<any, P>((props, _ref) => (
     <ComponentErrorBoundary 
       {...(fallback ? { fallback } : {})}
       componentName={Component.displayName || Component.name}

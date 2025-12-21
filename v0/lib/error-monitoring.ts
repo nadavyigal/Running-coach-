@@ -1,5 +1,3 @@
-import { analyzeError } from './errorHandling';
-
 // Error monitoring configuration
 interface ErrorMonitoringConfig {
   apiEndpoint?: string;
@@ -206,8 +204,6 @@ export class ErrorMonitoringService {
   // Categorize error based on error object and context
   private categorizeError(error: Error, providedCategory?: ErrorCategory): ErrorCategory {
     if (providedCategory) return providedCategory;
-
-    const errorInfo = analyzeError(error);
     const message = error.message?.toLowerCase() || '';
 
     if (message.includes('network') || message.includes('fetch') || message.includes('connection')) {

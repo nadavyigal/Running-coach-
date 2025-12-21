@@ -4,15 +4,12 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   Timer, 
   Move, 
   ArrowUp, 
   ArrowDown, 
-  Target,
-  TrendingUp,
   Info,
   CheckCircle,
   AlertCircle
@@ -43,7 +40,7 @@ interface RunningDynamicsVisualizationProps {
 export function RunningDynamicsVisualization({ 
   userId, 
   runId, 
-  showTrends = true 
+  showTrends: _showTrends = true 
 }: RunningDynamicsVisualizationProps) {
   const [dynamicsData, setDynamicsData] = useState<RunningDynamicsData[]>([])
   const [currentDynamics, setCurrentDynamics] = useState<RunningDynamicsData | null>(null)

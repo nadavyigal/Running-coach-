@@ -403,7 +403,7 @@ export function EngagementOptimization({ user: propUser, onPreferencesChange }: 
           <div className="space-y-2">
             <Label>Engagement Insights</Label>
             <div className="space-y-2 text-sm text-gray-600">
-              <p>ג€¢ You're most active in the mornings</p>
+              <p>ג€¢ You are most active in the mornings</p>
               <p>ג€¢ Your consistency is improving</p>
               <p>ג€¢ Consider increasing frequency during peak times</p>
             </div>
