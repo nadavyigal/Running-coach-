@@ -88,6 +88,8 @@ export default function RootLayout({
         {/* Resource hints for external services */}
         <link rel="dns-prefetch" href="https://us.i.posthog.com" />
         <link rel="preconnect" href="https://us.i.posthog.com" crossOrigin="" />
+        <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+        <link rel="preconnect" href="https://www.googletagmanager.com" crossOrigin="" />
         <script
           id="schema-org"
           type="application/ld+json"
@@ -95,6 +97,19 @@ export default function RootLayout({
         />
       </head>
       <body className={inter.className}>
+        {/* Google Analytics */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-YBJKT7T4DE"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-YBJKT7T4DE');
+          `}
+        </Script>
         <ServiceWorkerRegister />
         <ChunkErrorBoundary>
           <PostHogProvider>
