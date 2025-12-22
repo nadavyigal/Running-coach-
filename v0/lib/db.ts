@@ -174,6 +174,17 @@ export interface DataSource {
 }
 
 // User preferences and profile
+export interface BetaSignup {
+  id?: number;
+  email: string;
+  experienceLevel: 'beginner' | 'intermediate' | 'advanced';
+  goals: string;
+  hearAboutUs: string;
+  createdAt: Date;
+  invitedAt?: Date;
+  convertedAt?: Date;
+}
+
 export interface User {
   id?: number;
   name?: string;
