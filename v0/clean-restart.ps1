@@ -10,3 +10,4 @@ npm cache clean --force 2>&1 | Out-Null
 
 Write-Host "Cache cleared! Starting dev server..."
 npm run dev
+
