@@ -267,11 +267,11 @@ export function BetaSignupForm() {
                     <div className="space-y-1">
                       <Label htmlFor="agree" className="cursor-pointer">
                         I agree to the{' '}
-                        <Link className="underline underline-offset-4" href="/privacy">
+                        <Link className="underline underline-offset-4" href="/landing/privacy">
                           Privacy Policy
                         </Link>{' '}
                         and{' '}
-                        <Link className="underline underline-offset-4" href="/terms">
+                        <Link className="underline underline-offset-4" href="/landing/terms">
                           Terms of Service
                         </Link>
                       </Label>

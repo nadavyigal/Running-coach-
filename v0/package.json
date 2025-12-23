@@ -87,7 +87,7 @@
     "sonner": "^1.7.1",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
-    "vaul": "^0.9.6",
+    "vaul": "^1.1.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -106,9 +106,7 @@
     "eslint-plugin-security": "^3.0.1",
     "fake-indexeddb": "^6.0.1",
     "jsdom": "^26.1.0",
-    "lighthouse": "^12.2.1",
     "postcss": "^8.5",
-    "puppeteer": "^24.16.1",
     "tailwindcss": "^3.4.17",
     "typescript": "^5",
     "vitest": "^3.2.4"

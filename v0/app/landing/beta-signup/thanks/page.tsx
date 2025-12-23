@@ -42,10 +42,10 @@ export default function BetaThanksPage() {
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button asChild variant="outline">
-              <Link href="/">Back to home</Link>
+              <Link href="/landing">Back to home</Link>
             </Button>
             <Button asChild>
-              <Link href="/beta-signup">Invite another runner</Link>
+              <Link href="/landing/beta-signup">Invite another runner</Link>
             </Button>
           </div>
         </CardContent>

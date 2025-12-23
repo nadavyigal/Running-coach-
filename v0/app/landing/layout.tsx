@@ -29,9 +29,9 @@ export const metadata: Metadata = {
 }
 
 const navLinks = [
-  { href: '/', label: 'Home' },
-  { href: '/pricing', label: 'Pricing' },
-  { href: '/blog', label: 'Blog' },
+  { href: '/landing', label: 'Home' },
+  { href: '/landing/pricing', label: 'Pricing' },
+  { href: '/landing/blog', label: 'Blog' },
 ] as const
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
@@ -46,7 +46,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
 
       <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 md:px-6">
-          <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
+          <Link href="/landing" className="flex items-center gap-2 font-semibold tracking-tight">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               RS
             </span>
@@ -64,13 +64,13 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
               </Link>
             ))}
             <Button asChild>
-              <Link href="/beta-signup">Join Beta</Link>
+              <Link href="/landing/beta-signup">Join Beta</Link>
             </Button>
           </nav>
 
           <div className="flex items-center gap-2 md:hidden">
             <Button asChild size="sm">
-              <Link href="/beta-signup">Join Beta</Link>
+              <Link href="/landing/beta-signup">Join Beta</Link>
             </Button>
             <Sheet>
               <SheetTrigger asChild>
@@ -90,7 +90,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
                 </div>
                 <Separator className="my-4" />
                 <Button asChild className="w-full">
-                  <Link href="/beta-signup">Join Beta</Link>
+                  <Link href="/landing/beta-signup">Join Beta</Link>
                 </Button>
               </SheetContent>
             </Sheet>
@@ -115,22 +115,22 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             <div className="space-y-3">
               <div className="text-sm font-semibold">Quick Links</div>
               <div className="grid gap-2 text-sm">
-                <Link className="text-muted-foreground hover:text-foreground" href="/">
+                <Link className="text-muted-foreground hover:text-foreground" href="/landing">
                   Home
                 </Link>
-                <Link className="text-muted-foreground hover:text-foreground" href="/pricing">
+                <Link className="text-muted-foreground hover:text-foreground" href="/landing/pricing">
                   Pricing
                 </Link>
-                <Link className="text-muted-foreground hover:text-foreground" href="/blog">
+                <Link className="text-muted-foreground hover:text-foreground" href="/landing/blog">
                   Blog
                 </Link>
-                <Link className="text-muted-foreground hover:text-foreground" href="/beta-signup">
+                <Link className="text-muted-foreground hover:text-foreground" href="/landing/beta-signup">
                   Join the Beta
                 </Link>
-                <Link className="text-muted-foreground hover:text-foreground" href="/privacy">
+                <Link className="text-muted-foreground hover:text-foreground" href="/landing/privacy">
                   Privacy
                 </Link>
-                <Link className="text-muted-foreground hover:text-foreground" href="/terms">
+                <Link className="text-muted-foreground hover:text-foreground" href="/landing/terms">
                   Terms
                 </Link>
               </div>

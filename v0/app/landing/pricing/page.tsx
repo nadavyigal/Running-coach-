@@ -22,7 +22,7 @@ export default function PricingPage() {
         <CardContent className="space-y-4 text-sm text-muted-foreground">
           <p>We&apos;re finalizing the free vs premium tiers for the beta launch.</p>
           <Button asChild>
-            <Link href="/beta-signup">Join the Beta</Link>
+            <Link href="/landing/beta-signup">Join the Beta</Link>
           </Button>
         </CardContent>
       </Card>

@@ -56,7 +56,7 @@ export default function MarketingHomePage() {
 
             <div className="flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg">
-                <Link href="/beta-signup">Join the Beta</Link>
+                <Link href="/landing/beta-signup">Join the Beta</Link>
               </Button>
               <Button asChild variant="outline" size="lg">
                 <Link href="#demo">See How It Works</Link>
