@@ -19,7 +19,7 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  
+
   // Image optimization
   images: {
     formats: ['image/webp', 'image/avif'],
@@ -29,7 +29,7 @@ const nextConfig = {
     dangerouslyAllowSVG: true,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
-  
+
   // Disable critters optimization to fix dependency issue
   experimental: {
     optimizeCss: false, // Disable CSS optimization that uses critters
@@ -56,7 +56,7 @@ const nextConfig = {
     //     : {},
     // },
   },
-  
+
   // Security headers
   async headers() {
     return [
@@ -117,10 +117,10 @@ const nextConfig = {
   poweredByHeader: false, // Remove X-Powered-By header
   reactStrictMode: true, // Enable strict mode for better error detection
 
-  // Webpack optimizations
-  webpack: (config, { dev, isServer }) => {
+  // Webpack optimizations - Commented out to avoid Turbopack conflict
+  /* webpack: (config, { dev, isServer }) => {
     if (!dev && !isServer) {
-      // Code splitting optimization
+      // Code splitting optimization with better defaults
       config.optimization.splitChunks = {
         chunks: 'all',
         cacheGroups: {
@@ -129,31 +129,35 @@ const nextConfig = {
             name: 'recharts',
             chunks: 'async',
             priority: 20,
+            reuseExistingChunk: true,
           },
           radixui: {
             test: /[\\/]node_modules[\\/]@radix-ui[\\/]/,
             name: 'radix-ui',
             chunks: 'all',
             priority: 15,
+            reuseExistingChunk: true,
           },
           vendor: {
             test: /[\\/]node_modules[\\/]/,
             name: 'vendors',
             chunks: 'all',
             priority: 10,
+            reuseExistingChunk: true,
           },
           common: {
             name: 'common',
             minChunks: 2,
             chunks: 'all',
             priority: 5,
+            reuseExistingChunk: true,
           },
         },
       };
 
-      // Tree shaking optimization
+      // Tree shaking optimization matching webpack defaults for safe removal
       config.optimization.usedExports = true;
-      config.optimization.sideEffects = false;
+      config.optimization.sideEffects = true;
 
       // Additional minification for production
       config.optimization.minimize = true;
@@ -171,7 +175,7 @@ const nextConfig = {
     }
     
     return config
-  },
+  }, */
 }
 
 export default nextConfig
