@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["profile", "trainingHistory", "selfReport", "plannedWorkout"],
+  "properties": {
+    "profile": { "$ref": "../../_index/references/contracts.md#/definitions/UserProfile" },
+    "trainingHistory": {
+      "type": "object",
+      "properties": {
+        "recentRuns": { "type": "array", "items": { "type": "object" } },
+        "weeklyVolumeKm": { "type": "number" },
+        "consistencyScore": { "type": "number" }
+      }
+    },
+    "selfReport": {
+      "type": "object",
+      "properties": {
+        "sleepQuality": { "type": "string" },
+        "soreness": { "type": "string" },
+        "mood": { "type": "string" },
+        "painSignals": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["sleepQuality", "soreness"]
+    },
+    "plannedWorkout": { "type": "object" }
+  }
+}

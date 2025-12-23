@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["routeId", "segments", "distanceKm"],
+  "properties": {
+    "routeId": { "type": "string" },
+    "distanceKm": { "type": "number" },
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "instruction": { "type": "string" },
+          "distanceKm": { "type": "number" },
+          "surface": { "type": "string" },
+          "elevationNote": { "type": "string" }
+        }
+      }
+    },
+    "safetyFlags": { "type": "array", "items": { "type": "object" } },
+    "mapHints": { "type": "array", "items": { "type": "string" } }
+  }
+}

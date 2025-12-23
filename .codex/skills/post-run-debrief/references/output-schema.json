@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["summary", "confidence", "nextStep"],
+  "properties": {
+    "summary": { "type": "array", "items": { "type": "string" } },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "nextStep": { "type": "string" },
+    "safetyFlags": { "type": "array", "items": { "type": "object" } }
+  }
+}

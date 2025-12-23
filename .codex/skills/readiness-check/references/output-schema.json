@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["decision", "recommendation"],
+  "properties": {
+    "decision": { "type": "string", "enum": ["proceed", "modify", "skip"] },
+    "recommendation": { "type": "string" },
+    "modifications": { "type": "array", "items": { "type": "string" } },
+    "safetyFlags": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "confidence": { "type": "string", "enum": ["low", "medium", "high"] }
+  }
+}

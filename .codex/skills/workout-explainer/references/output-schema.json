@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["purpose", "executionCues", "commonMistakes", "substitutions"],
+  "properties": {
+    "purpose": { "type": "string" },
+    "executionCues": { "type": "array", "items": { "type": "string" } },
+    "commonMistakes": { "type": "array", "items": { "type": "string" } },
+    "substitutions": { "type": "array", "items": { "type": "string" } },
+    "safetyFlags": { "type": "array", "items": { "type": "object" } }
+  }
+}
