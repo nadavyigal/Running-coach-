@@ -67,7 +67,7 @@ export const MAP_CONFIG = {
   // Markers
   markers: {
     user: {
-      color: '#ef4444', // red-500
+      color: '#3b82f6', // blue-500
       size: 32,
     },
     routeStart: {

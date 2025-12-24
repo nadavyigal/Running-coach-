@@ -335,14 +335,27 @@ export function RunMap({
     }
 
     if (!userMarkerRef.current) {
+      const sizePx = MAP_CONFIG.markers.user.size
       const el = document.createElement('div');
       el.className = 'run-user-location-marker';
-      el.style.width = `${MAP_CONFIG.markers.user.size}px`;
-      el.style.height = `${MAP_CONFIG.markers.user.size}px`;
+      el.style.width = `${sizePx}px`;
+      el.style.height = `${sizePx}px`;
       el.style.borderRadius = '50%';
-      el.style.backgroundColor = MAP_CONFIG.markers.user.color;
-      el.style.border = '3px solid white';
-      el.style.boxShadow = '0 0 10px rgba(239, 68, 68, 0.35)';
+      el.style.backgroundColor = 'rgba(59, 130, 246, 0.20)';
+      el.style.border = '2px solid rgba(59, 130, 246, 0.55)';
+      el.style.boxShadow = '0 0 12px rgba(59, 130, 246, 0.35)';
+      el.style.display = 'flex'
+      el.style.alignItems = 'center'
+      el.style.justifyContent = 'center'
+
+      const inner = document.createElement('div')
+      inner.style.width = `${Math.max(10, Math.round(sizePx * 0.35))}px`
+      inner.style.height = `${Math.max(10, Math.round(sizePx * 0.35))}px`
+      inner.style.borderRadius = '50%'
+      inner.style.backgroundColor = MAP_CONFIG.markers.user.color
+      inner.style.border = '2px solid white'
+      inner.style.boxShadow = '0 0 6px rgba(0, 0, 0, 0.12)'
+      el.appendChild(inner)
 
       userMarkerRef.current = new mapLibre.Marker({ element: el })
         .setLngLat([userLocation.lng, userLocation.lat])

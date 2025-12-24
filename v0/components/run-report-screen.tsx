@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { RunMap } from '@/components/maps/RunMap'
+import { MapErrorBoundary } from '@/components/maps/MapErrorBoundary'
 import { useToast } from '@/hooks/use-toast'
 import { dbUtils } from '@/lib/dbUtils'
 import type { Run } from '@/lib/db'
@@ -233,14 +234,16 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         <CardContent className="p-4">
           <h3 className="font-medium mb-3">Route</h3>
           <div className="relative h-64 rounded-lg overflow-hidden">
-            <RunMap
-              height="100%"
-              userLocation={null}
-              path={path}
-              followUser={false}
-              interactive={false}
-              showStartEndMarkers={true}
-            />
+            <MapErrorBoundary fallbackMessage="Route map temporarily unavailable">
+              <RunMap
+                height="100%"
+                userLocation={null}
+                path={path}
+                followUser={false}
+                interactive={false}
+                showStartEndMarkers={true}
+              />
+            </MapErrorBoundary>
           </div>
         </CardContent>
       </Card>

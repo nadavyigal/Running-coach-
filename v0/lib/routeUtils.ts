@@ -207,8 +207,10 @@ export function parseGpsPath(gpsPath: string | undefined): LatLng[] {
     const parsed = JSON.parse(gpsPath);
     if (!Array.isArray(parsed)) return [];
 
-    return parsed.flatMap((point) => {
-      if (typeof point !== 'object' || point === null) return [];
+    const normalized: LatLng[] = []
+
+    for (const point of parsed) {
+      if (typeof point !== 'object' || point === null) continue
 
       const anyPoint = point as any
       const lat =
@@ -224,10 +226,12 @@ export function parseGpsPath(gpsPath: string | undefined): LatLng[] {
             ? anyPoint.longitude
             : null
 
-      if (typeof lat !== 'number' || typeof lng !== 'number') return []
-      if (!isValidLatitude(lat) || !isValidLongitude(lng)) return []
-      return [{ lat, lng }]
-    });
+      if (typeof lat !== 'number' || typeof lng !== 'number') continue
+      if (!isValidLatitude(lat) || !isValidLongitude(lng)) continue
+      normalized.push({ lat, lng })
+    }
+
+    return normalized
   } catch {
     return [];
   }
