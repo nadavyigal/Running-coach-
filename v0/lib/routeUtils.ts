@@ -207,15 +207,27 @@ export function parseGpsPath(gpsPath: string | undefined): LatLng[] {
     const parsed = JSON.parse(gpsPath);
     if (!Array.isArray(parsed)) return [];
 
-    return parsed.filter(
-      point =>
-        typeof point === 'object' &&
-        point !== null &&
-        typeof point.lat === 'number' &&
-        typeof point.lng === 'number' &&
-        isValidLatitude(point.lat) &&
-        isValidLongitude(point.lng)
-    );
+    return parsed.flatMap((point) => {
+      if (typeof point !== 'object' || point === null) return [];
+
+      const anyPoint = point as any
+      const lat =
+        typeof anyPoint.lat === 'number'
+          ? anyPoint.lat
+          : typeof anyPoint.latitude === 'number'
+            ? anyPoint.latitude
+            : null
+      const lng =
+        typeof anyPoint.lng === 'number'
+          ? anyPoint.lng
+          : typeof anyPoint.longitude === 'number'
+            ? anyPoint.longitude
+            : null
+
+      if (typeof lat !== 'number' || typeof lng !== 'number') return []
+      if (!isValidLatitude(lat) || !isValidLongitude(lng)) return []
+      return [{ lat, lng }]
+    });
   } catch {
     return [];
   }

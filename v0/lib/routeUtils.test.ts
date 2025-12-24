@@ -211,6 +211,18 @@ describe('routeUtils', () => {
       expect(parsed[1]).toEqual({ lat: 32.0950, lng: 34.7820 });
     });
 
+    it('should normalize latitude/longitude shape', () => {
+      const gpsPath = JSON.stringify([
+        { latitude: 32.0748, longitude: 34.7678, timestamp: 1000, accuracy: 12 },
+        { latitude: 32.0950, longitude: 34.7820, timestamp: 2000, accuracy: 10 },
+      ]);
+      const parsed = parseGpsPath(gpsPath);
+
+      expect(parsed).toHaveLength(2);
+      expect(parsed[0]).toEqual({ lat: 32.0748, lng: 34.7678 });
+      expect(parsed[1]).toEqual({ lat: 32.0950, lng: 34.7820 });
+    });
+
     it('should return empty array for invalid JSON', () => {
       const parsed = parseGpsPath('invalid');
       expect(parsed).toEqual([]);

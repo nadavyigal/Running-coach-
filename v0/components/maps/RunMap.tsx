@@ -22,6 +22,8 @@ export interface RunMapProps {
   path?: LatLng[];
   /** Whether the camera should follow the user */
   followUser?: boolean;
+  /** Whether to render start/end markers for the path */
+  showStartEndMarkers?: boolean;
   /** Whether the map is interactive (pan/zoom) */
   interactive?: boolean;
   /** Map container height */
@@ -52,6 +54,7 @@ export function RunMap({
   userLocation,
   path = [],
   followUser = true,
+  showStartEndMarkers = false,
   interactive = true,
   height = '400px',
   className = '',
@@ -59,6 +62,8 @@ export function RunMap({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const userMarkerRef = useRef<MapLibreMarker | null>(null);
+  const startMarkerRef = useRef<MapLibreMarker | null>(null);
+  const endMarkerRef = useRef<MapLibreMarker | null>(null);
 
   const hasCenteredOnceRef = useRef(false);
   const lastCameraUpdateAtRef = useRef(0);
@@ -217,6 +222,10 @@ export function RunMap({
 
         userMarkerRef.current?.remove();
         userMarkerRef.current = null;
+        startMarkerRef.current?.remove();
+        startMarkerRef.current = null;
+        endMarkerRef.current?.remove();
+        endMarkerRef.current = null;
 
         mapRef.current.remove();
         mapRef.current = null;
@@ -243,7 +252,77 @@ export function RunMap({
         coordinates: path.map((p) => [p.lng, p.lat]),
       },
     });
-  }, [path, mapReady]);
+
+    if (!showStartEndMarkers) {
+      startMarkerRef.current?.remove();
+      startMarkerRef.current = null;
+      endMarkerRef.current?.remove();
+      endMarkerRef.current = null;
+      return;
+    }
+
+    const map = mapRef.current;
+    const first = path.at(0) ?? null;
+    const last = path.at(-1) ?? null;
+
+    if (!first || !last) {
+      startMarkerRef.current?.remove();
+      startMarkerRef.current = null;
+      endMarkerRef.current?.remove();
+      endMarkerRef.current = null;
+      return;
+    }
+
+    if (!startMarkerRef.current) {
+      const startEl = document.createElement('div');
+      startEl.style.width = `${MAP_CONFIG.markers.routeStart.size}px`;
+      startEl.style.height = `${MAP_CONFIG.markers.routeStart.size}px`;
+      startEl.style.borderRadius = '50%';
+      startEl.style.backgroundColor = MAP_CONFIG.markers.routeStart.color;
+      startEl.style.border = '3px solid white';
+      startEl.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.35)';
+
+      startMarkerRef.current = new (mapLibre as any).Marker({ element: startEl })
+        .setLngLat([first.lng, first.lat])
+        .addTo(map);
+    } else {
+      startMarkerRef.current.setLngLat([first.lng, first.lat]);
+    }
+
+    if (!endMarkerRef.current) {
+      const endEl = document.createElement('div');
+      endEl.style.width = `${MAP_CONFIG.markers.routeEnd.size}px`;
+      endEl.style.height = `${MAP_CONFIG.markers.routeEnd.size}px`;
+      endEl.style.borderRadius = '50%';
+      endEl.style.backgroundColor = MAP_CONFIG.markers.routeEnd.color;
+      endEl.style.border = '3px solid white';
+      endEl.style.boxShadow = '0 0 10px rgba(239, 68, 68, 0.35)';
+
+      endMarkerRef.current = new (mapLibre as any).Marker({ element: endEl })
+        .setLngLat([last.lng, last.lat])
+        .addTo(map);
+    } else {
+      endMarkerRef.current.setLngLat([last.lng, last.lat]);
+    }
+
+    if (!userLocation && !hasCenteredOnceRef.current && path.length > 0) {
+      const lats = path.map((p) => p.lat);
+      const lngs = path.map((p) => p.lng);
+      const minLat = Math.min(...lats);
+      const maxLat = Math.max(...lats);
+      const minLng = Math.min(...lngs);
+      const maxLng = Math.max(...lngs);
+
+      hasCenteredOnceRef.current = true;
+      map.fitBounds(
+        [
+          [minLng, minLat],
+          [maxLng, maxLat],
+        ],
+        { padding: 40, duration: 0 }
+      );
+    }
+  }, [path, mapReady, mapLibre, showStartEndMarkers, userLocation]);
 
   // Update user marker + optionally follow camera
   useEffect(() => {

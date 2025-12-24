@@ -41,8 +41,8 @@ import { CoachingPreferencesSettings } from "@/components/coaching-preferences-s
 import { GoalProgressDashboard } from "@/components/goal-progress-dashboard";
 import { PerformanceAnalyticsDashboard } from "@/components/performance-analytics-dashboard";
 import { Brain, Target } from "lucide-react";
-import { PlanTemplateFlow } from "@/components/plan-template-flow";
-import { type Goal } from "@/lib/db";
+  import { PlanTemplateFlow } from "@/components/plan-template-flow";
+  import { type Goal, type Run } from "@/lib/db";
 
 export function ProfileScreen() {
   // Add state for the shoes modal at the top of the component
@@ -59,6 +59,8 @@ export function ProfileScreen() {
   const [showPlanTemplateFlow, setShowPlanTemplateFlow] = useState(false);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [primaryGoal, setPrimaryGoal] = useState<Goal | null>(null);
+  const [recentRuns, setRecentRuns] = useState<Run[]>([])
+  const [isRunsLoading, setIsRunsLoading] = useState(false)
 
   const handleShareClick = (badgeId: string, badgeName: string) => {
     setSelectedBadge({ id: badgeId, name: badgeName });
@@ -103,11 +105,50 @@ export function ProfileScreen() {
     }
   };
 
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const formatPace = (secondsPerKm: number) => {
+    if (!Number.isFinite(secondsPerKm) || secondsPerKm <= 0) return '--:--'
+    const mins = Math.floor(secondsPerKm / 60)
+    const secs = Math.round(secondsPerKm % 60)
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
   // Add useEffect to load shoes data
   useEffect(() => {
     const shoes = JSON.parse(localStorage.getItem("running-shoes") || "[]")
     setRunningShoes(shoes)
   }, [])
+
+  useEffect(() => {
+    if (!userId) return
+    let cancelled = false
+
+    const loadRuns = async () => {
+      setIsRunsLoading(true)
+      try {
+        const runs = await dbUtils.getUserRuns(userId, 10)
+        if (!cancelled) setRecentRuns(runs)
+      } catch (err) {
+        console.warn('[ProfileScreen] Failed to load runs:', err)
+      } finally {
+        if (!cancelled) setIsRunsLoading(false)
+      }
+    }
+
+    loadRuns()
+
+    const onRunSaved = () => loadRuns()
+    window.addEventListener('run-saved', onRunSaved)
+    return () => {
+      cancelled = true
+      window.removeEventListener('run-saved', onRunSaved)
+    }
+  }, [userId])
 
   useEffect(() => {
     const loadUserData = async (retryCount = 0) => {
@@ -503,6 +544,55 @@ export function ProfileScreen() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Recent Runs */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Recent Runs</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {isRunsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading runs...
+            </div>
+          ) : recentRuns.length === 0 ? (
+            <p className="text-sm text-gray-600">No runs yet.</p>
+          ) : (
+            recentRuns.slice(0, 5).map((run) => (
+              <div key={run.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-white">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-900">{run.distance.toFixed(2)} km</span>
+                    <span className="text-xs text-gray-500">•</span>
+                    <span className="text-sm text-gray-700">{formatTime(run.duration)}</span>
+                    <span className="text-xs text-gray-500">•</span>
+                    <span className="text-sm text-gray-700">{formatPace(run.pace ?? run.duration / run.distance)}/km</span>
+                  </div>
+                  <div className="text-xs text-gray-500 truncate">
+                    {new Date(run.completedAt).toLocaleDateString()} • {run.type}
+                    {run.runReport ? ' • report ready' : ''}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (!run.id) return
+                    try {
+                      window.dispatchEvent(new CustomEvent('navigate-to-run-report', { detail: { runId: run.id } }))
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                >
+                  View
+                </Button>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
       {/* Adaptive Coaching Widget */}
       {userId && (

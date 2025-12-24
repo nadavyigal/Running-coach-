@@ -6,9 +6,9 @@
 	import { DATABASE } from '@/lib/constants'
 	import { logger } from '@/lib/logger';
 
-type MainScreen = 'today' | 'plan' | 'record' | 'chat' | 'profile'
+type MainScreen = 'today' | 'plan' | 'record' | 'chat' | 'profile' | 'run-report'
 
-const MAIN_SCREENS: ReadonlySet<MainScreen> = new Set(['today', 'plan', 'record', 'chat', 'profile'])
+const MAIN_SCREENS: ReadonlySet<MainScreen> = new Set(['today', 'plan', 'record', 'chat', 'profile', 'run-report'])
 
 function parseMainScreen(value: string | null | undefined): MainScreen | null {
   if (!value) return null
@@ -50,6 +50,22 @@ function getRequestedMainScreen(): MainScreen | null {
   }
 
   return null
+}
+
+function parseRunId(value: string | null | undefined): number | null {
+  if (!value) return null
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function getRequestedRunId(): number | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const usp = new URLSearchParams(window.location.search)
+    return parseRunId(usp.get('runId'))
+  } catch {
+    return null
+  }
 }
 
 // Safer dynamic imports with comprehensive error handling
@@ -125,6 +141,7 @@ const TodayScreen = dynamic(
 
 const PlanScreen = dynamic(() => import("@/components/plan-screen").then(m => ({ default: m.PlanScreen })), { ssr: false })
 const RecordScreen = dynamic(() => import("@/components/record-screen").then(m => ({ default: m.RecordScreen })), { ssr: false })
+const RunReportScreen = dynamic(() => import("@/components/run-report-screen").then(m => ({ default: m.RunReportScreen })), { ssr: false })
 const ChatScreen = dynamic(
   () => import("@/components/chat-screen")
     .then((module) => {
@@ -204,6 +221,7 @@ const OnboardingDebugPanel = dynamic(() => import("@/components/onboarding-debug
 export default function RunSmartApp() {
   const [mounted, setMounted] = useState(false) // Fix hydration by rendering only after mount
   const [currentScreen, setCurrentScreen] = useState<string>("onboarding")
+  const [runReportId, setRunReportId] = useState<number | null>(null)
   const [isOnboardingComplete, setIsOnboardingComplete] = useState(false)
   const [isLoading, setIsLoading] = useState(true) // Start with loading=true
   const [hasError, setHasError] = useState(false)
@@ -236,6 +254,10 @@ export default function RunSmartApp() {
     logger.log('🔍 [INIT] Mounted! Starting initialization...')
 
     const requestedMainScreen = getRequestedMainScreen()
+    const requestedRunId = requestedMainScreen === 'run-report' ? getRequestedRunId() : null
+    if (requestedRunId) {
+      setRunReportId(requestedRunId)
+    }
 
     // Prevent double initialization in React Strict Mode
     if (initRef.current) {
@@ -430,14 +452,19 @@ export default function RunSmartApp() {
       // ignore
     }
 
-    try {
-      const url = new URL(window.location.href)
-      url.searchParams.set('screen', mainScreen)
-      window.history.replaceState({}, '', url.toString())
-    } catch {
-      // ignore
-    }
-  }, [currentScreen, isOnboardingComplete, mounted])
+     try {
+       const url = new URL(window.location.href)
+       url.searchParams.set('screen', mainScreen)
+       if (mainScreen === 'run-report' && runReportId) {
+         url.searchParams.set('runId', String(runReportId))
+       } else {
+         url.searchParams.delete('runId')
+       }
+       window.history.replaceState({}, '', url.toString())
+     } catch {
+       // ignore
+     }
+   }, [currentScreen, isOnboardingComplete, mounted, runReportId])
 
   // Separate useEffect for event listeners to avoid SSR issues
   useEffect(() => {
@@ -461,6 +488,15 @@ export default function RunSmartApp() {
       setCurrentScreen("plan")
     }
 
+    const handleNavigateToRunReport = (event: Event) => {
+      const detail = (event as CustomEvent).detail as any
+      const nextRunId = parseRunId(String(detail?.runId ?? ''))
+      if (nextRunId) {
+        setRunReportId(nextRunId)
+      }
+      setCurrentScreen("run-report")
+    }
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.shiftKey && event.key === 'D') {
         event.preventDefault()
@@ -471,6 +507,7 @@ export default function RunSmartApp() {
     window.addEventListener("navigate-to-record", handleNavigateToRecord)
     window.addEventListener("navigate-to-chat", handleNavigateToChat)
     window.addEventListener("navigate-to-plan", handleNavigateToPlan)
+    window.addEventListener("navigate-to-run-report", handleNavigateToRunReport as EventListener)
     window.addEventListener("keydown", handleKeyDown)
 
     return () => {
@@ -478,6 +515,7 @@ export default function RunSmartApp() {
       window.removeEventListener("navigate-to-record", handleNavigateToRecord)
       window.removeEventListener("navigate-to-chat", handleNavigateToChat)
       window.removeEventListener("navigate-to-plan", handleNavigateToPlan)
+      window.removeEventListener("navigate-to-run-report", handleNavigateToRunReport as EventListener)
       window.removeEventListener("keydown", handleKeyDown)
     }
   }, []) // Empty dependency array - event listeners should only be set up once
@@ -601,20 +639,30 @@ export default function RunSmartApp() {
 
       logger.log('📱 Rendering main app with screen:', currentScreen, '| isOnboardingComplete:', isOnboardingComplete)
       
-      switch (currentScreen) {
-        case "today":
-          return <TodayScreen />
-        case "plan":
-          return <PlanScreen />
-        case "record":
-          return <RecordScreen />
-        case "chat":
-          return <ChatScreen />
-        case "profile":
-          return <ProfileScreen />
-        default:
-          return <TodayScreen />
-      }
+       switch (currentScreen) {
+         case "today":
+           return <TodayScreen />
+         case "plan":
+           return <PlanScreen />
+         case "record":
+           return <RecordScreen />
+         case "run-report":
+           return (
+             <RunReportScreen
+               runId={runReportId}
+               onBack={() => {
+                 setRunReportId(null)
+                 setCurrentScreen("today")
+               }}
+             />
+           )
+         case "chat":
+           return <ChatScreen />
+         case "profile":
+           return <ProfileScreen />
+         default:
+           return <TodayScreen />
+       }
     } catch (renderError) {
       logger.error('Screen rendering error:', renderError);
       return (

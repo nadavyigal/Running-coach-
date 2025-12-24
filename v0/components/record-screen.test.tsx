@@ -168,6 +168,24 @@ describe('RecordScreen GPS lifecycle', () => {
     await waitFor(() => expect(screen.getByText('0.01')).toBeInTheDocument())
   })
 
+  it('filters points with very low accuracy (distance does not increase)', async () => {
+    mockPermissions.query.mockResolvedValue({ state: 'granted' })
+    mockGeolocation.watchPosition.mockImplementation((success: any) => {
+      success(makePosition({ latitude: 40.7128, longitude: -74.006, accuracy: 250, timestamp: 1000 }))
+      success(makePosition({ latitude: 40.7138, longitude: -74.006, accuracy: 250, timestamp: 2000 }))
+      return 1
+    })
+
+    render(<RecordScreen />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Run' }))
+
+    await waitFor(() => expect(mockGeolocation.watchPosition).toHaveBeenCalled())
+
+    // Distance display should remain at 0.00 km when points are discarded by accuracy filter.
+    await waitFor(() => expect(screen.getByText('0.00')).toBeInTheDocument())
+  })
+
   it('pauses clears watch and resume starts a new watch', async () => {
     mockPermissions.query.mockResolvedValue({ state: 'granted' })
 

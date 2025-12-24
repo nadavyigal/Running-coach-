@@ -1681,6 +1681,21 @@ export async function createRun(runData: Omit<Run, 'id' | 'createdAt'>): Promise
   return recordRun(runData);
 }
 
+export async function getRunById(runId: number): Promise<Run | null> {
+  return safeDbOperation(async () => {
+    if (!db) return null
+    const run = await db.runs.get(runId)
+    return run ?? null
+  }, 'getRunById', null)
+}
+
+export async function updateRun(runId: number, updates: Partial<Run>): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) return
+    await db.runs.update(runId, { ...updates, updatedAt: new Date() })
+  }, 'updateRun')
+}
+
 /**
  * Get user runs with filtering
  */

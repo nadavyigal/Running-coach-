@@ -754,6 +754,9 @@ export interface Run {
   startAccuracy?: number; // GPS accuracy at start (meters)
   endAccuracy?: number; // GPS accuracy at end (meters)
   averageAccuracy?: number; // Average GPS accuracy during run (meters)
+  runReport?: string; // JSON string of post-run report (AI + heuristics)
+  runReportSource?: 'ai' | 'fallback';
+  runReportCreatedAt?: Date;
   shoeId?: number;
   importSource?: string; // e.g. "image", "manual", "strava"
   importConfidencePct?: number;

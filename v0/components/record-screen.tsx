@@ -47,11 +47,17 @@ export function RecordScreen() {
   const [currentUser, setCurrentUser] = useState<User | null>(null)
 	  const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
 	  
-	  // GPS monitoring state
-	  const [currentGPSAccuracy, setCurrentGPSAccuracy] = useState<GPSAccuracyData | null>(null)
-	  const [gpsAccuracyHistory, setGpsAccuracyHistory] = useState<GPSAccuracyData[]>([])
-	  const [showGPSDetails, setShowGPSDetails] = useState(false)
-  
+ 	  // GPS monitoring state
+ 	  const [currentGPSAccuracy, setCurrentGPSAccuracy] = useState<GPSAccuracyData | null>(null)
+ 	  const [gpsAccuracyHistory, setGpsAccuracyHistory] = useState<GPSAccuracyData[]>([])
+ 	  const [showGPSDetails, setShowGPSDetails] = useState(false)
+
+  const gpsDebugEnabled =
+    process.env.NODE_ENV !== 'production' &&
+    (process.env.NEXT_PUBLIC_GPS_DEBUG_OVERLAY === 'true' ||
+      (typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).has('gpsDebug')))
+   
   // GPS and tracking state
   const [gpsPath, setGpsPath] = useState<GPSCoordinate[]>([])
   const [currentPosition, setCurrentPosition] = useState<GPSCoordinate | null>(null)
@@ -60,6 +66,11 @@ export function RecordScreen() {
   const totalDistanceKmRef = useRef(0)
   const lastRecordedPointRef = useRef<GPSCoordinate | null>(null)
   const gpsMonitoringRef = useRef<GPSMonitoringService | null>(null)
+  const GPS_MAX_ACCEPTABLE_ACCURACY_METERS = 80
+  const gpsWatchCallbackCountRef = useRef(0)
+  const [gpsWatchCallbackCount, setGpsWatchCallbackCount] = useState(0)
+  const lastGpsUpdateAtRef = useRef<number | null>(null)
+  const [lastGpsUpdateAt, setLastGpsUpdateAt] = useState<number | null>(null)
   const startTimeRef = useRef<number>(0)
   const elapsedRunMsRef = useRef<number>(0)
   const isRunningRef = useRef(false)
@@ -224,9 +235,8 @@ export function RecordScreen() {
 
     // Accuracy filtering: ignore noisy fixes before they can affect distance accumulation.
     // Typical outdoor running is < ~20m; beyond ~40m tends to add lots of jitter/overcount.
-    const MAX_ACCEPTABLE_ACCURACY_METERS = 40
     const nextAccuracy = typeof nextPoint.accuracy === 'number' ? nextPoint.accuracy : Number.POSITIVE_INFINITY
-    if (nextAccuracy > MAX_ACCEPTABLE_ACCURACY_METERS) return
+    if (nextAccuracy > GPS_MAX_ACCEPTABLE_ACCURACY_METERS) return
 
     // First accepted fix becomes our baseline (no distance added yet).
     if (!lastPoint) {
@@ -257,7 +267,9 @@ export function RecordScreen() {
     // - Jump rejection: ignore implausible speed spikes ("teleports").
     // - Jitter rejection: ignore very small deltas likely caused by GPS noise.
     const MAX_REASONABLE_SPEED_MPS = 9 // ~32 km/h (beyond elite running, filters car/GPS jumps)
-    const MIN_DISTANCE_METERS = Math.max(2, nextAccuracy * 0.1)
+    // Avoid undercounting: typical running at ~5:00–6:30/km moves ~2–3m per second.
+    // Keep this threshold low enough to accept 1s GPS updates, while still ignoring tiny jitter.
+    const MIN_DISTANCE_METERS = Math.max(0.8, Math.min(2, nextAccuracy * 0.025))
 
     if (segmentSpeedMps > MAX_REASONABLE_SPEED_MPS) return
     if (segmentDistanceMeters < MIN_DISTANCE_METERS) return
@@ -293,6 +305,10 @@ export function RecordScreen() {
       }
 
       stopGpsTracking()
+      gpsWatchCallbackCountRef.current = 0
+      setGpsWatchCallbackCount(0)
+      lastGpsUpdateAtRef.current = null
+      setLastGpsUpdateAt(null)
 
       let settled = false
       const settle = (value: boolean) => {
@@ -313,11 +329,27 @@ export function RecordScreen() {
           settle(true)
 
           const timestamp = Number.isFinite(position.timestamp) ? position.timestamp : Date.now()
+          gpsWatchCallbackCountRef.current += 1
+          setGpsWatchCallbackCount(gpsWatchCallbackCountRef.current)
+          lastGpsUpdateAtRef.current = Date.now()
+          setLastGpsUpdateAt(lastGpsUpdateAtRef.current)
           const newPosition: GPSCoordinate = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
             timestamp,
             accuracy: position.coords.accuracy
+          }
+
+          if (gpsDebugEnabled) {
+            console.log('[GPS]', {
+              watchId: watchIdRef.current,
+              count: gpsWatchCallbackCountRef.current,
+              latitude: newPosition.latitude,
+              longitude: newPosition.longitude,
+              timestamp: newPosition.timestamp,
+              accuracy: newPosition.accuracy,
+              speed: position.coords.speed ?? null,
+            })
           }
 
           setCurrentPosition(newPosition)
@@ -531,26 +563,33 @@ export function RecordScreen() {
 	          ? gpsAccuracyHistory.reduce((sum, acc) => sum + acc.accuracyRadius, 0) / gpsAccuracyHistory.length
 	          : undefined
 
-	      const runData: Omit<Run, 'id' | 'createdAt'> = {
-	        userId: user.id,
-	        type: resolveRunType(currentWorkout?.type),
-	        distance,
-	        duration,
-	        pace: duration / distance,
-	        calories: estimateCalories(duration, distance),
-	        gpsPath: JSON.stringify(gpsPathRef.current),
-	        gpsAccuracyData: JSON.stringify(gpsAccuracyHistory),
-	        completedAt: new Date(),
-	        ...(selectedRoute
-	          ? { notes: `Route: ${selectedRoute.name}`, route: selectedRoute.name }
-	          : {}),
+ 	      const runData: Omit<Run, 'id' | 'createdAt'> = {
+ 	        userId: user.id,
+ 	        type: resolveRunType(currentWorkout?.type),
+ 	        distance,
+ 	        duration,
+ 	        pace: duration / distance,
+ 	        calories: estimateCalories(duration, distance),
+ 	        gpsPath: JSON.stringify(
+ 	          gpsPathRef.current.map((point) => ({
+ 	            lat: point.latitude,
+ 	            lng: point.longitude,
+ 	            timestamp: point.timestamp,
+ 	            accuracy: point.accuracy,
+ 	          }))
+ 	        ),
+ 	        gpsAccuracyData: JSON.stringify(gpsAccuracyHistory),
+ 	        completedAt: new Date(),
+ 	        ...(selectedRoute
+ 	          ? { notes: `Route: ${selectedRoute.name}`, route: selectedRoute.name }
+ 	          : {}),
 	        ...(typeof startAccuracy === 'number' ? { startAccuracy } : {}),
 	        ...(typeof endAccuracy === 'number' ? { endAccuracy } : {}),
 	        ...(typeof averageAccuracy === 'number' ? { averageAccuracy } : {}),
 	        ...(typeof currentWorkout?.id === 'number' ? { workoutId: currentWorkout.id } : {}),
 	      }
 
-	      await dbUtils.createRun(runData)
+	      const runId = await dbUtils.createRun(runData)
 
 	      // Mark workout as completed if it exists
 	      if (currentWorkout?.id) {
@@ -562,8 +601,12 @@ export function RecordScreen() {
         description: `${distance.toFixed(2)}km in ${formatTime(duration)}`,
       })
 
-      // Navigate back to today screen
-      router.push('/')
+      try {
+        window.dispatchEvent(new CustomEvent("run-saved", { detail: { userId: user.id, runId } }))
+        window.dispatchEvent(new CustomEvent("navigate-to-run-report", { detail: { runId } }))
+      } catch {
+        router.push('/')
+      }
     } catch (error) {
       console.error('Error saving run:', error)
       toast({
@@ -678,16 +721,31 @@ export function RecordScreen() {
                 </p>
               </div>
             </div>
-             <div className="flex gap-2">
-               <Button
-                 variant="outline"
-                 size="sm"
-                 onClick={() => setShowGPSDetails(!showGPSDetails)}
-               >
-                {showGPSDetails ? 'Hide' : 'Details'}
-              </Button>
-            </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowGPSDetails(!showGPSDetails)}
+                >
+                 {showGPSDetails ? 'Hide' : 'Details'}
+               </Button>
+             </div>
           </div>
+
+          {isRunning && gpsAccuracy > GPS_MAX_ACCEPTABLE_ACCURACY_METERS && (
+            <div className="mt-3 p-3 bg-yellow-100 rounded-lg">
+              <div className="flex items-start gap-2">
+                <Info className="h-5 w-5 text-yellow-700 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-yellow-900">Low GPS accuracy</p>
+                  <p className="text-sm text-yellow-800 mt-1">
+                    Current accuracy (±{Math.round(gpsAccuracy)}m) is worse than the recording threshold (±{GPS_MAX_ACCEPTABLE_ACCURACY_METERS}m),
+                    so points may be ignored and distance can undercount. Enable precise location and move to open sky.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* GPS Permission Denied Warning */}
           {gpsPermission === 'denied' && (
@@ -871,6 +929,42 @@ export function RecordScreen() {
                   <p className="text-sm text-slate-700 dark:text-slate-300">
                     Start a run to enable live GPS tracking
                   </p>
+                </div>
+              </div>
+            )}
+            {gpsDebugEnabled && (
+              <div className="absolute bottom-2 left-2 right-2 rounded-md bg-black/70 text-white p-2 text-xs font-mono space-y-1">
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                  <span>perm={gpsPermission}</span>
+                  <span>watchId={watchIdRef.current ?? 'null'}</span>
+                  <span>cb={gpsWatchCallbackCount}</span>
+                  <span>acc={gpsAccuracy ? `${Math.round(gpsAccuracy)}m` : '--'}</span>
+                  <span>path={gpsPathRef.current.length}</span>
+                  <span>dist={Math.round((totalDistanceKmRef.current ?? 0) * 1000)}m</span>
+                  <span>
+                    spd=
+                    {Number.isFinite(metrics.currentSpeed)
+                      ? `${(metrics.currentSpeed * 3.6).toFixed(1)}kmh`
+                      : '--'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                  <span>
+                    last=
+                    {currentPosition
+                      ? `${currentPosition.latitude.toFixed(5)},${currentPosition.longitude.toFixed(5)}`
+                      : '--'}
+                  </span>
+                  <span>
+                    ts=
+                    {currentPosition?.timestamp
+                      ? new Date(currentPosition.timestamp).toLocaleTimeString()
+                      : '--'}
+                  </span>
+                  <span>
+                    since=
+                    {lastGpsUpdateAt ? `${Math.round((Date.now() - lastGpsUpdateAt) / 1000)}s` : '--'}
+                  </span>
                 </div>
               </div>
             )}
