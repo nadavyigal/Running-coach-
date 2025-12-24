@@ -3753,6 +3753,8 @@ export const dbUtils = {
   // Run tracking
   recordRun,
   createRun,
+  getRunById,
+  updateRun,
   getUserRuns,
   getRunStats,
   getUserBadges,
