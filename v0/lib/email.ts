@@ -4,9 +4,11 @@ import { Resend } from 'resend';
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Configuration
-const DEFAULT_FROM_EMAIL = 'runsmartteam@gmail.com';
+const DEFAULT_FROM_EMAIL = 'Run-Smart <noreply@runsmart-ai.com>';
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL?.trim() || DEFAULT_FROM_EMAIL;
 const DOMAIN = 'runsmart-ai.com';
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || `https://${DOMAIN}`).replace(/\/$/, '');
+const APP_URL = new URL('/', SITE_URL).toString();
 
 export interface EmailOptions {
   to: string | string[];
@@ -88,7 +90,7 @@ export async function sendWelcomeEmail(email: string, name?: string) {
                     </ul>
 
                     <div style="text-align: center; margin: 32px 0;">
-                      <a href="https://${DOMAIN}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                        <a href="${APP_URL}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
                         Start Your Journey
                       </a>
                     </div>
@@ -104,7 +106,7 @@ export async function sendWelcomeEmail(email: string, name?: string) {
                   <td style="padding: 20px 40px; background-color: #f9f9f9; border-radius: 0 0 8px 8px; text-align: center;">
                     <p style="margin: 0; color: #888888; font-size: 14px;">
                       Run-Smart AI Running Coach<br>
-                      <a href="https://${DOMAIN}" style="color: #667eea; text-decoration: none;">${DOMAIN}</a>
+                      <a href="${APP_URL}" style="color: #667eea; text-decoration: none;">${DOMAIN}</a>
                     </p>
                   </td>
                 </tr>
@@ -128,7 +130,7 @@ Here's what you can do with Run-Smart:
 - Chat with your AI running coach for advice and motivation
 - Join a supportive community of runners
 
-Start Your Journey: https://${DOMAIN}
+Start Your Journey: ${APP_URL}
 
 If you have any questions, just reply to this email. We're here to help!
 
@@ -201,8 +203,11 @@ export async function sendBetaWaitlistEmail(email: string, name?: string) {
                     </p>
 
                     <div style="text-align: center; margin: 32px 0;">
-                      <p style="margin: 0 0 16px; color: #888888; font-size: 14px;">
-                        Share Run-Smart with fellow runners to move up the waitlist!
+                      <a href="${APP_URL}" style="display: inline-block; padding: 14px 32px; background: #10b981; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                        Start Onboarding
+                      </a>
+                      <p style="margin: 16px 0 0; color: #888888; font-size: 14px;">
+                        Use the link above to begin onboarding and explore the app.
                       </p>
                     </div>
 
@@ -217,7 +222,7 @@ export async function sendBetaWaitlistEmail(email: string, name?: string) {
                   <td style="padding: 20px 40px; background-color: #f9f9f9; border-radius: 0 0 8px 8px; text-align: center;">
                     <p style="margin: 0 0 12px; color: #888888; font-size: 14px;">
                       Run-Smart AI Running Coach<br>
-                      <a href="https://${DOMAIN}" style="color: #667eea; text-decoration: none;">${DOMAIN}</a>
+                      <a href="${APP_URL}" style="color: #667eea; text-decoration: none;">${DOMAIN}</a>
                     </p>
                     <p style="margin: 0; color: #aaaaaa; font-size: 12px;">
                       You're receiving this email because you signed up for the Run-Smart beta waitlist.
@@ -248,6 +253,8 @@ What happens next?
 4. Exclusive perks for being an early supporter
 
 In the meantime, follow us on social media to stay updated on our progress and get running tips from our AI coach.
+
+Start onboarding: ${APP_URL}
 
 Share Run-Smart with fellow runners to move up the waitlist!
 
