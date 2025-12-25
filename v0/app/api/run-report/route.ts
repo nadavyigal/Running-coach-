@@ -54,8 +54,8 @@ const RunReportRequestSchema = z
         endAccuracy: z.coerce.number().min(0).optional(),
         averageAccuracy: z.coerce.number().min(0).optional(),
       })
-      .optional()
-      .passthrough(),
+      .passthrough()
+      .optional(),
     derivedMetrics: DerivedMetricsSchema.optional(),
     upcomingWorkouts: z.array(WorkoutSchema).optional(),
     userFeedback: z
