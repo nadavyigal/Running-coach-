@@ -23,17 +23,17 @@ export const metadata: Metadata = {
     type: 'website',
     images: [
       {
-        url: '/placeholder.jpg',
+        url: '/beta-app-preview.jpg',
         width: 1200,
         height: 630,
-        alt: 'Run-Smart preview',
+        alt: 'Run-Smart app preview',
       },
     ],
   },
   twitter: {
     title: 'Run-Smart AI Running Coach',
     description: 'Adaptive training plans that adjust to your life. Start your running journey today.',
-    images: ['/placeholder.jpg'],
+    images: ['/beta-app-preview.jpg'],
     card: 'summary_large_image',
   },
 }
@@ -71,8 +71,8 @@ export default function MarketingHomePage() {
           <Card className="overflow-hidden">
             <div className="relative aspect-video bg-muted">
               <Image
-                src="/placeholder.jpg"
-                alt="Run-Smart app preview placeholder"
+                src="/beta-app-preview.jpg"
+                alt="Run-Smart app preview"
                 fill
                 sizes="(max-width: 1024px) 100vw, 50vw"
                 className="object-cover"
@@ -82,7 +82,7 @@ export default function MarketingHomePage() {
               <div className="absolute bottom-4 left-4 right-4 space-y-1">
                 <div className="text-sm font-medium">Product preview</div>
                 <div className="text-xs text-muted-foreground">
-                  Replace with real screenshots or a short hero video when ready.
+                  A peek at the Run-Smart beta experience.
                 </div>
               </div>
             </div>
@@ -204,13 +204,13 @@ export default function MarketingHomePage() {
         <div className="space-y-2">
           <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">See Run-Smart in Action</h2>
           <p className="text-muted-foreground">
-            Add a 60-90 second demo video or animated GIF to show plan creation, today view, and AI chat.
+            A quick walkthrough of onboarding, today view, and AI coaching.
           </p>
         </div>
 
         <Card className="overflow-hidden">
           <div className="relative aspect-video bg-muted">
-            <Image src="/placeholder.svg" alt="Demo placeholder" fill sizes="100vw" />
+            <Image src="/beta-app-preview.jpg" alt="Run-Smart demo preview" fill sizes="100vw" className="object-cover" />
           </div>
         </Card>
       </section>

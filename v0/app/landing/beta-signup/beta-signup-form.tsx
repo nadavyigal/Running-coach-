@@ -106,7 +106,7 @@ export function BetaSignupForm() {
         return
       }
 
-      router.push('/beta-signup/thanks')
+      router.push('/landing/beta-signup/thanks')
     } catch (error) {
       setServerError(error instanceof Error ? error.message : 'Network error. Please try again.')
     }

@@ -36,18 +36,20 @@ function getStore(): BetaSignupStore {
 }
 
 function getSupabaseConfig():
-  | { url: string; serviceRoleKey: string }
-  | { url: string; serviceRoleKey: null } {
+  | { url: string; serviceRoleKey: string | null; anonKey: string | null }
+  | { url: string; serviceRoleKey: null; anonKey: null } {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? ''
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? ''
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? ''
 
   if (!url) {
-    return { url: '', serviceRoleKey: null }
+    return { url: '', serviceRoleKey: null, anonKey: null }
   }
 
   return {
     url,
     serviceRoleKey: serviceRoleKey ? serviceRoleKey : null,
+    anonKey: anonKey ? anonKey : null,
   }
 }
 
@@ -74,14 +76,14 @@ async function persistToMemory(input: CreateBetaSignupInput): Promise<CreateBeta
   return { storage: 'memory', created: true }
 }
 
-async function persistToSupabase(input: CreateBetaSignupInput, config: { url: string; serviceRoleKey: string }) {
+async function persistToSupabase(input: CreateBetaSignupInput, config: { url: string; apiKey: string }) {
   const url = new URL('/rest/v1/beta_signups', config.url)
 
   const response = await fetch(url.toString(), {
     method: 'POST',
     headers: {
-      apikey: config.serviceRoleKey,
-      Authorization: `Bearer ${config.serviceRoleKey}`,
+      apikey: config.apiKey,
+      Authorization: `Bearer ${config.apiKey}`,
       'Content-Type': 'application/json',
       Prefer: 'return=minimal',
     },
@@ -114,27 +116,46 @@ export async function createBetaSignup(input: CreateBetaSignupInput): Promise<Cr
   }
 
   const supabase = getSupabaseConfig()
-  if (supabase.url && !supabase.serviceRoleKey) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('SUPABASE_SERVICE_ROLE_KEY is required to persist beta signups in production')
-    }
-    return await persistToMemory(normalizedInput)
-  }
+  if (supabase.url) {
+    if (supabase.serviceRoleKey) {
+      try {
+        return await persistToSupabase(normalizedInput, { url: supabase.url, apiKey: supabase.serviceRoleKey })
+      } catch (error) {
+        if (supabase.anonKey) {
+          try {
+            return await persistToSupabase(normalizedInput, { url: supabase.url, apiKey: supabase.anonKey })
+          } catch (anonError) {
+            if (process.env.NODE_ENV !== 'production') {
+              return await persistToMemory(normalizedInput)
+            }
+            throw anonError
+          }
+        }
 
-  if (supabase.url && supabase.serviceRoleKey) {
-    try {
-      return await persistToSupabase(normalizedInput, { url: supabase.url, serviceRoleKey: supabase.serviceRoleKey })
-    } catch (error) {
-      if (process.env.NODE_ENV !== 'production') {
-        // If Supabase is misconfigured/unreachable, avoid losing signups in local dev.
-        return await persistToMemory(normalizedInput)
+        if (process.env.NODE_ENV !== 'production') {
+          // If Supabase is misconfigured/unreachable, avoid losing signups in local dev.
+          return await persistToMemory(normalizedInput)
+        }
+        throw error
       }
-      throw error
+    }
+
+    if (supabase.anonKey) {
+      try {
+        return await persistToSupabase(normalizedInput, { url: supabase.url, apiKey: supabase.anonKey })
+      } catch (error) {
+        if (process.env.NODE_ENV !== 'production') {
+          return await persistToMemory(normalizedInput)
+        }
+        throw error
+      }
     }
   }
 
   if (process.env.NODE_ENV === 'production') {
-    throw new Error('Supabase is not configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)')
+    throw new Error(
+      'Supabase is not configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY)'
+    )
   }
 
   return await persistToMemory(normalizedInput)

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: "You're on the waitlist",
   description: 'Thanks for joining the Run-Smart beta waitlist. Share to skip the line.',
   alternates: {
-    canonical: '/beta-signup/thanks',
+    canonical: '/landing/beta-signup/thanks',
   },
   robots: {
     index: false,

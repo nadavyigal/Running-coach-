@@ -14,17 +14,17 @@ export const metadata: Metadata = {
    description:
       'Get early access to Run-Smart AI running coach. Lifetime 50% discount, exclusive badge, direct founder access. Limited to 500 beta testers. Sign up now.',
    alternates: {
-      canonical: '/beta-signup',
+      canonical: '/landing/beta-signup',
    },
    openGraph: {
       title: 'Join the Run-Smart Beta - AI Running Coach',
       description:
          'Be among the first 500 runners to experience adaptive AI coaching. Lifetime discounts + exclusive perks.',
-      url: '/beta-signup',
+      url: '/landing/beta-signup',
       type: 'website',
       images: [
          {
-            url: '/placeholder.jpg',
+            url: '/beta-app-preview.jpg',
             width: 1200,
             height: 630,
             alt: 'Join the Run-Smart Beta',
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
    twitter: {
       title: 'Join the Run-Smart Beta',
       description: 'Early access to Run-Smart AI running coach. Lifetime 50% discount, exclusive badge, direct founder access.',
-      images: ['/placeholder.jpg'],
+      images: ['/beta-app-preview.jpg'],
       card: 'summary_large_image',
    },
 }
@@ -240,7 +240,7 @@ export default function BetaSignupPage() {
             <div className="relative border-l-2 border-muted md:border-l-0 md:border-t-2 ml-4 md:ml-0 md:mt-12 md:grid md:grid-cols-5 md:gap-4 md:pt-8">
 
                {[
-                  { step: 1, title: "You're on the list", body: 'Instant confirmation email with your waitlist position.' },
+                  { step: 1, title: "You're on the list", body: 'Instant confirmation email to confirm your spot.' },
                   { step: 2, title: 'Beta invites roll out', body: 'We invite runners in waves of 50. First come, first served.' },
                   { step: 3, title: 'Get your invite', body: 'Receive an email with your exclusive access link.' },
                   { step: 4, title: 'Start running', body: 'Complete onboarding and record your first 3 runs.' },

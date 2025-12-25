@@ -11,10 +11,10 @@ export function ShareWaitlist() {
   const [copied, setCopied] = useState(false)
   const [shareUrl, setShareUrl] = useState('')
 
-  const fallbackShareUrl = 'https://runsmart.ai/beta-signup'
+  const fallbackShareUrl = 'https://runsmart-ai.com/landing/beta-signup'
 
   useEffect(() => {
-    setShareUrl(new URL('/beta-signup', window.location.origin).toString())
+    setShareUrl(new URL('/landing/beta-signup', window.location.origin).toString())
   }, [])
 
   const effectiveShareUrl = shareUrl || fallbackShareUrl
@@ -27,7 +27,7 @@ export function ShareWaitlist() {
 
   const copy = async () => {
     try {
-      const urlToCopy = shareUrl || new URL('/beta-signup', window.location.origin).toString()
+      const urlToCopy = shareUrl || new URL('/landing/beta-signup', window.location.origin).toString()
       await navigator.clipboard.writeText(urlToCopy)
       setCopied(true)
       toast({ title: 'Link copied', description: 'Send it to a runner friend.' })

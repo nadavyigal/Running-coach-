@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { withApiSecurity, type ApiRequest } from '@/lib/security.middleware'
 import { createBetaSignup } from '@/lib/server/betaSignupRepository'
+import { sendBetaWaitlistEmail } from '@/lib/email'
 
 const betaSignupRequestSchema = z
   .object({
@@ -71,8 +72,18 @@ async function betaSignupHandler(req: ApiRequest) {
       hearAboutUs: hearAboutUsValue,
     })
 
+    let emailSent = false
+    if (result.created) {
+      try {
+        await sendBetaWaitlistEmail(normalizedEmail)
+        emailSent = true
+      } catch (emailError) {
+        console.error('Failed to send beta waitlist email:', emailError)
+      }
+    }
+
     return NextResponse.json(
-      { success: true, created: result.created, storage: result.storage },
+      { success: true, created: result.created, storage: result.storage, emailSent },
       { headers: { 'Cache-Control': 'no-store' } }
     )
   } catch (error) {

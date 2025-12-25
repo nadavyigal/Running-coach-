@@ -83,9 +83,10 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, networkResponse.clone());
-            });
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME)
+              .then((cache) => cache.put(request, responseClone))
+              .catch((error) => console.warn('Failed to cache navigation response:', error));
           }
           return networkResponse;
         })
@@ -114,7 +115,10 @@ self.addEventListener('fetch', (event) => {
           return fetch(request).then((networkResponse) => {
             // Cache successful responses
             if (networkResponse && networkResponse.status === 200) {
-              cache.put(request, networkResponse.clone());
+              const responseClone = networkResponse.clone();
+              cache.put(request, responseClone).catch((error) => {
+                console.warn('Failed to cache static asset:', error);
+              });
             }
             return networkResponse;
           });
@@ -130,9 +134,10 @@ self.addEventListener('fetch', (event) => {
       .then((networkResponse) => {
         // Cache successful responses
         if (networkResponse && networkResponse.status === 200 && !url.pathname.startsWith('/api/')) {
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, networkResponse.clone());
-          });
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME)
+            .then((cache) => cache.put(request, responseClone))
+            .catch((error) => console.warn('Failed to cache response:', error));
         }
         return networkResponse;
       })

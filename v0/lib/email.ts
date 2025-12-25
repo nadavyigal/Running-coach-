@@ -4,7 +4,8 @@ import { Resend } from 'resend';
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Configuration
-const FROM_EMAIL = 'runsmartteam@gmail.com';
+const DEFAULT_FROM_EMAIL = 'runsmartteam@gmail.com';
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL?.trim() || DEFAULT_FROM_EMAIL;
 const DOMAIN = 'runsmart-ai.com';
 
 export interface EmailOptions {
