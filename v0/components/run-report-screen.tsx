@@ -12,6 +12,7 @@ import { dbUtils } from '@/lib/dbUtils'
 import type { Run } from '@/lib/db'
 import type { LatLng } from '@/lib/mapConfig'
 import { parseGpsPath } from '@/lib/routeUtils'
+import { trackAnalyticsEvent } from '@/lib/analytics'
 
 type CoachNotes = {
   shortSummary: string
@@ -21,8 +22,31 @@ type CoachNotes = {
   suggestedNextWorkout: string
 }
 
+type SafetyFlag = {
+  code: string
+  severity: string
+  message: string
+}
+
+type RunInsight = {
+  runId: number
+  summary: string[]
+  effort: 'easy' | 'moderate' | 'hard'
+  metrics?: {
+    paceStability: string
+    cadenceNote?: string
+    hrNote?: string
+  }
+  recovery?: {
+    priority: string[]
+    optional?: string[]
+  }
+  nextSessionNudge?: string
+  safetyFlags?: SafetyFlag[]
+}
+
 type RunReportPayload = {
-  report: CoachNotes
+  report: CoachNotes | RunInsight
   source: 'ai' | 'fallback'
 }
 
@@ -41,12 +65,69 @@ function formatPace(secondsPerKm: number): string {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
 }
 
+function isCoachNotes(value: unknown): value is CoachNotes {
+  if (!value || typeof value !== 'object') return false
+  const parsed = value as CoachNotes
+  return (
+    typeof parsed.shortSummary === 'string' &&
+    Array.isArray(parsed.positives) &&
+    Array.isArray(parsed.flags) &&
+    typeof parsed.recoveryNext24h === 'string' &&
+    typeof parsed.suggestedNextWorkout === 'string'
+  )
+}
+
+function isRunInsight(value: unknown): value is RunInsight {
+  if (!value || typeof value !== 'object') return false
+  const parsed = value as RunInsight
+  return (
+    Array.isArray(parsed.summary) &&
+    typeof parsed.effort === 'string' &&
+    typeof parsed.runId === 'number'
+  )
+}
+
+function formatRecoveryText(recovery: RunInsight['recovery'] | undefined): string | null {
+  if (!recovery) return null
+  const priority = Array.isArray(recovery.priority) ? recovery.priority.filter(Boolean) : []
+  const optional = Array.isArray(recovery.optional) ? recovery.optional.filter(Boolean) : []
+  if (priority.length === 0 && optional.length === 0) return null
+  const parts: string[] = []
+  if (priority.length) parts.push(priority.join(' '))
+  if (optional.length) parts.push(`Optional: ${optional.join(' ')}`)
+  return parts.join(' ')
+}
+
+function runInsightToCoachNotes(insight: RunInsight): CoachNotes {
+  const summary = Array.isArray(insight.summary) ? insight.summary.filter(Boolean) : []
+  const shortSummary = summary[0] || 'Run logged.'
+  const positives = summary.length > 1 ? summary.slice(1) : []
+  const flags = Array.isArray(insight.safetyFlags)
+    ? insight.safetyFlags.map((flag) => flag.message).filter(Boolean)
+    : []
+  const recoveryNext24h =
+    formatRecoveryText(insight.recovery) ||
+    'Hydrate, eat a normal meal, and prioritize sleep.'
+  const suggestedNextWorkout =
+    insight.nextSessionNudge || 'Easy 20-40 min or rest, depending on how you feel.'
+
+  return {
+    shortSummary,
+    positives,
+    flags,
+    recoveryNext24h,
+    suggestedNextWorkout,
+  }
+}
+
 function safeParseCoachNotes(raw: string | undefined): CoachNotes | null {
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object') return null
-    return parsed as CoachNotes
+    if (isCoachNotes(parsed)) return parsed
+    if (isRunInsight(parsed)) return runInsightToCoachNotes(parsed)
+    return null
   } catch {
     return null
   }
@@ -89,6 +170,14 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
 
     setIsGenerating(true)
     try {
+      void trackAnalyticsEvent('ai_skill_invoked', {
+        skill_name: 'run-insights-recovery',
+        run_id: runId,
+      })
+
+      const avgPaceSecondsPerKm =
+        run.distance >= MIN_DISTANCE_FOR_PACE_KM ? run.duration / run.distance : undefined
+
       const response = await fetch('/api/run-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -98,9 +187,11 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
             type: run.type,
             distanceKm: run.distance,
             durationSeconds: run.duration,
-            avgPaceSecondsPerKm:
-              run.distance >= MIN_DISTANCE_FOR_PACE_KM ? run.duration / run.distance : 0,
+            avgPaceSecondsPerKm,
             completedAt: run.completedAt,
+            notes: run.notes,
+            heartRateBpm: run.heartRate,
+            calories: run.calories,
           },
           gps: {
             points: path.length,
@@ -123,6 +214,15 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         runReportSource: data.source,
         runReportCreatedAt: new Date(),
       })
+
+      if (isRunInsight(data.report)) {
+        void trackAnalyticsEvent('ai_insight_created', {
+          run_id: data.report.runId,
+          effort: data.report.effort,
+          safety_flags: data.report.safetyFlags?.length ?? 0,
+          source: data.source,
+        })
+      }
 
       toast({
         title: 'Coach Notes Ready',
