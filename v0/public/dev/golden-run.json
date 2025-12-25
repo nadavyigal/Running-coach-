@@ -1,0 +1,13 @@
+{
+  "name": "golden-1k-loop",
+  "distanceKm": 0.9926,
+  "durationSeconds": 330,
+  "expectedPace": "05:32",
+  "points": [
+    { "lat": 37.7749, "lng": -122.4194, "timestamp": 0 },
+    { "lat": 37.77715, "lng": -122.4194, "timestamp": 82500 },
+    { "lat": 37.77715, "lng": -122.4166, "timestamp": 165000 },
+    { "lat": 37.7749, "lng": -122.4166, "timestamp": 247500 },
+    { "lat": 37.7749, "lng": -122.4194, "timestamp": 330000 }
+  ]
+}

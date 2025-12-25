@@ -8,21 +8,19 @@ import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RouteSelectionWizard } from "@/components/route-selection-wizard"
 import { ManualRunModal } from "@/components/manual-run-modal"
 import { RunMap } from "@/components/maps/RunMap"
-import { type Run, type Workout, type User } from "@/lib/db"
+import { type Run, type Workout, type User, type Route } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { GPSAccuracyIndicator } from "@/components/gps-accuracy-indicator"
 import { GPSMonitoringService, type GPSAccuracyData } from "@/lib/gps-monitoring"
-import { calculateDistance } from "@/lib/routeUtils"
+import { calculateDistance, calculateWaypointDistance } from "@/lib/routeUtils"
+import { useGpsTracking, type GPSPoint } from "@/hooks/use-gps-tracking"
 
-interface GPSCoordinate {
-  latitude: number
-  longitude: number
-  timestamp: number
-  accuracy?: number
-}
+type GPSCoordinate = GPSPoint
+
+type GPSRejectReason = 'accuracy' | 'duplicate' | 'stale' | 'speed' | 'jitter'
 
 interface RunMetrics {
   distance: number // in km
@@ -62,24 +60,63 @@ export function RecordScreen() {
   const [gpsPath, setGpsPath] = useState<GPSCoordinate[]>([])
   const [currentPosition, setCurrentPosition] = useState<GPSCoordinate | null>(null)
   const gpsPathRef = useRef<GPSCoordinate[]>([])
-  const watchIdRef = useRef<number | null>(null)
   const totalDistanceKmRef = useRef(0)
   const lastRecordedPointRef = useRef<GPSCoordinate | null>(null)
   const gpsMonitoringRef = useRef<GPSMonitoringService | null>(null)
+  const acceptedPointCountRef = useRef(0)
+  const rejectedPointCountRef = useRef(0)
+  const rejectionReasonsRef = useRef<Record<GPSRejectReason, number>>({})
   const GPS_MAX_ACCEPTABLE_ACCURACY_METERS = 80
-  const gpsWatchCallbackCountRef = useRef(0)
-  const [gpsWatchCallbackCount, setGpsWatchCallbackCount] = useState(0)
-  const lastGpsUpdateAtRef = useRef<number | null>(null)
-  const [lastGpsUpdateAt, setLastGpsUpdateAt] = useState<number | null>(null)
+  const GPS_DEFAULT_ACCURACY_METERS = 50
+  const GPS_MIN_TIME_DELTA_MS = 700
+  const MAX_REASONABLE_SPEED_MPS = 9
+  const MIN_DISTANCE_FOR_PACE_KM = 0.05
   const startTimeRef = useRef<number>(0)
   const elapsedRunMsRef = useRef<number>(0)
   const isRunningRef = useRef(false)
   const isPausedRef = useRef(false)
 
+  const [lastGpsSpeedMps, setLastGpsSpeedMps] = useState<number | null>(null)
+  const [gpsAcceptedCount, setGpsAcceptedCount] = useState(0)
+  const [gpsRejectedCount, setGpsRejectedCount] = useState(0)
+  const [gpsRejectReasons, setGpsRejectReasons] = useState<Record<string, number>>({})
+  const [lastRejectReason, setLastRejectReason] = useState<GPSRejectReason | null>(null)
+  const [lastSegmentStats, setLastSegmentStats] = useState<{
+    distanceMeters: number
+    timeDeltaMs: number
+    speedMps: number
+  } | null>(null)
+  const [debugPathOverride, setDebugPathOverride] = useState<GPSCoordinate[] | null>(null)
+  const [goldenRunSummary, setGoldenRunSummary] = useState<{
+    name: string
+    expectedDistanceKm: number
+    expectedPace?: string
+    computedDistanceKm: number
+    computedPaceSecondsPerKm: number
+    computedPaceFormatted: string
+    deltaMeters: number
+  } | null>(null)
+  const [goldenRunError, setGoldenRunError] = useState<string | null>(null)
+
   useEffect(() => {
     isRunningRef.current = isRunning
     isPausedRef.current = isPaused
   }, [isRunning, isPaused])
+
+  const logGps = (payload: Record<string, unknown>) => {
+    if (!gpsDebugEnabled) return
+    console.log('[GPS]', payload)
+  }
+
+  const logRunStats = (payload: Record<string, unknown>) => {
+    if (!gpsDebugEnabled) return
+    console.log('[RUNSTATS]', payload)
+  }
+
+  const round = (value: number, precision: number) => {
+    const factor = Math.pow(10, precision)
+    return Math.round(value * factor) / factor
+  }
   
   // Metrics state
   const [metrics, setMetrics] = useState<RunMetrics>({
@@ -135,7 +172,7 @@ export function RecordScreen() {
     setupGps()
     
     return () => {
-      stopGpsTracking()
+      stopTracking()
     }
   }, [])
 
@@ -146,12 +183,15 @@ export function RecordScreen() {
       interval = setInterval(() => {
         const now = Date.now()
         const duration = Math.floor((elapsedRunMsRef.current + (now - startTimeRef.current)) / 1000)
-        setMetrics(prev => ({
-          ...prev,
-          duration,
-          pace: prev.distance > 0 ? duration / prev.distance : 0,
-          calories: estimateCalories(duration, prev.distance)
-        }))
+        setMetrics(prev => {
+          const distanceForPace = prev.distance >= MIN_DISTANCE_FOR_PACE_KM ? prev.distance : 0
+          return {
+            ...prev,
+            duration,
+            pace: distanceForPace > 0 ? duration / distanceForPace : 0,
+            calories: estimateCalories(duration, prev.distance)
+          }
+        })
       }, 1000)
     }
     return () => clearInterval(interval)
@@ -212,14 +252,29 @@ export function RecordScreen() {
     }
   }
 
+  const resetGpsDebugStats = () => {
+    acceptedPointCountRef.current = 0
+    rejectedPointCountRef.current = 0
+    rejectionReasonsRef.current = {}
+    setGpsAcceptedCount(0)
+    setGpsRejectedCount(0)
+    setGpsRejectReasons({})
+    setLastRejectReason(null)
+    setLastSegmentStats(null)
+  }
+
   const resetRunTrackingState = () => {
     gpsPathRef.current = []
     setGpsPath([])
+    setCurrentPosition(null)
+    setGpsAccuracy(0)
+    setLastGpsSpeedMps(null)
     totalDistanceKmRef.current = 0
     lastRecordedPointRef.current = null
     gpsMonitoringRef.current = null
     setCurrentGPSAccuracy(null)
     setGpsAccuracyHistory([])
+    resetGpsDebugStats()
     setMetrics({
       distance: 0,
       duration: 0,
@@ -230,34 +285,93 @@ export function RecordScreen() {
     })
   }
 
+  const normalizeGpsTimestamp = (timestamp: number, lastTimestamp: number | null) => {
+    let resolved = Number.isFinite(timestamp) ? timestamp : Date.now()
+    if (typeof lastTimestamp === 'number' && resolved <= lastTimestamp) {
+      const now = Date.now()
+      resolved = now > lastTimestamp ? now : lastTimestamp + GPS_MIN_TIME_DELTA_MS
+    }
+    return resolved
+  }
+
+  const trackRejection = (reason: GPSRejectReason, details: Record<string, unknown>) => {
+    rejectedPointCountRef.current += 1
+    const nextReasons = {
+      ...rejectionReasonsRef.current,
+      [reason]: (rejectionReasonsRef.current[reason] ?? 0) + 1,
+    }
+    rejectionReasonsRef.current = nextReasons
+    setGpsRejectedCount(rejectedPointCountRef.current)
+    setGpsRejectReasons(nextReasons)
+    setLastRejectReason(reason)
+    logGps({ event: 'reject', reason, ...details })
+  }
+
+  const trackAcceptance = (details: Record<string, unknown>) => {
+    acceptedPointCountRef.current += 1
+    setGpsAcceptedCount(acceptedPointCountRef.current)
+    logGps({ event: 'accept', ...details })
+  }
+
   const recordPointForActiveRun = (nextPoint: GPSCoordinate) => {
     const lastPoint = lastRecordedPointRef.current
-
-    // Accuracy filtering: ignore noisy fixes before they can affect distance accumulation.
-    // Typical outdoor running is < ~20m; beyond ~40m tends to add lots of jitter/overcount.
-    const nextAccuracy = typeof nextPoint.accuracy === 'number' ? nextPoint.accuracy : Number.POSITIVE_INFINITY
-    if (nextAccuracy > GPS_MAX_ACCEPTABLE_ACCURACY_METERS) return
-
-    // First accepted fix becomes our baseline (no distance added yet).
-    if (!lastPoint) {
-      lastRecordedPointRef.current = nextPoint
-      setGpsPath((previousPath) => {
-        const nextPath = [...previousPath, nextPoint]
-        gpsPathRef.current = nextPath
-        return nextPath
+    const accuracyValue =
+      typeof nextPoint.accuracy === 'number' && Number.isFinite(nextPoint.accuracy)
+        ? nextPoint.accuracy
+        : GPS_DEFAULT_ACCURACY_METERS
+    if (accuracyValue > GPS_MAX_ACCEPTABLE_ACCURACY_METERS) {
+      trackRejection('accuracy', {
+        accuracy: accuracyValue,
+        threshold: GPS_MAX_ACCEPTABLE_ACCURACY_METERS,
       })
       return
     }
 
-    const timeDeltaMs = nextPoint.timestamp - lastPoint.timestamp
-    if (!Number.isFinite(timeDeltaMs) || timeDeltaMs <= 0) return
-    if (timeDeltaMs < 400) return
+    const normalizedTimestamp = normalizeGpsTimestamp(nextPoint.timestamp, lastPoint?.timestamp ?? null)
+    const normalizedPoint: GPSCoordinate = {
+      ...nextPoint,
+      timestamp: normalizedTimestamp,
+      accuracy: accuracyValue,
+    }
+
+    // First accepted fix becomes our baseline (no distance added yet).
+    if (!lastPoint) {
+      lastRecordedPointRef.current = normalizedPoint
+      setGpsPath((previousPath) => {
+        const nextPath = [...previousPath, normalizedPoint]
+        gpsPathRef.current = nextPath
+        return nextPath
+      })
+      trackAcceptance({
+        accuracy: accuracyValue,
+        latitude: normalizedPoint.latitude,
+        longitude: normalizedPoint.longitude,
+        timestamp: normalizedPoint.timestamp,
+        reason: 'first_fix',
+      })
+      return
+    }
+
+    const timeDeltaMs = normalizedPoint.timestamp - lastPoint.timestamp
+    if (!Number.isFinite(timeDeltaMs) || timeDeltaMs <= 0) {
+      trackRejection('stale', {
+        timeDeltaMs,
+        lastTimestamp: lastPoint.timestamp,
+        nextTimestamp: normalizedPoint.timestamp,
+      })
+      return
+    }
+
+    if (timeDeltaMs < GPS_MIN_TIME_DELTA_MS) {
+      trackRejection('duplicate', { timeDeltaMs, minDeltaMs: GPS_MIN_TIME_DELTA_MS })
+      return
+    }
 
     const segmentDistanceKm = calculateDistance(
       lastPoint.latitude,
       lastPoint.longitude,
-      nextPoint.latitude,
-      nextPoint.longitude
+      normalizedPoint.latitude,
+      normalizedPoint.longitude
     )
     const segmentDistanceMeters = segmentDistanceKm * 1000
     const timeDeltaSeconds = timeDeltaMs / 1000
@@ -266,15 +380,19 @@ export function RecordScreen() {
     // Basic GPS filtering:
     // - Jump rejection: ignore implausible speed spikes ("teleports").
     // - Jitter rejection: ignore very small deltas likely caused by GPS noise.
-    const MAX_REASONABLE_SPEED_MPS = 9 // ~32 km/h (beyond elite running, filters car/GPS jumps)
-    // Avoid undercounting: typical running at ~5:00–6:30/km moves ~2–3m per second.
-    // Keep this threshold low enough to accept 1s GPS updates, while still ignoring tiny jitter.
-    const MIN_DISTANCE_METERS = Math.max(0.8, Math.min(2, nextAccuracy * 0.025))
+    const minDistanceMeters = Math.max(0.8, Math.min(2, accuracyValue * 0.025))
 
-    if (segmentSpeedMps > MAX_REASONABLE_SPEED_MPS) return
-    if (segmentDistanceMeters < MIN_DISTANCE_METERS) return
+    if (segmentSpeedMps > MAX_REASONABLE_SPEED_MPS) {
+      trackRejection('speed', { segmentSpeedMps, maxSpeedMps: MAX_REASONABLE_SPEED_MPS })
+      return
+    }
 
-    lastRecordedPointRef.current = nextPoint
+    if (segmentDistanceMeters < minDistanceMeters) {
+      trackRejection('jitter', { segmentDistanceMeters, minDistanceMeters })
+      return
+    }
+
+    lastRecordedPointRef.current = normalizedPoint
     // Incremental accumulation: only add this accepted segment (do not recompute over full path).
     totalDistanceKmRef.current += segmentDistanceKm
 
@@ -284,9 +402,15 @@ export function RecordScreen() {
     const currentPaceSecondsPerKm = currentSpeedMps > 0 ? 1000 / currentSpeedMps : 0
 
     setGpsPath((previousPath) => {
-      const nextPath = [...previousPath, nextPoint]
+      const nextPath = [...previousPath, normalizedPoint]
       gpsPathRef.current = nextPath
       return nextPath
+    })
+
+    setLastSegmentStats({
+      distanceMeters: segmentDistanceMeters,
+      timeDeltaMs,
+      speedMps: segmentSpeedMps,
     })
 
     setMetrics((previousMetrics) => ({
@@ -295,112 +419,144 @@ export function RecordScreen() {
       currentPace: currentPaceSecondsPerKm,
       currentSpeed: currentSpeedMps,
     }))
-  }
 
-  const startGpsTracking = (): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        resolve(false)
-        return
-      }
+    trackAcceptance({
+      segmentDistanceMeters: round(segmentDistanceMeters, 1),
+      segmentSpeedMps: round(segmentSpeedMps, 2),
+      timeDeltaMs,
+      totalDistanceKm: round(totalDistanceKmRef.current, 3),
+    })
 
-      stopGpsTracking()
-      gpsWatchCallbackCountRef.current = 0
-      setGpsWatchCallbackCount(0)
-      lastGpsUpdateAtRef.current = null
-      setLastGpsUpdateAt(null)
-
-      let settled = false
-      const settle = (value: boolean) => {
-        if (settled) return
-        settled = true
-        resolve(value)
-      }
-
-      const timeoutId = window.setTimeout(() => {
-        console.warn('[GPS] GPS tracking start timed out')
-        stopGpsTracking()
-        settle(false)
-      }, 12_000)
-
-      watchIdRef.current = navigator.geolocation.watchPosition(
-        (position) => {
-          clearTimeout(timeoutId)
-          settle(true)
-
-          const timestamp = Number.isFinite(position.timestamp) ? position.timestamp : Date.now()
-          gpsWatchCallbackCountRef.current += 1
-          setGpsWatchCallbackCount(gpsWatchCallbackCountRef.current)
-          lastGpsUpdateAtRef.current = Date.now()
-          setLastGpsUpdateAt(lastGpsUpdateAtRef.current)
-          const newPosition: GPSCoordinate = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            timestamp,
-            accuracy: position.coords.accuracy
-          }
-
-          if (gpsDebugEnabled) {
-            console.log('[GPS]', {
-              watchId: watchIdRef.current,
-              count: gpsWatchCallbackCountRef.current,
-              latitude: newPosition.latitude,
-              longitude: newPosition.longitude,
-              timestamp: newPosition.timestamp,
-              accuracy: newPosition.accuracy,
-              speed: position.coords.speed ?? null,
-            })
-          }
-
-          setCurrentPosition(newPosition)
-          setGpsAccuracy(position.coords.accuracy)
-          setGpsPermission('granted')
-
-          const gpsService = gpsMonitoringRef.current ?? new GPSMonitoringService()
-          gpsMonitoringRef.current = gpsService
-          const accuracyData = gpsService.calculateAccuracyMetrics(position)
-          setCurrentGPSAccuracy(accuracyData)
-          setGpsAccuracyHistory((prev) => [...prev.slice(-99), accuracyData])
-
-          if (isRunningRef.current && !isPausedRef.current) {
-            recordPointForActiveRun(newPosition)
-          }
-        },
-        (error) => {
-          console.error('[GPS] GPS tracking error:', error)
-          if (error.code === 1) {
-            clearTimeout(timeoutId)
-            setGpsPermission('denied')
-            stopGpsTracking()
-            if (!settled) {
-              settle(false)
-            }
-            return
-          }
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 20_000,
-          maximumAge: 0
-        }
-      )
-
-      // Resolve happens on first position update (or error/timeout).
+    logRunStats({
+      distanceKm: totalDistanceKmRef.current,
+      durationSeconds: metrics.duration,
+      currentPaceSecondsPerKm: currentPaceSecondsPerKm,
     })
   }
 
-  const stopGpsTracking = () => {
-    // Explicit null check (watchId can be `0`, so truthy checks break cleanup).
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current)
-      watchIdRef.current = null
+  const handleGpsPoint = (point: GPSCoordinate, position: GeolocationPosition) => {
+    setCurrentPosition(point)
+    setGpsAccuracy(point.accuracy ?? 0)
+    setLastGpsSpeedMps(typeof point.speed === 'number' ? point.speed : null)
+    setGpsPermission('granted')
+
+    const gpsService = gpsMonitoringRef.current ?? new GPSMonitoringService()
+    gpsMonitoringRef.current = gpsService
+    const accuracyData = gpsService.calculateAccuracyMetrics(position)
+    setCurrentGPSAccuracy(accuracyData)
+    setGpsAccuracyHistory((prev) => [...prev.slice(-99), accuracyData])
+
+    logGps({
+      event: 'watch',
+      latitude: point.latitude,
+      longitude: point.longitude,
+      timestamp: point.timestamp,
+      accuracy: typeof point.accuracy === 'number' ? point.accuracy : null,
+      speed: typeof point.speed === 'number' ? point.speed : null,
+    })
+
+    if (isRunningRef.current && !isPausedRef.current) {
+      recordPointForActiveRun(point)
     }
   }
 
-	  const estimateCalories = (_durationSeconds: number, distanceKm: number): number => {
-	    // Simple calorie estimation: ~60 calories per km for average runner
-	    return Math.round(distanceKm * 60)
-	  }
+  const handleGpsError = (error: GeolocationPositionError) => {
+    logGps({ event: 'error', code: error.code, message: error.message })
+    if (error.code === 1) {
+      setGpsPermission('denied')
+    }
+  }
+
+  const {
+    watchId: gpsWatchId,
+    isTracking: isGpsTracking,
+    callbackCount: gpsWatchCallbackCount,
+    lastUpdateAt: lastGpsUpdateAt,
+    startTracking,
+    stopTracking,
+  } = useGpsTracking({
+    onPoint: handleGpsPoint,
+    onError: handleGpsError,
+    debug: gpsDebugEnabled,
+  })
+
+  const gpsTrackingOptions = {
+    enableHighAccuracy: true,
+    timeout: 20_000,
+    maximumAge: 0,
+  }
+
+  const loadGoldenRun = async () => {
+    if (!gpsDebugEnabled) return
+    setGoldenRunError(null)
+    try {
+      const response = await fetch('/dev/golden-run.json', { cache: 'no-store' })
+      if (!response.ok) {
+        throw new Error(`Failed to load golden run (${response.status})`)
+      }
+      const data = await response.json()
+      const rawPoints = Array.isArray(data.points) ? data.points : []
+      const parsedPoints = rawPoints
+        .map((point: any, index: number) => {
+          const lat = Number(point?.lat)
+          const lng = Number(point?.lng)
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+          return {
+            latitude: lat,
+            longitude: lng,
+            timestamp: typeof point.timestamp === 'number' ? point.timestamp : Date.now() + index * 1000,
+            ...(typeof point.accuracy === 'number' ? { accuracy: point.accuracy } : {}),
+          } as GPSCoordinate
+        })
+        .filter(Boolean) as GPSCoordinate[]
+
+      if (parsedPoints.length < 2) {
+        throw new Error('Golden run data is missing points')
+      }
+
+      const computedDistanceKm = calculateWaypointDistance(
+        parsedPoints.map((point) => ({ lat: point.latitude, lng: point.longitude }))
+      )
+      const durationSeconds = typeof data.durationSeconds === 'number' ? data.durationSeconds : 0
+      const computedPaceSecondsPerKm =
+        computedDistanceKm > 0 && durationSeconds > 0 ? durationSeconds / computedDistanceKm : 0
+      const computedPaceFormatted = formatPace(computedPaceSecondsPerKm)
+      const expectedDistanceKm =
+        typeof data.distanceKm === 'number' && Number.isFinite(data.distanceKm)
+          ? data.distanceKm
+          : computedDistanceKm
+      const expectedPace = typeof data.expectedPace === 'string' ? data.expectedPace : undefined
+
+      setGoldenRunSummary({
+        name: typeof data.name === 'string' ? data.name : 'golden-run',
+        expectedDistanceKm,
+        expectedPace,
+        computedDistanceKm,
+        computedPaceSecondsPerKm,
+        computedPaceFormatted,
+        deltaMeters: (computedDistanceKm - expectedDistanceKm) * 1000,
+      })
+
+      if (isRunning) {
+        setDebugPathOverride(null)
+        setGoldenRunError('Stop the run before previewing the golden route.')
+        return
+      }
+
+      setDebugPathOverride(parsedPoints)
+    } catch (error) {
+      setGoldenRunError(error instanceof Error ? error.message : 'Failed to load golden run')
+    }
+  }
+
+  const clearGoldenRunPreview = () => {
+    setDebugPathOverride(null)
+  }
+
+  const estimateCalories = (_durationSeconds: number, distanceKm: number): number => {
+    // Simple calorie estimation: ~60 calories per km for average runner
+    return Math.round(distanceKm * 60)
+  }
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -438,7 +594,7 @@ export function RecordScreen() {
     setIsInitializingGps(true)
     let trackingStarted = false
     try {
-      trackingStarted = await startGpsTracking()
+      trackingStarted = await startTracking(gpsTrackingOptions)
     } finally {
       setIsInitializingGps(false)
     }
@@ -458,6 +614,8 @@ export function RecordScreen() {
       title: "Run Started",
       description: "GPS tracking active. Your run is being recorded.",
     })
+
+    logRunStats({ event: 'start', startedAt: Date.now() })
   }
 
   const pauseRun = () => {
@@ -465,17 +623,21 @@ export function RecordScreen() {
       elapsedRunMsRef.current += Date.now() - startTimeRef.current
       startTimeRef.current = 0
       const duration = Math.floor(elapsedRunMsRef.current / 1000)
-      setMetrics((previousMetrics) => ({
-        ...previousMetrics,
-        duration,
-        pace: previousMetrics.distance > 0 ? duration / previousMetrics.distance : 0,
-        currentPace: 0,
-        currentSpeed: 0,
-        calories: estimateCalories(duration, previousMetrics.distance),
-      }))
+      setMetrics((previousMetrics) => {
+        const distanceForPace =
+          previousMetrics.distance >= MIN_DISTANCE_FOR_PACE_KM ? previousMetrics.distance : 0
+        return {
+          ...previousMetrics,
+          duration,
+          pace: distanceForPace > 0 ? duration / distanceForPace : 0,
+          currentPace: 0,
+          currentSpeed: 0,
+          calories: estimateCalories(duration, previousMetrics.distance),
+        }
+      })
     }
 
-    stopGpsTracking()
+    stopTracking()
     setIsInitializingGps(false)
     // Break distance accumulation between paused segments (avoid counting movement while paused).
     lastRecordedPointRef.current = null
@@ -495,7 +657,7 @@ export function RecordScreen() {
     setIsInitializingGps(true)
     let trackingStarted = false
     try {
-      trackingStarted = await startGpsTracking()
+      trackingStarted = await startTracking(gpsTrackingOptions)
     } finally {
       setIsInitializingGps(false)
     }
@@ -515,10 +677,12 @@ export function RecordScreen() {
       title: "Run Resumed",
       description: "GPS tracking resumed. Your run continues.",
     })
+
+    logRunStats({ event: 'resume', resumedAt: Date.now() })
   }
 
   const stopRun = async () => {
-    stopGpsTracking()
+    stopTracking()
     setIsInitializingGps(false)
     setIsRunning(false)
     setIsPaused(false)
@@ -533,6 +697,14 @@ export function RecordScreen() {
 
     const totalDistance = totalDistanceKmRef.current
     const finalDuration = Math.floor(elapsedRunMsRef.current / 1000)
+
+    logRunStats({
+      event: 'stop',
+      distanceKm: totalDistance,
+      durationSeconds: finalDuration,
+      acceptedPoints: acceptedPointCountRef.current,
+      rejectedPoints: rejectedPointCountRef.current,
+    })
 
     if (totalDistance > 0 && finalDuration > 0) {
       await saveRun(totalDistance, finalDuration)
@@ -630,7 +802,7 @@ export function RecordScreen() {
   }
 
   const getGpsStatusText = () => {
-    if (gpsPermission === 'granted') return watchIdRef.current !== null ? 'GPS Tracking' : 'GPS Ready'
+    if (gpsPermission === 'granted') return isGpsTracking ? 'GPS Tracking' : 'GPS Ready'
     if (gpsPermission === 'denied') return 'GPS Denied - Allow in browser settings'
     if (gpsPermission === 'unsupported') {
       const isSecure = typeof window !== 'undefined' && 
@@ -654,6 +826,18 @@ export function RecordScreen() {
   const handleRouteWizardClose = () => {
     setShowRouteWizard(false)
   }
+
+  const mapPath = !isRunning && debugPathOverride ? debugPathOverride : gpsPath
+  const avgPaceSecondsPerKm =
+    metrics.distance >= MIN_DISTANCE_FOR_PACE_KM ? metrics.duration / metrics.distance : 0
+  const timeSinceLastGpsUpdateSec = lastGpsUpdateAt
+    ? Math.round((Date.now() - lastGpsUpdateAt) / 1000)
+    : null
+  const rejectionSummary =
+    Object.entries(gpsRejectReasons)
+      .map(([reason, count]) => `${reason}:${count}`)
+      .join(', ') || '--'
+  const avgPaceFormatted = avgPaceSecondsPerKm > 0 ? formatPace(avgPaceSecondsPerKm) : '--:--'
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 space-y-4">
@@ -714,7 +898,7 @@ export function RecordScreen() {
                     ? 'Please allow location access when prompted'
                     : gpsAccuracy > 0 
                       ? `Accuracy: ${gpsAccuracy.toFixed(1)}m` 
-                      : watchIdRef.current !== null
+                      : isGpsTracking
                         ? 'Accuracy: Waiting for signal'
                         : 'Accuracy: Start a run to begin tracking'
                   }
@@ -781,6 +965,13 @@ export function RecordScreen() {
                 </div>
               </div>
             </div>
+          )}
+
+          {isRunning && gpsPermission === 'granted' && (
+            <p className="mt-3 text-xs text-gray-600">
+              Note: Mobile browsers do not reliably support background GPS tracking. Keep the screen on for best
+              accuracy.
+            </p>
           )}
 
           {/* GPS Details */}
@@ -920,7 +1111,7 @@ export function RecordScreen() {
                   ? { lat: currentPosition.latitude, lng: currentPosition.longitude }
                   : null
               }
-              path={gpsPath.map((p) => ({ lat: p.latitude, lng: p.longitude }))}
+              path={mapPath.map((p) => ({ lat: p.latitude, lng: p.longitude }))}
               followUser={isRunning && !isPaused}
             />
             {!isRunning && (
@@ -936,7 +1127,7 @@ export function RecordScreen() {
               <div className="absolute bottom-2 left-2 right-2 rounded-md bg-black/70 text-white p-2 text-xs font-mono space-y-1">
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
                   <span>perm={gpsPermission}</span>
-                  <span>watchId={watchIdRef.current ?? 'null'}</span>
+                  <span>watchId={gpsWatchId ?? 'null'}</span>
                   <span>cb={gpsWatchCallbackCount}</span>
                   <span>acc={gpsAccuracy ? `${Math.round(gpsAccuracy)}m` : '--'}</span>
                   <span>path={gpsPathRef.current.length}</span>
@@ -971,6 +1162,92 @@ export function RecordScreen() {
           </div>
         </CardContent>
       </Card>
+
+      {gpsDebugEnabled && (
+        <Card className="border-dashed border-gray-300">
+          <CardContent className="p-4 space-y-3 text-xs font-mono">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">GPS Debug Panel</h3>
+              {debugPathOverride && !isRunning && (
+                <span className="text-[10px] text-green-700">Golden route preview</span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>permission: {gpsPermission}</div>
+              <div>
+                watch: {isGpsTracking ? 'started' : 'stopped'} (id: {gpsWatchId ?? 'null'})
+              </div>
+              <div>callbackCount: {gpsWatchCallbackCount}</div>
+              <div>lastUpdate: {timeSinceLastGpsUpdateSec ?? '--'}s</div>
+              <div>
+                lastPoint:{' '}
+                {currentPosition
+                  ? `${currentPosition.latitude.toFixed(5)}, ${currentPosition.longitude.toFixed(5)}`
+                  : '--'}
+              </div>
+              <div>
+                lastTimestamp:{' '}
+                {currentPosition?.timestamp
+                  ? new Date(currentPosition.timestamp).toLocaleTimeString()
+                  : '--'}
+              </div>
+              <div>accuracy: {gpsAccuracy ? `${Math.round(gpsAccuracy)}m` : '--'}</div>
+              <div>speed: {lastGpsSpeedMps !== null ? `${lastGpsSpeedMps.toFixed(2)} m/s` : '--'}</div>
+              <div>
+                accepted/rejected: {gpsAcceptedCount}/{gpsRejectedCount}
+              </div>
+              <div>lastReject: {lastRejectReason ?? '--'}</div>
+              <div>rejectReasons: {rejectionSummary}</div>
+              <div>totalDistance: {Math.round(totalDistanceKmRef.current * 1000)}m</div>
+              <div>
+                paceInputs: dist={metrics.distance.toFixed(3)}km dur={metrics.duration}s avg={avgPaceFormatted}/km
+              </div>
+              <div>
+                currentPace: {metrics.currentPace > 0 ? formatPace(metrics.currentPace) : '--:--'}/km
+              </div>
+              <div>
+                lastSegment:{' '}
+                {lastSegmentStats
+                  ? `${Math.round(lastSegmentStats.distanceMeters)}m in ${Math.round(
+                      lastSegmentStats.timeDeltaMs / 1000
+                    )}s @ ${lastSegmentStats.speedMps.toFixed(2)} m/s`
+                  : '--'}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={loadGoldenRun}>
+                  Load Golden Run
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={clearGoldenRunPreview}
+                  disabled={!debugPathOverride}
+                >
+                  Clear Preview
+                </Button>
+              </div>
+              {goldenRunSummary && (
+                <div className="space-y-1">
+                  <div>golden: {goldenRunSummary.name}</div>
+                  <div>
+                    distance: {goldenRunSummary.computedDistanceKm.toFixed(3)}km (expected{' '}
+                    {goldenRunSummary.expectedDistanceKm.toFixed(3)}km, delta{' '}
+                    {Math.round(goldenRunSummary.deltaMeters)}m)
+                  </div>
+                  <div>
+                    pace: {goldenRunSummary.computedPaceFormatted}/km
+                    {goldenRunSummary.expectedPace ? ` (expected ${goldenRunSummary.expectedPace})` : ''}
+                  </div>
+                </div>
+              )}
+              {goldenRunError && <div className="text-red-600">{goldenRunError}</div>}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Running Tips */}
       {isRunning && (

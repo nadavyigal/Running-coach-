@@ -26,6 +26,8 @@ type RunReportPayload = {
   source: 'ai' | 'fallback'
 }
 
+const MIN_DISTANCE_FOR_PACE_KM = 0.05
+
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60)
   const secs = Math.floor(seconds % 60)
@@ -63,7 +65,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
 
   const avgPace = useMemo(() => {
     if (!run) return 0
-    return run.distance > 0 ? run.duration / run.distance : 0
+    return run.distance >= MIN_DISTANCE_FOR_PACE_KM ? run.duration / run.distance : 0
   }, [run])
 
   const loadRun = useCallback(async () => {
@@ -96,7 +98,8 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
             type: run.type,
             distanceKm: run.distance,
             durationSeconds: run.duration,
-            avgPaceSecondsPerKm: run.distance > 0 ? run.duration / run.distance : 0,
+            avgPaceSecondsPerKm:
+              run.distance >= MIN_DISTANCE_FOR_PACE_KM ? run.duration / run.distance : 0,
             completedAt: run.completedAt,
           },
           gps: {
