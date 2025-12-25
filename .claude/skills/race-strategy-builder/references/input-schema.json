@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["profile", "trainingHistory", "race"],
+  "properties": {
+    "profile": { "type": "object" },
+    "trainingHistory": { "type": "object" },
+    "race": {
+      "type": "object",
+      "properties": {
+        "distance": { "type": "string" },
+        "date": { "type": "string" },
+        "course": { "type": "string" },
+        "expectedWeather": { "type": "string" }
+      },
+      "required": ["distance", "date"]
+    }
+  }
+}

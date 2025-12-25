@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["run", "derivedMetrics"],
+  "properties": {
+    "run": { "type": "object" },
+    "derivedMetrics": { "type": "object" },
+    "userNotes": { "type": "string" },
+    "planContext": { "type": "array", "items": { "type": "object" } }
+  }
+}

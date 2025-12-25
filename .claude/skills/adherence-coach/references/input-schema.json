@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["plan", "completedWorkouts", "missedWorkouts"],
+  "properties": {
+    "plan": { "type": "object" },
+    "completedWorkouts": { "type": "array", "items": { "type": "object" } },
+    "missedWorkouts": { "type": "array", "items": { "type": "object" } },
+    "availability": { "type": "array", "items": { "type": "string" } },
+    "reasonNotes": { "type": "array", "items": { "type": "string" } }
+  }
+}

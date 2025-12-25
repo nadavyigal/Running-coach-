@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["distanceKm", "startArea"],
+  "properties": {
+    "distanceKm": { "type": "number" },
+    "targetTimeMinutes": { "type": "number" },
+    "surfacePreference": { "type": "string" },
+    "elevationPreference": { "type": "string" },
+    "startArea": { "type": "string" },
+    "constraints": { "type": "array", "items": { "type": "string" } }
+  }
+}
