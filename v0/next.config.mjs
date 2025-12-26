@@ -13,9 +13,6 @@ const svgrAvailable = (() => {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Temporarily ignore ESLint and TypeScript during builds for staging deployment
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
