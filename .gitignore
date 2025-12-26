@@ -31,3 +31,5 @@ yarn-error.log*
 Thumbs.db
 .vscode/
 *.tsbuildinfo
+.vercel
+.env*.local
