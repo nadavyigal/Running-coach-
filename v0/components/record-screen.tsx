@@ -66,10 +66,10 @@ export function RecordScreen() {
   const acceptedPointCountRef = useRef(0)
   const rejectedPointCountRef = useRef(0)
   const rejectionReasonsRef = useRef<Record<GPSRejectReason, number>>({})
-  const GPS_MAX_ACCEPTABLE_ACCURACY_METERS = 80
+  const GPS_MAX_ACCEPTABLE_ACCURACY_METERS = 120  // Increased from 80 to accept more points in poor conditions
   const GPS_DEFAULT_ACCURACY_METERS = 50
-  const GPS_MIN_TIME_DELTA_MS = 700
-  const MAX_REASONABLE_SPEED_MPS = 9
+  const GPS_MIN_TIME_DELTA_MS = 400  // Reduced from 700ms to 400ms to accept more frequent GPS updates
+  const MAX_REASONABLE_SPEED_MPS = 12  // Increased from 9 to 12 m/s (from ~32 km/h to ~43 km/h) for sprints
   const MIN_DISTANCE_FOR_PACE_KM = 0.05
   const startTimeRef = useRef<number>(0)
   const elapsedRunMsRef = useRef<number>(0)
@@ -334,7 +334,8 @@ export function RecordScreen() {
       accuracy: accuracyValue,
     }
 
-    // First accepted fix becomes our baseline (no distance added yet).
+    // First accepted fix becomes our baseline (no distance added yet on initial start).
+    // However, if we're resuming after a pause and lastPoint exists, we WILL add distance.
     if (!lastPoint) {
       lastRecordedPointRef.current = normalizedPoint
       setGpsPath((previousPath) => {
@@ -348,6 +349,14 @@ export function RecordScreen() {
         longitude: normalizedPoint.longitude,
         timestamp: normalizedPoint.timestamp,
         reason: 'first_fix',
+        totalDistanceKm: totalDistanceKmRef.current,
+      })
+      logRunStats({
+        event: 'first_gps_point',
+        lat: normalizedPoint.latitude,
+        lng: normalizedPoint.longitude,
+        accuracy: accuracyValue,
+        totalDistanceKm: totalDistanceKmRef.current
       })
       return
     }
@@ -380,7 +389,8 @@ export function RecordScreen() {
     // Basic GPS filtering:
     // - Jump rejection: ignore implausible speed spikes ("teleports").
     // - Jitter rejection: ignore very small deltas likely caused by GPS noise.
-    const minDistanceMeters = Math.max(0.8, Math.min(2, accuracyValue * 0.025))
+    // Reduced jitter threshold: now 0.5m minimum (was 0.8-2m), and reduced multiplier from 0.025 to 0.015
+    const minDistanceMeters = Math.max(0.5, Math.min(1.5, accuracyValue * 0.015))
 
     if (segmentSpeedMps > MAX_REASONABLE_SPEED_MPS) {
       trackRejection('speed', { segmentSpeedMps, maxSpeedMps: MAX_REASONABLE_SPEED_MPS })
@@ -392,7 +402,10 @@ export function RecordScreen() {
       return
     }
 
+    // Update last recorded point BEFORE accumulating distance
+    const previousTotalDistance = totalDistanceKmRef.current
     lastRecordedPointRef.current = normalizedPoint
+
     // Incremental accumulation: only add this accepted segment (do not recompute over full path).
     totalDistanceKmRef.current += segmentDistanceKm
 
@@ -413,6 +426,7 @@ export function RecordScreen() {
       speedMps: segmentSpeedMps,
     })
 
+    // Ensure metrics.distance is ALWAYS synchronized with totalDistanceKmRef
     setMetrics((previousMetrics) => ({
       ...previousMetrics,
       distance: totalDistanceKmRef.current,
@@ -424,13 +438,18 @@ export function RecordScreen() {
       segmentDistanceMeters: round(segmentDistanceMeters, 1),
       segmentSpeedMps: round(segmentSpeedMps, 2),
       timeDeltaMs,
-      totalDistanceKm: round(totalDistanceKmRef.current, 3),
+      previousDistanceKm: round(previousTotalDistance, 3),
+      newDistanceKm: round(totalDistanceKmRef.current, 3),
+      segmentAdded: round(segmentDistanceKm, 4),
     })
 
     logRunStats({
+      event: 'gps_point_accepted',
       distanceKm: totalDistanceKmRef.current,
+      segmentKm: segmentDistanceKm,
       durationSeconds: metrics.duration,
       currentPaceSecondsPerKm: currentPaceSecondsPerKm,
+      pathLength: gpsPathRef.current.length,
     })
   }
 
@@ -639,10 +658,19 @@ export function RecordScreen() {
 
     stopTracking()
     setIsInitializingGps(false)
-    // Break distance accumulation between paused segments (avoid counting movement while paused).
-    lastRecordedPointRef.current = null
+    // NOTE: DO NOT reset lastRecordedPointRef here - we need to preserve it for distance continuity
+    // The next GPS point after resume will calculate distance from the last recorded point
     setIsPaused(true)
     isPausedRef.current = true
+
+    logRunStats({
+      event: 'pause',
+      pausedAt: Date.now(),
+      distanceKm: totalDistanceKmRef.current,
+      durationSeconds: Math.floor(elapsedRunMsRef.current / 1000),
+      preservedLastPoint: lastRecordedPointRef.current ? 'yes' : 'no'
+    })
+
     toast({
       title: "Run Paused",
       description: "Your run has been paused. Resume when ready.",
@@ -653,7 +681,8 @@ export function RecordScreen() {
     setIsPaused(false)
     isPausedRef.current = false
     startTimeRef.current = Date.now()
-    lastRecordedPointRef.current = null
+    // CRITICAL FIX: DO NOT reset lastRecordedPointRef - preserve it for distance continuity
+    // The GPS tracking will continue from where we paused
     setIsInitializingGps(true)
     let trackingStarted = false
     try {
@@ -673,12 +702,20 @@ export function RecordScreen() {
       return
     }
 
+    logRunStats({
+      event: 'resume',
+      resumedAt: Date.now(),
+      distanceKm: totalDistanceKmRef.current,
+      hasLastPoint: lastRecordedPointRef.current ? 'yes' : 'no',
+      lastPointAge: lastRecordedPointRef.current
+        ? Date.now() - lastRecordedPointRef.current.timestamp
+        : null
+    })
+
     toast({
       title: "Run Resumed",
       description: "GPS tracking resumed. Your run continues.",
     })
-
-    logRunStats({ event: 'resume', resumedAt: Date.now() })
   }
 
   const stopRun = async () => {
