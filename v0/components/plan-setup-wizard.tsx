@@ -208,13 +208,12 @@ function SelectCard(props: {
   const { selected, onClick, title, subtitle, right } = props
   return (
     <button type="button" onClick={onClick} className="w-full text-left">
-      <Card
+      <div
         className={cn(
-          'relative overflow-hidden border rounded-3xl px-6 py-5 flex items-center justify-between shadow-lg transition-all duration-200',
-          '!bg-gradient-to-br',
+          'relative overflow-hidden border rounded-3xl px-6 py-5 flex items-center justify-between shadow-lg transition-all duration-200 bg-gradient-to-br',
           selected
-            ? 'border-emerald-400/60 ring-2 ring-inset ring-emerald-400/30 !from-emerald-500/[0.15] !via-emerald-500/[0.08] !to-emerald-500/[0.03] text-white'
-            : 'border-white/[0.15] hover:border-white/30 !from-white/[0.08] !via-white/[0.05] !to-white/[0.02] text-white hover:!from-white/[0.12]'
+            ? 'border-emerald-400/60 ring-2 ring-inset ring-emerald-400/30 from-emerald-500/[0.15] via-emerald-500/[0.08] to-emerald-500/[0.03] text-white'
+            : 'border-white/[0.15] hover:border-white/30 from-white/[0.08] via-white/[0.05] to-white/[0.02] text-white hover:from-white/[0.12]'
         )}
       >
         <div className="flex-1">
@@ -222,7 +221,7 @@ function SelectCard(props: {
           {subtitle && <div className="text-sm text-white/60 mt-1.5 leading-relaxed">{subtitle}</div>}
         </div>
         {right && <div className="ml-4">{right}</div>}
-      </Card>
+      </div>
     </button>
   )
 }
