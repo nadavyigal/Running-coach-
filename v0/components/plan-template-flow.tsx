@@ -7,7 +7,6 @@ import { ArrowLeft, Footprints, Info, Loader2, X } from 'lucide-react'
 import { PLAN_TEMPLATES, type PlanTemplateFilter, type PlanTemplate } from '@/lib/plan-templates'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
 import { dbUtils } from '@/lib/dbUtils'
@@ -158,21 +157,22 @@ function CatalogView(props: {
         {templates.map((template) => {
           const accent = getAccentStyle(template.accentClassName)
           return (
-            <Card
+            <button
               key={template.id}
+              type="button"
+              onClick={() => onSelectTemplate(template)}
               className={cn(
-                'group relative cursor-pointer overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/10 via-white/[0.06] to-white/[0.02] text-white shadow-[0_12px_30px_rgba(0,0,0,0.55)] ring-1 ring-inset transition-colors active:scale-[0.99]',
+                'group relative cursor-pointer overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/10 via-white/[0.06] to-white/[0.02] text-white shadow-[0_12px_30px_rgba(0,0,0,0.55)] ring-1 ring-inset transition-colors active:scale-[0.99] w-full',
                 'before:content-[""] before:absolute before:inset-0 before:bg-gradient-to-r before:via-transparent before:to-transparent before:opacity-0 before:transition-opacity',
                 'hover:border-white/20 hover:bg-white/10 hover:before:opacity-100',
                 accent.ring,
                 accent.cardGlow,
                 template.isComingSoon && 'opacity-70'
               )}
-              onClick={() => onSelectTemplate(template)}
             >
-              <CardContent className="relative p-5 flex items-center gap-4 overflow-hidden">
+              <div className="relative p-5 flex items-center gap-4 overflow-hidden">
                 <PlanBadge label={getPlanBadgeLabel(template)} accentClassName={template.accentClassName} />
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 text-left">
                   <div className="text-xl font-semibold tracking-tight truncate">{template.name}</div>
                   <div className="text-sm text-white/70 mt-1">
                     {template.recommendedWeeks} weeks • {formatDistanceKm(template.distanceKm)}
@@ -183,8 +183,8 @@ function CatalogView(props: {
                     </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </button>
           )
         })}
       </div>
