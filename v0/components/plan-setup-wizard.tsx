@@ -210,15 +210,15 @@ function SelectCard(props: {
     <button type="button" onClick={onClick} className="w-full text-left">
       <Card
         className={cn(
-          'relative overflow-hidden border text-white rounded-3xl px-6 py-5 flex items-center justify-between bg-gradient-to-br shadow-lg transition-all duration-200',
+          'relative overflow-hidden border rounded-3xl px-6 py-5 flex items-center justify-between bg-gradient-to-br shadow-lg transition-all duration-200',
           selected
-            ? 'border-emerald-400/50 ring-2 ring-inset ring-emerald-400/20 from-emerald-500/[0.08] via-emerald-500/[0.04] to-transparent'
-            : 'border-white/10 hover:border-white/20 from-white/[0.03] to-transparent hover:from-white/[0.05]'
+            ? 'border-emerald-400/60 ring-2 ring-inset ring-emerald-400/30 from-emerald-500/[0.15] via-emerald-500/[0.08] to-emerald-500/[0.03] text-white'
+            : 'border-white/[0.15] hover:border-white/30 from-white/[0.08] via-white/[0.05] to-white/[0.02] text-white hover:from-white/[0.12]'
         )}
       >
         <div className="flex-1">
           <div className="text-lg font-medium">{title}</div>
-          {subtitle && <div className="text-sm text-white/50 mt-1.5 leading-relaxed">{subtitle}</div>}
+          {subtitle && <div className="text-sm text-white/60 mt-1.5 leading-relaxed">{subtitle}</div>}
         </div>
         {right && <div className="ml-4">{right}</div>}
       </Card>
@@ -417,7 +417,7 @@ export function PlanSetupWizard(props: {
 
       <div className="flex-1 overflow-y-auto px-6 pb-32">
         {step === 1 ? (
-          <div className="pt-2 space-y-8">
+          <div className="pt-2 space-y-6">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-3xl font-semibold tracking-tight leading-tight">
@@ -457,12 +457,7 @@ export function PlanSetupWizard(props: {
               })}
             </div>
 
-            <div className="text-center text-white/60 text-base py-2">
-              I can currently run a <span className="text-emerald-400 font-medium">{template.distanceLabel}</span> in{' '}
-              <span className="text-white font-semibold">{formatTimeHms(currentRaceTimeSeconds)}</span>
-            </div>
-
-            <div className="flex items-center justify-center gap-4 pt-4">
+            <div className="flex items-center justify-center gap-3 pt-2">
               <WheelColumn
                 value={hours}
                 min={0}
@@ -500,6 +495,11 @@ export function PlanSetupWizard(props: {
                   setSeconds(value)
                 }}
               />
+            </div>
+
+            <div className="text-center text-white/60 text-base pt-4">
+              I can currently run a <span className="text-emerald-400 font-medium">{template.distanceLabel}</span> in{' '}
+              <span className="text-white font-semibold">{formatTimeHms(currentRaceTimeSeconds)}</span>
             </div>
           </div>
         ) : null}
