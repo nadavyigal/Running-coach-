@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Alert, AlertDescription } from './ui/alert';
@@ -21,6 +21,14 @@ interface RecoveryRecommendation {
   };
 }
 
+interface ProRequiredError {
+  success: false;
+  error: 'pro_required';
+  message: string;
+  upgradeUrl: string;
+  preview?: RecoveryRecommendation;
+}
+
 interface RecoveryRecommendationsProps {
   userId?: number;
   date?: Date | string;
@@ -28,15 +36,16 @@ interface RecoveryRecommendationsProps {
   onRefresh?: () => void;
 }
 
-export default function RecoveryRecommendations({ 
-  userId = 1, 
+export default function RecoveryRecommendations({
+  userId = 1,
   date,
   showBreakdown = false,
-  onRefresh 
+  onRefresh
 }: RecoveryRecommendationsProps) {
   const [recommendations, setRecommendations] = useState<RecoveryRecommendation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [proRequired, setProRequired] = useState<ProRequiredError | null>(null);
 
   const [defaultDate] = useState(() => new Date());
   const inflightRequestRef = useRef<AbortController | null>(null);
@@ -60,18 +69,25 @@ export default function RecoveryRecommendations({
     try {
       setLoading(true);
       setError(null);
+      setProRequired(null);
 
       const response = await fetch(
         `/api/recovery/recommendations?userId=${userId}&date=${encodeURIComponent(dateKey)}`,
         { signal: controller.signal }
       );
-       
+
+      const data = await response.json();
+
+      // Handle Pro required response (403 status)
+      if (response.status === 403 && data.error === 'pro_required') {
+        setProRequired(data as ProRequiredError);
+        return;
+      }
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-       
-      const data = await response.json();
-       
+
       if (data.success) {
         setRecommendations(data.data);
       } else {
@@ -146,6 +162,101 @@ export default function RecoveryRecommendations({
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
           </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Pro Required State
+  if (proRequired) {
+    const preview = proRequired.preview;
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Recovery Recommendations</CardTitle>
+            <Badge variant="default" className="bg-gradient-to-r from-purple-600 to-blue-600">
+              Pro Feature
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Alert className="mb-4">
+            <Zap className="h-4 w-4" />
+            <AlertDescription>{proRequired.message}</AlertDescription>
+          </Alert>
+
+          {/* Preview Data (blurred/locked) */}
+          {preview && (
+            <div className="relative mb-4">
+              <div className="pointer-events-none opacity-50 blur-sm">
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-4">
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Recovery Score</span>
+                    <div className="flex items-center space-x-2">
+                      <span className={`text-2xl font-bold ${getScoreColor(preview.recoveryScore)}`}>
+                        {preview.recoveryScore}/100
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm text-gray-600">Status</span>
+                    <div className="text-sm font-medium">
+                      {preview.recoveryScore >= 80 ? 'Ready for Training' :
+                       preview.recoveryScore >= 60 ? 'Moderate Training OK' : 'Rest Day Recommended'}
+                    </div>
+                  </div>
+                </div>
+
+                {preview.breakdown && (
+                  <div className="grid grid-cols-2 gap-3 p-3 bg-blue-50 rounded-lg mb-4">
+                    <div>
+                      <div className="flex items-center space-x-1">
+                        <Moon className="w-3 h-3" />
+                        <span className="text-xs font-medium">Sleep</span>
+                      </div>
+                      <span className={`text-sm font-bold ${getScoreColor(preview.breakdown.sleepScore)}`}>
+                        {preview.breakdown.sleepScore}/100
+                      </span>
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-1">
+                        <Heart className="w-3 h-3" />
+                        <span className="text-xs font-medium">HRV</span>
+                      </div>
+                      <span className={`text-sm font-bold ${getScoreColor(preview.breakdown.hrvScore)}`}>
+                        {preview.breakdown.hrvScore}/100
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {preview.recommendations.slice(0, 2).map((rec, index) => (
+                    <div key={index} className="flex items-start space-x-3 p-3 rounded-lg border bg-green-50 border-green-200">
+                      <TrendingUp className="w-4 h-4 mt-1 text-green-600" />
+                      <p className="text-sm text-gray-800">{rec}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Unlock Overlay */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <Zap className="w-12 h-12 text-purple-600 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-gray-900">Unlock Personalized Insights</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <Button
+            onClick={() => window.location.href = proRequired.upgradeUrl}
+            className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+          >
+            Upgrade to Pro
+          </Button>
         </CardContent>
       </Card>
     );

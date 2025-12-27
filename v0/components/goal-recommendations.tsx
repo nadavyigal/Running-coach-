@@ -6,23 +6,24 @@ import { Button } from '@/components/ui/button';
 	import { Badge } from '@/components/ui/badge';
 	import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 	import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
-  Lightbulb, 
-  TrendingUp, 
-  Target, 
+import {
+  Lightbulb,
+  TrendingUp,
+  Target,
   Clock,
   AlertTriangle,
   CheckCircle2,
   X,
   ThumbsUp,
   ThumbsDown,
-	  Settings,
-	  Sparkles,
-	  ArrowRight,
-	  Zap,
-	  Award,
-	  RefreshCw
-	} from 'lucide-react';
+  Settings,
+  Sparkles,
+  ArrowRight,
+  Zap,
+  Award,
+  RefreshCw,
+  Lock
+} from 'lucide-react';
 import { SimpleGoalForm } from './simple-goal-form';
 import { toast } from '@/components/ui/use-toast';
 
@@ -68,13 +69,26 @@ const recommendationColors = {
   priority_change: 'text-indigo-600 bg-indigo-50 border-indigo-200'
 };
 
+interface ProRequiredError {
+  success: false;
+  error: 'pro_required';
+  message: string;
+  upgradeUrl: string;
+  preview?: {
+    stored: GoalRecommendation[];
+    dynamic: Partial<GoalRecommendation>[];
+    summary: any;
+  };
+}
+
 export function GoalRecommendations({ userId, className = '' }: GoalRecommendationsProps) {
   const [recommendations, setRecommendations] = useState<{
     stored: GoalRecommendation[];
     dynamic: Partial<GoalRecommendation>[];
     summary: any;
   }>({ stored: [], dynamic: [], summary: {} });
-	  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [proRequired, setProRequired] = useState<ProRequiredError | null>(null);
 	  const [selectedRecommendation, setSelectedRecommendation] = useState<GoalRecommendation | Partial<GoalRecommendation> | null>(null);
 	  const [showGoalWizard, setShowGoalWizard] = useState(false);
 	  const [, setWizardTemplate] = useState<any>(null);
@@ -86,10 +100,18 @@ export function GoalRecommendations({ userId, className = '' }: GoalRecommendati
   const loadRecommendations = async () => {
     try {
       setLoading(true);
+      setProRequired(null);
       const response = await fetch(`/api/goals/recommendations?userId=${userId}&includeExpired=false`);
-      
+
+      const data = await response.json();
+
+      // Handle Pro required response (403 status)
+      if (response.status === 403 && data.error === 'pro_required') {
+        setProRequired(data as ProRequiredError);
+        return;
+      }
+
       if (response.ok) {
-        const data = await response.json();
         setRecommendations(data);
       } else {
         console.error('Failed to load recommendations');
@@ -242,6 +264,89 @@ export function GoalRecommendations({ userId, className = '' }: GoalRecommendati
           </div>
         </CardContent>
       </Card>
+    );
+  }
+
+  // Pro Required State
+  if (proRequired) {
+    const preview = proRequired.preview;
+    const previewRecommendations = preview
+      ? [...(preview.stored || []), ...(preview.dynamic || [])].slice(0, 2)
+      : [];
+
+    return (
+      <div className={className}>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Lightbulb className="h-5 w-5 text-yellow-500" />
+                  Smart Recommendations
+                </CardTitle>
+                <CardDescription>
+                  AI-powered suggestions to optimize your running goals
+                </CardDescription>
+              </div>
+              <Badge variant="default" className="bg-gradient-to-r from-purple-600 to-blue-600">
+                Pro Feature
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert>
+              <Zap className="h-4 w-4" />
+              <AlertDescription>{proRequired.message}</AlertDescription>
+            </Alert>
+
+            {/* Preview Recommendations (blurred/locked) */}
+            {previewRecommendations.length > 0 && (
+              <div className="relative">
+                <div className="pointer-events-none opacity-50 blur-sm space-y-3">
+                  {previewRecommendations.map((recommendation, index) => (
+                    <Card
+                      key={index}
+                      className={`border-l-4 ${
+                        recommendationColors[recommendation.recommendationType as keyof typeof recommendationColors]
+                      }`}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            {getRecommendationIcon(recommendation.recommendationType!)}
+                            <div>
+                              <h4 className="font-semibold">{recommendation.title}</h4>
+                              <p className="text-sm text-gray-600">{recommendation.description}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-700">{recommendation.reasoning}</p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* Unlock Overlay */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center bg-white/90 px-6 py-4 rounded-lg shadow-lg">
+                    <Lock className="w-12 h-12 text-purple-600 mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-gray-900">Unlock Smart Recommendations</p>
+                    <p className="text-xs text-gray-600 mt-1">Get personalized goal insights</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <Button
+              onClick={() => window.location.href = proRequired.upgradeUrl}
+              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+            >
+              <Zap className="h-4 w-4 mr-2" />
+              Upgrade to Pro
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 

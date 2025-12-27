@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { GoalRecommendation } from '@/lib/db';
 import { dbUtils } from '@/lib/dbUtils';
 import { goalProgressEngine } from '@/lib/goalProgressEngine';
+import { PersonalizationContext, PersonalizationContextBuilder } from '@/lib/personalizationContext';
+import { SubscriptionGate, ProFeature } from '@/lib/subscriptionGates';
 import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
@@ -48,23 +50,6 @@ const RespondToRecommendationSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    // Temporary fix: Return mock data during onboarding to prevent API loops
-    return NextResponse.json({
-      success: true,
-      data: [
-        {
-          id: 1,
-          type: 'new_goal',
-          title: 'Complete Onboarding',
-          message: 'Finish setting up your profile to unlock personalized goal recommendations',
-          priority: 'high',
-          status: 'pending',
-          createdAt: new Date(),
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
-        }
-      ]
-    });
-    
     const { searchParams } = new URL(request.url);
     const params = RecommendationsQuerySchema.parse({
       userId: searchParams.get('userId'),
@@ -72,6 +57,52 @@ export async function GET(request: NextRequest) {
       status: searchParams.get('status'),
       includeExpired: searchParams.get('includeExpired')
     });
+
+    // Check if user has Pro access
+    const hasAccess = await SubscriptionGate.hasAccess(params.userId, ProFeature.SMART_RECOMMENDATIONS);
+
+    if (!hasAccess) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'pro_required',
+          message: SubscriptionGate.getUpgradePrompt(ProFeature.SMART_RECOMMENDATIONS),
+          upgradeUrl: '/pricing',
+          preview: [
+            {
+              id: 1,
+              type: 'new_goal',
+              title: 'Unlock Smart Recommendations',
+              message: 'Upgrade to Pro for personalized goal recommendations tailored to your progress',
+              priority: 'high',
+              status: 'pending',
+              createdAt: new Date(),
+            }
+          ]
+        },
+        { status: 403 }
+      );
+    }
+
+    // Check if onboarding is complete
+    const user = await dbUtils.getUser(params.userId);
+    if (!user || !user.onboardingComplete) {
+      return NextResponse.json({
+        success: true,
+        data: [
+          {
+            id: 1,
+            type: 'new_goal',
+            title: 'Complete Onboarding',
+            message: 'Finish setting up your profile to unlock personalized goal recommendations',
+            priority: 'high',
+            status: 'pending',
+            createdAt: new Date(),
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+          }
+        ]
+      });
+    }
 
     // Get stored recommendations
     let recommendations = await dbUtils.getGoalRecommendations(params.userId, params.status);
@@ -87,8 +118,11 @@ export async function GET(request: NextRequest) {
       recommendations = recommendations.filter(r => !r.expiresAt || r.expiresAt > now);
     }
 
-    // Generate dynamic recommendations based on current goal progress
-    const dynamicRecommendations = await generateDynamicRecommendations(params.userId);
+    // Build personalization context
+    const context = await PersonalizationContextBuilder.build(params.userId);
+
+    // Generate dynamic personalized recommendations
+    const dynamicRecommendations = await generateDynamicRecommendations(params.userId, context);
 
     return NextResponse.json({
       stored: recommendations,
@@ -200,20 +234,17 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-async function generateDynamicRecommendations(userId: number): Promise<Partial<GoalRecommendation>[]> {
+async function generateDynamicRecommendations(
+  userId: number,
+  context: PersonalizationContext
+): Promise<Partial<GoalRecommendation>[]> {
   const recommendations: Partial<GoalRecommendation>[] = [];
-  
+
   // Get user's goals and their progress
-  const activeGoals = await dbUtils.getUserGoals(userId, 'active');
-  
-  // Get recent runs for analysis
-  const recentRuns = await dbUtils.getRunsByUser(userId);
-  const last30DaysRuns = recentRuns.filter(run => {
-    const runDate = new Date(run.completedAt);
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    return runDate >= thirtyDaysAgo;
-  });
+  const activeGoals = context.activeGoals;
+
+  // Get recent runs from context
+  const last30DaysRuns = context.recentActivity.runsLast30Days;
 
   // 1. Goal adjustment recommendations
   for (const goal of activeGoals) {
@@ -262,11 +293,13 @@ async function generateDynamicRecommendations(userId: number): Promise<Partial<G
     }
   }
 
-  // 2. New goal recommendations
+  // 2. New goal recommendations based on user's primary goal
   if (activeGoals.length < 3) {
-    // Recommend consistency goal if lacking regular activity
-    const weeklyRunCount = last30DaysRuns.length / 4;
-    if (weeklyRunCount < 2 && !activeGoals.some(g => g.goalType === 'frequency')) {
+    // Goal-specific recommendations based on user profile
+    if (context.userProfile.goal === 'habit') {
+      // For habit-focused users, recommend consistency goals
+      const weeklyRunCount = last30DaysRuns / 4;
+      if (weeklyRunCount < 2 && !activeGoals.some(g => g.goalType === 'frequency')) {
       recommendations.push({
         userId,
         recommendationType: 'new_goal',
@@ -293,34 +326,35 @@ async function generateDynamicRecommendations(userId: number): Promise<Partial<G
           actionRequired: 'Create new consistency goal'
         }
       });
-    }
-
-    // Recommend speed goal if only has endurance goals
-    if (activeGoals.every(g => g.category !== 'speed') && last30DaysRuns.length > 8) {
-      const avgPace = last30DaysRuns.reduce((sum, run) => sum + run.pace, 0) / last30DaysRuns.length;
-      recommendations.push({
-        userId,
-        recommendationType: 'new_goal',
-        title: 'Improve 5K Time',
-        description: 'Add a speed goal to complement your endurance training',
-        reasoning: `You have good training consistency but no speed-focused goals. Your current average pace is ${Math.round(avgPace)} seconds/km.`,
-        confidenceScore: 0.75,
-        recommendationData: {
-          newGoalTemplate: {
-            title: 'Improve 5K Personal Record',
-            goalType: 'time_improvement',
-            category: 'speed',
-            priority: 2,
-            specificTarget: {
-              metric: '5k_time',
-              value: 1500, // 25 minutes
-              unit: 'seconds',
-              description: 'Run 5K in under 25 minutes'
-            }
-          },
-          benefits: ['Improved speed', 'Better racing performance', 'Training variety']
-        }
-      });
+      }
+    } else if (context.userProfile.goal === 'speed') {
+      // Recommend speed goal if only has endurance goals
+      if (activeGoals.every(g => g.category !== 'speed') && last30DaysRuns > 8) {
+        const avgPace = context.recentActivity.avgPace;
+        recommendations.push({
+          userId,
+          recommendationType: 'new_goal',
+          title: 'Improve 5K Time',
+          description: 'Add a speed goal to complement your endurance training',
+          reasoning: `You have good training consistency but no speed-focused goals. Your current average pace is ${Math.round(avgPace)} seconds/km.`,
+          confidenceScore: 0.75,
+          recommendationData: {
+            newGoalTemplate: {
+              title: 'Improve 5K Personal Record',
+              goalType: 'time_improvement',
+              category: 'speed',
+              priority: 2,
+              specificTarget: {
+                metric: '5k_time',
+                value: 1500, // 25 minutes
+                unit: 'seconds',
+                description: 'Run 5K in under 25 minutes'
+              }
+            },
+            benefits: ['Improved speed', 'Better racing performance', 'Training variety']
+          }
+        });
+      }
     }
   }
 
@@ -374,7 +408,34 @@ async function generateDynamicRecommendations(userId: number): Promise<Partial<G
     }
   }
 
-  return recommendations;
+  // Apply coaching style to all recommendations
+  const styledRecommendations = recommendations.map(rec => applyCoachingStyleToRecommendation(rec, context));
+
+  return styledRecommendations;
+}
+
+/**
+ * Apply coaching style to a recommendation
+ */
+function applyCoachingStyleToRecommendation(
+  recommendation: Partial<GoalRecommendation>,
+  context: PersonalizationContext
+): Partial<GoalRecommendation> {
+  const { coachingStyle } = context.userProfile;
+
+  const styleTemplates: Record<string, (text: string) => string> = {
+    supportive: (text) => `💚 ${text}`,
+    challenging: (text) => `🎯 ${text}`,
+    analytical: (text) => `📊 ${text}`,
+    encouraging: (text) => `⭐ ${text}`,
+  };
+
+  const template = styleTemplates[coachingStyle] || ((text: string) => text);
+
+  return {
+    ...recommendation,
+    title: recommendation.title ? template(recommendation.title) : recommendation.title,
+  };
 }
 
 async function handleAcceptedRecommendation(recommendationId: number, modifications?: Record<string, any>): Promise<void> {

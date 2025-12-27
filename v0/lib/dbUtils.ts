@@ -361,6 +361,9 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
     console.log(`[onboarding:begin] traceId=${traceId} size=${payloadSize}B`);
 
     // Normalize + validate input against consumer contract
+    const now = new Date();
+    const trialEndDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days from now
+
     const normalizedProfileRequired: Partial<User> = {
       goal: profile.goal || 'habit',
       experience: profile.experience || 'beginner',
@@ -368,6 +371,11 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
       daysPerWeek: typeof profile.daysPerWeek === 'number' ? profile.daysPerWeek : 3,
       consents: (profile.consents as any) ?? { data: true, gdpr: true, push: (typeof (profile as any).consents?.push === 'boolean' ? (profile as any).consents.push : false) },
       onboardingComplete: true,
+      // Initialize 14-day trial for new users
+      subscriptionTier: 'free',
+      subscriptionStatus: 'trial',
+      trialStartDate: now,
+      trialEndDate: trialEndDate,
     };
     if (typeof profile.rpe === 'number') (normalizedProfileRequired as any).rpe = profile.rpe;
     if (typeof profile.age === 'number') (normalizedProfileRequired as any).age = profile.age;
@@ -3647,6 +3655,145 @@ async function getCohortPerformanceComparison(
 }
 
 // ============================================================================
+// ONBOARDING & RECOMMENDATION HELPERS
+// ============================================================================
+
+/**
+ * Check if a user has completed onboarding
+ * @param userId - User ID to check
+ * @returns True if onboarding is complete
+ */
+export async function isOnboardingComplete(userId: number): Promise<boolean> {
+  return safeDbOperation(async () => {
+    const validatedUserId = validateUserId(userId);
+    const user = await db.users.get(validatedUserId);
+
+    if (!user) {
+      return false;
+    }
+
+    // Check if user has essential onboarding data
+    return !!(
+      user.name &&
+      user.goal &&
+      user.experience &&
+      user.daysPerWeek &&
+      user.preferredTimes &&
+      user.preferredTimes.length > 0
+    );
+  }, 'isOnboardingComplete', false);
+}
+
+/**
+ * Check if a user has minimal data for generating recommendations
+ * @param userId - User ID to check
+ * @returns True if user has sufficient data
+ */
+export async function hasMinimalDataForRecommendations(userId: number): Promise<boolean> {
+  return safeDbOperation(async () => {
+    const validatedUserId = validateUserId(userId);
+
+    // Check if onboarding is complete
+    const onboardingComplete = await isOnboardingComplete(validatedUserId);
+    if (!onboardingComplete) {
+      return false;
+    }
+
+    // Check if user has at least one of the following:
+    // - Active plan
+    // - Recent runs (last 30 days)
+    // - Active goals
+
+    const [plans, runs, goals] = await Promise.all([
+      db.plans.where('userId').equals(validatedUserId).toArray(),
+      db.runs.where('userId').equals(validatedUserId).toArray(),
+      db.goals.where('userId').equals(validatedUserId).toArray(),
+    ]);
+
+    const hasActivePlan = plans.some(plan => plan.status === 'active');
+    const hasRecentRuns = runs.some(run => {
+      const runDate = run.completedAt ?? run.createdAt;
+      const thirtyDaysAgo = nowUTC();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      return runDate >= thirtyDaysAgo;
+    });
+    const hasActiveGoals = goals.some(goal => goal.status === 'active');
+
+    // User needs at least one of these data points for meaningful recommendations
+    return hasActivePlan || hasRecentRuns || hasActiveGoals;
+  }, 'hasMinimalDataForRecommendations', false);
+}
+
+/**
+ * Get user's onboarding status and data quality
+ * @param userId - User ID to check
+ * @returns Object with onboarding status and data quality metrics
+ */
+export async function getUserOnboardingStatus(userId: number): Promise<{
+  onboardingComplete: boolean;
+  hasMinimalData: boolean;
+  dataQuality: {
+    hasActivePlan: boolean;
+    hasRecentRuns: boolean;
+    hasActiveGoals: boolean;
+    hasRecoveryData: boolean;
+    runCount: number;
+    goalCount: number;
+  };
+}> {
+  return safeDbOperation(async () => {
+    const validatedUserId = validateUserId(userId);
+
+    const onboardingComplete = await isOnboardingComplete(validatedUserId);
+    const hasMinimalData = await hasMinimalDataForRecommendations(validatedUserId);
+
+    // Get detailed data quality metrics
+    const [plans, runs, goals, sleepData, hrvData] = await Promise.all([
+      db.plans.where('userId').equals(validatedUserId).toArray(),
+      db.runs.where('userId').equals(validatedUserId).toArray(),
+      db.goals.where('userId').equals(validatedUserId).toArray(),
+      db.sleepData.where('userId').equals(validatedUserId).toArray(),
+      db.hrvMeasurements.where('userId').equals(validatedUserId).toArray(),
+    ]);
+
+    const thirtyDaysAgo = nowUTC();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const hasActivePlan = plans.some(plan => plan.status === 'active');
+    const hasRecentRuns = runs.some(run => {
+      const runDate = run.completedAt ?? run.createdAt;
+      return runDate >= thirtyDaysAgo;
+    });
+    const hasActiveGoals = goals.some(goal => goal.status === 'active');
+    const hasRecoveryData = sleepData.length > 0 || hrvData.length > 0;
+
+    return {
+      onboardingComplete,
+      hasMinimalData,
+      dataQuality: {
+        hasActivePlan,
+        hasRecentRuns,
+        hasActiveGoals,
+        hasRecoveryData,
+        runCount: runs.length,
+        goalCount: goals.length,
+      },
+    };
+  }, 'getUserOnboardingStatus', {
+    onboardingComplete: false,
+    hasMinimalData: false,
+    dataQuality: {
+      hasActivePlan: false,
+      hasRecentRuns: false,
+      hasActiveGoals: false,
+      hasRecoveryData: false,
+      runCount: 0,
+      goalCount: 0,
+    },
+  });
+}
+
+// ============================================================================
 // EXPORT ALL UTILITIES
 // ============================================================================
 
@@ -3789,7 +3936,12 @@ export const dbUtils = {
   getPerformanceMetrics,
   getPersonalRecordProgression,
   checkAndUpdatePersonalRecords,
-  deletePersonalRecord
+  deletePersonalRecord,
+
+  // Onboarding & Recommendation Helpers
+  isOnboardingComplete,
+  hasMinimalDataForRecommendations,
+  getUserOnboardingStatus
 };
 
 export default dbUtils; 

@@ -1,4 +1,5 @@
 import { db, SleepData, HRVMeasurement, RecoveryScore, SubjectiveWellness } from './db';
+import { PersonalizationContext } from './personalizationContext';
 
 /**
  * Recovery score calculation algorithms and data structures.
@@ -585,11 +586,193 @@ export class RecoveryEngine {
   static async getRecoveryTrends(userId: number, days: number = 30): Promise<RecoveryScore[]> {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
-    
+
     return await db.recoveryScores
       .where('userId').equals(userId)
       .and(score => score.date >= startDate)
       .reverse()
       .sortBy('date');
+  }
+
+  /**
+   * Generate personalized recovery recommendations based on user profile and context
+   * @param userId - User ID
+   * @param recoveryScore - Current recovery score
+   * @param context - Personalization context
+   * @returns Personalized recommendations
+   */
+  static async generatePersonalizedRecommendations(
+    userId: number,
+    recoveryScore: RecoveryScore,
+    context: PersonalizationContext
+  ): Promise<string[]> {
+    // Start with base recommendations
+    const baseRecs = this.generateRecommendations({
+      sleepQuality: recoveryScore.sleepScore,
+      hrvScore: recoveryScore.hrvScore,
+      restingHRScore: recoveryScore.restingHRScore,
+      subjectiveWellness: recoveryScore.subjectiveWellnessScore,
+      trainingLoadImpact: recoveryScore.trainingLoadImpact,
+      stressLevel: recoveryScore.stressLevel,
+    });
+
+    // Apply coaching style to all recommendations
+    const styledRecs = baseRecs.map((rec) =>
+      this.applyCoachingStyle(rec, context.userProfile.coachingStyle)
+    );
+
+    // Add goal-specific recommendations
+    const goalRecs = this.getGoalSpecificRecoveryAdvice(
+      recoveryScore.overallScore,
+      context.userProfile.goal
+    );
+
+    // Add barrier-specific recommendations
+    const barrierRecs = context.userProfile.barriers
+      .map((barrier) => this.getBarrierSpecificRecoveryAdvice(barrier, recoveryScore.overallScore))
+      .filter((rec) => rec !== null) as string[];
+
+    // Add motivation-based framing
+    const motivationFrame = this.selectMotivationalFrame(
+      context.userProfile.motivations,
+      context.userProfile.coachingStyle
+    );
+
+    // Combine all recommendations with motivation framing
+    const allRecs = [...styledRecs, ...goalRecs, ...barrierRecs];
+
+    // Apply motivation frame to first recommendation if available
+    if (allRecs.length > 0 && motivationFrame) {
+      allRecs[0] = `${motivationFrame} ${allRecs[0]}`;
+    }
+
+    return allRecs;
+  }
+
+  /**
+   * Apply coaching style to a recommendation
+   * @param recommendation - Base recommendation text
+   * @param style - User's preferred coaching style
+   * @returns Styled recommendation
+   */
+  private static applyCoachingStyle(
+    recommendation: string,
+    style: 'supportive' | 'challenging' | 'analytical' | 'encouraging'
+  ): string {
+    const styleTemplates = {
+      supportive: (rec: string) => `Take care of yourself: ${rec}`,
+      challenging: (rec: string) => `Push smart: ${rec}`,
+      analytical: (rec: string) => `Data shows: ${rec}`,
+      encouraging: (rec: string) => `Great progress! ${rec}`,
+    };
+
+    // Apply style template
+    const template = styleTemplates[style];
+    return template ? template(recommendation) : recommendation;
+  }
+
+  /**
+   * Get goal-specific recovery advice
+   * @param recoveryScore - Current recovery score
+   * @param goal - User's primary goal
+   * @returns Goal-specific recommendations
+   */
+  private static getGoalSpecificRecoveryAdvice(
+    recoveryScore: number,
+    goal: 'habit' | 'distance' | 'speed'
+  ): string[] {
+    const recs: string[] = [];
+
+    if (goal === 'habit') {
+      if (recoveryScore < 60) {
+        recs.push(
+          'Maintain your streak with a light recovery walk or easy jog today'
+        );
+      } else {
+        recs.push('Your recovery supports your consistency goal - keep it going!');
+      }
+    } else if (goal === 'distance') {
+      if (recoveryScore < 60) {
+        recs.push(
+          'Focus on aerobic base recovery - save long runs for when you\'re fully recovered'
+        );
+      } else {
+        recs.push(
+          'Good recovery for building endurance - ready for progressive mileage'
+        );
+      }
+    } else if (goal === 'speed') {
+      if (recoveryScore < 60) {
+        recs.push(
+          'Skip high-intensity work today - speed training requires full recovery'
+        );
+      } else {
+        recs.push('Optimal recovery for quality speed work - your intervals will benefit');
+      }
+    }
+
+    return recs;
+  }
+
+  /**
+   * Get barrier-specific recovery advice
+   * @param barrier - User's barrier
+   * @param recoveryScore - Current recovery score
+   * @returns Barrier-specific recommendation or null
+   */
+  private static getBarrierSpecificRecoveryAdvice(
+    barrier: string,
+    recoveryScore: number
+  ): string | null {
+    const lowerBarrier = barrier.toLowerCase();
+
+    if (lowerBarrier.includes('time')) {
+      return 'Quick 10-min recovery routine: light stretching and foam rolling';
+    }
+
+    if (lowerBarrier.includes('motivation') || lowerBarrier.includes('tired')) {
+      if (recoveryScore < 60) {
+        return 'Small steps count - even light movement aids recovery';
+      }
+    }
+
+    if (lowerBarrier.includes('sleep')) {
+      return 'Prioritize sleep quality tonight - it\'s your best recovery tool';
+    }
+
+    return null;
+  }
+
+  /**
+   * Select motivational frame based on user motivations
+   * @param motivations - User's motivations
+   * @param coachingStyle - User's coaching style
+   * @returns Motivational frame or empty string
+   */
+  private static selectMotivationalFrame(
+    motivations: string[],
+    coachingStyle: string
+  ): string {
+    if (motivations.length === 0) return '';
+
+    const firstMotivation = motivations[0].toLowerCase();
+
+    if (firstMotivation.includes('health')) {
+      return '💚 For your health:';
+    }
+
+    if (firstMotivation.includes('stress') || firstMotivation.includes('mental')) {
+      return '🧠 For your mental wellbeing:';
+    }
+
+    if (firstMotivation.includes('race') || firstMotivation.includes('performance')) {
+      return '🏃 To achieve your race goals:';
+    }
+
+    if (firstMotivation.includes('weight') || firstMotivation.includes('fitness')) {
+      return '💪 For your fitness journey:';
+    }
+
+    return '';
   }
 } 

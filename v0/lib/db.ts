@@ -259,6 +259,14 @@ export interface User {
 
   // Plan template flow (optional)
   planPreferences?: PlanSetupPreferences;
+
+  // Subscription fields for Pro plan gating
+  subscriptionTier?: 'free' | 'pro' | 'premium';
+  subscriptionStatus?: 'active' | 'trial' | 'cancelled' | 'expired';
+  trialStartDate?: Date;
+  trialEndDate?: Date; // 14-30 days from signup
+  subscriptionStartDate?: Date;
+  subscriptionEndDate?: Date;
 }
 
 export interface PlanSetupPreferences {
@@ -1145,6 +1153,27 @@ export class RunSmartDB extends Dexie {
       }
 
       console.log(`✓ Database upgrade complete: Updated ${routes.length} routes with map fields`);
+    });
+
+    this.version(3).stores({}).upgrade(async (trans) => {
+      console.log('🔄 Upgrading database to version 3: Adding subscription fields to users');
+
+      // Update existing users with trial period (14 days from now)
+      const users = await trans.table('users').toArray();
+      const now = new Date();
+      const trialEndDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+      for (const user of users) {
+        await trans.table('users').update(user.id!, {
+          subscriptionTier: 'free',
+          subscriptionStatus: 'trial',
+          trialStartDate: now,
+          trialEndDate: trialEndDate,
+          updatedAt: now
+        });
+      }
+
+      console.log(`✓ Database upgrade complete: Updated ${users.length} users with subscription fields`);
     });
 
   }
