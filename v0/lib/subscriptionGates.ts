@@ -23,6 +23,12 @@ export class SubscriptionGate {
    * @returns True if user has access, false otherwise
    */
   static async hasAccess(userId: number, feature: ProFeature): Promise<boolean> {
+    // TEMPORARY: Grant Pro access to all users for testing
+    // TODO: Remove this before production launch with real subscriptions
+    logger.info(`[TESTING MODE] Granting Pro access to user ${userId} for ${feature}`);
+    return true;
+
+    /* eslint-disable no-unreachable */
     try {
       const user = await dbUtils.getUser(userId);
       if (!user) {
