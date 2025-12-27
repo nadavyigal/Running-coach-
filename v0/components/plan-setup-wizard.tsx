@@ -210,15 +210,17 @@ function SelectCard(props: {
     <button type="button" onClick={onClick} className="w-full text-left">
       <Card
         className={cn(
-          'relative overflow-hidden border text-white rounded-3xl px-5 py-4 flex items-center justify-between bg-gradient-to-br from-white/10 via-white/[0.06] to-white/[0.02] shadow-[0_12px_30px_rgba(0,0,0,0.55)] transition-colors',
-          selected ? 'border-emerald-300/60 ring-1 ring-inset ring-emerald-300/20' : 'border-white/10 hover:border-white/20'
+          'relative overflow-hidden border text-white rounded-3xl px-6 py-5 flex items-center justify-between bg-gradient-to-br shadow-lg transition-all duration-200',
+          selected
+            ? 'border-emerald-400/50 ring-2 ring-inset ring-emerald-400/20 from-emerald-500/[0.08] via-emerald-500/[0.04] to-transparent'
+            : 'border-white/10 hover:border-white/20 from-white/[0.03] to-transparent hover:from-white/[0.05]'
         )}
       >
-        <div>
-          <div className="text-lg">{title}</div>
-          {subtitle && <div className="text-sm text-white/60 mt-1">{subtitle}</div>}
+        <div className="flex-1">
+          <div className="text-lg font-medium">{title}</div>
+          {subtitle && <div className="text-sm text-white/50 mt-1.5 leading-relaxed">{subtitle}</div>}
         </div>
-        {right}
+        {right && <div className="ml-4">{right}</div>}
       </Card>
     </button>
   )
@@ -394,43 +396,43 @@ export function PlanSetupWizard(props: {
 
   return (
     <div className="h-[100dvh] flex flex-col bg-neutral-950 text-white">
-      <div className="px-4 pt-4 pb-2">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="text-white" onClick={handleBack}>
-            <ArrowLeft className="h-5 w-5" />
+      <div className="px-5 pt-5 pb-4">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" className="text-white hover:bg-white/5 -ml-2" onClick={handleBack}>
+            <ArrowLeft className="h-6 w-6" />
           </Button>
           <div className="flex-1 flex items-center justify-center">
-            <div className="h-1 w-44 bg-white/10 rounded-full overflow-hidden">
+            <div className="h-1 w-48 bg-white/10 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-emerald-300 to-sky-300"
+                className="h-full bg-emerald-400 transition-all duration-300 ease-out"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
           </div>
-          <Button variant="ghost" size="icon" className="text-white" onClick={onClose}>
-            <X className="h-5 w-5" />
+          <Button variant="ghost" size="icon" className="text-white hover:bg-white/5 -mr-2" onClick={onClose}>
+            <X className="h-6 w-6" />
           </Button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 pb-28">
+      <div className="flex-1 overflow-y-auto px-6 pb-32">
         {step === 1 ? (
-          <div className="pt-6 space-y-6">
+          <div className="pt-2 space-y-8">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-4xl font-semibold tracking-tight">
-                  What&apos;s your estimated <span className="text-emerald-300">current</span> race time?
+                <h2 className="text-3xl font-semibold tracking-tight leading-tight">
+                  What&apos;s your estimated <span className="text-emerald-400">current</span> race time?
                 </h2>
-                <p className="text-white/70 mt-3 leading-relaxed">
-                  Choose a time reflective of your <span className="text-emerald-300">current</span> fitness level — don&apos;t use an out of date PB or goal time!
+                <p className="text-white/60 mt-4 leading-relaxed text-[15px]">
+                  Choose a time reflective of your <span className="text-emerald-400">current</span> fitness level — don&apos;t use an out of date PB or goal time!
                 </p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/70" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
 
-            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+            <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
               {DISTANCE_CHIPS.map((chip) => {
                 const active = distanceKey === chip.key
                 return (
@@ -443,10 +445,10 @@ export function PlanSetupWizard(props: {
                       onDistanceChange?.(chip.key)
                     }}
                     className={cn(
-                      'h-10 rounded-full px-6 shrink-0 text-sm font-medium border transition-colors',
+                      'h-11 rounded-full px-7 shrink-0 text-sm font-medium border transition-all duration-200',
                       active
-                        ? 'bg-emerald-400 text-neutral-950 border-emerald-300 shadow-[0_10px_24px_rgba(16,185,129,0.22)] hover:bg-emerald-300'
-                        : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10 hover:text-white'
+                        ? 'bg-emerald-400 text-neutral-950 border-emerald-400 shadow-lg shadow-emerald-500/25 hover:bg-emerald-300'
+                        : 'bg-white/[0.03] text-white/70 border-white/10 hover:bg-white/[0.06] hover:text-white hover:border-white/20'
                     )}
                   >
                     {chip.label}
@@ -455,12 +457,12 @@ export function PlanSetupWizard(props: {
               })}
             </div>
 
-            <div className="text-center text-white/70">
-              I can currently run a <span className="text-emerald-300">{template.distanceLabel}</span> in{' '}
+            <div className="text-center text-white/60 text-base py-2">
+              I can currently run a <span className="text-emerald-400 font-medium">{template.distanceLabel}</span> in{' '}
               <span className="text-white font-semibold">{formatTimeHms(currentRaceTimeSeconds)}</span>
             </div>
 
-            <div className="flex items-center justify-center gap-3 pt-2">
+            <div className="flex items-center justify-center gap-4 pt-4">
               <WheelColumn
                 value={hours}
                 min={0}
@@ -502,20 +504,20 @@ export function PlanSetupWizard(props: {
           </div>
         ) : null}
         {step === 2 ? (
-          <div className="pt-6 space-y-6">
+          <div className="pt-2 space-y-8">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-3xl font-semibold">How many days per week would you like to run?</h2>
-                <p className="text-white/70 mt-3">
+                <h2 className="text-3xl font-semibold leading-tight">How many days per week would you like to run?</h2>
+                <p className="text-white/60 mt-4 leading-relaxed text-[15px]">
                   This should be at most once more than you currently run per week to reduce the risk of injury
                 </p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/70" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               {[2, 3, 4, 5, 6].map((n) => (
                 <SelectCard
                   key={n}
@@ -528,28 +530,28 @@ export function PlanSetupWizard(props: {
           </div>
         ) : null}
         {step === 3 ? (
-          <div className="pt-6 space-y-6">
+          <div className="pt-2 space-y-8">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-3xl font-semibold">Which days are you available to run on?</h2>
-                <p className="text-white/70 mt-3">
+                <h2 className="text-3xl font-semibold leading-tight">Which days are you free to run on?</h2>
+                <p className="text-white/60 mt-4 leading-relaxed text-[15px]">
                   Please select every day available to you, spaced throughout the week, so we can choose the most optimal days to run.
                 </p>
                 <p
                   className={cn(
-                    'mt-3 font-semibold',
-                    availableDays.length >= daysPerWeek ? 'text-white/60' : 'text-emerald-300'
+                    'mt-4 font-medium text-sm',
+                    availableDays.length >= daysPerWeek ? 'text-white/50' : 'text-emerald-400'
                   )}
                 >
                   Please select at least {daysPerWeek} days to continue
                 </p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/70" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3.5">
               {WEEKDAYS.map((d) => {
                 const selected = availableDays.includes(d.key)
                 return (
@@ -579,18 +581,18 @@ export function PlanSetupWizard(props: {
           </div>
         ) : null}
         {step === 4 ? (
-          <div className="pt-6 space-y-6">
+          <div className="pt-2 space-y-8">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-3xl font-semibold">Which day do you want to do your long runs on?</h2>
-                <p className="text-white/70 mt-3">Choose one to continue</p>
+                <h2 className="text-3xl font-semibold leading-tight">Which day do you want to do your long runs on?</h2>
+                <p className="text-white/60 mt-4 leading-relaxed text-[15px]">Choose one to continue</p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/70" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3.5">
               {availableDays
                 .slice()
                 .sort((a, b) => getWeekdayIndex(a) - getWeekdayIndex(b))
@@ -606,30 +608,30 @@ export function PlanSetupWizard(props: {
           </div>
         ) : null}
         {step === 5 ? (
-          <div className="pt-6 space-y-6">
+          <div className="pt-2 space-y-8">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-4xl font-semibold tracking-tight">When do you want to start your plan?</h2>
-                <p className="text-white/70 mt-3">Pick a start date that suits you best (you can change this later)</p>
+                <h2 className="text-3xl font-semibold tracking-tight leading-tight">When do you want to start your plan?</h2>
+                <p className="text-white/60 mt-4 leading-relaxed text-[15px]">Pick a start date that suits you best (you can change this later)</p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/70" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               <button type="button" onClick={() => setStartPreset('today')} className="w-full text-left">
                 <Card
                   className={cn(
-                    'relative overflow-hidden rounded-3xl border px-5 py-4 text-white shadow-[0_12px_30px_rgba(0,0,0,0.55)]',
+                    'relative overflow-hidden rounded-3xl border px-6 py-5 text-white shadow-lg transition-all duration-200',
                     startPreset !== 'custom'
-                      ? 'border-emerald-300/60 bg-emerald-300/5 ring-1 ring-inset ring-emerald-300/20'
-                      : 'border-white/10 bg-white/5'
+                      ? 'border-emerald-400/40 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent ring-1 ring-inset ring-emerald-400/20'
+                      : 'border-white/10 bg-gradient-to-br from-white/[0.03] to-transparent hover:border-white/20'
                   )}
                 >
-                  <div className="text-sm text-white/60">{format(startPresetDate, 'MMM d, yyyy')}</div>
-                  <div className="mt-1 text-2xl font-semibold tracking-tight">Now</div>
-                  <div className="mt-4 flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                  <div className="text-sm text-white/50 font-medium">{format(startPresetDate, 'MMM d, yyyy')}</div>
+                  <div className="mt-2 text-2xl font-semibold tracking-tight">Now</div>
+                  <div className="mt-5 flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
                     {[
                       { id: 'today', label: 'Today' },
                       { id: 'tomorrow', label: 'Tomorrow' },
@@ -644,10 +646,10 @@ export function PlanSetupWizard(props: {
                           setStartPreset(chip.id as any)
                         }}
                         className={cn(
-                          'h-10 rounded-full px-6 shrink-0 text-sm font-medium border transition-colors',
+                          'h-11 rounded-full px-7 shrink-0 text-sm font-medium border transition-all duration-200',
                           startPreset === chip.id
-                            ? 'bg-emerald-400 text-neutral-950 border-emerald-300 shadow-[0_10px_24px_rgba(16,185,129,0.22)] hover:bg-emerald-300'
-                            : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10 hover:text-white'
+                            ? 'bg-emerald-400 text-neutral-950 border-emerald-400 shadow-lg shadow-emerald-500/25 hover:bg-emerald-300'
+                            : 'bg-white/[0.06] text-white/70 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20'
                         )}
                       >
                         {chip.label}
@@ -676,18 +678,18 @@ export function PlanSetupWizard(props: {
           </div>
         ) : null}
         {step === 6 ? (
-          <div className="pt-6 space-y-6">
+          <div className="pt-2 space-y-8">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-3xl font-semibold">How long do you want your plan to be?</h2>
-                <p className="text-white/70 mt-3">Choose how long you would like your plan to be.</p>
+                <h2 className="text-3xl font-semibold leading-tight">How long do you want your plan to be?</h2>
+                <p className="text-white/60 mt-4 leading-relaxed text-[15px]">Choose how long you would like your plan to be.</p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/70" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               {[
                 { weeks: 12, recommendation: 'Recommended for longer training time' },
                 { weeks: 10, recommendation: 'Recommended for balanced training amount' },
@@ -705,7 +707,7 @@ export function PlanSetupWizard(props: {
                     }}
                     title={`${option.weeks} Weeks`}
                     subtitle={option.recommendation}
-                    right={<div className="text-sm text-white/60">{format(optionWeekStart, 'PPP')}</div>}
+                    right={<div className="text-sm text-white/50">{format(optionWeekStart, 'MMM d, yyyy')}</div>}
                   />
                 )
               })}
@@ -759,52 +761,52 @@ export function PlanSetupWizard(props: {
           </div>
         ) : null}
         {step === 7 ? (
-          <div className="pt-6 space-y-6">
+          <div className="pt-2 space-y-8">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-3xl font-semibold">Which day do you want to do your {template.distanceLabel} race on?</h2>
-                <p className="text-white/70 mt-3">
+                <h2 className="text-3xl font-semibold leading-tight">Which day do you want to do your {template.distanceLabel} race on?</h2>
+                <p className="text-white/60 mt-4 leading-relaxed text-[15px]">
                   The last run of your training plan will be a {template.distanceLabel} race. Select the day that you want to go and get that personal best!
                 </p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/70" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3.5">
               {raceOptions.map((option) => (
                 <SelectCard
                   key={option.day}
                   selected={isSameDay(raceDate, option.date)}
                   onClick={() => setRaceDate(option.date)}
                   title={option.label}
-                  subtitle={format(option.date, 'PPP')}
+                  subtitle={format(option.date, 'MMM d, yyyy')}
                 />
               ))}
             </div>
           </div>
         ) : null}
         {step === 8 ? (
-          <div className="pt-6 space-y-6">
+          <div className="pt-2 space-y-8">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-3xl font-semibold">Set your training preferences</h2>
-                <p className="text-white/70 mt-3">
-                  We&apos;ve customized your training volume and difficulty for you. You can revisit this later in Manage Plan.
+                <h2 className="text-3xl font-semibold leading-tight">Set your training preferences</h2>
+                <p className="text-white/60 mt-4 leading-relaxed text-[15px]">
+                  We&apos;ve customized your training volume and difficulty for you. You can revisit this later in &apos;Manage Plan&apos;.
                 </p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/70" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
 
-            <Card className="border border-white/10 bg-white/5 text-white rounded-2xl">
-              <div className="p-5">
-                <div className="grid grid-cols-2 gap-4">
+            <Card className="border border-white/10 bg-gradient-to-br from-white/[0.04] to-white/[0.02] text-white rounded-3xl shadow-lg">
+              <div className="p-6">
+                <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <div className="text-xs text-white/50">TRAINING VOLUME</div>
-                    <div className="text-lg">
+                    <div className="text-xs text-white/50 font-semibold tracking-wide uppercase">TRAINING VOLUME</div>
+                    <div className="text-lg font-medium mt-1.5">
                       {trainingVolume === 'high'
                         ? 'High'
                         : trainingVolume === 'conservative'
@@ -812,9 +814,9 @@ export function PlanSetupWizard(props: {
                           : 'Progressive'}
                     </div>
                   </div>
-                  <div className="border-l border-white/10 pl-4">
-                    <div className="text-xs text-white/50">DIFFICULTY</div>
-                    <div className="text-lg">
+                  <div className="border-l border-white/10 pl-6">
+                    <div className="text-xs text-white/50 font-semibold tracking-wide uppercase">DIFFICULTY</div>
+                    <div className="text-lg font-medium mt-1.5">
                       {difficulty === 'challenging'
                         ? 'Challenging'
                         : difficulty === 'easy'
@@ -827,16 +829,16 @@ export function PlanSetupWizard(props: {
                 <Button
                   type="button"
                   variant="ghost"
-                  className="mt-4 text-white/80 hover:bg-white/10"
+                  className="mt-5 w-full text-white/70 hover:bg-white/5 hover:text-white border border-white/10 rounded-2xl h-11"
                   onClick={() => setShowPreferenceEditor((v) => !v)}
                 >
-                  Edit preferences
+                  ✏️ EDIT PREFERENCES
                 </Button>
 
                 {showPreferenceEditor && (
-                  <div className="mt-4 space-y-3">
-                    <div className="text-sm text-white/60">Training volume</div>
-                    <div className="grid grid-cols-3 gap-2">
+                  <div className="mt-6 pt-6 border-t border-white/10 space-y-5">
+                    <div className="text-sm text-white/60 font-medium">Training volume</div>
+                    <div className="grid grid-cols-3 gap-2.5">
                       {[
                         { id: 'conservative', label: 'Conservative' },
                         { id: 'progressive', label: 'Progressive' },
@@ -847,10 +849,10 @@ export function PlanSetupWizard(props: {
                           type="button"
                           onClick={() => setTrainingVolume(v.id as TrainingVolumePreference)}
                           className={cn(
-                            'rounded-xl h-10',
+                            'rounded-2xl h-11 text-sm font-medium transition-all duration-200',
                             trainingVolume === v.id
-                              ? 'bg-emerald-400 text-neutral-950'
-                              : 'bg-white/10 text-white'
+                              ? 'bg-emerald-400 text-neutral-950 shadow-lg shadow-emerald-500/25'
+                              : 'bg-white/[0.06] text-white/80 hover:bg-white/10 hover:text-white border border-white/10'
                           )}
                         >
                           {v.label}
@@ -858,8 +860,8 @@ export function PlanSetupWizard(props: {
                       ))}
                     </div>
 
-                    <div className="text-sm text-white/60 pt-2">Difficulty</div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="text-sm text-white/60 font-medium pt-3">Difficulty</div>
+                    <div className="grid grid-cols-3 gap-2.5">
                       {[
                         { id: 'easy', label: 'Easy' },
                         { id: 'balanced', label: 'Balanced' },
@@ -870,10 +872,10 @@ export function PlanSetupWizard(props: {
                           type="button"
                           onClick={() => setDifficulty(v.id as TrainingDifficultyPreference)}
                           className={cn(
-                            'rounded-xl h-10',
+                            'rounded-2xl h-11 text-sm font-medium transition-all duration-200',
                             difficulty === v.id
-                              ? 'bg-emerald-400 text-neutral-950'
-                              : 'bg-white/10 text-white'
+                              ? 'bg-emerald-400 text-neutral-950 shadow-lg shadow-emerald-500/25'
+                              : 'bg-white/[0.06] text-white/80 hover:bg-white/10 hover:text-white border border-white/10'
                           )}
                         >
                           {v.label}
@@ -887,34 +889,63 @@ export function PlanSetupWizard(props: {
           </div>
         ) : null}
         {step === 9 ? (
-          <div className="pt-6 space-y-6">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-3xl font-semibold">Your plan is nearly ready</h2>
-                <p className="text-white/70 mt-3">Your plan is customized based on these details</p>
-              </div>
-              <Button variant="ghost" size="icon" className="text-white/70" aria-label="Help">
-                <HelpCircle className="h-5 w-5" />
-              </Button>
+          <div className="pt-2 space-y-8">
+            <div>
+              <h2 className="text-3xl font-semibold leading-tight">Your plan is nearly ready</h2>
             </div>
 
-            <div className="space-y-3 text-white/80">
-              <div className="text-2xl font-semibold">{template.name}</div>
-              <div className="text-white/70">
-                {actualWeeks} weeks • {template.distanceKm.toFixed(1)} km
+            <div className="flex flex-col items-center justify-center py-6">
+              <div className="relative">
+                <div className="w-32 h-32 rounded-3xl bg-gradient-to-br from-amber-500 via-amber-600 to-orange-600 flex items-center justify-center shadow-2xl shadow-amber-500/30">
+                  <div className="text-center">
+                    <div className="text-4xl font-bold text-white">{distanceKey === '5k' ? '5K' : distanceKey === '10k' ? '10K' : distanceKey === 'half-marathon' ? '13.1' : distanceKey === 'marathon' ? '26.2' : '10K'}</div>
+                    <div className="text-xs text-white/80 mt-1 tracking-wider">
+                      {distanceKey === 'half-marathon' ? 'HALF' : distanceKey === 'marathon' ? 'FULL' : ''}
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="text-white/70">{format(raceDate, 'PPP')}</div>
 
-              <div className="text-white/70 pt-2">Your plan is customized based on these details</div>
-              <ul className="list-disc pl-6 space-y-2">
-                <li>
-                  Your estimated current {template.distanceLabel} time is {formatTimeHms(currentRaceTimeSeconds)}
+              <div className="text-center mt-6 space-y-2">
+                <div className="text-2xl font-semibold">{template.name}</div>
+                <div className="text-white/60 text-base flex items-center justify-center gap-3">
+                  <span className="flex items-center gap-1.5">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    {actualWeeks} weeks
+                  </span>
+                  <span className="text-white/30">•</span>
+                  <span>{template.distanceKm.toFixed(1)} km</span>
+                </div>
+                <div className="text-white/60 text-base flex items-center justify-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  {format(raceDate, 'EEE, MMM d, yyyy')}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="text-white/60 text-sm font-medium">Your plan is customized based on these details</div>
+              <ul className="space-y-3.5">
+                <li className="flex items-start gap-3 text-white/80 text-[15px]">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-2 shrink-0"></div>
+                  <span>Your estimated current {template.distanceLabel} time is <span className="text-white font-medium">{formatTimeHms(currentRaceTimeSeconds)}</span></span>
                 </li>
-                <li>You are available to run on {availableDays.map(getWeekdayLabel).join(', ')}</li>
-                <li>You&apos;d like your long run to be on {getWeekdayLabel(longRunDay)}</li>
-                <li>Your plan starts on {format(startDate, 'PPP')}</li>
-                <li>Training volume: {trainingVolume}</li>
-                <li>Difficulty: {difficulty}</li>
+                <li className="flex items-start gap-3 text-white/80 text-[15px]">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-2 shrink-0"></div>
+                  <span>You are available to run on <span className="text-white font-medium">{availableDays.map(getWeekdayLabel).join(', ')}</span></span>
+                </li>
+                <li className="flex items-start gap-3 text-white/80 text-[15px]">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-2 shrink-0"></div>
+                  <span>You&apos;d like your long run to be on <span className="text-white font-medium">{getWeekdayLabel(longRunDay)}</span></span>
+                </li>
+                <li className="flex items-start gap-3 text-white/80 text-[15px]">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-2 shrink-0"></div>
+                  <span>Your plan starts on <span className="text-white font-medium">{format(startDate, 'EEE, MMM d, yyyy')}</span></span>
+                </li>
               </ul>
             </div>
           </div>
@@ -924,12 +955,14 @@ export function PlanSetupWizard(props: {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-neutral-950">
+      <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto px-6 pb-6 pt-4 bg-gradient-to-t from-neutral-950 via-neutral-950 to-transparent">
         <Button
           type="button"
           className={cn(
-            'w-full h-12 rounded-xl',
-            canContinue ? 'bg-white text-neutral-950 hover:bg-white/90' : 'bg-white/20 text-white/50'
+            'w-full h-14 rounded-2xl font-semibold text-base shadow-xl transition-all duration-200',
+            canContinue
+              ? 'bg-white text-neutral-950 hover:bg-white/95 hover:shadow-2xl hover:scale-[1.02] active:scale-100'
+              : 'bg-white/10 text-white/40 cursor-not-allowed'
           )}
           onClick={handleContinue}
           disabled={!canContinue}
