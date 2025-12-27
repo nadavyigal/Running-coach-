@@ -417,13 +417,13 @@ export function PlanSetupWizard(props: {
 
       <div className="flex-1 overflow-y-auto px-6 pb-32">
         {step === 1 ? (
-          <div className="pt-2 space-y-6">
+          <div className="pt-2 space-y-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-3xl font-semibold tracking-tight leading-tight">
+                <h2 className="text-2xl font-semibold tracking-tight leading-tight">
                   What&apos;s your estimated <span className="text-emerald-400">current</span> race time?
                 </h2>
-                <p className="text-white/60 mt-4 leading-relaxed text-[15px]">
+                <p className="text-white/60 mt-3 leading-relaxed text-sm">
                   Choose a time reflective of your <span className="text-emerald-400">current</span> fitness level — don&apos;t use an out of date PB or goal time!
                 </p>
               </div>
@@ -457,7 +457,7 @@ export function PlanSetupWizard(props: {
               })}
             </div>
 
-            <div className="flex items-center justify-center gap-3 pt-2">
+            <div className="flex items-center justify-center gap-3 pt-1">
               <WheelColumn
                 value={hours}
                 min={0}
@@ -497,7 +497,7 @@ export function PlanSetupWizard(props: {
               />
             </div>
 
-            <div className="text-center text-white/60 text-base pt-4">
+            <div className="text-center text-white/60 text-sm pt-3 leading-relaxed">
               I can currently run a <span className="text-emerald-400 font-medium">{template.distanceLabel}</span> in{' '}
               <span className="text-white font-semibold">{formatTimeHms(currentRaceTimeSeconds)}</span>
             </div>
@@ -621,12 +621,12 @@ export function PlanSetupWizard(props: {
 
             <div className="space-y-4">
               <button type="button" onClick={() => setStartPreset('today')} className="w-full text-left">
-                <Card
+                <div
                   className={cn(
-                    'relative overflow-hidden rounded-3xl border px-6 py-5 text-white shadow-lg transition-all duration-200',
+                    'relative overflow-hidden rounded-3xl border px-6 py-5 text-white shadow-lg transition-all duration-200 bg-gradient-to-br',
                     startPreset !== 'custom'
-                      ? 'border-emerald-400/40 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent ring-1 ring-inset ring-emerald-400/20'
-                      : 'border-white/10 bg-gradient-to-br from-white/[0.03] to-transparent hover:border-white/20'
+                      ? 'border-emerald-400/40 from-emerald-500/10 via-emerald-500/5 to-transparent ring-1 ring-inset ring-emerald-400/20'
+                      : 'border-white/10 from-white/[0.03] to-transparent hover:border-white/20'
                   )}
                 >
                   <div className="text-sm text-white/50 font-medium">{format(startPresetDate, 'MMM d, yyyy')}</div>
@@ -656,7 +656,7 @@ export function PlanSetupWizard(props: {
                       </Button>
                     ))}
                   </div>
-                </Card>
+                </div>
               </button>
 
               <SelectCard selected={startPreset === 'custom'} onClick={() => setStartPreset('custom')} title="Custom" />
@@ -801,7 +801,7 @@ export function PlanSetupWizard(props: {
               </Button>
             </div>
 
-            <Card className="border border-white/10 bg-gradient-to-br from-white/[0.04] to-white/[0.02] text-white rounded-3xl shadow-lg">
+            <div className="border border-white/10 bg-gradient-to-br from-white/[0.04] to-white/[0.02] text-white rounded-3xl shadow-lg">
               <div className="p-6">
                 <div className="grid grid-cols-2 gap-6">
                   <div>
@@ -885,7 +885,7 @@ export function PlanSetupWizard(props: {
                   </div>
                 )}
               </div>
-            </Card>
+            </div>
           </div>
         ) : null}
         {step === 9 ? (
