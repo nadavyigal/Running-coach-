@@ -5,35 +5,35 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-	import {
-	  Sun,
-	  Clock,
-	  Plus,
-	  MapPin,
-	  Play,
-	  ChevronDown,
-	  ChevronUp,
-	  Zap,
-	  StretchHorizontal,
-	  Loader2,
-	  Flame,
-	  BarChart3,
-	  RefreshCw,
-	  TrendingUp,
-	  Award,
-	} from "lucide-react"
+import {
+  Sun,
+  Clock,
+  Plus,
+  MapPin,
+  Play,
+  ChevronDown,
+  ChevronUp,
+  Zap,
+  StretchHorizontal,
+  Loader2,
+  Flame,
+  BarChart3,
+  RefreshCw,
+  TrendingUp,
+  Award,
+} from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
 import { AddActivityModal } from "@/components/add-activity-modal"
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
 import ModalErrorBoundary from "@/components/modal-error-boundary"
-	import { type Workout, type Plan, type Route, type Goal, resetDatabaseInstance } from "@/lib/db"
-	import { dbUtils } from "@/lib/dbUtils"
-	import { useToast } from "@/hooks/use-toast"
-	import { CommunityStatsWidget } from "@/components/community-stats-widget"
-	import { GoalRecommendations } from "@/components/goal-recommendations"
-	import { HabitAnalyticsWidget } from "@/components/habit-analytics-widget"
+import { type Workout, type Plan, type Route, type Goal, resetDatabaseInstance } from "@/lib/db"
+import { dbUtils } from "@/lib/dbUtils"
+import { useToast } from "@/hooks/use-toast"
+import { CommunityStatsWidget } from "@/components/community-stats-widget"
+import { GoalRecommendations } from "@/components/goal-recommendations"
+import { HabitAnalyticsWidget } from "@/components/habit-analytics-widget"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -96,11 +96,11 @@ export function TodayScreen() {
     return diff < 0 ? 0 : diff
   }
 
-	  const refreshTip = () => {
-	    const currentIndex = tips.indexOf(dailyTip)
-	    const nextIndex = (currentIndex + 1) % tips.length
-	    setDailyTip(tips.at(nextIndex) ?? tips[0] ?? dailyTip)
-	  }
+  const refreshTip = () => {
+    const currentIndex = tips.indexOf(dailyTip)
+    const nextIndex = (currentIndex + 1) % tips.length
+    setDailyTip(tips.at(nextIndex) ?? tips[0] ?? dailyTip)
+  }
 
   // Initialize data
   useEffect(() => {
@@ -137,8 +137,22 @@ export function TodayScreen() {
           const stripWorkouts = await dbUtils.getWorkoutsForDateRange(user.id!, stripStart, stripEnd)
           setVisibleWorkouts(stripWorkouts)
 
-          const todaysWorkout = await dbUtils.getTodaysWorkout(user.id!)
-          setTodaysWorkout(todaysWorkout)
+          // const todaysWorkout = await dbUtils.getTodaysWorkout(user.id!)
+          // setTodaysWorkout(todaysWorkout)
+
+          // MOCK FOR DEMO RECORDING (Scene 4)
+          const mockMissedWorkout = {
+            id: 777,
+            userId: user.id!,
+            planId: 1,
+            scheduledDate: new Date(new Date().setDate(new Date().getDate() - 1)), // Yesterday
+            type: 'tempo',
+            distance: 5,
+            duration: 30,
+            completed: false,
+            notes: 'Mock missed workout'
+          } as Workout
+          setTodaysWorkout(mockMissedWorkout)
         }
         setIsLoadingWorkout(false)
       } catch (error) {
@@ -336,15 +350,15 @@ export function TodayScreen() {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-	    for (let i = 0; i < sortedWorkouts.length; i++) {
-	      const workout = sortedWorkouts.at(i)
-	      if (!workout) continue
+    for (let i = 0; i < sortedWorkouts.length; i++) {
+      const workout = sortedWorkouts.at(i)
+      if (!workout) continue
 
-	      const workoutDate = new Date(workout.scheduledDate)
-	      workoutDate.setHours(0, 0, 0, 0)
-	      const daysDiff = Math.floor(
-	        (today.getTime() - workoutDate.getTime()) / (1000 * 60 * 60 * 24)
-	      )
+      const workoutDate = new Date(workout.scheduledDate)
+      workoutDate.setHours(0, 0, 0, 0)
+      const daysDiff = Math.floor(
+        (today.getTime() - workoutDate.getTime()) / (1000 * 60 * 60 * 24)
+      )
 
       if (daysDiff === i) {
         streak++
@@ -424,12 +438,12 @@ export function TodayScreen() {
               <Sun className="h-5 w-5" />
               <span className="text-sm font-semibold">22°C</span>
             </div>
-	            <Button
-	              variant="ghost"
-	              size="sm"
-	              onClick={handleRestartOnboarding}
-	              className="gap-1.5 text-xs text-gray-500 hover:text-gray-700"
-	            >
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRestartOnboarding}
+              className="gap-1.5 text-xs text-gray-500 hover:text-gray-700"
+            >
               <RefreshCw className="h-3 w-3" />
               Reset
             </Button>
@@ -467,11 +481,10 @@ export function TodayScreen() {
             return (
               <button
                 key={index}
-                className={`flex-shrink-0 text-center p-3 rounded-xl min-w-[70px] transition-all duration-300 hover:scale-105 active:scale-95 ${
-                  isSelected
-                    ? "bg-blue-500 text-white shadow-lg scale-105"
-                    : "bg-white border border-gray-200 hover:shadow-md"
-                }`}
+                className={`flex-shrink-0 text-center p-3 rounded-xl min-w-[70px] transition-all duration-300 hover:scale-105 active:scale-95 ${isSelected
+                  ? "bg-blue-500 text-white shadow-lg scale-105"
+                  : "bg-white border border-gray-200 hover:shadow-md"
+                  }`}
                 style={{ animationDelay: `${200 + index * 50}ms` }}
                 onClick={() => handleDateClick(day)}
               >
@@ -480,11 +493,10 @@ export function TodayScreen() {
                 {day.hasWorkout && (
                   <div className="flex justify-center">
                     <div
-                      className={`w-2 h-2 rounded-full ${
-                        isSelected
-                          ? "bg-white"
-                          : day.workoutColor || "bg-green-500"
-                      }`}
+                      className={`w-2 h-2 rounded-full ${isSelected
+                        ? "bg-white"
+                        : day.workoutColor || "bg-green-500"
+                        }`}
                     />
                   </div>
                 )}
@@ -510,9 +522,9 @@ export function TodayScreen() {
                 <span className="text-sm text-gray-500">
                   {todaysWorkout.scheduledDate
                     ? new Date(todaysWorkout.scheduledDate).toLocaleDateString(
-                        "en-US",
-                        { month: "short", day: "numeric" }
-                      )
+                      "en-US",
+                      { month: "short", day: "numeric" }
+                    )
                     : ""}
                 </span>
               </div>
@@ -534,12 +546,11 @@ export function TodayScreen() {
                   <Clock className="h-5 w-5" />
                   <span className="font-semibold">
                     {todaysWorkout.duration
-                      ? `${Math.max(20, todaysWorkout.duration - 5)}-${
-                          todaysWorkout.duration + 5
-                        }m`
+                      ? `${Math.max(20, todaysWorkout.duration - 5)}-${todaysWorkout.duration + 5
+                      }m`
                       : `${Math.round(todaysWorkout.distance! * 5)}-${Math.round(
-                          todaysWorkout.distance! * 7
-                        )}m`}
+                        todaysWorkout.distance! * 7
+                      )}m`}
                   </span>
                 </div>
               </div>
@@ -617,7 +628,7 @@ export function TodayScreen() {
             </CardContent>
           </Card>
         ) : (
-	          <Card className="text-center py-12">
+          <Card className="text-center py-12">
             <CardContent>
               <div className="w-16 h-16 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center mx-auto mb-4">
                 <Award className="h-8 w-8 text-white" />
@@ -647,11 +658,11 @@ export function TodayScreen() {
 
       {/* Add Run & Activity - Side by Side */}
       <div className="px-4 grid grid-cols-2 gap-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-400">
-	        <Button
-	          variant="default"
-	          className="h-12"
-	          onClick={() => setShowAddRunModal(true)}
-	        >
+        <Button
+          variant="default"
+          className="h-12"
+          onClick={() => setShowAddRunModal(true)}
+        >
           <Plus className="h-5 w-5 mr-2" />
           Add Run
         </Button>
@@ -665,11 +676,11 @@ export function TodayScreen() {
         </Button>
       </div>
 
-	      {/* Coaching Tip with Gradient Background */}
-	      <div className="px-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-500">
-	        <Card className="relative overflow-hidden">
-	          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary/20 to-accent/20 rounded-full blur-3xl" />
-	          <CardContent className="p-6 relative z-10">
+      {/* Coaching Tip with Gradient Background */}
+      <div className="px-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-500">
+        <Card className="relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary/20 to-accent/20 rounded-full blur-3xl" />
+          <CardContent className="p-6 relative z-10">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
                 <Zap className="h-6 w-6 text-white" />
@@ -677,12 +688,12 @@ export function TodayScreen() {
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
                   Coach&apos;s Tip
-	                  <Button
-	                    variant="ghost"
-	                    size="icon"
-	                    onClick={refreshTip}
-	                    className="ml-auto h-8 w-8"
-	                  >
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={refreshTip}
+                    className="ml-auto h-8 w-8"
+                  >
                     <RefreshCw className="h-3 w-3" />
                   </Button>
                 </h3>
@@ -695,21 +706,21 @@ export function TodayScreen() {
 
       {/* Progress Stats - Bento Grid */}
       <div className="px-4 grid grid-cols-3 gap-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-600">
-	        <Card className="col-span-1 hover:-translate-y-1">
+        <Card className="col-span-1 hover:-translate-y-1">
           <CardContent className="p-4 text-center">
             <TrendingUp className="h-5 w-5 text-primary mx-auto mb-2" />
             <div className="text-2xl font-bold text-gray-900">{totalRuns}</div>
             <div className="text-xs text-gray-600 mt-1">Runs</div>
           </CardContent>
         </Card>
-	        <Card className="col-span-1 hover:-translate-y-1">
+        <Card className="col-span-1 hover:-translate-y-1">
           <CardContent className="p-4 text-center">
             <BarChart3 className="h-5 w-5 text-accent mx-auto mb-2" />
             <div className="text-2xl font-bold text-gray-900">{consistency}%</div>
             <div className="text-xs text-gray-600 mt-1">Rate</div>
           </CardContent>
         </Card>
-	        <Card className="col-span-1 hover:-translate-y-1">
+        <Card className="col-span-1 hover:-translate-y-1">
           <CardContent className="p-4 text-center">
             <Award className="h-5 w-5 text-warning mx-auto mb-2" />
             <div className="text-2xl font-bold text-gray-900">
@@ -759,7 +770,7 @@ export function TodayScreen() {
           onRunAdded={refreshWorkouts}
         />
       </ModalErrorBoundary>
-      
+
       <ModalErrorBoundary modalName="Add Activity" onClose={() => setShowAddActivityModal(false)}>
         <AddActivityModal
           open={showAddActivityModal}
@@ -767,7 +778,7 @@ export function TodayScreen() {
           onActivityAdded={refreshWorkouts}
         />
       </ModalErrorBoundary>
-      
+
       <ModalErrorBoundary modalName="Route Selector" onClose={() => setShowRouteSelectorModal(false)}>
         <RouteSelectorModal
           isOpen={showRouteSelectorModal}
@@ -775,14 +786,14 @@ export function TodayScreen() {
           onRouteSelected={handleRouteSelected}
         />
       </ModalErrorBoundary>
-      
-	      <ModalErrorBoundary modalName="Reschedule" onClose={() => setShowRescheduleModal(false)}>
-	        <RescheduleModal
-	          isOpen={showRescheduleModal}
-	          onClose={() => setShowRescheduleModal(false)}
-	        />
-	      </ModalErrorBoundary>
-      
+
+      <ModalErrorBoundary modalName="Reschedule" onClose={() => setShowRescheduleModal(false)}>
+        <RescheduleModal
+          isOpen={showRescheduleModal}
+          onClose={() => setShowRescheduleModal(false)}
+        />
+      </ModalErrorBoundary>
+
       <ModalErrorBoundary
         modalName="Date Workout"
         onClose={() => {

@@ -41,8 +41,8 @@ import { CoachingPreferencesSettings } from "@/components/coaching-preferences-s
 import { GoalProgressDashboard } from "@/components/goal-progress-dashboard";
 import { PerformanceAnalyticsDashboard } from "@/components/performance-analytics-dashboard";
 import { Brain, Target } from "lucide-react";
-  import { PlanTemplateFlow } from "@/components/plan-template-flow";
-  import { type Goal, type Run } from "@/lib/db";
+import { PlanTemplateFlow } from "@/components/plan-template-flow";
+import { type Goal, type Run } from "@/lib/db";
 
 export function ProfileScreen() {
   // Add state for the shoes modal at the top of the component
@@ -193,7 +193,7 @@ export function ProfileScreen() {
           setUserId(user.id!);
           setError(null);
           setIsLoading(false);
-          
+
           // Check for new badge unlocks after streak update
           // NOTE: checkAndUnlockBadges function not yet implemented in dbUtils
           // TODO: Implement badge checking when badge engine is complete
@@ -324,13 +324,13 @@ export function ProfileScreen() {
             <AlertCircle className="h-8 w-8 text-red-500 mb-4" />
             <h3 className="text-lg font-semibold mb-2">Unable to Load Profile</h3>
             <p className="text-gray-600 mb-4">{error}</p>
-            
+
             {/* Database Status Indicator */}
             <div className="flex items-center gap-2 text-xs text-gray-500 mb-4 bg-gray-50 px-3 py-2 rounded-lg">
               <Database className="h-3 w-3" />
               <span>Database: {typeof indexedDB !== 'undefined' ? 'Available' : 'Not Available'}</span>
             </div>
-            
+
             <div className="flex flex-col gap-2 w-full max-w-xs">
               <Button
                 onClick={() => {
@@ -405,477 +405,477 @@ export function ProfileScreen() {
       {!isLoading && !error && (
         <>
 
-      {/* Goals */}
-      <div className="space-y-3">
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-bold">Goals</h2>
-          <Button size="sm" className="gap-2" onClick={() => setShowPlanTemplateFlow(true)}>
-            <Plus className="h-4 w-4" />
-            Create Goal
-          </Button>
-        </div>
-
-        {primaryGoal ? (
-          <Card className="border">
-            <CardContent className="p-5 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-blue-600">PRIMARY GOAL</p>
-                  <h3 className="text-lg font-semibold text-gray-900">{primaryGoal.title}</h3>
-                  <p className="text-sm text-gray-700">{primaryGoal.description}</p>
-                </div>
-                <div className="text-right space-y-1">
-                  {getDaysRemaining(primaryGoal) !== null && (
-                    <Badge variant="secondary" className="text-xs">
-                      {getDaysRemaining(primaryGoal)} days left
-                    </Badge>
-                  )}
-                  {primaryGoal.timeBound?.deadline && (
-                    <div className="text-xs text-gray-500">
-                      Target date:{' '}
-                      {(() => {
-                        const deadline = new Date(primaryGoal.timeBound.deadline);
-                        return Number.isNaN(deadline.getTime()) ? '--' : deadline.toLocaleDateString();
-                      })()}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex justify-between text-sm text-gray-700">
-                  <span>Progress</span>
-                  <span>{Math.round(goalProgressPercent(primaryGoal))}%</span>
-                </div>
-                <Progress value={goalProgressPercent(primaryGoal)} className="h-2" />
-                <p className="text-xs text-gray-600">
-                  This plan is designed to help you achieve your goal by the target date.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-           <Card>
-             <CardContent className="p-5 flex items-center justify-between">
-               <div>
-                 <h3 className="text-lg font-semibold">No active goal</h3>
-                 <p className="text-sm text-gray-600">Set a goal to get a tailored training plan.</p>
-               </div>
-              <Button size="sm" onClick={() => setShowPlanTemplateFlow(true)} className="gap-2">
+          {/* Goals */}
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold">Goals</h2>
+              <Button size="sm" className="gap-2" onClick={() => setShowPlanTemplateFlow(true)}>
                 <Plus className="h-4 w-4" />
                 Create Goal
               </Button>
-             </CardContent>
-           </Card>
-          )}
+            </div>
 
-        {goals.filter(g => !primaryGoal || g.id !== primaryGoal.id).length > 0 && (
+            {primaryGoal ? (
+              <Card className="border">
+                <CardContent className="p-5 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold text-blue-600">PRIMARY GOAL</p>
+                      <h3 className="text-lg font-semibold text-gray-900">{primaryGoal.title}</h3>
+                      <p className="text-sm text-gray-700">{primaryGoal.description}</p>
+                    </div>
+                    <div className="text-right space-y-1">
+                      {getDaysRemaining(primaryGoal) !== null && (
+                        <Badge variant="secondary" className="text-xs">
+                          {getDaysRemaining(primaryGoal)} days left
+                        </Badge>
+                      )}
+                      {primaryGoal.timeBound?.deadline && (
+                        <div className="text-xs text-gray-500">
+                          Target date:{' '}
+                          {(() => {
+                            const deadline = new Date(primaryGoal.timeBound.deadline);
+                            return Number.isNaN(deadline.getTime()) ? '--' : deadline.toLocaleDateString();
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-sm text-gray-700">
+                      <span>Progress</span>
+                      <span>{Math.round(goalProgressPercent(primaryGoal))}%</span>
+                    </div>
+                    <Progress value={goalProgressPercent(primaryGoal)} className="h-2" />
+                    <p className="text-xs text-gray-600">
+                      This plan is designed to help you achieve your goal by the target date.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="p-5 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold">No active goal</h3>
+                    <p className="text-sm text-gray-600">Set a goal to get a tailored training plan.</p>
+                  </div>
+                  <Button size="sm" onClick={() => setShowPlanTemplateFlow(true)} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Create Goal
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {goals.filter(g => !primaryGoal || g.id !== primaryGoal.id).length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Other Goals</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {goals
+                    .filter(g => !primaryGoal || g.id !== primaryGoal.id)
+                    .map(goal => (
+                      <div key={goal.id} className="p-3 rounded-lg border bg-gray-50">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <h4 className="font-semibold text-gray-900">{goal.title}</h4>
+                            <p className="text-xs text-gray-600">{goal.description}</p>
+                          </div>
+                          <Badge variant="outline" className="text-xs">{goal.status}</Badge>
+                        </div>
+                        <div className="mt-2">
+                          <div className="flex justify-between text-xs text-gray-600 mb-1">
+                            <span>Progress</span>
+                            <span>{Math.round(goalProgressPercent(goal))}%</span>
+                          </div>
+                          <Progress value={goalProgressPercent(goal)} className="h-1.5" />
+                        </div>
+                      </div>
+                    ))}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* User Info */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center">
+                  <User className="h-8 w-8 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-xl font-bold">Runner</h2>
+                  <p className="text-gray-600">Beginner Runner</p>
+                  <div className="flex gap-2 text-sm text-gray-500 mt-1">
+                    <span>5 days active</span>
+                    <span>•</span>
+                    <span>12 total runs</span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Quick Stats */}
+          <div className="grid grid-cols-3 gap-4">
+            <Card>
+              <CardContent className="p-4 text-center">
+                <Route className="h-6 w-6 text-green-500 mx-auto mb-2" />
+                <div className="text-lg font-bold">42.3 km</div>
+                <div className="text-xs text-gray-600">Total Distance</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <Clock className="h-6 w-6 text-blue-500 mx-auto mb-2" />
+                <div className="text-lg font-bold">320 min</div>
+                <div className="text-xs text-gray-600">Total Time</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <Flame className="h-6 w-6 text-orange-500 mx-auto mb-2" />
+                <div className="text-lg font-bold">5</div>
+                <div className="text-xs text-gray-600">Day Streak</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Recent Runs */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Other Goals</CardTitle>
+              <CardTitle className="text-base">Recent Runs</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {goals
-                .filter(g => !primaryGoal || g.id !== primaryGoal.id)
-                .map(goal => (
-                  <div key={goal.id} className="p-3 rounded-lg border bg-gray-50">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h4 className="font-semibold text-gray-900">{goal.title}</h4>
-                        <p className="text-xs text-gray-600">{goal.description}</p>
+              {isRunsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading runs...
+                </div>
+              ) : recentRuns.length === 0 ? (
+                <p className="text-sm text-gray-600">No runs yet.</p>
+              ) : (
+                recentRuns.slice(0, 5).map((run) => (
+                  <div key={run.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-white">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">{run.distance.toFixed(2)} km</span>
+                        <span className="text-xs text-gray-500">•</span>
+                        <span className="text-sm text-gray-700">{formatTime(run.duration)}</span>
+                        <span className="text-xs text-gray-500">•</span>
+                        <span className="text-sm text-gray-700">{formatPace(run.pace ?? run.duration / run.distance)}/km</span>
                       </div>
-                      <Badge variant="outline" className="text-xs">{goal.status}</Badge>
+                      <div className="text-xs text-gray-500 truncate">
+                        {new Date(run.completedAt).toLocaleDateString()} • {run.type}
+                        {run.runReport ? ' • report ready' : ''}
+                      </div>
                     </div>
-                    <div className="mt-2">
-                      <div className="flex justify-between text-xs text-gray-600 mb-1">
-                        <span>Progress</span>
-                        <span>{Math.round(goalProgressPercent(goal))}%</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (!run.id) return
+                        try {
+                          window.dispatchEvent(new CustomEvent('navigate-to-run-report', { detail: { runId: run.id } }))
+                        } catch {
+                          // ignore
+                        }
+                      }}
+                    >
+                      View
+                    </Button>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Adaptive Coaching Widget */}
+          {userId && (
+            <CoachingInsightsWidget
+              userId={userId}
+              showDetails={false}
+              onSettingsClick={() => setShowCoachingPreferences(true)}
+              className="hover:shadow-lg transition-all duration-300"
+            />
+          )}
+
+          {/* Achievements */}
+          {userId && <BadgeCabinet userId={userId} />}
+
+          {/* Performance Analytics */}
+          {userId ? (
+            <PerformanceAnalyticsDashboard
+              userId={userId}
+            />
+          ) : isLoading ? (
+            <Card>
+              <CardContent className="p-6 text-center text-muted-foreground">
+                Loading analytics...
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {/* Goal Progress */}
+          {userId && (
+            <div data-section="goal-progress">
+              <GoalProgressDashboard
+                userId={userId}
+                className="hover:shadow-lg transition-all duration-300"
+              />
+            </div>
+          )}
+
+          {/* Community Stats Widget */}
+          {userId && <CommunityStatsWidget userId={userId} />}
+
+          {userId && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-2xl font-bold">Share All Badges</CardTitle>
+                <Button variant="outline" size="sm" onClick={() => handleShareClick("all-badges", "All Badges")}>
+                  <Share2 className="mr-2 h-4 w-4" /> Share All
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-500">Share your entire badge collection with friends and on social media.</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {selectedBadge && (
+            <ShareBadgeModal
+              badgeId={selectedBadge.id}
+              badgeName={selectedBadge.name}
+              isOpen={isShareModalOpen}
+              onClose={handleCloseShareModal}
+            />
+          )}
+
+          {runningShoes.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Your Running Shoes</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {runningShoes.map((shoe) => (
+                  <div key={shoe.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Footprints className="h-5 w-5 text-gray-600" />
+                      <div>
+                        <div className="font-medium">{shoe.name}</div>
+                        <div className="text-sm text-gray-600">
+                          {shoe.brand} {shoe.model}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {shoe.currentKm}km / {shoe.maxKm}km
+                        </div>
                       </div>
-                      <Progress value={goalProgressPercent(goal)} className="h-1.5" />
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-medium">{Math.round((shoe.currentKm / shoe.maxKm) * 100)}%</div>
+                      <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-green-500 transition-all"
+                          style={{ width: `${Math.min((shoe.currentKm / shoe.maxKm) * 100, 100)}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Devices & Apps */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Devices & Apps</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {connections.map((connection, index) => {
+                const handleClick = () => {
+                  if (connection.name === "Add Shoes") {
+                    setShowAddShoesModal(true);
+                  } else if (connection.name === "Join a Cohort") {
+                    setShowJoinCohortModal(true);
+                  }
+                  // Add other connection handlers here
+                };
+
+                return (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
+                    onClick={handleClick}
+                  >
+                    <div className="flex items-center gap-3">
+                      <connection.icon className="h-5 w-5 text-gray-600" />
+                      <div>
+                        <div className="font-medium">{connection.name}</div>
+                        <div className="text-sm text-gray-600">{connection.desc}</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-gray-400" />
+                  </div>
+                );
+              })}
             </CardContent>
           </Card>
-        )}
-      </div>
 
-      {/* User Info */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center">
-              <User className="h-8 w-8 text-white" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-xl font-bold">Runner</h2>
-              <p className="text-gray-600">Beginner Runner</p>
-              <div className="flex gap-2 text-sm text-gray-500 mt-1">
-                <span>5 days active</span>
-                <span>•</span>
-                <span>12 total runs</span>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          {/* Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Settings</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {settings.map((setting, index) => {
+                const handleSettingClick = () => {
+                  if (setting.action === "coaching-preferences") {
+                    setShowCoachingPreferences(true);
+                  } else if (setting.action === "goal-settings") {
+                    // Navigate to goal settings - could scroll to goal dashboard
+                    const goalSection = document.querySelector('[data-section="goal-progress"]');
+                    if (goalSection) {
+                      goalSection.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }
+                  // Add other setting handlers here
+                };
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <Route className="h-6 w-6 text-green-500 mx-auto mb-2" />
-            <div className="text-lg font-bold">42.3 km</div>
-            <div className="text-xs text-gray-600">Total Distance</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <Clock className="h-6 w-6 text-blue-500 mx-auto mb-2" />
-            <div className="text-lg font-bold">320 min</div>
-            <div className="text-xs text-gray-600">Total Time</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <Flame className="h-6 w-6 text-orange-500 mx-auto mb-2" />
-            <div className="text-lg font-bold">5</div>
-            <div className="text-xs text-gray-600">Day Streak</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Runs */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Recent Runs</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {isRunsLoading ? (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading runs...
-            </div>
-          ) : recentRuns.length === 0 ? (
-            <p className="text-sm text-gray-600">No runs yet.</p>
-          ) : (
-            recentRuns.slice(0, 5).map((run) => (
-              <div key={run.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-white">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900">{run.distance.toFixed(2)} km</span>
-                    <span className="text-xs text-gray-500">•</span>
-                    <span className="text-sm text-gray-700">{formatTime(run.duration)}</span>
-                    <span className="text-xs text-gray-500">•</span>
-                    <span className="text-sm text-gray-700">{formatPace(run.pace ?? run.duration / run.distance)}/km</span>
+                return (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
+                    onClick={handleSettingClick}
+                  >
+                    <div className="flex items-center gap-3">
+                      <setting.icon className="h-5 w-5 text-gray-600" />
+                      <div>
+                        <div className="font-medium">{setting.name}</div>
+                        <div className="text-sm text-gray-600">{setting.desc}</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-gray-400" />
                   </div>
-                  <div className="text-xs text-gray-500 truncate">
-                    {new Date(run.completedAt).toLocaleDateString()} • {run.type}
-                    {run.runReport ? ' • report ready' : ''}
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          {/* Developer/Testing Tools */}
+          <Card className="border-red-200 bg-red-50/50">
+            <CardHeader>
+              <CardTitle className="text-red-900 flex items-center gap-2">
+                <Database className="h-5 w-5" />
+                Developer Tools
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="p-4 bg-white rounded-lg border border-red-200">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <div className="font-medium text-red-900">Reset App Data</div>
+                    <div className="text-sm text-red-700 mt-1">
+                      Clear all local data including user profile, workouts, and cached data.
+                      This will reset the app to its initial state.
+                    </div>
                   </div>
                 </div>
                 <Button
+                  variant="destructive"
                   size="sm"
-                  variant="outline"
+                  className="mt-3 w-full"
                   onClick={() => {
-                    if (!run.id) return
-                    try {
-                      window.dispatchEvent(new CustomEvent('navigate-to-run-report', { detail: { runId: run.id } }))
-                    } catch {
-                      // ignore
+                    if (confirm('Are you sure you want to reset all app data? This cannot be undone.')) {
+                      // Clear IndexedDB
+                      [DATABASE.NAME, 'running-coach-db', 'RunningCoachDB'].forEach((dbName) => {
+                        try {
+                          indexedDB.deleteDatabase(dbName);
+                        } catch {
+                          // Best-effort cleanup
+                        }
+                      });
+                      // Clear localStorage
+                      localStorage.clear();
+                      // Clear sessionStorage
+                      sessionStorage.clear();
+                      // Reload page
+                      window.location.reload();
                     }
                   }}
                 >
-                  View
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Reset All Data
                 </Button>
               </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
 
-      {/* Adaptive Coaching Widget */}
-      {userId && (
-        <CoachingInsightsWidget
-          userId={userId}
-          showDetails={false}
-          onSettingsClick={() => setShowCoachingPreferences(true)}
-          className="hover:shadow-lg transition-all duration-300"
-        />
-      )}
+          <ReminderSettings />
 
-      {/* Achievements */}
-      {userId && <BadgeCabinet userId={userId} />}
-
-      {/* Performance Analytics */}
-      {userId ? (
-        <PerformanceAnalyticsDashboard
-          userId={userId}
-        />
-      ) : isLoading ? (
-        <Card>
-          <CardContent className="p-6 text-center text-muted-foreground">
-            Loading analytics...
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {/* Goal Progress */}
-      {userId && (
-        <div data-section="goal-progress">
-          <GoalProgressDashboard
-            userId={userId}
-            className="hover:shadow-lg transition-all duration-300"
-          />
-        </div>
-      )}
-      
-      {/* Community Stats Widget */}
-      {userId && <CommunityStatsWidget userId={userId} />}
-
-      {userId && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-2xl font-bold">Share All Badges</CardTitle>
-            <Button variant="outline" size="sm" onClick={() => handleShareClick("all-badges", "All Badges")}>
-              <Share2 className="mr-2 h-4 w-4" /> Share All
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-gray-500">Share your entire badge collection with friends and on social media.</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {selectedBadge && (
-        <ShareBadgeModal
-          badgeId={selectedBadge.id}
-          badgeName={selectedBadge.name}
-          isOpen={isShareModalOpen}
-          onClose={handleCloseShareModal}
-        />
-      )}
-
-      {runningShoes.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Your Running Shoes</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {runningShoes.map((shoe) => (
-              <div key={shoe.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Footprints className="h-5 w-5 text-gray-600" />
-                  <div>
-                    <div className="font-medium">{shoe.name}</div>
-                    <div className="text-sm text-gray-600">
-                      {shoe.brand} {shoe.model}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {shoe.currentKm}km / {shoe.maxKm}km
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-medium">{Math.round((shoe.currentKm / shoe.maxKm) * 100)}%</div>
-                  <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-green-500 transition-all"
-                      style={{ width: `${Math.min((shoe.currentKm / shoe.maxKm) * 100, 100)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Devices & Apps */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Devices & Apps</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {connections.map((connection, index) => {
-            const handleClick = () => {
-              if (connection.name === "Add Shoes") {
-                setShowAddShoesModal(true);
-              } else if (connection.name === "Join a Cohort") {
-                setShowJoinCohortModal(true);
-              }
-              // Add other connection handlers here
-            };
-
-            return (
-              <div
-                key={index}
-                className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
-                onClick={handleClick}
-              >
-                <div className="flex items-center gap-3">
-                  <connection.icon className="h-5 w-5 text-gray-600" />
-                  <div>
-                    <div className="font-medium">{connection.name}</div>
-                    <div className="text-sm text-gray-600">{connection.desc}</div>
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-gray-400" />
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
-
-      {/* Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Settings</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {settings.map((setting, index) => {
-            const handleSettingClick = () => {
-              if (setting.action === "coaching-preferences") {
-                setShowCoachingPreferences(true);
-              } else if (setting.action === "goal-settings") {
-                // Navigate to goal settings - could scroll to goal dashboard
-                const goalSection = document.querySelector('[data-section="goal-progress"]');
-                if (goalSection) {
-                  goalSection.scrollIntoView({ behavior: 'smooth' });
-                }
-              }
-              // Add other setting handlers here
-            };
-
-            return (
-              <div
-                key={index}
-                className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
-                onClick={handleSettingClick}
-              >
-                <div className="flex items-center gap-3">
-                  <setting.icon className="h-5 w-5 text-gray-600" />
-                  <div>
-                    <div className="font-medium">{setting.name}</div>
-                    <div className="text-sm text-gray-600">{setting.desc}</div>
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-gray-400" />
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
-
-      {/* Developer/Testing Tools */}
-      <Card className="border-red-200 bg-red-50/50">
-        <CardHeader>
-          <CardTitle className="text-red-900 flex items-center gap-2">
-            <Database className="h-5 w-5" />
-            Developer Tools
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="p-4 bg-white rounded-lg border border-red-200">
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <div className="font-medium text-red-900">Reset App Data</div>
-                <div className="text-sm text-red-700 mt-1">
-                  Clear all local data including user profile, workouts, and cached data.
-                  This will reset the app to its initial state.
-                </div>
-              </div>
-            </div>
-            <Button
-              variant="destructive"
-              size="sm"
-              className="mt-3 w-full"
-              onClick={() => {
-                if (confirm('Are you sure you want to reset all app data? This cannot be undone.')) {
-                  // Clear IndexedDB
-                  [DATABASE.NAME, 'running-coach-db', 'RunningCoachDB'].forEach((dbName) => {
-                    try {
-                      indexedDB.deleteDatabase(dbName);
-                    } catch {
-                      // Best-effort cleanup
-                    }
-                  });
-                  // Clear localStorage
-                  localStorage.clear();
-                  // Clear sessionStorage
-                  sessionStorage.clear();
-                  // Reload page
-                  window.location.reload();
-                }
+          {/* App Info */}
+          <div className="text-center text-sm text-gray-500 space-y-1">
+            <p>Run-Smart v1.0.0</p>
+            <p>Made with ❤️ for runners</p>
+          </div>
+          {showAddShoesModal && (
+            <AddShoesModal
+              isOpen={showAddShoesModal}
+              onClose={() => {
+                setShowAddShoesModal(false)
+                // Reload shoes data
+                const shoes = JSON.parse(localStorage.getItem("running-shoes") || "[]")
+                setRunningShoes(shoes)
               }}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Reset All Data
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            />
+          )}
 
-      <ReminderSettings />
+          {userId && (
+            <PlanTemplateFlow
+              isOpen={showPlanTemplateFlow}
+              onClose={() => setShowPlanTemplateFlow(false)}
+              userId={userId}
+              onCompleted={loadGoals}
+            />
+          )}
 
-      {/* App Info */}
-      <div className="text-center text-sm text-gray-500 space-y-1">
-        <p>Run-Smart v1.0.0</p>
-        <p>Made with ❤️ for runners</p>
-      </div>
-      {showAddShoesModal && (
-        <AddShoesModal
-          isOpen={showAddShoesModal}
-          onClose={() => {
-            setShowAddShoesModal(false)
-            // Reload shoes data
-            const shoes = JSON.parse(localStorage.getItem("running-shoes") || "[]")
-            setRunningShoes(shoes)
-          }}
-        />
-      )}
+          {userId && (
+            <JoinCohortModal
+              isOpen={showJoinCohortModal}
+              onClose={() => setShowJoinCohortModal(false)}
+              userId={userId}
+            />
+          )}
 
-      {userId && (
-        <PlanTemplateFlow
-          isOpen={showPlanTemplateFlow}
-          onClose={() => setShowPlanTemplateFlow(false)}
-          userId={userId}
-          onCompleted={loadGoals}
-        />
-      )}
-
-      {userId && (
-        <JoinCohortModal
-          isOpen={showJoinCohortModal}
-          onClose={() => setShowJoinCohortModal(false)}
-          userId={userId}
-        />
-      )}
-      
-      {/* Coaching Preferences Modal */}
-      {showCoachingPreferences && userId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-4 border-b flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Coaching Preferences</h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowCoachingPreferences(false)}
-              >
-                ×
-              </Button>
+          {/* Coaching Preferences Modal */}
+          {showCoachingPreferences && userId && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+                <div className="p-4 border-b flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Coaching Preferences</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowCoachingPreferences(false)}
+                  >
+                    ×
+                  </Button>
+                </div>
+                <div className="p-4">
+                  <CoachingPreferencesSettings
+                    userId={userId}
+                    onClose={() => setShowCoachingPreferences(false)}
+                  />
+                </div>
+              </div>
             </div>
-            <div className="p-4">
-              <CoachingPreferencesSettings
-                userId={userId}
-                onClose={() => setShowCoachingPreferences(false)}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-      </>
+          )}
+        </>
       )}
     </div>
   )
