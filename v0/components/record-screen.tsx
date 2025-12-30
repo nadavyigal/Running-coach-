@@ -7,6 +7,7 @@ import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertT
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RouteSelectionWizard } from "@/components/route-selection-wizard"
 import { ManualRunModal } from "@/components/manual-run-modal"
+import { AddActivityModal } from "@/components/add-activity-modal"
 import { RunMap } from "@/components/maps/RunMap"
 import { type Run, type Workout, type User, type Route } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
@@ -1328,14 +1329,27 @@ export function RecordScreen() {
         />
       )}
 	      {showManualModal && (
-	        <ManualRunModal 
-	          isOpen={showManualModal} 
+	        <ManualRunModal
+	          isOpen={showManualModal}
 	          onClose={() => setShowManualModal(false)}
 	          {...(currentWorkout?.id ? { workoutId: currentWorkout.id } : {})}
 	          onSaved={() => {
 	            // Navigate back to today screen after saving manual run
 	            router.push('/')
 	          }}
+        />
+      )}
+      {showAddActivityModal && (
+        <AddActivityModal
+          open={showAddActivityModal}
+          onOpenChange={setShowAddActivityModal}
+          onActivityAdded={() => {
+            setShowAddActivityModal(false)
+            // Navigate back to today screen after adding activity
+            router.push('/')
+          }}
+          initialStep="upload"
+          {...(currentWorkout?.id ? { workoutId: currentWorkout.id } : {})}
         />
       )}
     </div>

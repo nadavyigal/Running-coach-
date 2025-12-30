@@ -15,6 +15,16 @@ export const AiActivityResultSchema = z.object({
   parserVersion: z.string().optional(),
   preprocessing: z.array(z.string()).optional(),
   warnings: z.array(z.string()).optional(),
+  // GPS/Route data
+  hasRouteMap: z.boolean().optional(),
+  routeType: z.string().optional(),
+  gpsCoordinates: z.array(
+    z.object({
+      lat: z.number(),
+      lng: z.number(),
+    })
+  ).optional(),
+  mapImageDescription: z.string().optional(),
 })
 
 export type AiActivityResult = z.infer<typeof AiActivityResultSchema>
@@ -98,6 +108,11 @@ export async function analyzeActivityImage(file: File): Promise<AiActivityResult
     parserVersion: typeof meta.parserVersion === "string" ? meta.parserVersion : undefined,
     preprocessing: Array.isArray(meta.preprocessing) ? meta.preprocessing : undefined,
     warnings: Array.isArray(meta.warnings) ? meta.warnings : undefined,
+    // GPS/Route data
+    hasRouteMap: typeof activityData.hasRouteMap === "boolean" ? activityData.hasRouteMap : undefined,
+    routeType: typeof activityData.routeType === "string" ? activityData.routeType : undefined,
+    gpsCoordinates: Array.isArray(activityData.gpsCoordinates) ? activityData.gpsCoordinates : undefined,
+    mapImageDescription: typeof activityData.mapImageDescription === "string" ? activityData.mapImageDescription : undefined,
   }
 
   const parsed = AiActivityResultSchema.safeParse(transformed)

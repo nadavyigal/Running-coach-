@@ -68,6 +68,11 @@ type NormalizedExtraction = {
   notes: string | undefined
   completedAtIso: string | undefined
   confidencePct: number
+  // GPS/Route data
+  hasRouteMap?: boolean
+  routeType?: string
+  gpsCoordinates?: Array<{ lat: number; lng: number }>
+  mapImageDescription?: string
 }
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -121,6 +126,26 @@ const normalizeStructured = (raw: unknown, exifDateIso?: string): NormalizedExtr
   const runType =
     typeof record.type === "string" ? record.type : typeof record.runType === "string" ? record.runType : "run"
 
+  // Extract GPS/Route data
+  const hasRouteMap = typeof record.has_route_map === "boolean" ? record.has_route_map : undefined
+  const routeType = typeof record.route_type === "string" ? record.route_type : undefined
+  const mapImageDescription = typeof record.map_image_description === "string" ? record.map_image_description : undefined
+
+  let gpsCoordinates: Array<{ lat: number; lng: number }> | undefined
+  if (Array.isArray(record.gps_coordinates)) {
+    const coords = record.gps_coordinates
+      .filter((coord): coord is Record<string, unknown> => typeof coord === "object" && coord !== null)
+      .map(coord => ({
+        lat: typeof coord.lat === "number" ? coord.lat : NaN,
+        lng: typeof coord.lng === "number" ? coord.lng : NaN,
+      }))
+      .filter(coord => !isNaN(coord.lat) && !isNaN(coord.lng))
+
+    if (coords.length > 0) {
+      gpsCoordinates = coords
+    }
+  }
+
   return {
     type: runType,
     distanceKm: typeof distanceKm === "number" ? distanceKm : undefined,
@@ -130,6 +155,10 @@ const normalizeStructured = (raw: unknown, exifDateIso?: string): NormalizedExtr
     notes: typeof record.notes === "string" ? record.notes : undefined,
     completedAtIso: dateIso,
     confidencePct: confidence ?? 50,
+    hasRouteMap: hasRouteMap ?? undefined,
+    routeType: routeType ?? undefined,
+    gpsCoordinates: gpsCoordinates ?? undefined,
+    mapImageDescription: mapImageDescription ?? undefined,
   }
 }
 
@@ -249,19 +278,55 @@ export async function POST(req: Request) {
         confidencePct: z.union([z.number(), z.string()]).optional(),
         kcal: z.union([z.number(), z.string()]).optional(),
         runType: z.string().optional(),
+        // GPS and route data
+        has_route_map: z.boolean().optional(),
+        route_type: z.string().optional(), // "out_and_back", "loop", "point_to_point"
+        gps_coordinates: z.array(
+          z.object({
+            lat: z.number(),
+            lng: z.number(),
+          })
+        ).optional(),
+        map_image_description: z.string().optional(),
       })
       .passthrough()
 
-    const prompt = `You are extracting a running activity from a fitness screenshot/photo.
+    const prompt = `You are extracting a running activity from a fitness screenshot/photo from apps like Garmin Connect, Strava, Apple Fitness, Nike Run Club, Google Fit, Polar Flow, or similar fitness tracking platforms.
  Return ONLY the fields you are confident about. Prefer totals (total distance, total time, average pace).
- 
+
+ CRITICAL REQUIRED FIELDS (must extract these):
+- distance_km or distance_miles: The total distance run
+- duration_seconds or duration_minutes or duration_text: Total time of the activity
+- pace_seconds_per_km or pace_text: Average pace
+- date_iso: Date when the activity was completed (ISO-8601 format)
+
+ OPTIONAL FIELDS:
+- calories: Total calories burned
+- type: Activity type (run, jog, race, etc.)
+- notes: Any visible notes or workout description
+
+ GPS/ROUTE EXTRACTION (if map is visible):
+- has_route_map: true if you can see a route/map visualization
+- route_type: "out_and_back", "loop", or "point_to_point" based on the route shape
+- gps_coordinates: If you can identify specific GPS coordinates from the map, extract key waypoints as {lat, lng} pairs. Try to extract at least start/end points and major turns if visible.
+- map_image_description: Brief description of the route visible in the map (e.g., "urban route with several turns", "straight out and back path", "loop around park")
+
  Rules:
 - If distance is shown in km, put it in distance_km. If miles, use distance_miles.
 - Duration should be total elapsed/moving time in duration_seconds. If only a text duration exists, use duration_text.
 - If average pace is shown, output pace_seconds_per_km or pace_text.
 - If a date is visible, output date_iso as ISO-8601. If no date is visible but EXIF exists, you may use it.
-- confidence_pct must be 0..100 (percentage).
- 
+- confidence_pct must be 0..100 (percentage). Use lower confidence if any CRITICAL fields are missing or uncertain.
+- For GPS coordinates: Only extract if you can see actual latitude/longitude values OR can reasonably infer coordinates from map landmarks. If unsure, leave empty.
+
+ PLATFORM-SPECIFIC NOTES:
+- Garmin: Look for "Distance", "Time", "Avg Pace", "Calories"
+- Strava: Orange interface, look for activity stats at top
+- Apple Fitness: Green rings, "Workout" header
+- Nike Run Club: Black/white interface, "Total Distance", "Total Time"
+- Google Fit: Material design, activity summary cards
+- Polar Flow: Blue interface, training load metrics
+
  EXIF date hint (optional): ${preprocessed.exifDateIso ?? "none"}`
     const imageUrl = `data:${preprocessed.mimeType};base64,${preprocessed.buffer.toString("base64")}`
 
@@ -324,11 +389,31 @@ export async function POST(req: Request) {
       }
     }
 
-    if (!extracted || typeof extracted.distanceKm !== "number" || typeof extracted.durationSeconds !== "number") {
+    // Check for critical required fields (distance and duration are essential, pace and date can be derived)
+    const missingFields: string[] = []
+    if (!extracted || typeof extracted.distanceKm !== "number") {
+      missingFields.push("distance")
+    }
+    if (!extracted || typeof extracted.durationSeconds !== "number") {
+      missingFields.push("duration")
+    }
+
+    // Warn about missing optional but recommended fields
+    const warningFields: string[] = []
+    if (!extracted || !extracted.paceSecondsPerKm) {
+      warningFields.push("pace (will be calculated)")
+    }
+    if (!extracted || !extracted.completedAtIso) {
+      warningFields.push("date (will default to today)")
+    }
+
+    if (missingFields.length > 0) {
       return NextResponse.json(
         {
-          error: "Unable to extract distance and duration from the image. Please crop/zoom and try again, or enter manually.",
-          errorCode: "ai_unparseable",
+          error: `Unable to extract critical fields: ${missingFields.join(", ")}. Please try again with a clearer image, or enter the data manually.`,
+          errorCode: "ai_missing_required_fields",
+          missingFields,
+          warningFields,
           requestId,
           meta: {
             parserVersion: PARSER_VERSION,
@@ -348,8 +433,8 @@ export async function POST(req: Request) {
       paceSecondsPerKm?: number
       calories?: number
     } = {
-      distanceKm: extracted.distanceKm,
-      durationSeconds: extracted.durationSeconds,
+      distanceKm: extracted.distanceKm!,
+      durationSeconds: extracted.durationSeconds!,
       confidencePct: extracted.confidencePct,
     }
 
@@ -365,8 +450,8 @@ export async function POST(req: Request) {
 
     const normalized = activitySchema.parse({
       type: extracted.type,
-      distance: extracted.distanceKm,
-      durationMinutes: extracted.durationSeconds / 60,
+      distance: extracted.distanceKm!,
+      durationMinutes: extracted.durationSeconds! / 60,
       paceSeconds: paceSecondsPerKm,
       calories: extracted.calories,
       notes: extracted.notes,
@@ -384,6 +469,11 @@ export async function POST(req: Request) {
         calories: normalized.calories,
         notes: normalized.notes,
         date: normalized.date || new Date().toISOString(),
+        // GPS/Route data
+        hasRouteMap: extracted.hasRouteMap ?? undefined,
+        routeType: extracted.routeType ?? undefined,
+        gpsCoordinates: extracted.gpsCoordinates ?? undefined,
+        mapImageDescription: extracted.mapImageDescription ?? undefined,
       },
       confidence: normalized.confidence ?? 60,
       requestId,

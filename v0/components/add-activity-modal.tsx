@@ -58,6 +58,10 @@ export function AddActivityModal({
     method?: string
     model?: string
     parserVersion?: string
+    hasRouteMap?: boolean
+    routeType?: string
+    gpsCoordinates?: Array<{ lat: number; lng: number }>
+    mapImageDescription?: string
   } | null>(null)
   const { toast } = useToast()
 
@@ -170,6 +174,10 @@ export function AddActivityModal({
       method?: string
       model?: string
       parserVersion?: string
+      hasRouteMap?: boolean
+      routeType?: string
+      gpsCoordinates?: Array<{ lat: number; lng: number }>
+      mapImageDescription?: string
     },
   ) => {
     const { dbUtils } = await import("@/lib/dbUtils")
@@ -201,7 +209,21 @@ export function AddActivityModal({
           ...(importMeta.method ? { method: importMeta.method } : {}),
           ...(importMeta.model ? { model: importMeta.model } : {}),
           ...(importMeta.parserVersion ? { parserVersion: importMeta.parserVersion } : {}),
+          ...(typeof importMeta.hasRouteMap === "boolean" ? { hasRouteMap: importMeta.hasRouteMap } : {}),
+          ...(importMeta.routeType ? { routeType: importMeta.routeType } : {}),
+          ...(importMeta.gpsCoordinates ? { gpsCoordinates: importMeta.gpsCoordinates } : {}),
+          ...(importMeta.mapImageDescription ? { mapImageDescription: importMeta.mapImageDescription } : {}),
         }
+      : undefined
+
+    // Convert GPS coordinates to gpsPath format if available
+    const gpsPath = importMeta?.gpsCoordinates
+      ? JSON.stringify(importMeta.gpsCoordinates.map(coord => ({
+          latitude: coord.lat,
+          longitude: coord.lng,
+          timestamp: Date.now(), // Placeholder timestamp
+          accuracy: 10, // Placeholder accuracy
+        })))
       : undefined
 
     await recordRunWithSideEffects({
@@ -215,6 +237,8 @@ export function AddActivityModal({
       ...(typeof paceSeconds === "number" ? { paceSecondsPerKm: paceSeconds } : {}),
       ...(typeof caloriesValue === "number" ? { calories: caloriesValue } : {}),
       ...(data.notes.trim() ? { notes: data.notes.trim() } : {}),
+      ...(gpsPath ? { gpsPath } : {}),
+      ...(importMeta?.routeType ? { route: importMeta.mapImageDescription || importMeta.routeType } : {}),
       importSource: cleanedImportMeta ? "image" : "manual",
       ...(cleanedImportMeta ? { importMeta: cleanedImportMeta } : {}),
     })
@@ -289,6 +313,10 @@ export function AddActivityModal({
         ...(result.method ? { method: result.method } : {}),
         ...(result.model ? { model: result.model } : {}),
         ...(result.parserVersion ? { parserVersion: result.parserVersion } : {}),
+        ...(typeof result.hasRouteMap === "boolean" ? { hasRouteMap: result.hasRouteMap } : {}),
+        ...(result.routeType ? { routeType: result.routeType } : {}),
+        ...(result.gpsCoordinates ? { gpsCoordinates: result.gpsCoordinates } : {}),
+        ...(result.mapImageDescription ? { mapImageDescription: result.mapImageDescription } : {}),
       })
 
       const updatedActivity = {
@@ -343,7 +371,18 @@ export function AddActivityModal({
         requestId: err instanceof AiActivityAnalysisError ? err.requestId : undefined,
         errorCode: err instanceof AiActivityAnalysisError ? err.errorCode : undefined,
       }).catch(() => undefined)
-      setError(err instanceof Error ? err.message : "Failed to analyze the image")
+
+      // Show more specific error message if critical fields are missing
+      if (err instanceof AiActivityAnalysisError && err.errorCode === "ai_missing_required_fields") {
+        setError(
+          err.message + "\n\nTip: Make sure the screenshot shows the distance and duration clearly. You can also switch to manual entry to fill in the details yourself."
+        )
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to analyze the image")
+      }
+
+      // Pre-fill manual form with whatever we could extract
+      setStep("manual")
     } finally {
       setIsAnalyzing(false)
     }
