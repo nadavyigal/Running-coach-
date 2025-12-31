@@ -1,28 +1,73 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 // Production URL - update this with your actual Vercel URL
 const PRODUCTION_URL = process.env.PRODUCTION_URL || 'https://running-coach.vercel.app';
+const RUN_PRODUCTION_TESTS = process.env.RUN_PRODUCTION_TESTS === 'true';
+
+async function clearAppData(page: Page) {
+  await page.goto(PRODUCTION_URL);
+  await page.evaluate(async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+
+    const dbNames = ['RunSmartDB', 'running-coach-db', 'RunningCoachDB'];
+    await Promise.all(
+      dbNames.map(
+        (dbName) =>
+          new Promise((resolve) => {
+            let settled = false;
+            const finish = () => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              resolve(true);
+            };
+
+            const timer = setTimeout(finish, 2000);
+
+            try {
+              const req = indexedDB.deleteDatabase(dbName);
+              req.onsuccess = finish;
+              req.onerror = finish;
+              req.onblocked = finish;
+            } catch {
+              finish();
+            }
+          })
+      )
+    );
+  });
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+}
+
+async function completeOnboarding(page: Page) {
+  await page.getByRole('button', { name: /get started/i }).waitFor({ state: 'visible', timeout: 20000 });
+  await page.getByRole('button', { name: /get started/i }).click();
+
+  await page.getByText(/Build a Running Habit/i).click();
+  await page.getByRole('button', { name: /^continue$/i }).click();
+
+  await page.getByText(/^Beginner$/i).click();
+  await page.getByRole('button', { name: /^continue$/i }).click();
+
+  await page.getByLabel(/your age/i).fill('25');
+  await page.getByRole('button', { name: /^continue$/i }).click();
+
+  await page.getByText(/Morning/i).click();
+  await page.getByRole('button', { name: /^continue$/i }).click();
+
+  await page.getByRole('button', { name: /start my journey/i }).click();
+  await page.getByRole('navigation', { name: /main navigation/i }).waitFor({ state: 'visible', timeout: 20000 });
+}
 
 test.describe('Production Deployment Verification', () => {
+  test.skip(!RUN_PRODUCTION_TESTS, 'Set RUN_PRODUCTION_TESTS=true to run production checks.');
 
   test.beforeEach(async ({ page, context }) => {
     // Clear all storage before each test
     await context.clearCookies();
-    await page.goto(PRODUCTION_URL);
-
-    // Clear IndexedDB and localStorage
-    await page.evaluate(() => {
-      localStorage.clear();
-      // Delete the running-coach-db
-      const deleteRequest = indexedDB.deleteDatabase('running-coach-db');
-      return new Promise((resolve, reject) => {
-        deleteRequest.onsuccess = () => resolve(true);
-        deleteRequest.onerror = () => reject(deleteRequest.error);
-      });
-    });
-
-    await page.reload();
-    await page.waitForLoadState('networkidle');
+    await clearAppData(page);
   });
 
   test('Fix 1: Onboarding screen appears by default for new users', async ({ page }) => {
@@ -32,119 +77,46 @@ test.describe('Production Deployment Verification', () => {
     await page.waitForTimeout(2000);
 
     // Check if onboarding screen is visible
-    const hasOnboardingHeading = await page.locator('text=/Welcome to|Let\'s get started|What.*goal/i').first().isVisible({ timeout: 5000 }).catch(() => false);
-    const hasTodayScreen = await page.locator('text=/Today.*Workout|Your Plan/i').first().isVisible({ timeout: 1000 }).catch(() => false);
+    const hasOnboardingButton = await page
+      .getByRole('button', { name: /get started/i })
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
+    const hasTodayScreen = await page
+      .getByRole('navigation', { name: /main navigation/i })
+      .isVisible({ timeout: 1000 })
+      .catch(() => false);
 
-    console.log('Onboarding visible:', hasOnboardingHeading);
+    console.log('Onboarding visible:', hasOnboardingButton);
     console.log('Today screen visible:', hasTodayScreen);
 
     // Take screenshot for debugging
-    await page.screenshot({ path: 'V0/test-results/production-onboarding-default.png', fullPage: true });
+    await page.screenshot({ path: 'test-results/production-onboarding-default.png', fullPage: true });
 
-    expect(hasOnboardingHeading).toBe(true);
+    expect(hasOnboardingButton).toBe(true);
     expect(hasTodayScreen).toBe(false);
   });
 
   test('Fix 2: Restart Onboarding button exists on Today screen', async ({ page }) => {
     console.log('🧪 Testing: Restart Onboarding button on Today screen');
 
-    // First, complete onboarding to get to Today screen
-    await page.evaluate(() => {
-      localStorage.setItem('onboarding-complete', 'true');
-    });
+    await completeOnboarding(page);
 
-    // Create a completed user in IndexedDB
-    await page.evaluate(async () => {
-      const dbRequest = indexedDB.open('running-coach-db', 1);
+    // Look for Reset button
+    const resetButton = page.getByRole('button', { name: /reset/i });
+    const isResetButtonVisible = await resetButton.isVisible({ timeout: 5000 }).catch(() => false);
 
-      return new Promise((resolve) => {
-        dbRequest.onupgradeneeded = (event: any) => {
-          const db = event.target.result;
-          if (!db.objectStoreNames.contains('users')) {
-            db.createObjectStore('users', { keyPath: 'id', autoIncrement: true });
-          }
-        };
-
-        dbRequest.onsuccess = (event: any) => {
-          const db = event.target.result;
-          const transaction = db.transaction(['users'], 'readwrite');
-          const store = transaction.objectStore('users');
-
-          store.add({
-            goal: 'habit',
-            experience: 'beginner',
-            onboardingComplete: true,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          });
-
-          transaction.oncomplete = () => resolve(true);
-        };
-      });
-    });
-
-    await page.reload();
-    await page.waitForTimeout(3000);
-
-    // Look for Restart Onboarding button
-    const restartButton = page.locator('button:has-text("Restart Onboarding")');
-    const isRestartButtonVisible = await restartButton.isVisible({ timeout: 5000 }).catch(() => false);
-
-    console.log('Restart Onboarding button visible:', isRestartButtonVisible);
+    console.log('Reset button visible:', isResetButtonVisible);
 
     // Take screenshot
-    await page.screenshot({ path: 'V0/test-results/production-restart-button.png', fullPage: true });
+    await page.screenshot({ path: 'test-results/production-reset-button.png', fullPage: true });
 
-    expect(isRestartButtonVisible).toBe(true);
+    expect(isResetButtonVisible).toBe(true);
   });
 
   test('Fix 3: Date selection allows 14 days forward', async ({ page }) => {
     console.log('🧪 Testing: Date selection 14-day range');
 
-    // Set up as completed user
-    await page.evaluate(async () => {
-      const dbRequest = indexedDB.open('running-coach-db', 1);
-
-      return new Promise((resolve) => {
-        dbRequest.onupgradeneeded = (event: any) => {
-          const db = event.target.result;
-          if (!db.objectStoreNames.contains('users')) {
-            db.createObjectStore('users', { keyPath: 'id', autoIncrement: true });
-          }
-          if (!db.objectStoreNames.contains('plans')) {
-            db.createObjectStore('plans', { keyPath: 'id', autoIncrement: true });
-          }
-        };
-
-        dbRequest.onsuccess = async (event: any) => {
-          const db = event.target.result;
-          const transaction = db.transaction(['users', 'plans'], 'readwrite');
-
-          const userStore = transaction.objectStore('users');
-          userStore.add({
-            goal: 'habit',
-            experience: 'beginner',
-            onboardingComplete: true,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          });
-
-          const planStore = transaction.objectStore('plans');
-          planStore.add({
-            userId: 1,
-            title: 'Test Plan',
-            startDate: new Date(),
-            createdAt: new Date(),
-            updatedAt: new Date()
-          });
-
-          transaction.oncomplete = () => resolve(true);
-        };
-      });
-    });
-
-    await page.reload();
-    await page.waitForTimeout(3000);
+    await completeOnboarding(page);
 
     // Look for "Add Run" button and click it
     const addRunButton = page.locator('button:has-text("Add Run")').first();
@@ -152,20 +124,23 @@ test.describe('Production Deployment Verification', () => {
       await addRunButton.click();
       await page.waitForTimeout(1000);
 
+      await page.getByText(/Easy Run/i).first().click();
+
       // Click on date selector
-      const dateButton = page.locator('button[aria-label*="date"], button:has-text("Select date")').first();
+      const dateSection = page.getByText(/When do you want to run/i).locator('..');
+      const dateButton = dateSection.getByRole('button').first();
       if (await dateButton.isVisible({ timeout: 2000 }).catch(() => false)) {
         await dateButton.click();
         await page.waitForTimeout(1000);
 
         // Check if calendar is visible
-        const calendar = page.locator('[role="dialog"], [class*="calendar"]').first();
+        const calendar = page.locator('.rdp, [class*="calendar"]').first();
         const isCalendarVisible = await calendar.isVisible({ timeout: 2000 }).catch(() => false);
 
         console.log('Calendar visible:', isCalendarVisible);
 
         // Take screenshot of calendar
-        await page.screenshot({ path: 'V0/test-results/production-calendar.png', fullPage: true });
+        await page.screenshot({ path: 'test-results/production-calendar.png', fullPage: true });
 
         expect(isCalendarVisible).toBe(true);
       }
@@ -207,41 +182,10 @@ test.describe('Production Deployment Verification', () => {
   test('Fix 5: GPS timeout implementation', async ({ page }) => {
     console.log('🧪 Testing: GPS timeout functionality');
 
-    // Set up as completed user
-    await page.evaluate(async () => {
-      const dbRequest = indexedDB.open('running-coach-db', 1);
-
-      return new Promise((resolve) => {
-        dbRequest.onupgradeneeded = (event: any) => {
-          const db = event.target.result;
-          if (!db.objectStoreNames.contains('users')) {
-            db.createObjectStore('users', { keyPath: 'id', autoIncrement: true });
-          }
-        };
-
-        dbRequest.onsuccess = (event: any) => {
-          const db = event.target.result;
-          const transaction = db.transaction(['users'], 'readwrite');
-          const store = transaction.objectStore('users');
-
-          store.add({
-            goal: 'habit',
-            experience: 'beginner',
-            onboardingComplete: true,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          });
-
-          transaction.oncomplete = () => resolve(true);
-        };
-      });
-    });
-
-    await page.reload();
-    await page.waitForTimeout(2000);
+    await completeOnboarding(page);
 
     // Navigate to Record screen
-    const recordButton = page.locator('[data-screen="record"], button:has-text("Record")').first();
+    const recordButton = page.getByRole('button', { name: /navigate to record/i });
     if (await recordButton.isVisible({ timeout: 5000 }).catch(() => false)) {
       await recordButton.click();
       await page.waitForTimeout(2000);
@@ -252,7 +196,7 @@ test.describe('Production Deployment Verification', () => {
 
       console.log('GPS timeout code found:', hasGPSTimeout);
 
-      await page.screenshot({ path: 'V0/test-results/production-record-screen.png', fullPage: true });
+      await page.screenshot({ path: 'test-results/production-record-screen.png', fullPage: true });
 
       expect(hasGPSTimeout).toBe(true);
     }
@@ -285,41 +229,10 @@ test.describe('Production Deployment Verification', () => {
   test('Fix 7: Profile page retry logic', async ({ page }) => {
     console.log('🧪 Testing: Profile page retry logic');
 
-    // Set up as completed user
-    await page.evaluate(async () => {
-      const dbRequest = indexedDB.open('running-coach-db', 1);
-
-      return new Promise((resolve) => {
-        dbRequest.onupgradeneeded = (event: any) => {
-          const db = event.target.result;
-          if (!db.objectStoreNames.contains('users')) {
-            db.createObjectStore('users', { keyPath: 'id', autoIncrement: true });
-          }
-        };
-
-        dbRequest.onsuccess = (event: any) => {
-          const db = event.target.result;
-          const transaction = db.transaction(['users'], 'readwrite');
-          const store = transaction.objectStore('users');
-
-          store.add({
-            goal: 'habit',
-            experience: 'beginner',
-            onboardingComplete: true,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          });
-
-          transaction.oncomplete = () => resolve(true);
-        };
-      });
-    });
-
-    await page.reload();
-    await page.waitForTimeout(2000);
+    await completeOnboarding(page);
 
     // Navigate to Profile screen
-    const profileButton = page.locator('[data-screen="profile"], button:has-text("Profile")').first();
+    const profileButton = page.getByRole('button', { name: /navigate to profile/i });
     if (await profileButton.isVisible({ timeout: 5000 }).catch(() => false)) {
       await profileButton.click();
       await page.waitForTimeout(3000);
@@ -330,7 +243,7 @@ test.describe('Production Deployment Verification', () => {
 
       console.log('Profile retry logic found:', hasRetryLogic);
 
-      await page.screenshot({ path: 'V0/test-results/production-profile-screen.png', fullPage: true });
+      await page.screenshot({ path: 'test-results/production-profile-screen.png', fullPage: true });
 
       expect(hasRetryLogic).toBe(true);
     }
@@ -354,7 +267,7 @@ test.describe('Production Deployment Verification', () => {
     console.log('Version info found:', hasVersionInfo);
 
     // Take full page screenshot
-    await page.screenshot({ path: 'V0/test-results/production-homepage.png', fullPage: true });
+    await page.screenshot({ path: 'test-results/production-homepage.png', fullPage: true });
 
     // Log the URL for verification
     console.log('Tested URL:', page.url());
