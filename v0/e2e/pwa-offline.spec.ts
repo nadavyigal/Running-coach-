@@ -14,7 +14,7 @@ test.describe('PWA / Offline', () => {
 
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null)
 
-    const manifestHref = await page.locator('link[rel="manifest"]').getAttribute('href')
+    const manifestHref = await page.locator('link[rel="manifest"]').first().getAttribute('href')
     expect(manifestHref).toBeTruthy()
 
     const manifestUrl = manifestHref?.startsWith('http')

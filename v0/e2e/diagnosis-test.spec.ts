@@ -4,7 +4,7 @@ test.describe('Running Coach Application Diagnosis', () => {
   test.beforeEach(async ({ page, context }) => {
     // Clear all storage before each test
     await context.clearCookies();
-    await page.goto('http://localhost:3000');
+    await page.goto('/');
     await page.evaluate(() => {
       localStorage.clear();
       sessionStorage.clear();
@@ -42,7 +42,7 @@ test.describe('Running Coach Application Diagnosis', () => {
     });
     
     // Load the page and wait for network idle
-    await page.goto('http://localhost:3000');
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
     
     // Wait a bit more to capture any delayed errors
@@ -62,7 +62,7 @@ test.describe('Running Coach Application Diagnosis', () => {
   test('2. Verify onboarding elements and goal wizard', async ({ page }) => {
     console.log('🔍 Testing onboarding elements...');
     
-    await page.goto('http://localhost:3000');
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
@@ -94,7 +94,7 @@ test.describe('Running Coach Application Diagnosis', () => {
   test('3. Test Start my journey button functionality', async ({ page }) => {
     console.log('🔍 Testing Start my journey button...');
     
-    await page.goto('http://localhost:3000');
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
@@ -120,7 +120,7 @@ test.describe('Running Coach Application Diagnosis', () => {
         await page.waitForTimeout(3000);
         
         // Check for success message
-        const successMessage = await page.locator('text*="training plan created successfully", text*="success", text*="complete"').count();
+        const successMessage = await page.getByText(/training plan created successfully|success|complete/i).count();
         console.log('✅ Success message found:', successMessage > 0);
         
         // Check localStorage for completion state
@@ -139,7 +139,7 @@ test.describe('Running Coach Application Diagnosis', () => {
   test('4. Test AI coach chat functionality', async ({ page }) => {
     console.log('🔍 Testing AI coach chat...');
     
-    await page.goto('http://localhost:3000');
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
@@ -183,7 +183,7 @@ test.describe('Running Coach Application Diagnosis', () => {
   test('5. Test navigation between main screens', async ({ page }) => {
     console.log('🔍 Testing main screen navigation...');
     
-    await page.goto('http://localhost:3000');
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
@@ -239,7 +239,7 @@ test.describe('Running Coach Application Diagnosis', () => {
   test('6. Check for missing UI elements and functionality', async ({ page }) => {
     console.log('🔍 Checking for missing UI elements...');
     
-    await page.goto('http://localhost:3000');
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
@@ -295,7 +295,7 @@ test.describe('Running Coach Application Diagnosis', () => {
   test('7. Test full onboarding to main app flow', async ({ page }) => {
     console.log('🔍 Testing complete user flow...');
     
-    await page.goto('http://localhost:3000');
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
