@@ -57,7 +57,7 @@ export function validateOpenAIKey(): ApiKeyValidationResult {
  * Securely validate PostHog API key
  */
 export function validatePostHogKey(): ApiKeyValidationResult {
-  const key = process.env.NEXT_PUBLIC_POSTHOG_API_KEY;
+  const key = process.env.NEXT_PUBLIC_POSTHOG_KEY || process.env.NEXT_PUBLIC_POSTHOG_API_KEY;
   
   if (!key || key === 'your_posthog_api_key_here') {
     return {

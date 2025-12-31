@@ -135,7 +135,7 @@ npm run start
    NEXT_PUBLIC_APP_URL=https://your-domain.com
    OPENAI_API_KEY=sk-... (keep secret!)
    NEXT_PUBLIC_POSTHOG_KEY=phc_...
-   NEXT_PUBLIC_POSTHOG_HOST=https://app.posthog.com
+   NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
    ```
 
 2. **Database Migration Strategy**

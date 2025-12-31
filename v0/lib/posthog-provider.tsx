@@ -1,17 +1,15 @@
 'use client'
 
-
 import { useEffect } from 'react'
 import { logger } from '@/lib/logger'
 
-const POSTHOG_SCRIPT_SRC = 'https://cdn.jsdelivr.net/npm/posthog-js@1.257.0/dist/posthog.min.js'
-const POSTHOG_SCRIPT_ID = 'posthog-js-script'
-const API_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://app.posthog.com'
+const DEFAULT_POSTHOG_HOST = 'https://us.i.posthog.com'
+const API_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || DEFAULT_POSTHOG_HOST
 
 type PosthogInstance = NonNullable<Window['posthog']>
 
 let posthogInitialized = false
-let scriptLoadingPromise: Promise<PosthogInstance | undefined> | null = null
+let posthogLoadingPromise: Promise<PosthogInstance | undefined> | null = null
 
 const loadPosthogLibrary = async (): Promise<PosthogInstance | undefined> => {
   if (typeof window === 'undefined') {
@@ -22,39 +20,25 @@ const loadPosthogLibrary = async (): Promise<PosthogInstance | undefined> => {
     return window.posthog
   }
 
-  if (scriptLoadingPromise) {
-    return scriptLoadingPromise
+  if (posthogLoadingPromise) {
+    return posthogLoadingPromise
   }
 
-  scriptLoadingPromise = new Promise<PosthogInstance | undefined>((resolve, reject) => {
-    const existingScript = document.getElementById(POSTHOG_SCRIPT_ID) as HTMLScriptElement | null
-
-    if (existingScript) {
-      if (window.posthog) {
-        resolve(window.posthog)
-        return
+  posthogLoadingPromise = import('posthog-js')
+    .then((module) => {
+      const posthog = module.default
+      if (!window.posthog) {
+        window.posthog = posthog
       }
+      return posthog
+    })
+    .catch((error) => {
+      logger.error('Unable to load PostHog library:', error)
+      posthogLoadingPromise = null
+      return undefined
+    })
 
-      existingScript.addEventListener('load', () => resolve(window.posthog))
-      existingScript.addEventListener('error', (_event) => reject(new Error('Failed to load PostHog script')))
-      return
-    }
-
-    const script = document.createElement('script')
-    script.id = POSTHOG_SCRIPT_ID
-    script.src = POSTHOG_SCRIPT_SRC
-    script.async = true
-    script.defer = true
-    script.onload = () => resolve(window.posthog)
-    script.onerror = (_event) => reject(new Error('Failed to load PostHog script'))
-    document.head.appendChild(script)
-  }).catch((error) => {
-    logger.error('Unable to load PostHog script:', error)
-    scriptLoadingPromise = null
-    return undefined
-  })
-
-  return scriptLoadingPromise
+  return posthogLoadingPromise
 }
 
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
@@ -66,7 +50,8 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
 
       if (posthogInitialized) return
 
-      const apiKey = process.env.NEXT_PUBLIC_POSTHOG_API_KEY
+      const apiKey =
+        process.env.NEXT_PUBLIC_POSTHOG_KEY || process.env.NEXT_PUBLIC_POSTHOG_API_KEY
       if (!apiKey || apiKey.trim() === '') {
         if (process.env.NODE_ENV === 'development') {
           logger.info('PostHog API key not provided - analytics disabled')
@@ -75,19 +60,19 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
       }
 
       const setup = async () => {
-	        const posthog = await loadPosthogLibrary()
-	        if (!posthog || posthogInitialized) {
-	          return
-	        }
+        const posthog = await loadPosthogLibrary()
+        if (!posthog || posthogInitialized) {
+          return
+        }
 
-	        if (typeof posthog.init !== 'function') {
-	          logger.error('PostHog loaded but init is unavailable')
-	          return
-	        }
+        if (typeof posthog.init !== 'function') {
+          logger.error('PostHog loaded but init is unavailable')
+          return
+        }
 
-	        posthog.init(apiKey, {
-	          api_host: API_HOST,
-	          person_profiles: 'identified_only',
+        posthog.init(apiKey, {
+          api_host: API_HOST,
+          person_profiles: 'identified_only',
           loaded: () => {
             posthogInitialized = true
             if (process.env.NODE_ENV === 'development') {

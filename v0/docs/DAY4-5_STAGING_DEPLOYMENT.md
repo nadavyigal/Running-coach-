@@ -118,7 +118,7 @@ OPENAI_API_KEY=sk-proj-...your-key-here
 
 # PostHog Analytics
 NEXT_PUBLIC_POSTHOG_KEY=phc_...your-key-here
-NEXT_PUBLIC_POSTHOG_HOST=https://app.posthog.com
+NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
 
 # App URL (will be Vercel URL)
 NEXT_PUBLIC_APP_URL=https://running-coach-xyz123.vercel.app
@@ -279,7 +279,7 @@ Test on multiple browsers:
 ### Test 4: Analytics Verification
 
 Check PostHog dashboard:
-1. Visit https://app.posthog.com
+1. Visit https://us.posthog.com
 2. Select your project
 3. Check "Events" tab
 4. Verify events are being tracked from staging URL
