@@ -1,16 +1,98 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { OnboardingChatOverlay } from './onboarding-chat-overlay'
 import { useToast } from '@/hooks/use-toast'
+
+const { mockAiChatWithFallback } = vi.hoisted(() => ({
+  mockAiChatWithFallback: vi.fn()
+}))
 
 // Mock the toast hook
 vi.mock('@/hooks/use-toast', () => ({
   useToast: vi.fn()
 }))
 
+vi.mock('@/hooks/use-ai-service-error-handling', () => ({
+  useAIServiceErrorHandling: () => ({
+    aiChatWithFallback: mockAiChatWithFallback
+  })
+}))
+
 // Mock the analytics tracking
 vi.mock('@/lib/analytics', () => ({
-  trackOnboardingEvent: vi.fn()
+  trackOnboardingEvent: vi.fn(),
+  trackAnalyticsEvent: vi.fn(),
+  trackEngagementEvent: vi.fn(),
+}))
+
+vi.mock('@/lib/sessionManager', () => ({
+  sessionManager: {
+    resumeSession: vi.fn().mockResolvedValue(null),
+    createSession: vi.fn().mockResolvedValue({
+      session: {
+        id: 1,
+        userId: 1,
+        conversationId: 'conv-123',
+        goalDiscoveryPhase: 'motivation',
+        discoveredGoals: [],
+        coachingStyle: 'supportive',
+        sessionProgress: 0,
+        isCompleted: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      conflicts: [],
+      wasResumed: false
+    }),
+    updateSession: vi.fn().mockResolvedValue({
+      id: 1,
+      userId: 1,
+      conversationId: 'conv-123',
+      goalDiscoveryPhase: 'motivation',
+      discoveredGoals: [],
+      coachingStyle: 'supportive',
+      sessionProgress: 0,
+      isCompleted: false,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    })
+  }
+}))
+
+vi.mock('@/lib/conversationStorage', () => ({
+  conversationStorage: {
+    saveMessage: vi.fn().mockResolvedValue({
+      id: 1,
+      conversationId: 'conv-123',
+      role: 'assistant',
+      content: 'Saved message',
+      timestamp: new Date(),
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }),
+    loadConversation: vi.fn().mockResolvedValue({
+      messages: [],
+      session: null,
+      totalMessages: 0,
+      lastUpdated: new Date(),
+      dataIntegrity: {
+        isValid: true,
+        errors: [],
+        warnings: []
+      }
+    })
+  }
+}))
+
+vi.mock('@/lib/onboardingManager', () => ({
+  onboardingManager: {
+    completeAIChatOnboarding: vi.fn().mockResolvedValue({
+      success: true,
+      user: { id: 1 },
+      planId: 1
+    })
+  }
 }))
 
 // Mock the database utilities
@@ -31,8 +113,33 @@ vi.mock('@/lib/dbUtils', () => ({
   }
 }))
 
-// Mock fetch for API calls
-global.fetch = vi.fn()
+const createStreamingResponse = (text: string, nextPhase: string) => ({
+  ok: true,
+  body: {
+    getReader: () => ({
+      read: vi.fn()
+        .mockResolvedValueOnce({
+          done: false,
+          value: new TextEncoder().encode(`0:${JSON.stringify({ textDelta: text })}`)
+        })
+        .mockResolvedValueOnce({
+          done: true,
+          value: undefined
+        })
+    })
+  },
+  headers: new Headers({
+    'X-Coaching-Interaction-Id': 'onboarding-123',
+    'X-Coaching-Confidence': '0.8',
+    'X-Onboarding-Next-Phase': nextPhase
+  })
+})
+
+const waitForHistoryLoad = async () => {
+  await waitFor(() => {
+    expect(screen.queryByLabelText('Loading conversation history')).not.toBeInTheDocument()
+  })
+}
 
 describe('OnboardingChatOverlay', () => {
   const mockToast = vi.fn()
@@ -42,27 +149,16 @@ describe('OnboardingChatOverlay', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     ;(useToast as any).mockReturnValue({ toast: mockToast })
-    ;(global.fetch as any).mockResolvedValue({
-      ok: true,
-      body: {
-        getReader: () => ({
-          read: vi.fn()
-            .mockResolvedValueOnce({
-              done: false,
-              value: new TextEncoder().encode('0:{"textDelta": "Great! I can see you\'re motivated to start running. What specific goals do you have in mind?"}')
-            })
-            .mockResolvedValueOnce({
-              done: true,
-              value: undefined
-            })
-        })
-      },
-      headers: new Headers({
-        'X-Coaching-Interaction-Id': 'onboarding-123',
-        'X-Coaching-Confidence': '0.8',
-        'X-Onboarding-Next-Phase': 'assessment'
-      })
-    })
+    mockAiChatWithFallback.mockResolvedValue(
+      createStreamingResponse(
+        "Great! I can see you're motivated to start running. What specific goals do you have in mind?",
+        'assessment'
+      )
+    )
+  })
+
+  afterEach(() => {
+    cleanup()
   })
 
   it('renders when isOpen is true', () => {
@@ -105,7 +201,9 @@ describe('OnboardingChatOverlay', () => {
       />
     )
 
-    expect(screen.getByText(/Welcome to your AI-guided onboarding/)).toBeInTheDocument()
+    return waitForHistoryLoad().then(() => {
+      expect(screen.getByText(/Welcome to your AI-guided onboarding/)).toBeInTheDocument()
+    })
   })
 
   it('allows user to send messages', async () => {
@@ -119,6 +217,7 @@ describe('OnboardingChatOverlay', () => {
       />
     )
 
+    await waitForHistoryLoad()
     const input = screen.getByPlaceholderText('Tell me more about your running goals...')
     const sendButton = screen.getByRole('button', { name: '' }) // Icon button without text
 
@@ -131,28 +230,15 @@ describe('OnboardingChatOverlay', () => {
   })
 
   it('shows loading state while processing message', async () => {
-    ;(global.fetch as any).mockImplementation(() => 
-      new Promise(resolve => setTimeout(() => resolve({
-        ok: true,
-        body: {
-          getReader: () => ({
-            read: vi.fn()
-              .mockResolvedValueOnce({
-                done: false,
-                value: new TextEncoder().encode('0:{"textDelta": "That\'s great! Let\'s explore your goals further."}')
-              })
-              .mockResolvedValueOnce({
-                done: true,
-                value: undefined
-              })
-          })
-        },
-        headers: new Headers({
-          'X-Coaching-Interaction-Id': 'onboarding-123',
-          'X-Coaching-Confidence': '0.8',
-          'X-Onboarding-Next-Phase': 'assessment'
-        })
-      }), 100))
+    mockAiChatWithFallback.mockImplementation(() => 
+      new Promise(resolve => setTimeout(() => {
+        resolve(
+          createStreamingResponse(
+            "That's great! Let's explore your goals further.",
+            'assessment'
+          )
+        )
+      }, 100))
     )
 
     render(
@@ -165,6 +251,7 @@ describe('OnboardingChatOverlay', () => {
       />
     )
 
+    await waitForHistoryLoad()
     const input = screen.getByPlaceholderText('Tell me more about your running goals...')
     const sendButton = screen.getByRole('button', { name: '' })
 
@@ -172,13 +259,14 @@ describe('OnboardingChatOverlay', () => {
     fireEvent.click(sendButton)
 
     // Should show loading spinner
-    expect(screen.getByRole('status')).toBeInTheDocument()
+    expect(screen.getByLabelText('Loading')).toBeInTheDocument()
   })
 
   it('handles API errors gracefully', async () => {
-    ;(global.fetch as any).mockResolvedValue({
-      ok: false,
-      status: 500
+    mockAiChatWithFallback.mockResolvedValue({
+      fallback: true,
+      message: "AI chat is not available right now. Let's continue with the guided form instead.",
+      redirectToForm: true
     })
 
     render(
@@ -191,6 +279,7 @@ describe('OnboardingChatOverlay', () => {
       />
     )
 
+    await waitForHistoryLoad()
     const input = screen.getByPlaceholderText('Tell me more about your running goals...')
     const sendButton = screen.getByRole('button', { name: '' })
 
@@ -199,35 +288,21 @@ describe('OnboardingChatOverlay', () => {
 
     await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith({
-        title: "Onboarding Error",
-        description: "Failed to get response from AI coach. Please try again.",
-        variant: "destructive",
+        title: "Switching to Guided Form",
+        description: "AI chat is not available right now. Let's continue with the guided form instead.",
+        variant: "default",
       })
+      expect(mockOnClose).toHaveBeenCalled()
     })
   })
 
   it('calls onComplete when conversation is finished', async () => {
-    ;(global.fetch as any).mockResolvedValue({
-      ok: true,
-      body: {
-        getReader: () => ({
-          read: vi.fn()
-            .mockResolvedValueOnce({
-              done: false,
-              value: new TextEncoder().encode('0:{"textDelta": "Perfect! I\'ve created your personalized goals."}')
-            })
-            .mockResolvedValueOnce({
-              done: true,
-              value: undefined
-            })
-        })
-      },
-      headers: new Headers({
-        'X-Coaching-Interaction-Id': 'onboarding-123',
-        'X-Coaching-Confidence': '0.8',
-        'X-Onboarding-Next-Phase': 'complete'
-      })
-    })
+    mockAiChatWithFallback.mockResolvedValue(
+      createStreamingResponse(
+        "Perfect! I've created your personalized goals.",
+        'complete'
+      )
+    )
 
     render(
       <OnboardingChatOverlay
@@ -239,6 +314,7 @@ describe('OnboardingChatOverlay', () => {
       />
     )
 
+    await waitForHistoryLoad()
     const input = screen.getByPlaceholderText('Tell me more about your running goals...')
     const sendButton = screen.getByRole('button', { name: '' })
 
@@ -251,27 +327,12 @@ describe('OnboardingChatOverlay', () => {
   })
 
   it('updates progress based on conversation phase', async () => {
-    ;(global.fetch as any).mockResolvedValue({
-      ok: true,
-      body: {
-        getReader: () => ({
-          read: vi.fn()
-            .mockResolvedValueOnce({
-              done: false,
-              value: new TextEncoder().encode('0:{"textDelta": "Let\'s assess your experience level."}')
-            })
-            .mockResolvedValueOnce({
-              done: true,
-              value: undefined
-            })
-        })
-      },
-      headers: new Headers({
-        'X-Coaching-Interaction-Id': 'onboarding-123',
-        'X-Coaching-Confidence': '0.8',
-        'X-Onboarding-Next-Phase': 'assessment'
-      })
-    })
+    mockAiChatWithFallback.mockResolvedValue(
+      createStreamingResponse(
+        "Let's assess your experience level.",
+        'assessment'
+      )
+    )
 
     render(
       <OnboardingChatOverlay
@@ -283,6 +344,7 @@ describe('OnboardingChatOverlay', () => {
       />
     )
 
+    await waitForHistoryLoad()
     const input = screen.getByPlaceholderText('Tell me more about your running goals...')
     const sendButton = screen.getByRole('button', { name: '' })
 

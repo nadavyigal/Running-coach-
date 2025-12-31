@@ -4,7 +4,7 @@ test.describe('Feature Verification - P1 & P2 Features', () => {
   test.beforeEach(async ({ page, context }) => {
     // Clear all storage before each test
     await context.clearCookies();
-    await page.goto('http://localhost:3000');
+    await page.goto('/');
     await page.evaluate(() => {
       localStorage.clear();
       sessionStorage.clear();
@@ -17,7 +17,7 @@ test.describe('Feature Verification - P1 & P2 Features', () => {
       }
     });
     await page.waitForTimeout(500);
-    await page.goto('http://localhost:3000');
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
   });
 
@@ -168,7 +168,7 @@ test.describe('Feature Verification - P1 & P2 Features', () => {
     console.log('\n🧪 Testing P2.1: AI goal discovery wizard...');
 
     // Start from fresh onboarding
-    await page.goto('http://localhost:3000');
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
 
@@ -293,55 +293,36 @@ test.describe('Feature Verification - P1 & P2 Features', () => {
 
 // Helper function to complete onboarding
 async function completeOnboarding(page: any) {
-  console.log('  → Completing onboarding...');
+  console.log('  -> Completing onboarding...');
 
-  // Check if already completed
   const isOnboardingComplete = await page.evaluate(() =>
     localStorage.getItem('onboarding-complete') === 'true'
   );
 
   if (isOnboardingComplete) {
-    console.log('  ✓ Onboarding already completed');
+    console.log('  -> Onboarding already completed');
     return;
   }
 
-  // Wait for onboarding to load
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(1000);
 
-  // Click through onboarding steps
-  let attempts = 0;
-  const maxAttempts = 10;
-
-  while (attempts < maxAttempts) {
-    // Look for any clickable onboarding elements
-    const continueButton = page.locator('button').filter({
-      hasText: /continue|next|start|generate|create|complete|begin/i
-    }).first();
-
-    if (await continueButton.count() > 0 && await continueButton.isVisible()) {
-      await continueButton.click();
-      await page.waitForTimeout(1500);
-      attempts++;
-
-      // Check if we've completed onboarding
-      const nowComplete = await page.evaluate(() =>
-        localStorage.getItem('onboarding-complete') === 'true'
-      );
-
-      if (nowComplete) {
-        console.log('  ✓ Onboarding completed');
-        return;
-      }
-    } else {
-      // Check if we're on the main app
-      const hasNavigation = await page.locator('nav, button').filter({ hasText: /today|plan|profile/i }).count() > 0;
-      if (hasNavigation) {
-        console.log('  ✓ Reached main app');
-        return;
-      }
-      break;
-    }
+  const getStarted = page.getByRole('button', { name: /get started/i });
+  if (await getStarted.isVisible().catch(() => false)) {
+    await getStarted.click();
   }
 
-  console.log('  ⚠ Onboarding may not have completed fully');
+  await page.getByText(/Build a Running Habit/i).click();
+  await page.getByRole('button', { name: /^continue$/i }).click();
+
+  await page.getByText(/^Beginner$/i).click();
+  await page.getByRole('button', { name: /^continue$/i }).click();
+
+  await page.getByLabel(/Your age/i).fill('25');
+  await page.getByRole('button', { name: /^continue$/i }).click();
+
+  await page.getByText(/Morning/i).click();
+  await page.getByRole('button', { name: /^continue$/i }).click();
+
+  await page.getByRole('button', { name: /start my journey/i }).click();
 }
+

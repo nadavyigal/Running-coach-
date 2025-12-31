@@ -164,21 +164,28 @@ export async function POST(req: Request) {
         async start(controller) {
           const encoder = new TextEncoder();
           const decoder = new TextDecoder();
-          
+          let buffer = "";
+
           try {
             while (true) {
               const { done, value } = await reader.read();
               if (done) break;
-              
-              const text = decoder.decode(value);
-              const lines = text.split('\n').filter(Boolean);
-              
+
+              const text = decoder.decode(value, { stream: true });
+              buffer += text;
+              const lines = buffer.split("\n");
+              buffer = lines.pop() ?? "";
+
               for (const line of lines) {
                 // Only forward content lines (channel 0) in the expected format
-                if (line.startsWith('0:')) {
-                  controller.enqueue(encoder.encode(line + '\n'));
+                if (line.startsWith("0:")) {
+                  controller.enqueue(encoder.encode(line + "\n"));
                 }
               }
+            }
+
+            if (buffer.trim() && buffer.startsWith("0:")) {
+              controller.enqueue(encoder.encode(buffer + "\n"));
             }
           } catch (error) {
             logger.error(`[onboarding:chat] requestId=${requestId} Stream error:`, error);

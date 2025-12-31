@@ -6,6 +6,7 @@ import { withErrorHandling } from '@/lib/errorHandler.middleware';
 import { withSecureOpenAI } from '@/lib/apiKeyManager';
 import { withApiSecurity } from '@/lib/security.middleware';
 import { logger } from '@/lib/logger';
+import { WORKOUT } from '@/lib/constants';
 
 /**
  * Zod schema for user context from onboarding data
@@ -103,6 +104,68 @@ const PlanSchema = z.object({
   /** Array of all workouts in the plan */
   workouts: z.array(WorkoutSchema)
 });
+
+const nullableNumber = (schema: z.ZodNumber) =>
+  z.preprocess((value) => (value === null ? undefined : value), schema.optional());
+
+const AiWorkoutSchema = z.object({
+  week: z.number().min(1).max(16),
+  day: z.enum(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']),
+  type: z.enum(['easy', 'tempo', 'intervals', 'long', 'time-trial', 'hill', 'rest']),
+  distance: nullableNumber(z.number().min(0).max(50)),
+  duration: nullableNumber(z.number().min(0).max(300)),
+  notes: z.string().optional()
+});
+
+const AiPlanSchema = z.object({
+  title: z.string(),
+  description: z.string(),
+  totalWeeks: z.number().min(1).max(16),
+  workouts: z.array(AiWorkoutSchema)
+});
+
+const DEFAULT_PACE_MIN_PER_KM = (WORKOUT.DISTANCE_TO_TIME_MIN + WORKOUT.DISTANCE_TO_TIME_MAX) / 2;
+
+const roundToTenth = (value: number) => Math.round(value * 10) / 10;
+
+const normalizeAiPlan = (plan: z.infer<typeof AiPlanSchema>): z.infer<typeof PlanSchema> => {
+  const normalizeWorkout = (workout: z.infer<typeof AiWorkoutSchema>) => {
+    const distance = typeof workout.distance === 'number' && Number.isFinite(workout.distance)
+      ? workout.distance
+      : undefined;
+    const duration = typeof workout.duration === 'number' && Number.isFinite(workout.duration)
+      ? workout.duration
+      : undefined;
+
+    if (workout.type === 'rest') {
+      return {
+        ...workout,
+        distance: 0,
+        duration: duration ?? 0
+      };
+    }
+
+    const normalizedDistance = distance ?? (duration
+      ? clampNumber(roundToTenth(duration / DEFAULT_PACE_MIN_PER_KM), 0, 50)
+      : WORKOUT.DEFAULT_DISTANCE);
+    const normalizedDuration = duration ?? clampNumber(
+      Math.round(normalizedDistance * DEFAULT_PACE_MIN_PER_KM),
+      0,
+      300
+    );
+
+    return {
+      ...workout,
+      distance: normalizedDistance,
+      duration: normalizedDuration
+    };
+  };
+
+  return {
+    ...plan,
+    workouts: plan.workouts.map(normalizeWorkout)
+  };
+};
 
 /**
  * Generate a fallback plan when AI is unavailable
@@ -334,7 +397,7 @@ async function generatePlanHandler(req: NextRequest) {
     async () => {
       const { object: generatedPlan } = await generateObject({
         model: openai('gpt-4o'),
-        schema: PlanSchema,
+        schema: AiPlanSchema,
         prompt,
         temperature: 0.7,
       });
@@ -343,7 +406,7 @@ async function generatePlanHandler(req: NextRequest) {
   );
 
   // If AI fails, return a fallback plan instead of an error
-  if (!result.success) {
+  if (!result.success || !result.data) {
     logger.log('[generate-plan] AI unavailable, using fallback plan generator');
     
     const fallbackPlan = generateFallbackPlan(user, { totalWeeks, planPreferences, targetDistance });
@@ -355,10 +418,21 @@ async function generatePlanHandler(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({ 
-    plan: result.data,
-    source: 'ai'
-  });
+  try {
+    const normalizedPlan = PlanSchema.parse(normalizeAiPlan(result.data));
+    return NextResponse.json({ 
+      plan: normalizedPlan,
+      source: 'ai'
+    });
+  } catch (error) {
+    logger.warn('[generate-plan] AI output normalization failed, falling back', { error });
+    const fallbackPlan = generateFallbackPlan(user, { totalWeeks, planPreferences, targetDistance });
+    return NextResponse.json({ 
+      plan: fallbackPlan,
+      source: 'fallback',
+      message: 'AI output was incomplete. Using a pre-built plan template.'
+    });
+  }
 }
 
 export const POST = withApiSecurity(withErrorHandling(generatePlanHandler, 'GeneratePlan'));
@@ -401,7 +475,7 @@ async function handleEnhancedPlanRequest(body: any) {
     async () => {
       const { object: generatedPlan } = await generateObject({
         model: openai('gpt-4o'),
-        schema: PlanSchema,
+        schema: AiPlanSchema,
         prompt,
         temperature: 0.7,
       });
@@ -410,7 +484,7 @@ async function handleEnhancedPlanRequest(body: any) {
   );
 
   // If AI fails, return a fallback plan instead of an error
-  if (!result.success) {
+  if (!result.success || !result.data) {
     logger.log('[generate-plan:enhanced] AI unavailable, using fallback plan generator');
     
     const fallbackPlan = generateFallbackPlan({
@@ -429,12 +503,30 @@ async function handleEnhancedPlanRequest(body: any) {
     });
   }
 
-  return NextResponse.json({ 
-    plan: result.data,
-    source: 'ai',
-    adaptationTrigger: requestData.adaptationTrigger,
-    userContext: requestData.userContext
-  });
+  try {
+    const normalizedPlan = PlanSchema.parse(normalizeAiPlan(result.data));
+    return NextResponse.json({ 
+      plan: normalizedPlan,
+      source: 'ai',
+      adaptationTrigger: requestData.adaptationTrigger,
+      userContext: requestData.userContext
+    });
+  } catch (error) {
+    logger.warn('[generate-plan:enhanced] AI output normalization failed, falling back', { error });
+    const fallbackPlan = generateFallbackPlan({
+      experience: requestData.userContext.experience,
+      goal: requestData.userContext.goal,
+      daysPerWeek: requestData.userContext.daysPerWeek,
+      preferredTimes: requestData.userContext.preferredTimes
+    });
+    return NextResponse.json({ 
+      plan: fallbackPlan,
+      source: 'fallback',
+      message: 'AI output was incomplete. Using a pre-built plan template.',
+      adaptationTrigger: requestData.adaptationTrigger,
+      userContext: requestData.userContext
+    });
+  }
 }
 
 /**

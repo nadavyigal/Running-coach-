@@ -443,29 +443,38 @@ Keep responses concise but informative. Always be supportive and positive. Focus
         const encoder = new TextEncoder();
         const decoder = new TextDecoder();
         let aggregatedContent = '';
+        let buffer = '';
+        const handleLine = (line: string) => {
+          if (!line) return;
+          if (line.startsWith('0:')) {
+            controller.enqueue(encoder.encode(line + '\n'));
+            try {
+              const data = JSON.parse(line.slice(2));
+              if (typeof data.textDelta === 'string') {
+                aggregatedContent += data.textDelta;
+              }
+            } catch (parseError) {
+              logger.error('??? Failed to parse streamed chat chunk:', parseError);
+            }
+            return;
+          }
+
+          aggregatedContent += line;
+          controller.enqueue(encoder.encode(`0:${JSON.stringify({ textDelta: line })}\n`));
+        };
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          const text = decoder.decode(value);
-          // Wrap raw text chunks into the expected format if they are plain text
-          const lines = text.split('\n').filter(Boolean);
+          const text = decoder.decode(value, { stream: true });
+          buffer += text;
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
           for (const line of lines) {
-            // If already in the expected format, pass through
-            if (line.startsWith('0:')) {
-              controller.enqueue(encoder.encode(line + '\n'));
-              try {
-                const data = JSON.parse(line.slice(2));
-                if (typeof data.textDelta === 'string') {
-                  aggregatedContent += data.textDelta;
-                }
-              } catch (parseError) {
-                logger.error('❌ Failed to parse streamed chat chunk:', parseError);
-              }
-            } else {
-              aggregatedContent += line;
-              controller.enqueue(encoder.encode(`0:${JSON.stringify({ textDelta: line })}\n`));
-            }
+            handleLine(line);
           }
+        }
+        if (buffer.trim()) {
+          handleLine(buffer);
         }
         if (normalizedUserId && aggregatedContent) {
           try {

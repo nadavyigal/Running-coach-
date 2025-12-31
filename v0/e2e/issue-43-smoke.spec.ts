@@ -116,8 +116,9 @@ test.describe('Issue #43 - Smoke (multi-device)', () => {
       await page.addInitScript(() => {
       const route = [
         { lat: 37.7749, lng: -122.4194 },
-        { lat: 37.7759, lng: -122.4194 },
-        { lat: 37.7769, lng: -122.4194 },
+        { lat: 37.77495, lng: -122.4194 },
+        { lat: 37.775, lng: -122.4194 },
+        { lat: 37.77505, lng: -122.4194 },
       ]
 
       const makePosition = (point) => ({

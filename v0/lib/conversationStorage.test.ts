@@ -7,35 +7,23 @@ vi.mock('./db', () => ({
   db: {
     conversationMessages: {
       add: vi.fn(),
+      get: vi.fn(),
       where: vi.fn(() => ({
         equals: vi.fn(() => ({
-          orderBy: vi.fn(() => ({
-            offset: vi.fn(() => ({
-              limit: vi.fn(() => ({
-                toArray: vi.fn()
-              }))
-            })),
-            limit: vi.fn(() => ({
-              toArray: vi.fn()
-            })),
-            toArray: vi.fn()
-          })),
-          count: vi.fn(),
+          count: vi.fn().mockResolvedValue(0),
           delete: vi.fn()
         }))
       })),
-      toArray: vi.fn(),
+      toArray: vi.fn().mockResolvedValue([]),
       bulkDelete: vi.fn()
     },
     onboardingSessions: {
       get: vi.fn(),
       add: vi.fn(),
-      where: vi.fn(() => ({
-        equals: vi.fn(() => ({
-          delete: vi.fn()
-        }))
-      })),
-      toArray: vi.fn()
+      update: vi.fn(),
+      delete: vi.fn(),
+      where: vi.fn(),
+      toArray: vi.fn().mockResolvedValue([])
     }
   }
 }))
@@ -126,19 +114,23 @@ describe('ConversationStorage', () => {
       ]
 
       const { db } = await import('./db')
-      const mockQuery = {
-        orderBy: vi.fn(() => ({
-          toArray: vi.fn().mockResolvedValue(mockMessages)
-        }))
-      }
-      vi.mocked(db.conversationMessages.where).mockReturnValue({
-        equals: vi.fn(() => mockQuery)
-      } as any)
-      vi.mocked(db.conversationMessages.where).mockReturnValue({
-        equals: vi.fn(() => ({
-          count: vi.fn().mockResolvedValue(1)
-        }))
-      } as any)
+      const mockMessagesQuery: any = {}
+      mockMessagesQuery.offset = vi.fn(() => mockMessagesQuery)
+      mockMessagesQuery.limit = vi.fn(() => mockMessagesQuery)
+      mockMessagesQuery.toArray = vi.fn().mockResolvedValue(mockMessages)
+      const mockEquals = vi.fn(() => ({
+        orderBy: vi.fn(() => mockMessagesQuery),
+        count: vi.fn().mockResolvedValue(1)
+      }))
+      vi.mocked(db.conversationMessages.where).mockImplementation((index: string) => {
+        if (index === '[conversationId+timestamp]') {
+          return {}
+        }
+        if (index === 'conversationId') {
+          return { equals: mockEquals }
+        }
+        return { equals: vi.fn() }
+      })
 
       const result = await storage.loadConversation('conv_123')
 
@@ -149,19 +141,26 @@ describe('ConversationStorage', () => {
 
     it('should handle pagination options', async () => {
       const { db } = await import('./db')
-      const mockOffset = vi.fn(() => ({
-        limit: vi.fn(() => ({
-          toArray: vi.fn().mockResolvedValue([])
-        }))
+      const mockMessagesQuery: any = {}
+      const mockOffset = vi.fn(() => mockMessagesQuery)
+      const mockLimit = vi.fn(() => mockMessagesQuery)
+      const mockToArray = vi.fn().mockResolvedValue([])
+      mockMessagesQuery.offset = mockOffset
+      mockMessagesQuery.limit = mockLimit
+      mockMessagesQuery.toArray = mockToArray
+      const mockEquals = vi.fn(() => ({
+        orderBy: vi.fn(() => mockMessagesQuery),
+        count: vi.fn().mockResolvedValue(0)
       }))
-      const mockQuery = {
-        orderBy: vi.fn(() => ({
-          offset: mockOffset
-        }))
-      }
-      vi.mocked(db.conversationMessages.where).mockReturnValue({
-        equals: vi.fn(() => mockQuery)
-      } as any)
+      vi.mocked(db.conversationMessages.where).mockImplementation((index: string) => {
+        if (index === '[conversationId+timestamp]') {
+          return {}
+        }
+        if (index === 'conversationId') {
+          return { equals: mockEquals }
+        }
+        return { equals: vi.fn() }
+      })
 
       await storage.loadConversation('conv_123', {
         limit: 10,
@@ -184,24 +183,42 @@ describe('ConversationStorage', () => {
         }
       ]
 
-      vi.mocked(db.onboardingSessions.where).mockReturnValue({
-        below: vi.fn(() => ({
-          toArray: vi.fn().mockResolvedValue(oldSessions)
-        }))
-      } as any)
-
       const mockDeleteMessages = vi.fn()
       const mockDeleteSession = vi.fn()
-      vi.mocked(db.conversationMessages.where).mockReturnValue({
-        equals: vi.fn(() => ({
-          delete: mockDeleteMessages
-        }))
-      } as any)
-      vi.mocked(db.onboardingSessions.where).mockReturnValue({
-        equals: vi.fn(() => ({
-          delete: mockDeleteSession
-        }))
-      } as any)
+      vi.mocked(db.onboardingSessions.toArray).mockResolvedValue(oldSessions as any)
+      vi.mocked(db.conversationMessages.toArray).mockResolvedValue([] as any)
+      vi.mocked(db.onboardingSessions.where).mockImplementation((index: string) => {
+        if (index === 'createdAt') {
+          return {
+            below: vi.fn(() => ({
+              toArray: vi.fn().mockResolvedValue(oldSessions)
+            }))
+          }
+        }
+        if (index === 'conversationId') {
+          return {
+            equals: vi.fn(() => ({
+              delete: mockDeleteSession
+            }))
+          }
+        }
+        return { equals: vi.fn(() => ({ delete: mockDeleteSession })) }
+      })
+      vi.mocked(db.conversationMessages.where).mockImplementation((index: string) => {
+        if (index === 'conversationId') {
+          return {
+            equals: vi.fn(() => ({
+              delete: mockDeleteMessages,
+              count: vi.fn().mockResolvedValue(0),
+              toArray: vi.fn().mockResolvedValue([])
+            }))
+          }
+        }
+        if (index === '[conversationId+timestamp]') {
+          return {}
+        }
+        return { equals: vi.fn() }
+      })
 
       const result = await storage.performMaintenance()
 
@@ -228,13 +245,22 @@ describe('ConversationStorage', () => {
       ]
 
       const { db } = await import('./db')
-      vi.mocked(db.conversationMessages.where).mockReturnValue({
-        equals: vi.fn(() => ({
-          orderBy: vi.fn(() => ({
-            toArray: vi.fn().mockResolvedValue(validMessages)
-          }))
-        }))
-      } as any)
+      vi.mocked(db.conversationMessages.where).mockImplementation((index: string) => {
+        if (index === '[conversationId+timestamp]') {
+          return {}
+        }
+        if (index === 'conversationId') {
+          return {
+            equals: vi.fn(() => ({
+              orderBy: vi.fn(() => ({
+                toArray: vi.fn().mockResolvedValue(validMessages)
+              })),
+              count: vi.fn().mockResolvedValue(1)
+            }))
+          }
+        }
+        return { equals: vi.fn() }
+      })
       vi.mocked(db.onboardingSessions.get).mockResolvedValue({
         id: 1,
         userId: 123,
@@ -266,14 +292,22 @@ describe('ConversationStorage', () => {
         }
       ]
 
-      vi.mocked(db.conversationMessages.where).mockReturnValue({
-        equals: vi.fn(() => ({
-          orderBy: vi.fn(() => ({
-            toArray: vi.fn().mockResolvedValue(mockMessages)
-          })),
-          count: vi.fn().mockResolvedValue(1)
-        }))
-      } as any)
+      vi.mocked(db.conversationMessages.where).mockImplementation((index: string) => {
+        if (index === '[conversationId+timestamp]') {
+          return {}
+        }
+        if (index === 'conversationId') {
+          return {
+            equals: vi.fn(() => ({
+              orderBy: vi.fn(() => ({
+                toArray: vi.fn().mockResolvedValue(mockMessages)
+              })),
+              count: vi.fn().mockResolvedValue(1)
+            }))
+          }
+        }
+        return { equals: vi.fn() }
+      })
 
       const result = await storage.exportConversation('conv_123')
 
@@ -314,8 +348,8 @@ describe('SessionManager Integration', () => {
   it('should detect session conflicts', async () => {
     const { db } = await import('./db')
     const multipleSessions = [
-      { id: 1, conversationId: 'conv_1', isCompleted: false },
-      { id: 2, conversationId: 'conv_2', isCompleted: false }
+      { id: 1, userId: 123, conversationId: 'conv_1', goalDiscoveryPhase: 'motivation', sessionProgress: 0, isCompleted: false },
+      { id: 2, userId: 123, conversationId: 'conv_2', goalDiscoveryPhase: 'motivation', sessionProgress: 0, isCompleted: false }
     ]
 
     vi.mocked(db.onboardingSessions.where).mockReturnValue({

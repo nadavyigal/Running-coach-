@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { db, type ConversationMessage, type OnboardingSession } from './db'
 
 export interface ConversationData {
@@ -104,22 +105,33 @@ export class ConversationStorage {
       } = options
 
       // Load messages with pagination
-      let messages = await db.conversationMessages
-        .where('conversationId')
-        .equals(conversationId)
-        .toArray()
+      const indexedQuery = db.conversationMessages
+        .where('[conversationId+timestamp]')
+      const hasBetween = typeof (indexedQuery as any).between === "function"
+      const baseQuery = hasBetween
+        ? (indexedQuery as any).between([conversationId, Dexie.minKey], [conversationId, Dexie.maxKey])
+        : db.conversationMessages.where('conversationId').equals(conversationId)
 
-      // Sort by timestamp in memory
-      messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+      let messagesQuery: any = baseQuery
+      if (!hasBetween && typeof messagesQuery.orderBy === "function") {
+        messagesQuery = messagesQuery.orderBy('timestamp')
+      }
+      if (offset > 0 && typeof messagesQuery.offset === "function") {
+        messagesQuery = messagesQuery.offset(offset)
+      }
+      if (limit > 0 && typeof messagesQuery.limit === "function") {
+        messagesQuery = messagesQuery.limit(limit)
+      }
 
-      // Apply pagination in memory
-      if (offset > 0 || limit > 0) {
+      let messages = await messagesQuery.toArray()
+      if (!hasBetween && typeof messagesQuery.orderBy !== "function") {
+        messages.sort((a: any, b: any) => a.timestamp.getTime() - b.timestamp.getTime())
+      }
+      if (!hasBetween && (offset > 0 || limit > 0) && typeof messagesQuery.offset !== "function") {
         const start = offset
         const end = limit > 0 ? offset + limit : messages.length
         messages = messages.slice(start, end)
       }
-      
-      // Get total count
       const totalMessages = await db.conversationMessages
         .where('conversationId')
         .equals(conversationId)

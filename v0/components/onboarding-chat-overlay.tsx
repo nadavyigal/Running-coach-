@@ -452,42 +452,77 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete }: Onboardin
       setMessages(prev => [...prev, assistantMessage])
 
       // Add timeout for streaming
+      const STREAM_TIMEOUT_MS = 30000
+      let streamTimeoutError: Error | null = null
       const timeout = setTimeout(() => {
+        streamTimeoutError = new Error('Streaming response timeout')
         reader.cancel()
-        throw new Error('Streaming response timeout')
-      }, 30000) // 30 second timeout
-
-      try {
-        while (reader) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          const chunk = decoder.decode(value)
-          const lines = chunk.split('\n')
-          
-          for (const line of lines) {
-            if (!line) continue
-            if (line.startsWith('0:')) {
-              try {
-                const data = JSON.parse(line.slice(2))
-                if (data.textDelta) {
-                  aiContent += data.textDelta
-                  setMessages(prev => 
-                    prev.map(msg => 
-                      msg.id === assistantMessage.id 
-                        ? { ...msg, content: aiContent }
-                        : msg
-                    )
+      }, STREAM_TIMEOUT_MS)
+      let buffer = ''
+      const handleLine = (line: string) => {
+        if (!line.trim()) return
+        if (line.startsWith('0:')) {
+          const tryParse = (frame: string) => {
+            try {
+              const data = JSON.parse(frame.slice(2))
+              if (data.textDelta) {
+                aiContent += data.textDelta
+                setMessages(prev => 
+                  prev.map(msg => 
+                    msg.id === assistantMessage.id 
+                      ? { ...msg, content: aiContent }
+                      : msg
                   )
-                }
-              } catch (e) {
-                // Ignore JSON parse errors for streaming chunks
-                console.warn('Failed to parse streaming chunk:', e)
+                )
               }
-            } else {
-              // Ignore control/error channels (2:, 3:) and any stray lines
+              return true
+            } catch (e) {
+              // Ignore JSON parse errors for streaming chunks
+              console.warn('Failed to parse streaming chunk:', e)
+              return false
             }
           }
+
+          const parsed = tryParse(line)
+          if (!parsed && line.indexOf('0:', 2) !== -1) {
+            const segments = line.split('0:').filter(Boolean)
+            for (const segment of segments) {
+              tryParse(`0:${segment}`)
+            }
+          }
+        } else {
+          // Ignore control/error channels (2:, 3:) and any stray lines
+        }
+      }
+      try {
+        while (reader) {
+          if (streamTimeoutError) {
+            throw streamTimeoutError
+          }
+
+          const readResult = await reader.read().catch((err) => {
+            if (streamTimeoutError) {
+              throw streamTimeoutError
+            }
+            throw err
+          })
+          const { done, value } = readResult
+          if (done) break
+
+          const chunk = decoder.decode(value, { stream: true })
+          buffer += chunk
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
+
+          for (const line of lines) {
+            handleLine(line)
+          }
+        }
+        if (buffer.trim()) {
+          handleLine(buffer)
+        }
+        if (streamTimeoutError) {
+          throw streamTimeoutError
         }
       } finally {
         clearTimeout(timeout)
@@ -579,8 +614,13 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete }: Onboardin
         
         try {
           // Step 1: Extract user profile and goals from conversation
-          const userProfile = extractUserProfileFromConversation(messages);
-          const goals = extractGoalsFromConversation(messages);
+          const conversationSnapshot = [
+            ...messages,
+            userMessage,
+            { ...assistantMessage, content: aiContent },
+          ]
+          const userProfile = extractUserProfileFromConversation(conversationSnapshot)
+          const goals = extractGoalsFromConversation(conversationSnapshot)
           console.log('📋 Extracted user profile:', userProfile);
           console.log('📋 Extracted goals:', goals);
           
@@ -590,7 +630,7 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete }: Onboardin
           const onboardingResult = await onboardingManager.completeAIChatOnboarding(
             goals, 
             userProfile, 
-            messages
+            conversationSnapshot
           );
           
           if (!onboardingResult.success) {

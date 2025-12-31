@@ -317,6 +317,45 @@ export function ChatScreen() {
         reader?.cancel?.('timeout');
       }, STREAM_TIMEOUT_MS);
 
+      let buffer = ''
+      const handleLine = (line: string) => {
+        if (!line.trim()) return;
+        if (line.startsWith('0:')) {
+          const tryParse = (frame: string) => {
+            try {
+              const data = JSON.parse(frame.slice(2))
+              if (data.textDelta) {
+                aiContent += data.textDelta
+                updateCount++;
+
+                console.log('??? UI Update #', updateCount, 'Content length:', aiContent.length);
+
+                setMessages(prev => {
+                  const updated = prev.map(msg => 
+                    msg.id === assistantMessage.id 
+                      ? { ...msg, content: aiContent }
+                      : msg
+                  );
+                  console.log('??? Messages array updated:', updated.length, 'messages');
+                  return updated;
+                });
+              }
+              return true;
+            } catch (parseError) {
+              console.error('??? JSON Parse Error:', parseError, 'Line:', frame);
+              return false;
+            }
+          };
+
+          const parsed = tryParse(line)
+          if (!parsed && line.indexOf('0:', 2) !== -1) {
+            const segments = line.split('0:').filter(Boolean)
+            for (const segment of segments) {
+              tryParse(`0:${segment}`)
+            }
+          }
+        }
+      }
       try {
         if (reader) {
           while (reader) {
@@ -336,36 +375,20 @@ export function ChatScreen() {
               break
             }
 
-            const chunk = decoder.decode(value)
-            console.log('?ѓу? Chunk received:', chunk.length, 'chars');
-            
-            const lines = chunk.split('\n').filter(line => line.trim());
-            
+            const chunk = decoder.decode(value, { stream: true })
+            console.log('???? Chunk received:', chunk.length, 'chars');
+
+            buffer += chunk;
+            const lines = buffer.split('\n');
+            buffer = lines.pop() ?? '';
+
             for (const line of lines) {
-              if (line.startsWith('0:')) {
-                try {
-                  const data = JSON.parse(line.slice(2))
-                  if (data.textDelta) {
-                    aiContent += data.textDelta
-                    updateCount++;
-                    
-                    console.log('?ќЕ UI Update #', updateCount, 'Content length:', aiContent.length);
-                    
-                    setMessages(prev => {
-                      const updated = prev.map(msg => 
-                        msg.id === assistantMessage.id 
-                          ? { ...msg, content: aiContent }
-                          : msg
-                      );
-                      console.log('?ќп Messages array updated:', updated.length, 'messages');
-                      return updated;
-                    });
-                  }
-                } catch (parseError) {
-                  console.error('?ЭМ JSON Parse Error:', parseError, 'Line:', line);
-                }
-              }
+              handleLine(line);
             }
+          }
+
+          if (buffer.trim()) {
+            handleLine(buffer);
           }
         } else {
           aiContent = 'Thanks for your message!';

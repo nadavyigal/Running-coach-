@@ -38,7 +38,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `npm run dev -- -p ${PORT}`,
+    command: `npm run dev -- --webpack -p ${PORT}`,
     port: PORT,
     reuseExistingServer: false,
     timeout: 120 * 1000,
