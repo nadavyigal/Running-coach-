@@ -16,6 +16,7 @@ vi.mock('@/lib/dbUtils', () => ({
     getWorkoutsForDateRange: vi.fn(),
     getCoachingProfile: vi.fn(),
     getStreakData: vi.fn(),
+    getPrimaryGoal: vi.fn(),
   },
 }));
 
@@ -61,6 +62,12 @@ vi.mock('./goal-recommendations', () => ({
 vi.mock('./coaching-insights-widget', () => ({
   CoachingInsightsWidget: ({ userId }: any) => (
     <div data-testid="coaching-insights">Coaching Insights for user {userId}</div>
+  ),
+}));
+
+vi.mock('./habit-analytics-widget', () => ({
+  HabitAnalyticsWidget: ({ userId }: any) => (
+    <div data-testid="habit-analytics">Habit Analytics for user {userId}</div>
   ),
 }));
 
@@ -124,6 +131,7 @@ describe('TodayScreen', () => {
     dbUtils.getWorkoutsForDateRange.mockResolvedValue([]);
     dbUtils.getCoachingProfile.mockResolvedValue(null);
     dbUtils.getStreakData.mockResolvedValue({ currentStreak: 0, longestStreak: 0 });
+    dbUtils.getPrimaryGoal.mockResolvedValue(null);
   });
 
   it('renders dashboard with today workout and actions', async () => {

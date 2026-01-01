@@ -3,43 +3,65 @@ import { test, expect } from '@playwright/test'
 test.describe('Onboarding to Today - Atomic and Gated', () => {
   test('completes onboarding and lands on Today with plan loaded', async ({ page }) => {
     await page.goto('/')
+    await page.evaluate(async () => {
+      localStorage.clear()
+      sessionStorage.clear()
 
-    // Step 1 -> 2
-    await page.getByRole('button', { name: /get started/i }).click()
+      const dbNames = ['RunSmartDB', 'running-coach-db', 'RunningCoachDB']
+      await Promise.all(
+        dbNames.map(
+          (dbName) =>
+            new Promise((resolve) => {
+              try {
+                const req = indexedDB.deleteDatabase(dbName)
+                req.onsuccess = () => resolve(true)
+                req.onerror = () => resolve(true)
+                req.onblocked = () => resolve(true)
+              } catch {
+                resolve(true)
+              }
+            })
+        )
+      )
+    })
 
-    // Goal
-    await page.getByText(/Build a Running Habit/i).click()
-    await page.getByRole('button', { name: /continue/i }).click()
+    await completeOnboarding(page)
 
-    // Experience
-    await page.getByText(/Beginner/i).click()
-    await page.getByRole('button', { name: /continue/i }).click()
+    const mainNav = page.getByRole('navigation', { name: /main navigation/i })
+    await expect(mainNav).toBeVisible({ timeout: 15000 })
 
-    // Optional RPE step
-    await page.getByRole('button', { name: /continue/i }).click()
+    const todayNav = page.getByRole('button', { name: /navigate to today/i })
+    await expect(todayNav).toHaveAttribute('aria-current', 'page', { timeout: 10000 })
 
-    // Age
-    await page.getByLabel(/your age/i).fill('25')
-    await page.getByRole('button', { name: /continue/i }).click()
+    const planNav = page.getByRole('button', { name: /navigate to plan/i })
+    await planNav.click()
 
-    // Schedule
-    await page.getByText(/Morning/i).click()
-    await page.getByRole('button', { name: /continue/i }).click()
-
-    // Consents
-    await page.getByLabel(/processing of my health data/i).click()
-    await page.getByLabel(/Privacy Policy/i).click()
-    await page.getByRole('button', { name: /continue/i }).click()
-
-    // Privacy
-    await page.getByRole('button', { name: /continue/i }).click()
-
-    // Finish (atomic)
-    await page.getByRole('button', { name: /Start My Journey/i }).click()
-
-    // Wait for navigation gate to pass. We should not see partial dashboard.
-    // Expect elements typical to Today or Plan.
-    await expect(page.getByText(/Training Plan/i)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('heading', { name: /training plan/i })).toBeVisible({ timeout: 15000 })
   })
 })
 
+async function completeOnboarding(page: any) {
+  await page.waitForLoadState('networkidle')
+
+  const getStarted = page.getByRole('button', { name: /get started/i })
+  await expect(getStarted).toBeVisible({ timeout: 10000 })
+  await getStarted.click()
+
+  const goalOption = page.getByText(/Build a Running Habit/i)
+  await expect(goalOption).toBeVisible({ timeout: 10000 })
+  await goalOption.click()
+  await page.getByRole('button', { name: /^continue$/i }).click()
+
+  const experienceOption = page.getByText(/^Beginner$/i)
+  await expect(experienceOption).toBeVisible({ timeout: 10000 })
+  await experienceOption.click()
+  await page.getByRole('button', { name: /^continue$/i }).click()
+
+  await page.getByLabel(/your age/i).fill('25')
+  await page.getByRole('button', { name: /^continue$/i }).click()
+
+  await page.getByText(/Morning/i).click()
+  await page.getByRole('button', { name: /^continue$/i }).click()
+
+  await page.getByRole('button', { name: /start my journey/i }).click()
+}

@@ -379,7 +379,12 @@ function generateFallbackPlan(
  * @since 1.0.0
  */
 async function generatePlanHandler(req: NextRequest) {
-  const body = await req.json();
+  let body: any = {};
+  try {
+    body = await req.json();
+  } catch (error) {
+    logger.warn('[generate-plan] Failed to parse request body, using defaults', { error });
+  }
   
   // Check if this is an enhanced request with onboarding data
   if (body.userContext) {
@@ -748,3 +753,4 @@ Generate a structured plan that will help this runner achieve their goals safely
 
   return prompt;
 } 
+

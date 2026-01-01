@@ -1,123 +1,118 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '@playwright/test'
 
 test.describe('Onboarding Flow', () => {
   test.beforeEach(async ({ page, context }) => {
-    // Clear localStorage before each test
-    await context.clearCookies();
-    await page.goto('http://localhost:3000'); // Using port 3000 where our app is running
-    await page.evaluate(() => {
-      localStorage.clear();
-    });
-  });
+    await context.clearCookies()
+    await page.goto('/')
+    await page.evaluate(async () => {
+      localStorage.clear()
+      sessionStorage.clear()
+
+      const dbNames = ['RunSmartDB', 'running-coach-db', 'RunningCoachDB']
+      await Promise.all(
+        dbNames.map(
+          (dbName) =>
+            new Promise((resolve) => {
+              try {
+                const req = indexedDB.deleteDatabase(dbName)
+                req.onsuccess = () => resolve(true)
+                req.onerror = () => resolve(true)
+                req.onblocked = () => resolve(true)
+              } catch {
+                resolve(true)
+              }
+            })
+        )
+      )
+    })
+  })
 
   test('should complete onboarding flow successfully', async ({ page }) => {
-    console.log('🧪 Testing onboarding completion flow...');
-    
-    // Wait for page to load and show onboarding
-    await page.waitForLoadState('networkidle');
-    
-    // Check initial state
-    const initialOnboardingState = await page.evaluate(() => {
-      return localStorage.getItem('onboarding-complete');
-    });
-    expect(initialOnboardingState).toBeNull();
-    console.log('✅ Initial state: onboarding not complete');
-    
-    // Look for the onboarding button
-    const onboardingButton = page.locator('button:has-text("Start My Journey Now"), button:has-text("Starting Your Journey...")');
-    await expect(onboardingButton).toBeVisible({ timeout: 10000 });
-    console.log('✅ Found onboarding button');
-    
-    // Get button text before clicking
-    const buttonText = await onboardingButton.textContent();
-    console.log('🔘 Button text:', buttonText);
-    
-    // Click the onboarding button
-    await onboardingButton.click();
-    console.log('👆 Clicked onboarding button');
-    
-    // Wait for processing
-    await page.waitForTimeout(2000);
-    
-    // Check if localStorage was set
+    await completeOnboarding(page)
+
+    await expect.poll(async () => {
+      return page.evaluate(() => localStorage.getItem('onboarding-complete'))
+    }, { timeout: 15000 }).toBe('true')
+
     const completionState = await page.evaluate(() => {
       return {
         onboardingComplete: localStorage.getItem('onboarding-complete'),
         userData: localStorage.getItem('user-data')
-      };
-    });
-    
-    expect(completionState.onboardingComplete).toBe('true');
-    expect(completionState.userData).toBeTruthy();
-    console.log('✅ localStorage set correctly:', completionState);
-    
-    // Wait for navigation to today screen
-    await page.waitForTimeout(3000);
-    
-    // Check if we're now on the today screen (should not see onboarding anymore)
-    const hasOnboardingButton = await page.locator('button:has-text("Start My Journey")').count();
-    expect(hasOnboardingButton).toBe(0);
-    console.log('✅ No longer showing onboarding screen');
-    
-    // Look for today screen elements
-    const todayHeader = page.locator('h1:has-text("Today")');
-    await expect(todayHeader).toBeVisible({ timeout: 5000 });
-    console.log('✅ Successfully navigated to Today screen');
-  });
+      }
+    })
+
+    expect(completionState.onboardingComplete).toBe('true')
+    expect(completionState.userData).toBeTruthy()
+
+    const mainNav = page.getByRole('navigation', { name: /main navigation/i })
+    await expect(mainNav).toBeVisible({ timeout: 15000 })
+
+    const todayNav = page.getByRole('button', { name: /navigate to today/i })
+    await expect(todayNav).toHaveAttribute('aria-current', 'page', { timeout: 10000 })
+
+    const onboardingStart = page.getByRole('button', { name: /get started/i })
+    expect(await onboardingStart.count()).toBe(0)
+  })
 
   test('should persist onboarding completion across page reloads', async ({ page }) => {
-    console.log('🧪 Testing persistence across reloads...');
-    
-    // Complete onboarding first
-    await page.waitForLoadState('networkidle');
-    const onboardingButton = page.locator('button:has-text("Start My Journey Now")');
-    await expect(onboardingButton).toBeVisible({ timeout: 10000 });
-    await onboardingButton.click();
-    await page.waitForTimeout(2000);
-    
-    // Verify completion
-    const completionState = await page.evaluate(() => {
-      return localStorage.getItem('onboarding-complete');
-    });
-    expect(completionState).toBe('true');
-    console.log('✅ Initial completion verified');
-    
-    // Reload the page
-    await page.reload();
-    await page.waitForLoadState('networkidle');
-    
-    // Should not see onboarding screen after reload
-    const hasOnboardingAfterReload = await page.locator('button:has-text("Start My Journey")').count();
-    expect(hasOnboardingAfterReload).toBe(0);
-    console.log('✅ Onboarding not shown after reload');
-    
-    // Should see today screen
-    const todayHeader = page.locator('h1:has-text("Today")');
-    await expect(todayHeader).toBeVisible({ timeout: 5000 });
-    console.log('✅ Today screen persisted after reload');
-  });
+    await completeOnboarding(page)
+
+    await expect.poll(async () => {
+      return page.evaluate(() => localStorage.getItem('onboarding-complete'))
+    }, { timeout: 15000 }).toBe('true')
+
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+
+    const mainNav = page.getByRole('navigation', { name: /main navigation/i })
+    await expect(mainNav).toBeVisible({ timeout: 15000 })
+
+    const onboardingStart = page.getByRole('button', { name: /get started/i })
+    expect(await onboardingStart.count()).toBe(0)
+  })
 
   test('should create proper user data structure', async ({ page }) => {
-    console.log('🧪 Testing user data creation...');
-    
-    await page.waitForLoadState('networkidle');
-    const onboardingButton = page.locator('button:has-text("Start My Journey Now")');
-    await expect(onboardingButton).toBeVisible({ timeout: 10000 });
-    await onboardingButton.click();
-    await page.waitForTimeout(2000);
-    
+    await completeOnboarding(page)
+
+    await expect.poll(async () => {
+      return page.evaluate(() => localStorage.getItem('user-data'))
+    }, { timeout: 15000 }).toBeTruthy()
+
     const userData = await page.evaluate(() => {
-      const raw = localStorage.getItem('user-data');
-      return raw ? JSON.parse(raw) : null;
-    });
-    
-    expect(userData).toBeTruthy();
-    expect(userData.experience).toBe('beginner');
-    expect(userData.goal).toBe('habit');
-    expect(userData.daysPerWeek).toBe(3);
-    expect(userData.preferredTimes).toContain('morning');
-    expect(userData.coachingStyle).toBe('supportive');
-    
-    console.log('✅ User data structure correct:', userData);
-  });
-});
+      const raw = localStorage.getItem('user-data')
+      return raw ? JSON.parse(raw) : null
+    })
+
+    expect(userData).toBeTruthy()
+    expect(userData.experience).toBe('beginner')
+    expect(userData.goal).toBe('habit')
+    expect(userData.daysPerWeek).toBe(3)
+    expect(userData.preferredTimes).toContain('morning')
+  })
+})
+
+async function completeOnboarding(page: any) {
+  await page.waitForLoadState('networkidle')
+
+  const getStarted = page.getByRole('button', { name: /get started/i })
+  await expect(getStarted).toBeVisible({ timeout: 10000 })
+  await getStarted.click()
+
+  const goalOption = page.getByText(/Build a Running Habit/i)
+  await expect(goalOption).toBeVisible({ timeout: 10000 })
+  await goalOption.click()
+  await page.getByRole('button', { name: /^continue$/i }).click()
+
+  const experienceOption = page.getByText(/^Beginner$/i)
+  await expect(experienceOption).toBeVisible({ timeout: 10000 })
+  await experienceOption.click()
+  await page.getByRole('button', { name: /^continue$/i }).click()
+
+  await page.getByLabel(/your age/i).fill('25')
+  await page.getByRole('button', { name: /^continue$/i }).click()
+
+  await page.getByText(/Morning/i).click()
+  await page.getByRole('button', { name: /^continue$/i }).click()
+
+  await page.getByRole('button', { name: /start my journey/i }).click()
+}

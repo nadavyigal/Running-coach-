@@ -1,6 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 3010;
+const PORT = Number(process.env.PLAYWRIGHT_PORT || 3010);
+const USE_PROD = process.env.PLAYWRIGHT_USE_PROD === 'true';
+const IS_WINDOWS = process.platform === 'win32';
+const PROD_COMMAND = IS_WINDOWS
+  ? `set PORT=${PORT}&& npm run start`
+  : `PORT=${PORT} npm run start`;
+const DEV_COMMAND = `npm run dev -- --webpack -p ${PORT}`;
 
 export default defineConfig({
   testDir: './e2e',
@@ -38,7 +44,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `npm run dev -- --webpack -p ${PORT}`,
+    command: USE_PROD ? PROD_COMMAND : DEV_COMMAND,
     port: PORT,
     reuseExistingServer: false,
     timeout: 120 * 1000,

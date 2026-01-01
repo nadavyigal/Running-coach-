@@ -2,17 +2,17 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Quick Onboarding Test', () => {
   test('verify onboarding works on correct port', async ({ page }) => {
-    console.log('🔍 Testing onboarding on localhost:3000...');
+    console.log('🔍 Testing onboarding on baseURL...');
     
     // Clear storage first
-    await page.goto('http://localhost:3000');
+    await page.goto('/');
     await page.evaluate(() => {
       localStorage.clear();
       sessionStorage.clear();
     });
     
     // Navigate to app
-    await page.goto('http://localhost:3000');
+    await page.goto('/');
     
     // Wait for app to load
     await page.waitForTimeout(3000);

@@ -24,7 +24,7 @@ test.describe('Comprehensive Error Fix and Flow Test', () => {
     });
     
     // Navigate to app
-    await page.goto('http://localhost:3000');
+    await page.goto('/');
     
     // Clear storage to ensure fresh start
     await page.evaluate(() => {
