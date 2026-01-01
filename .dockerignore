@@ -1,0 +1,15 @@
+node_modules
+dist
+.next
+.git
+*.md
+.env.local
+v0/node_modules
+v0/.next
+v0/dist
+services/worker/node_modules
+services/worker/dist
+.vercel
+.claude
+.vscode
+*.log

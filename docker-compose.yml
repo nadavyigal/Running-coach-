@@ -1,0 +1,41 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    build:
+      context: .
+      dockerfile: services/worker/Dockerfile
+      target: base
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=development
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_TLS=false
+      - LOG_LEVEL=debug
+    volumes:
+      - ./services/worker/src:/app/src:ro
+      - ./services/shared:/app/shared:ro
+      - /app/node_modules
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+    command: npm run dev
+
+volumes:
+  redis-data:

@@ -11,6 +11,11 @@
 # playwright artifacts
 .playwright-mcp/
 
+# local tooling and scratch
+.mcp.json
+Running-coach-/
+v0/test-results/
+
 # accidental nested V0 directory
 V0/V0/
 
