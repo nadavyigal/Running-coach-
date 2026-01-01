@@ -3,7 +3,7 @@ import { validateEnvironmentConfiguration } from '@/lib/apiKeyManager'
 
 // Simple health check endpoint used by the NetworkStatusMonitor to
 // avoid noisy connection-refused errors in the browser console.
-// Last updated: 2026-01-01 16:30 - Force redeploy with newest API key
+// Last updated: 2026-01-01 16:47 - Redeploy after confirming sk-proj prefix on Vercel
 export async function GET(request: Request) {
   // If diagnostic mode is requested via query param
   const url = new URL(request.url);
