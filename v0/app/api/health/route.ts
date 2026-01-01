@@ -1,8 +1,38 @@
 import { NextResponse } from 'next/server'
+import { validateEnvironmentConfiguration } from '@/lib/apiKeyManager'
 
 // Simple health check endpoint used by the NetworkStatusMonitor to
 // avoid noisy connection-refused errors in the browser console.
-export async function GET() {
+export async function GET(request: Request) {
+  // If diagnostic mode is requested via query param
+  const url = new URL(request.url);
+  if (url.searchParams.get('diagnostic') === 'true') {
+    try {
+      const envCheck = validateEnvironmentConfiguration();
+      const hasOpenAI = !!process.env.OPENAI_API_KEY;
+      const openAIPrefix = process.env.OPENAI_API_KEY?.substring(0, 8) || 'missing';
+
+      return NextResponse.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'unknown',
+        checks: {
+          openai: {
+            configured: hasOpenAI,
+            prefix: openAIPrefix,
+            valid: envCheck.isValid
+          },
+          issues: envCheck.issues
+        }
+      });
+    } catch (error) {
+      return NextResponse.json({
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }, { status: 500 });
+    }
+  }
+
   return new NextResponse(null, { status: 200 })
 }
 
