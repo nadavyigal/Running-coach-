@@ -7,6 +7,9 @@ import { withSecureOpenAI } from '@/lib/apiKeyManager';
 import { withApiSecurity } from '@/lib/security.middleware';
 import { logger } from '@/lib/logger';
 import { WORKOUT } from '@/lib/constants';
+import { sanitizeForPrompt, sanitizeDistance, sanitizeTimeDuration, sanitizeName } from '@/lib/security';
+import { parseISO, format, isValid } from 'date-fns';
+import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 
 /**
  * Zod schema for user context from onboarding data
@@ -242,9 +245,25 @@ function generateFallbackPlan(
   const longRunDayPref = isWeekdayShort(preferences.longRunDay) ? (preferences.longRunDay as WeekdayShort) : undefined
   const longRunDay = longRunDayPref && selectedDays.includes(longRunDayPref) ? longRunDayPref : selectedDays[selectedDays.length - 1]
 
-  const raceDateRaw = preferences.raceDate
-  const raceDate = raceDateRaw ? new Date(raceDateRaw) : null
-  const raceDay = raceDate && !Number.isNaN(raceDate.getTime()) ? getWeekdayShortFromDate(raceDate) : undefined
+  // Parse race date with timezone awareness to prevent off-by-one errors
+  const raceDateRaw = preferences.raceDate;
+  let raceDate: Date | null = null;
+  if (raceDateRaw) {
+    try {
+      // Try parsing as ISO string first
+      const parsedDate = parseISO(raceDateRaw);
+      if (isValid(parsedDate)) {
+        // Assume user's local timezone if not specified
+        // In a real app, get user.timezone from database
+        const userTimezone = user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+        raceDate = fromZonedTime(parsedDate, userTimezone);
+      }
+    } catch (e) {
+      logger.error('Failed to parse race date:', raceDateRaw, e);
+      raceDate = null;
+    }
+  }
+  const raceDay = raceDate && isValid(raceDate) ? getWeekdayShortFromDate(raceDate) : undefined
   const raceDistanceKm = getDistanceKmFromTargetDistance(options?.targetDistance)
 
   const volume: string | undefined = preferences.trainingVolume
@@ -604,10 +623,23 @@ function buildPlanPromptV2(
     ? preferences.trainingDays.filter((d: any) => isWeekdayShort(d))
     : null;
   const longRunDay = isWeekdayShort(preferences.longRunDay) ? (preferences.longRunDay as WeekdayShort) : undefined;
+
+  // Parse race date with timezone awareness to prevent off-by-one errors
   const raceDateRaw = preferences.raceDate;
-  const raceDate = raceDateRaw ? new Date(raceDateRaw) : null;
-  const raceDay =
-    raceDate && !Number.isNaN(raceDate.getTime()) ? getWeekdayShortFromDate(raceDate) : undefined;
+  let raceDate: Date | null = null;
+  if (raceDateRaw) {
+    try {
+      const parsedDate = parseISO(raceDateRaw);
+      if (isValid(parsedDate)) {
+        const userTimezone = user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+        raceDate = fromZonedTime(parsedDate, userTimezone);
+      }
+    } catch (e) {
+      logger.error('Failed to parse race date:', raceDateRaw, e);
+      raceDate = null;
+    }
+  }
+  const raceDay = raceDate && isValid(raceDate) ? getWeekdayShortFromDate(raceDate) : undefined;
   const raceDistanceKm = getDistanceKmFromTargetDistance(targetDistance);
 
   const requestedWeeks =
@@ -631,6 +663,14 @@ function buildPlanPromptV2(
       ? `- Final workout: Week ${resolvedWeeks} ${raceDay} time-trial (${raceDistanceKm}km)`
       : '';
 
+  // Sanitize all user-controlled inputs to prevent prompt injection
+  const sanitizedPlanType = planType ? sanitizeForPrompt(planType, 50) : '';
+  const sanitizedDistance = targetDistance ? sanitizeForPrompt(targetDistance, 50) : '';
+  const sanitizedVolume = trainingVolume ? sanitizeForPrompt(trainingVolume, 50) : '';
+  const sanitizedDifficulty = difficulty ? sanitizeForPrompt(difficulty, 50) : '';
+  const sanitizedLongRunDay = longRunDay ? sanitizeForPrompt(longRunDay, 20) : '';
+  const sanitizedRaceDay = raceDay ? sanitizeForPrompt(raceDay, 20) : '';
+
   return `Create a personalized running training plan for a runner with the following profile:
 
 **Runner Profile:**
@@ -638,18 +678,18 @@ function buildPlanPromptV2(
 - Primary Goal: ${user.goal === 'habit' ? 'Build consistent running habit' : user.goal === 'distance' ? 'Increase running distance' : 'Improve running speed'}
 - Training Days: ${user.daysPerWeek} days per week
 - Preferred Times: ${user.preferredTimes.join(', ')}
-${planType ? `- Plan Type: ${planType}` : ''}
-${targetDistance ? `- Target Distance: ${targetDistance}` : ''}
+${sanitizedPlanType ? `- Plan Type: ${sanitizedPlanType}` : ''}
+${sanitizedDistance ? `- Target Distance: ${sanitizedDistance}` : ''}
 ${typeof currentRaceTimeSeconds === 'number' ? `- Estimated current race time: ${formatTimeHms(currentRaceTimeSeconds)}` : ''}
-${trainingVolume ? `- Training volume preference: ${trainingVolume}` : ''}
-${difficulty ? `- Difficulty preference: ${difficulty}` : ''}
+${sanitizedVolume ? `- Training volume preference: ${sanitizedVolume}` : ''}
+${sanitizedDifficulty ? `- Difficulty preference: ${sanitizedDifficulty}` : ''}
 ${rookie_challenge ? '\n- This user is a rookie and should receive a 14-day rookie challenge plan focused on habit-building and gradual progression.' : ''}
 
 **Scheduling constraints:**
 ${schedulingLine}
-${longRunDay ? `- Weekly long run day: ${longRunDay}` : ''}
+${sanitizedLongRunDay ? `- Weekly long run day: ${sanitizedLongRunDay}` : ''}
 ${raceLine}
-${raceDate && !Number.isNaN(raceDate.getTime()) ? `- Race date: ${raceDate.toDateString()}` : ''}
+${raceDate && isValid(raceDate) ? `- Race date: ${format(raceDate, 'EEEE, MMMM d, yyyy')}` : ''}
 
 **Requirements:**
 - totalWeeks MUST be ${resolvedWeeks} (and workouts must use week numbers 1..${resolvedWeeks})
@@ -684,7 +724,12 @@ Generate a structured plan that will help this runner achieve their goals safely
  */
 function buildEnhancedPlanPrompt(requestData: any): string {
   const { userContext, recentRuns, currentGoals, adaptationTrigger } = requestData;
-  
+
+  // Sanitize user-controlled inputs to prevent prompt injection
+  const sanitizedMotivations = userContext.motivations?.map((m: string) => sanitizeForPrompt(m, 100)) || [];
+  const sanitizedBarriers = userContext.barriers?.map((b: string) => sanitizeForPrompt(b, 100)) || [];
+  const sanitizedTrigger = adaptationTrigger ? sanitizeForPrompt(adaptationTrigger, 200) : '';
+
   const prompt = `Create a highly personalized running training plan using comprehensive user context:
 
 **Runner Profile:**
@@ -695,8 +740,8 @@ function buildEnhancedPlanPrompt(requestData: any): string {
 ${userContext.age ? `- Age: ${userContext.age} years old` : ''}
 
 **Personal Context:**
-- Motivations: ${userContext.motivations.join(', ')}
-- Barriers: ${userContext.barriers.join(', ')}
+- Motivations: ${sanitizedMotivations.join(', ')}
+- Barriers: ${sanitizedBarriers.join(', ')}
 - Coaching Style: ${userContext.coachingStyle} (adjust tone and detail level accordingly)
 
 **Recent Performance:**
@@ -716,12 +761,12 @@ ${currentGoals && currentGoals.length > 0 ?
 }
 
 **Adaptation Context:**
-${adaptationTrigger ? `- Trigger: ${adaptationTrigger} (adjust plan accordingly)` : '- New plan generation'}
+${sanitizedTrigger ? `- Trigger: ${sanitizedTrigger} (adjust plan accordingly)` : '- New plan generation'}
 
 **Requirements:**
 - Create a ${userContext.experience === 'beginner' ? '4-week' : userContext.experience === 'intermediate' ? '6-week' : '8-week'} progressive training plan
-- Address specific barriers: ${userContext.barriers.join(', ')}
-- Align with motivations: ${userContext.motivations.join(', ')}
+- Address specific barriers: ${sanitizedBarriers.join(', ')}
+- Align with motivations: ${sanitizedMotivations.join(', ')}
 - Use ${userContext.coachingStyle} coaching style with appropriate tone and detail
 - Include variety: easy runs, tempo runs, intervals, long runs, and rest days
 - Follow the 80/20 rule (80% easy, 20% hard efforts)

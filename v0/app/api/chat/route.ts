@@ -8,43 +8,26 @@ import { withChatSecurity, validateAndSanitizeInput, ApiRequest } from '@/lib/se
 // Error handling is managed by the secure wrapper and middleware
 import { withSecureOpenAI } from '@/lib/apiKeyManager'
 import { logger } from '@/lib/logger'
+import { rateLimiter, createRateLimitKey, sanitizeChatMessage } from '@/lib/security'
 
 // Token budget configuration
 const MONTHLY_TOKEN_BUDGET = 200000 // Approximate tokens for $50/mo budget
 const RATE_LIMIT_PER_USER_PER_HOUR = 50
 
-// In-memory tracking (in production, use Redis or database)
+// Legacy in-memory token tracking (kept for backward compatibility)
+// For production, migrate to Redis-based tracking
 const userTokenUsage = new Map<string, { tokens: number; lastReset: Date }>()
-const userRequestCounts = new Map<string, { count: number; lastReset: Date }>()
 
 function trackTokenUsage(userId: string, tokens: number): boolean {
   const now = new Date()
   const currentMonth = `${now.getFullYear()}-${now.getMonth()}`
   const key = `${userId}-${currentMonth}`
-  
+
   const usage = userTokenUsage.get(key) || { tokens: 0, lastReset: now }
   usage.tokens += tokens
   userTokenUsage.set(key, usage)
-  
-  return usage.tokens < MONTHLY_TOKEN_BUDGET
-}
 
-function checkRateLimit(userId: string): boolean {
-  const now = new Date()
-  const hourKey = `${userId}-${now.getHours()}`
-  
-  const requests = userRequestCounts.get(hourKey) || { count: 0, lastReset: now }
-  
-  // Reset if it's a new hour
-  if (now.getTime() - requests.lastReset.getTime() > 3600000) {
-    requests.count = 0
-    requests.lastReset = now
-  }
-  
-  requests.count++
-  userRequestCounts.set(hourKey, requests)
-  
-  return requests.count <= RATE_LIMIT_PER_USER_PER_HOUR
+  return usage.tokens < MONTHLY_TOKEN_BUDGET
 }
 
 async function chatHandler(req: ApiRequest) {
@@ -107,7 +90,9 @@ async function chatHandler(req: ApiRequest) {
     const latestMessage = messages[messages.length - 1];
     logger.log('📨 Latest message:', latestMessage);
 
-    const userMessageContent = latestMessage?.content || '';
+    // Sanitize the latest message content to prevent XSS
+    const rawUserMessage = latestMessage?.content || '';
+    const userMessageContent = sanitizeChatMessage(rawUserMessage);
 
     let userMessageStored = false;
     const persistUserMessage = async () => {
@@ -128,16 +113,30 @@ async function chatHandler(req: ApiRequest) {
       }
     };
 
-    // Rate limiting
+    // Improved rate limiting with IP tracking
     logger.log('🔍 Checking rate limits...');
-    if (userIdKey && !checkRateLimit(userIdKey)) {
-      logger.warn(`⚠️ Rate limit exceeded for user ${userId}`);
-      return new Response(JSON.stringify({ 
-        error: "Rate limit exceeded. Please try again later." 
-      }), {
-        status: 429,
-        headers: { "Content-Type": "application/json" }
-      })
+    if (userIdKey) {
+      const clientIP = req.clientIP || req.headers.get('x-forwarded-for') || 'unknown';
+      const rateLimitKey = createRateLimitKey(userIdKey, clientIP);
+      const rateLimit = rateLimiter.check(rateLimitKey, {
+        windowMs: 3600000, // 1 hour
+        maxRequests: RATE_LIMIT_PER_USER_PER_HOUR
+      });
+
+      if (!rateLimit.allowed) {
+        logger.warn(`⚠️ Rate limit exceeded for user ${userId} from IP ${clientIP}`);
+        return new Response(JSON.stringify({
+          error: "Rate limit exceeded. Please try again later.",
+          resetAt: rateLimit.resetAt.toISOString(),
+          remaining: rateLimit.remaining
+        }), {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": Math.ceil((rateLimit.resetAt.getTime() - Date.now()) / 1000).toString()
+          }
+        })
+      }
     }
 
     // Estimate token usage for budget check
