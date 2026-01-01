@@ -29,8 +29,6 @@ import {
   ArrowLeft,
   RefreshCw,
 } from "lucide-react"
-import { generateText } from "ai"
-import { openai } from "@ai-sdk/openai"
 import { useToast } from "@/hooks/use-toast"
 
 interface AddRunModalProps {
@@ -413,41 +411,31 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
 
     setIsGenerating(true)
     try {
-      const { text } = await generateText({
-        model: openai("gpt-4o"),
-        system: `You are an expert running coach. Create a detailed workout breakdown for a ${selectedWorkout.name} run. 
-        
-        Format your response as a JSON object with this structure:
-        {
-          "title": "Workout Name",
-          "description": "Brief description",
-          "duration": "estimated time range",
-          "phases": [
-            {
-              "phase": "Warm-up",
-              "color": "bg-gray-500",
-              "repeat": "optional repeat label",
-              "steps": [
-                {
-                  "step": 1,
-                  "description": "detailed instruction",
-                  "detail": "additional guidance (optional)",
-                  "type": "RUN"
-                }
-              ]
-            }
-          ]
-        }
-        
-        Rules:
-        - Always include Warm-up, Main Set, and Cool Down phases.
-        - For interval-style workouts, add a Strides/Activation phase and use "repeat" on the Main Set with RUN/RECOVER steps.
-        - Keep steps concise and action-oriented with short cues in "detail".
-        - Return valid JSON only.`,
-        prompt: `Create a ${selectedWorkout.name} workout for ${selectedGoal === "distance" ? targetValue + " km" : targetValue + " minutes"} at ${selectedDifficulty} difficulty level. The workout should be appropriate for: ${selectedWorkout.description}.`,
+      const response = await fetch("/api/workouts/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workout: {
+            id: selectedWorkout.id,
+            name: selectedWorkout.name,
+            description: selectedWorkout.description,
+          },
+          goalType: selectedGoal,
+          targetValue,
+          difficulty: selectedDifficulty,
+        }),
       })
 
-      const workoutData = JSON.parse(text)
+      const payload = await response.json()
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to generate workout")
+      }
+
+      const workoutData = payload?.workout
+      if (!workoutData) {
+        throw new Error("Invalid workout response")
+      }
+
       setGeneratedWorkout(workoutData)
       setStep("approve")
     } catch (error) {

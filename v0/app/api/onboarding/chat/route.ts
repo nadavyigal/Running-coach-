@@ -4,6 +4,9 @@ import { openai } from '@ai-sdk/openai'
 import { OnboardingPromptBuilder } from '@/lib/onboardingPromptBuilder'
 import { OnboardingSessionManager } from '@/lib/onboardingSessionManager'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: Request) {
   try {
     const rawBody = await req.clone().text()

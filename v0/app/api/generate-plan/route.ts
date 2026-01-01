@@ -11,6 +11,9 @@ import { sanitizeForPrompt, sanitizeDistance, sanitizeTimeDuration, sanitizeName
 import { parseISO, format, isValid } from 'date-fns';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 /**
  * Zod schema for user context from onboarding data
  * 

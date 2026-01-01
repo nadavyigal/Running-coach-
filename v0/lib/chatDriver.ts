@@ -368,7 +368,7 @@ export class ChatDriver {
         generateText({
           model: openai(config.defaultModel),
           messages: [{ role: 'user', content: 'ping' }],
-          maxOutputTokens: 5,
+          maxOutputTokens: 16,
           abortSignal: controller.signal,
         }),
         config.timeoutMs,

@@ -10,6 +10,9 @@ import { withSecureOpenAI } from '@/lib/apiKeyManager'
 import { logger } from '@/lib/logger'
 import { rateLimiter, createRateLimitKey, sanitizeChatMessage } from '@/lib/security'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 // Token budget configuration
 const MONTHLY_TOKEN_BUDGET = 200000 // Approximate tokens for $50/mo budget
 const RATE_LIMIT_PER_USER_PER_HOUR = 50
