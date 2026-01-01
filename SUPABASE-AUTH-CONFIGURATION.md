@@ -1,4 +1,4 @@
-# Supabase Authentication Configuration Guide
+﻿# Supabase Authentication Configuration Guide
 
 ## Complete URL Configuration for Run-Smart
 
@@ -12,7 +12,7 @@ This guide will help you configure Supabase authentication for your Run-Smart ap
 
 1. Go to [https://supabase.com/dashboard](https://supabase.com/dashboard)
 2. Select your project: `dxqglotcyirxzyqaxqln`
-3. Navigate to: **Authentication** → **URL Configuration**
+3. Navigate to: **Authentication** ג†’ **URL Configuration**
 
 ### Add Redirect URLs
 
@@ -57,7 +57,7 @@ Click **"Save"**
 
 ## Step 3: Configure Email Templates (Optional but Recommended)
 
-Navigate to: **Authentication** → **Email Templates**
+Navigate to: **Authentication** ג†’ **Email Templates**
 
 ### Update Confirmation Email Template
 
@@ -77,14 +77,14 @@ Your `.env.local` file should contain:
 ```env
 # Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=https://dxqglotcyirxzyqaxqln.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_PpDpqkqVaKFnOyoLR7mdyA_UNTeeoqN
-SUPABASE_SERVICE_ROLE_KEY=sb_secret_ogT13ZixPFyvzPQxEWrFiA_I_DoOJ1W
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_REDACTED
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_REDACTED
 
 # Site Configuration
 NEXT_PUBLIC_SITE_URL=https://runsmart-ai.com
 ```
 
-**✅ These are already configured in your project!**
+**ג… These are already configured in your project!**
 
 ---
 
@@ -93,13 +93,13 @@ NEXT_PUBLIC_SITE_URL=https://runsmart-ai.com
 ### Auth Callback Route
 **Location:** `app/auth/callback/route.ts`
 
-✅ **Already created and configured!**
+ג… **Already created and configured!**
 
 ### Supabase Client Utilities
 **Location:** `lib/supabase/`
 
-✅ **Browser client:** `lib/supabase/client.ts`
-✅ **Server client:** `lib/supabase/server.ts`
+ג… **Browser client:** `lib/supabase/client.ts`
+ג… **Server client:** `lib/supabase/server.ts`
 
 ---
 
@@ -155,11 +155,11 @@ NEXT_PUBLIC_SITE_URL=https://runsmart-ai.com
 
 ## Security Checklist
 
-- ✅ Anon key is public-safe (only for client-side)
-- ✅ Service role key is kept secret (never exposed to client)
-- ✅ Redirect URLs are explicitly whitelisted
-- ✅ Site URL matches your production domain
-- ✅ HTTPS is enforced in production
+- ג… Anon key is public-safe (only for client-side)
+- ג… Service role key is kept secret (never exposed to client)
+- ג… Redirect URLs are explicitly whitelisted
+- ג… Site URL matches your production domain
+- ג… HTTPS is enforced in production
 
 ---
 
@@ -189,9 +189,10 @@ After configuration, test these flows:
 ## Need Help?
 
 If you encounter issues:
-1. Check Supabase logs in Dashboard → Authentication → Logs
+1. Check Supabase logs in Dashboard ג†’ Authentication ג†’ Logs
 2. Check browser console for errors
 3. Verify all environment variables are set
 4. Ensure you're using the latest `@supabase/ssr` package
 
 **Current package version:** Check `package.json` for `@supabase/ssr` and `@supabase/supabase-js`
+
