@@ -170,6 +170,157 @@ const strengthWorkouts = [
   },
 ]
 
+type GoalType = "distance" | "duration"
+type DifficultyLevel = "open" | "easy" | "medium"
+
+const intervalProfiles: Record<DifficultyLevel, { reps: number; strideCount: number }> = {
+  easy: { reps: 6, strideCount: 4 },
+  medium: { reps: 8, strideCount: 6 },
+  open: { reps: 7, strideCount: 5 },
+}
+
+const getIntervalSegment = (goal: GoalType, difficulty: DifficultyLevel) => {
+  if (goal === "distance") {
+    if (difficulty === "easy") return { rep: "300m hard", recover: "200m easy jog" }
+    if (difficulty === "medium") return { rep: "600m hard", recover: "200m easy jog" }
+    return { rep: "400m hard", recover: "200m easy jog" }
+  }
+
+  if (difficulty === "easy") return { rep: "45s hard", recover: "90s easy jog" }
+  if (difficulty === "medium") return { rep: "90s hard", recover: "2:00 easy jog" }
+  return { rep: "60s hard", recover: "2:00 easy jog" }
+}
+
+const buildIntervalsFallback = (
+  workout: WorkoutType,
+  goal: GoalType,
+  targetValue: string,
+  difficulty: DifficultyLevel,
+) => {
+  const profile = intervalProfiles[difficulty]
+  const segment = getIntervalSegment(goal, difficulty)
+  const totalLabel = goal === "distance" ? `${targetValue} km total` : `${targetValue} min total`
+
+  return {
+    title: `${workout.name} Workout`,
+    description: workout.description,
+    duration: goal === "duration" ? `${targetValue} min total` : "45-65 min",
+    phases: [
+      {
+        phase: "Warm-up",
+        color: "bg-gray-500",
+        steps: [
+          {
+            step: 1,
+            description: "10-15 min easy pace",
+            detail: "Add light mobility drills if you feel stiff",
+            type: "RUN",
+          },
+        ],
+      },
+      {
+        phase: "Strides",
+        color: "bg-amber-500",
+        repeat: `${profile.strideCount}x`,
+        steps: [
+          {
+            step: 1,
+            description: "20s fast but relaxed stride",
+            detail: "Full recovery walk/jog between strides",
+            type: "STRIDE",
+          },
+        ],
+      },
+      {
+        phase: "Main Set",
+        color: "bg-pink-500",
+        repeat: `${profile.reps}x`,
+        steps: [
+          {
+            step: 1,
+            description: `Run ${segment.rep}`,
+            detail: `Anaerobic focus. Smooth form, stop one notch before all-out. ${totalLabel}.`,
+            type: "RUN",
+          },
+          {
+            step: 2,
+            description: `Recover ${segment.recover}`,
+            detail: "Easy jog or walk, reset breathing",
+            type: "RECOVER",
+          },
+        ],
+      },
+      {
+        phase: "Cool Down",
+        color: "bg-gray-500",
+        steps: [
+          {
+            step: 1,
+            description: "8-10 min easy pace",
+            detail: "Gradually slow down and loosen up",
+            type: "RUN",
+          },
+        ],
+      },
+    ],
+  }
+}
+
+const buildDefaultFallback = (
+  workout: WorkoutType,
+  goal: GoalType,
+  targetValue: string,
+  difficulty: DifficultyLevel,
+) => {
+  const effortHint = difficulty === "easy" ? "comfortable" : difficulty === "medium" ? "moderately hard" : "steady"
+  const mainColor = workout.id === "tempo" ? "bg-orange-500" : workout.id === "long" ? "bg-blue-500" : "bg-green-500"
+  const mainLabel = goal === "distance" ? `${targetValue} km` : `${targetValue} min`
+
+  return {
+    title: `${workout.name} Workout`,
+    description: workout.description,
+    duration: goal === "duration" ? `${targetValue} min total` : "30-60 min",
+    phases: [
+      {
+        phase: "Warm-up",
+        color: "bg-gray-500",
+        steps: [
+          {
+            step: 1,
+            description: "10 min easy pace",
+            detail: "Build up gradually and keep strides relaxed",
+            type: "RUN",
+          },
+        ],
+      },
+      {
+        phase: "Main Set",
+        color: mainColor,
+        steps: [
+          {
+            step: 1,
+            description: `${mainLabel} at ${effortHint} effort`,
+            detail: "Focus on smooth breathing and relaxed shoulders",
+            type: "RUN",
+          },
+        ],
+      },
+      {
+        phase: "Cool Down",
+        color: "bg-gray-500",
+        steps: [
+          {
+            step: 1,
+            description: "8-10 min easy pace",
+            detail: "Gradually slow down",
+            type: "RUN",
+          },
+        ],
+      },
+    ],
+  }
+}
+
 export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps) {
   const [step, setStep] = useState<"select" | "configure" | "approve">("select")
   const [selectedWorkout, setSelectedWorkout] = useState<WorkoutType | null>(null)
@@ -185,6 +336,9 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
   const [planStartDate, setPlanStartDate] = useState<Date | undefined>(undefined)
   const [isCalendarOpen, setIsCalendarOpen] = useState(false)
   const { toast } = useToast()
+  const today = new Date()
+  const fallbackStartMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+  const fallbackEndMonth = new Date(today.getFullYear() + 1, 11, 31)
 
   // Load plan data for calendar validation when modal opens
   useEffect(() => {
@@ -272,6 +426,7 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
             {
               "phase": "Warm-up",
               "color": "bg-gray-500",
+              "repeat": "optional repeat label",
               "steps": [
                 {
                   "step": 1,
@@ -284,8 +439,12 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
           ]
         }
         
-        Include warm-up, main workout, and cool-down phases. Make it specific to the workout type and difficulty level.`,
-        prompt: `Create a ${selectedWorkout.name} workout for ${selectedGoal === "distance" ? targetValue + "km" : targetValue + " minutes"} at ${selectedDifficulty} difficulty level. The workout should be appropriate for a ${selectedWorkout.description}.`,
+        Rules:
+        - Always include Warm-up, Main Set, and Cool Down phases.
+        - For interval-style workouts, add a Strides/Activation phase and use "repeat" on the Main Set with RUN/RECOVER steps.
+        - Keep steps concise and action-oriented with short cues in "detail".
+        - Return valid JSON only.`,
+        prompt: `Create a ${selectedWorkout.name} workout for ${selectedGoal === "distance" ? targetValue + " km" : targetValue + " minutes"} at ${selectedDifficulty} difficulty level. The workout should be appropriate for: ${selectedWorkout.description}.`,
       })
 
       const workoutData = JSON.parse(text)
@@ -293,49 +452,13 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
       setStep("approve")
     } catch (error) {
       console.error("Error generating workout:", error)
-      // Fallback workout
-      setGeneratedWorkout({
-        title: `${selectedWorkout.name} Workout`,
-        description: selectedWorkout.description,
-        duration: "30-45 min",
-        phases: [
-          {
-            phase: "Warm-up",
-            color: "bg-gray-500",
-            steps: [
-              {
-                step: 1,
-                description: "10 minutes easy pace",
-                detail: "Build up gradually",
-                type: "RUN",
-              },
-            ],
-          },
-          {
-            phase: "Main Workout",
-            color: selectedWorkout.id === "tempo" ? "bg-orange-500" : "bg-green-500",
-            steps: [
-              {
-                step: 2,
-                description: `${selectedGoal === "distance" ? targetValue + "km" : targetValue + " minutes"} at ${selectedWorkout.name.toLowerCase()} pace`,
-                type: "RUN",
-              },
-            ],
-          },
-          {
-            phase: "Cool Down",
-            color: "bg-gray-500",
-            steps: [
-              {
-                step: 3,
-                description: "10 minutes easy pace",
-                detail: "Gradually slow down",
-                type: "RUN",
-              },
-            ],
-          },
-        ],
-      })
+      const goal = selectedGoal as GoalType
+      const difficulty = (selectedDifficulty as DifficultyLevel) || "open"
+      const fallback =
+        selectedWorkout.id === "intervals"
+          ? buildIntervalsFallback(selectedWorkout, goal, targetValue, difficulty)
+          : buildDefaultFallback(selectedWorkout, goal, targetValue, difficulty)
+      setGeneratedWorkout(fallback)
       setStep("approve")
     } finally {
       setIsGenerating(false)
@@ -698,22 +821,23 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    className="w-full justify-start text-left font-normal bg-transparent"
+                    className="w-full justify-start text-left font-normal bg-transparent whitespace-normal h-auto py-3 leading-tight"
                     type="button"
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {selectedDate ? format(selectedDate, "PPP") : "Pick a date"}
+                    {selectedDate ? format(selectedDate, "MMM d, yyyy") : "Pick a date"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent
-                  className="w-auto p-0 z-[200]"
-                  align="start"
+                  className="w-full max-w-[calc(100vw-2rem)] p-0 z-[200] sm:w-auto"
+                  align="center"
                   side="bottom"
                   sideOffset={4}
                   onOpenAutoFocus={(e) => e.preventDefault()}
                   style={{ pointerEvents: 'auto', touchAction: 'auto' }}
                 >
                   <Calendar
+                    captionLayout="dropdown"
                     mode="single"
                     selected={selectedDate}
                     onSelect={handleDateSelect}
@@ -722,6 +846,9 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
                       ...(planEndDate ? [{ after: planEndDate }] : [])
                     ]}
                     defaultMonth={selectedDate}
+                    startMonth={planStartDate ?? fallbackStartMonth}
+                    endMonth={planEndDate ?? fallbackEndMonth}
+                    className="w-full"
                   />
                 </PopoverContent>
               </Popover>

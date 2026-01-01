@@ -136,7 +136,7 @@ export const RUN_BREAKDOWNS: Record<string, TierBreakdowns> = {
   threshold: {
     beginner: {
       warmup: "15 min + drills",
-      drills: "3-4 min activation drills",
+      drills: "3-4 min activation drills + 4x20s strides",
       mainSet: "3-5×5 min threshold with 2 min easy recoveries",
       totalTime: "50-70 min",
       frequency: "0-1×/week",
@@ -167,23 +167,23 @@ export const RUN_BREAKDOWNS: Record<string, TierBreakdowns> = {
       mainSet: "8-12×1 min fast with 1-2 min easy recoveries",
       totalTime: "45-65 min",
       frequency: "0-1×/week (only after base)",
-      coachNotes: "Fast but repeatable; form stays smooth"
+      coachNotes: "Anaerobic focus, fast but repeatable; form stays smooth"
     },
     intermediate: {
       warmup: "15-20 min + strides",
-      drills: "4-6 strides (20s each)",
+      drills: "4-6 strides (20s each) + light drills",
       mainSet: "6-10 reps (e.g., 400-600m) with 200m jog or 90-150s easy",
       totalTime: "60-80 min",
       frequency: "0-1×/week (more in 5K blocks)",
-      coachNotes: "High-intensity intervals with recovery periods. Warm up well and cool down properly."
+      coachNotes: "Anaerobic focus with full recovery. Warm up well and cool down properly."
     },
     advanced: {
       warmup: "20 min + strides",
-      drills: "6-8 strides (20s each)",
+      drills: "6-8 strides (20s each) + light drills",
       mainSet: "10-14 reps (e.g., 400m) or 6-10×600m with controlled, consistent recoveries",
       totalTime: "70-95 min",
       frequency: "1×/week during sharpening",
-      coachNotes: "Focus on maintaining form throughout all reps"
+      coachNotes: "Anaerobic focus. Maintain form throughout all reps"
     }
   },
 
