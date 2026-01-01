@@ -44,7 +44,8 @@ const buildAuthHeaders = (userId?: number | null): HeadersInit => {
   }
 
   return {
-    Authorization: `Bearer user-${userId}`,
+    'Authorization': `Bearer user-${userId}`,
+    'x-user-id': userId.toString(),
   }
 }
 
