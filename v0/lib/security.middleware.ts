@@ -307,7 +307,7 @@ export function withAuthSecurity(
 
 // Input validation middleware
 export async function validateAndSanitizeInput(
-  request: NextRequest,
+  request: Request | NextRequest,
   maxLength: number = securityConfig.validation.maxLengths.chatMessage
 ): Promise<{ valid: boolean; sanitized?: any; error?: string }> {
   try {
