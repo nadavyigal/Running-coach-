@@ -3,7 +3,7 @@ import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
 import { sanitizeForPrompt, sanitizeDistance } from '@/lib/security'
 import { withSecureOpenAI } from '@/lib/apiKeyManager'
-import { withApiSecurity, validateAndSanitizeInput, ApiRequest } from '@/lib/security.middleware'
+import { withApiSecurity, validateAndSanitizeInput, type ApiRequest } from '@/lib/security.middleware'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -135,4 +135,8 @@ async function generateWorkoutHandler(req: ApiRequest) {
   }
 }
 
-export const POST = withApiSecurity(generateWorkoutHandler)
+const securedGenerateWorkoutHandler = withApiSecurity(generateWorkoutHandler)
+
+export async function POST(req: ApiRequest) {
+  return securedGenerateWorkoutHandler(req)
+}

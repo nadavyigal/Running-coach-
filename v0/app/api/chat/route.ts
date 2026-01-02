@@ -559,7 +559,12 @@ Keep responses concise but informative. Always be supportive and positive. Focus
 }
 
 // Export the secured handler
-export const POST = withChatSecurity(chatHandler);
+const securedChatHandler = withChatSecurity(chatHandler);
+const securedChatHistoryHandler = withChatSecurity(chatHistoryHandler);
+
+export async function POST(req: ApiRequest) {
+  return securedChatHandler(req);
+}
 
 function extractUserIdFromString(value: string | undefined | null): number | null {
   if (!value) {
@@ -644,4 +649,6 @@ async function chatHistoryHandler(req: ApiRequest): Promise<NextResponse> {
   }
 }
 
-export const GET = withChatSecurity(chatHistoryHandler);
+export async function GET(req: ApiRequest) {
+  return securedChatHistoryHandler(req);
+}

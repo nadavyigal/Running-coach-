@@ -4,7 +4,7 @@ import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { withErrorHandling } from '@/lib/errorHandler.middleware';
 import { withSecureOpenAI } from '@/lib/apiKeyManager';
-import { withApiSecurity } from '@/lib/security.middleware';
+import { withApiSecurity, type ApiRequest } from '@/lib/security.middleware';
 import { logger } from '@/lib/logger';
 import { WORKOUT } from '@/lib/constants';
 import { sanitizeForPrompt, sanitizeDistance, sanitizeTimeDuration, sanitizeName } from '@/lib/security';
@@ -462,7 +462,11 @@ async function generatePlanHandler(req: NextRequest) {
   }
 }
 
-export const POST = withApiSecurity(withErrorHandling(generatePlanHandler, 'GeneratePlan'));
+const securedGeneratePlanHandler = withApiSecurity(withErrorHandling(generatePlanHandler, 'GeneratePlan'));
+
+export async function POST(req: NextRequest) {
+  return securedGeneratePlanHandler(req as ApiRequest);
+}
 
 /**
  * Handles enhanced plan requests with onboarding data integration
