@@ -52,7 +52,16 @@ async function chatHandler(req: ApiRequest) {
       });
     }
 
-    const body = validation.sanitized || await req.json();
+    // Use sanitized body from validation (request body already consumed)
+    if (!validation.sanitized) {
+      logger.error('❌ No sanitized body returned from validation');
+      return new Response(JSON.stringify({ error: 'Invalid request body' }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    const body = validation.sanitized;
     logger.log('📝 Request body keys:', Object.keys(body));
     logger.log('👤 User ID:', body.userId);
 

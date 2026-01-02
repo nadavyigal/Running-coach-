@@ -310,11 +310,11 @@ export async function validateAndSanitizeInput(
 ): Promise<{ valid: boolean; sanitized?: any; error?: string }> {
   try {
     if (!['POST', 'PUT', 'PATCH'].includes(request.method)) {
-      return { valid: true };
+      return { valid: true, sanitized: null };
     }
-    
+
     const contentType = request.headers.get('content-type') || '';
-    
+
     if (contentType.includes('application/json')) {
       const body = await request.json();
       
@@ -354,13 +354,14 @@ export async function validateAndSanitizeInput(
       
       return { valid: true, sanitized };
     }
-    
-    return { valid: true };
-    
+
+    return { valid: true, sanitized: null };
+
   } catch (error) {
-    return { 
-      valid: false, 
-      error: error instanceof Error ? error.message : 'Validation failed' 
+    return {
+      valid: false,
+      sanitized: null,
+      error: error instanceof Error ? error.message : 'Validation failed'
     };
   }
 }
