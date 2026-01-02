@@ -1,808 +1,406 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { generateObject } from 'ai';
+import { NextResponse } from 'next/server';
+import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
-import { withErrorHandling } from '@/lib/errorHandler.middleware';
+import { sanitizeForPrompt } from '@/lib/security';
 import { withSecureOpenAI } from '@/lib/apiKeyManager';
-import { withApiSecurity, type ApiRequest } from '@/lib/security.middleware';
 import { logger } from '@/lib/logger';
-import { WORKOUT } from '@/lib/constants';
-import { sanitizeForPrompt, sanitizeDistance, sanitizeTimeDuration, sanitizeName } from '@/lib/security';
-import { parseISO, format, isValid } from 'date-fns';
-import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/**
- * Zod schema for user context from onboarding data
- * 
- * Defines the structure for comprehensive user context including
- * motivations, barriers, coaching style, and other onboarding data.
- */
-const UserContextSchema = z.object({
-  goal: z.enum(['habit', 'distance', 'speed']),
-  experience: z.enum(['beginner', 'intermediate', 'advanced']),
-  daysPerWeek: z.number().min(1).max(7),
-  preferredTimes: z.array(z.string()),
-  age: z.number().optional(),
-  motivations: z.array(z.string()),
-  barriers: z.array(z.string()),
-  coachingStyle: z.enum(['supportive', 'challenging', 'analytical', 'encouraging'])
-});
+const WeekdaySchema = z.enum(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
 
-/**
- * Zod schema for recent run data
- * 
- * Defines the structure for recent run data used in plan adaptation.
- */
-const RunSchema = z.object({
-  id: z.number().optional(),
-  type: z.enum(['easy', 'tempo', 'intervals', 'long', 'time-trial', 'hill', 'other']),
-  distance: z.number(),
-  duration: z.number(),
-  pace: z.number().optional(),
-  completedAt: z.string().transform(str => new Date(str))
-});
-
-/**
- * Zod schema for current goals
- * 
- * Defines the structure for current user goals used in plan generation.
- */
-const GoalSchema = z.object({
-  id: z.number().optional(),
-  title: z.string(),
-  goalType: z.enum(['time_improvement', 'distance_achievement', 'frequency', 'race_completion', 'consistency', 'health']),
-  status: z.enum(['active', 'completed', 'paused', 'cancelled']),
-  currentValue: z.number(),
-  targetValue: z.number()
-});
-
-/**
- * Zod schema for enhanced plan request with onboarding data
- * 
- * Defines the structure for plan generation requests that include
- * comprehensive user context, recent runs, and adaptation triggers.
- */
-const EnhancedPlanRequest = z.object({
-  userId: z.number(),
-  userContext: UserContextSchema,
-  recentRuns: z.array(RunSchema).optional(),
-  currentGoals: z.array(GoalSchema).optional(),
-  adaptationTrigger: z.enum(['completion', 'goal_update', 'feedback', 'manual']).optional()
-});
-
-/**
- * Zod schema for individual workout validation
- * 
- * Defines the structure and constraints for a single workout in a training plan.
- * Used by AI generation to ensure consistent workout format.
- */
 const WorkoutSchema = z.object({
-  /** Week number in the training plan (1-16) */
   week: z.number().min(1).max(16),
-  /** Day of the week for the workout */
-  day: z.enum(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']),
-  /** Type of workout to perform */
+  day: WeekdaySchema,
   type: z.enum(['easy', 'tempo', 'intervals', 'long', 'time-trial', 'hill', 'rest']),
-  /** Distance to run in kilometers (0-50) */
   distance: z.number().min(0).max(50),
-  /** Optional duration in minutes (0-300) */
   duration: z.number().min(0).max(300).optional(),
-  /** Optional notes with specific instructions */
-  notes: z.string().optional()
+  notes: z.string().optional(),
 });
 
-/**
- * Zod schema for complete training plan validation
- * 
- * Ensures the generated training plan has all required fields
- * and maintains consistency across the entire plan structure.
- */
 const PlanSchema = z.object({
-  /** Human-readable title for the training plan */
-  title: z.string(),
-  /** Detailed description of the plan's purpose and approach */
-  description: z.string(),
-  /** Total duration of the plan in weeks (1-16) */
-  totalWeeks: z.number().min(1).max(16),
-  /** Array of all workouts in the plan */
-  workouts: z.array(WorkoutSchema)
-});
-
-const nullableNumber = (schema: z.ZodNumber) =>
-  z.preprocess((value) => (value === null ? undefined : value), schema.optional());
-
-const AiWorkoutSchema = z.object({
-  week: z.number().min(1).max(16),
-  day: z.enum(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']),
-  type: z.enum(['easy', 'tempo', 'intervals', 'long', 'time-trial', 'hill', 'rest']),
-  distance: nullableNumber(z.number().min(0).max(50)),
-  duration: nullableNumber(z.number().min(0).max(300)),
-  notes: z.string().optional()
-});
-
-const AiPlanSchema = z.object({
   title: z.string(),
   description: z.string(),
   totalWeeks: z.number().min(1).max(16),
-  workouts: z.array(AiWorkoutSchema)
+  workouts: z.array(WorkoutSchema).min(1),
 });
 
-const DEFAULT_PACE_MIN_PER_KM = (WORKOUT.DISTANCE_TO_TIME_MIN + WORKOUT.DISTANCE_TO_TIME_MAX) / 2;
+type WeekdayShort = z.infer<typeof WeekdaySchema>;
+type PlanData = z.infer<typeof PlanSchema>;
 
-const roundToTenth = (value: number) => Math.round(value * 10) / 10;
+const DEFAULT_PACE_MIN_PER_KM = 6;
 
-const normalizeAiPlan = (plan: z.infer<typeof AiPlanSchema>): z.infer<typeof PlanSchema> => {
-  const normalizeWorkout = (workout: z.infer<typeof AiWorkoutSchema>) => {
-    const distance = typeof workout.distance === 'number' && Number.isFinite(workout.distance)
-      ? workout.distance
-      : undefined;
-    const duration = typeof workout.duration === 'number' && Number.isFinite(workout.duration)
-      ? workout.duration
-      : undefined;
-
-    if (workout.type === 'rest') {
-      return {
-        ...workout,
-        distance: 0,
-        duration: duration ?? 0
-      };
-    }
-
-    const normalizedDistance = distance ?? (duration
-      ? clampNumber(roundToTenth(duration / DEFAULT_PACE_MIN_PER_KM), 0, 50)
-      : WORKOUT.DEFAULT_DISTANCE);
-    const normalizedDuration = duration ?? clampNumber(
-      Math.round(normalizedDistance * DEFAULT_PACE_MIN_PER_KM),
-      0,
-      300
-    );
-
-    return {
-      ...workout,
-      distance: normalizedDistance,
-      duration: normalizedDuration
-    };
+type PlanRequest = {
+  user?: {
+    goal?: 'habit' | 'distance' | 'speed';
+    experience?: 'beginner' | 'intermediate' | 'advanced';
+    daysPerWeek?: number;
+    preferredTimes?: string[];
+    age?: number;
   };
-
-  return {
-    ...plan,
-    workouts: plan.workouts.map(normalizeWorkout)
+  userContext?: {
+    goal?: 'habit' | 'distance' | 'speed';
+    experience?: 'beginner' | 'intermediate' | 'advanced';
+    daysPerWeek?: number;
+    preferredTimes?: string[];
+    age?: number;
+    motivations?: string[];
+    barriers?: string[];
+    coachingStyle?: string;
+  };
+  planType?: string;
+  targetDistance?: string;
+  rookie_challenge?: boolean;
+  totalWeeks?: number;
+  planPreferences?: {
+    trainingDays?: string[];
+    availableDays?: string[];
+    longRunDay?: string;
+    trainingVolume?: string;
+    difficulty?: string;
   };
 };
 
-/**
- * Generate a fallback plan when AI is unavailable
- * Creates a reasonable beginner-friendly plan based on user preferences
- */
-const MAX_FALLBACK_WEEKS = 16
-type WeekdayShort = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
-
 function clampNumber(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value))
+  return Math.min(max, Math.max(min, value));
 }
 
 function isWeekdayShort(value: unknown): value is WeekdayShort {
-  return (
-    value === 'Mon' ||
-    value === 'Tue' ||
-    value === 'Wed' ||
-    value === 'Thu' ||
-    value === 'Fri' ||
-    value === 'Sat' ||
-    value === 'Sun'
-  )
+  return WeekdaySchema.safeParse(value).success;
 }
 
-function getWeekdayShortFromDate(date: Date): WeekdayShort {
-  return (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const)[date.getDay()] as WeekdayShort
+function resolveDaysPerWeek(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return clampNumber(Math.round(value), 2, 6);
+  }
+  return 3;
 }
 
-function getDistanceKmFromTargetDistance(targetDistance?: string): number | undefined {
-  const normalized = (targetDistance || '').toLowerCase()
-  if (normalized.includes('5k')) return 5
-  if (normalized.includes('10k')) return 10
-  if (normalized.includes('half')) return 21.1
-  if (normalized.includes('marathon')) return 42.2
-  return undefined
+function resolveUser(body: PlanRequest) {
+  const source = body.userContext ?? body.user ?? {};
+  const goal =
+    source.goal === 'habit' || source.goal === 'distance' || source.goal === 'speed'
+      ? source.goal
+      : 'habit';
+  const experience =
+    source.experience === 'beginner' ||
+    source.experience === 'intermediate' ||
+    source.experience === 'advanced'
+      ? source.experience
+      : 'beginner';
+  const daysPerWeek = resolveDaysPerWeek(source.daysPerWeek);
+  const preferredTimes =
+    Array.isArray(source.preferredTimes) && source.preferredTimes.length > 0
+      ? source.preferredTimes
+      : ['morning'];
+
+  return {
+    goal,
+    experience,
+    daysPerWeek,
+    preferredTimes,
+    age: typeof source.age === 'number' ? source.age : undefined,
+  };
 }
 
-/**
- * Generate a fallback plan when AI is unavailable.
- * Creates a reasonable plan and honors optional plan-template preferences.
- */
-function generateFallbackPlan(
-  user: any,
-  options?: { totalWeeks?: number; planPreferences?: any; targetDistance?: string }
-): z.infer<typeof PlanSchema> {
-  const experience = user?.experience || 'beginner'
-  const goal = user?.goal || 'habit'
-  const daysPerWeek = clampNumber(user?.daysPerWeek || 3, 2, 6)
+function resolveTotalWeeks(body: PlanRequest, experience: string) {
+  if (typeof body.totalWeeks === 'number' && Number.isFinite(body.totalWeeks)) {
+    return clampNumber(Math.round(body.totalWeeks), 1, 16);
+  }
+  if (body.rookie_challenge) {
+    return 2;
+  }
+  return experience === 'beginner' ? 4 : experience === 'intermediate' ? 6 : 8;
+}
 
-  const defaultWeeks = experience === 'beginner' ? 4 : experience === 'intermediate' ? 6 : 8
-  const totalWeeks = clampNumber(options?.totalWeeks ?? defaultWeeks, 1, MAX_FALLBACK_WEEKS)
-
-  const preferences = options?.planPreferences || {}
-  const trainingDaysRaw = preferences.trainingDays || preferences.availableDays
+function resolveTrainingDays(daysPerWeek: number, planPreferences?: PlanRequest['planPreferences']) {
+  const trainingDaysRaw = planPreferences?.trainingDays ?? planPreferences?.availableDays;
   const preferredDays = Array.isArray(trainingDaysRaw)
-    ? trainingDaysRaw.filter((d: any) => isWeekdayShort(d))
-    : null
+    ? trainingDaysRaw.filter((day) => isWeekdayShort(day))
+    : [];
 
   const defaultPattern =
     daysPerWeek === 2
-      ? (['Wed', 'Sat'] as WeekdayShort[])
+      ? (['Tue', 'Sat'] as WeekdayShort[])
       : daysPerWeek === 3
         ? (['Mon', 'Wed', 'Fri'] as WeekdayShort[])
         : daysPerWeek === 4
           ? (['Mon', 'Wed', 'Fri', 'Sun'] as WeekdayShort[])
           : daysPerWeek === 5
             ? (['Mon', 'Tue', 'Thu', 'Fri', 'Sun'] as WeekdayShort[])
-            : (['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as WeekdayShort[])
+            : (['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as WeekdayShort[]);
 
-  const selectedDays = (preferredDays && preferredDays.length >= daysPerWeek
-    ? preferredDays.slice(0, daysPerWeek)
-    : defaultPattern.slice(0, daysPerWeek)) as WeekdayShort[]
+  const resolvedDays =
+    preferredDays.length >= daysPerWeek ? preferredDays.slice(0, daysPerWeek) : defaultPattern;
 
-  const longRunDayPref = isWeekdayShort(preferences.longRunDay) ? (preferences.longRunDay as WeekdayShort) : undefined
-  const longRunDay = longRunDayPref && selectedDays.includes(longRunDayPref) ? longRunDayPref : selectedDays[selectedDays.length - 1]
+  const longRunDay = isWeekdayShort(planPreferences?.longRunDay)
+    ? (planPreferences?.longRunDay as WeekdayShort)
+    : resolvedDays[resolvedDays.length - 1];
 
-  // Parse race date with timezone awareness to prevent off-by-one errors
-  const raceDateRaw = preferences.raceDate;
-  let raceDate: Date | null = null;
-  if (raceDateRaw) {
-    try {
-      // Try parsing as ISO string first
-      const parsedDate = parseISO(raceDateRaw);
-      if (isValid(parsedDate)) {
-        // Assume user's local timezone if not specified
-        // In a real app, get user.timezone from database
-        const userTimezone = user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-        raceDate = fromZonedTime(parsedDate, userTimezone);
-      }
-    } catch (e) {
-      logger.error('Failed to parse race date:', raceDateRaw, e);
-      raceDate = null;
+  return { trainingDays: resolvedDays, longRunDay };
+}
+
+function normalizePlan(plan: PlanData): PlanData {
+  const workouts = plan.workouts.map((workout) => {
+    const distance = Number.isFinite(workout.distance) ? workout.distance : 0;
+    const duration =
+      typeof workout.duration === 'number' && Number.isFinite(workout.duration)
+        ? workout.duration
+        : Math.round(distance * DEFAULT_PACE_MIN_PER_KM);
+
+    if (workout.type === 'rest') {
+      return {
+        ...workout,
+        distance: 0,
+        duration: duration || 0,
+      };
     }
-  }
-  const raceDay = raceDate && isValid(raceDate) ? getWeekdayShortFromDate(raceDate) : undefined
-  const raceDistanceKm = getDistanceKmFromTargetDistance(options?.targetDistance)
 
-  const volume: string | undefined = preferences.trainingVolume
-  const difficulty: string | undefined = preferences.difficulty
+    return {
+      ...workout,
+      distance: clampNumber(distance, 0, 50),
+      duration: clampNumber(duration, 0, 300),
+    };
+  });
 
-  const volumeScale = volume === 'conservative' ? 0.9 : volume === 'high' ? 1.12 : 1
-  const hardEveryOtherWeek = difficulty === 'easy'
-  const hardEveryWeek = difficulty === 'challenging'
+  return {
+    ...plan,
+    workouts,
+  };
+}
 
-  const workouts: z.infer<typeof WorkoutSchema>[] = []
+function generateFallbackPlan(
+  user: ReturnType<typeof resolveUser>,
+  totalWeeks: number,
+  planPreferences?: PlanRequest['planPreferences']
+): PlanData {
+  const daysPerWeek = resolveDaysPerWeek(user.daysPerWeek);
+  const { trainingDays, longRunDay } = resolveTrainingDays(daysPerWeek, planPreferences);
 
-  for (let week = 1; week <= totalWeeks; week++) {
-    const baseDistanceRaw =
-      experience === 'beginner' ? 2.5 + week * 0.5 : experience === 'intermediate' ? 4 + week * 0.5 : 6 + week * 0.5
-    const baseDistance = clampNumber(baseDistanceRaw * volumeScale, 1, 50)
+  const baseDistance =
+    user.experience === 'beginner' ? 3 : user.experience === 'intermediate' ? 5 : 7;
 
-    for (const day of selectedDays) {
-      let type: z.infer<typeof WorkoutSchema>['type'] = 'easy'
-      let distance = baseDistance
-      let duration = Math.round(distance * 6)
+  const workouts: PlanData['workouts'] = [];
 
-      const isRaceDay = week === totalWeeks && !!raceDay && day === raceDay && typeof raceDistanceKm === 'number'
+  for (let week = 1; week <= totalWeeks; week += 1) {
+    const weeklyBase = baseDistance + (week - 1) * 0.5;
 
-      if (isRaceDay) {
-        type = 'time-trial'
-        distance = raceDistanceKm!
-        duration = Math.round(distance * 6)
-      } else if (day === longRunDay) {
-        type = 'long'
-        distance = clampNumber(baseDistance * 1.5 + (week - 1) * 0.2, 1, 50)
-        duration = Math.round(distance * 6.5)
-      } else if (selectedDays.length >= 3 && day === selectedDays[1]) {
-        const shouldBeHard = hardEveryWeek || (!hardEveryOtherWeek && week % 2 === 0) || (hardEveryOtherWeek && week % 3 === 0)
-        if (shouldBeHard) {
-          type = week % 2 === 0 ? 'tempo' : 'intervals'
-          distance = clampNumber(baseDistance * 0.85, 1, 50)
-          duration = Math.round(distance * 5.5)
-        }
-      }
+    for (const day of trainingDays) {
+      const isLongRun = day === longRunDay;
+      const type: PlanData['workouts'][number]['type'] = isLongRun
+        ? 'long'
+        : week % 2 === 0 && trainingDays.length >= 3 && day === trainingDays[1]
+          ? 'tempo'
+          : 'easy';
 
-      const isTaperWeek = week === totalWeeks
-      if (isTaperWeek && type !== 'time-trial') {
-        distance = clampNumber(distance * 0.75, 1, 50)
-        duration = Math.round(duration * 0.75)
-      }
+      const distance = isLongRun ? weeklyBase * 1.4 : weeklyBase;
+      const duration =
+        type === 'tempo'
+          ? Math.round(distance * (DEFAULT_PACE_MIN_PER_KM - 0.5))
+          : Math.round(distance * DEFAULT_PACE_MIN_PER_KM);
 
       workouts.push({
         week,
         day,
         type,
-        distance: Math.round(distance * 10) / 10,
-        duration,
+        distance: clampNumber(Math.round(distance * 10) / 10, 0, 50),
+        duration: clampNumber(duration, 0, 300),
         notes:
           type === 'easy'
-            ? 'Keep a conversational pace'
+            ? 'Keep a conversational pace.'
             : type === 'long'
-              ? 'Focus on time on feet, not speed'
-              : type === 'tempo'
-                ? 'Comfortably hard pace'
-                : type === 'intervals'
-                  ? 'Hard efforts with recovery'
-                  : type === 'time-trial'
-                    ? 'Race effort — warm up well and pace yourself'
-                    : undefined,
-      })
-    }
-
-    // If the race day is not in the training days, still add the race as the final workout.
-    if (week === totalWeeks && raceDay && raceDistanceKm && !selectedDays.includes(raceDay)) {
-      workouts.push({
-        week,
-        day: raceDay,
-        type: 'time-trial',
-        distance: raceDistanceKm,
-        duration: Math.round(raceDistanceKm * 6),
-        notes: 'Race effort — warm up well and pace yourself',
-      })
+              ? 'Focus on steady effort, not speed.'
+              : 'Comfortably hard effort with controlled breathing.',
+      });
     }
   }
 
   return {
     title:
-      goal === 'habit'
+      user.goal === 'habit'
         ? 'Build Your Running Habit'
-        : goal === 'distance'
+        : user.goal === 'distance'
           ? 'Increase Your Distance'
           : 'Improve Your Speed',
-    description: `A ${totalWeeks}-week plan designed for ${experience} runners focused on ${goal === 'habit' ? 'building consistency' : goal === 'distance' ? 'increasing endurance' : 'improving pace'}.`,
+    description: `A ${totalWeeks}-week plan for ${user.experience} runners focused on ${user.goal}.`,
     totalWeeks,
     workouts,
-  }
+  };
 }
 
-/**
- * Generates a personalized training plan using AI based on user preferences and goals.
- * 
- * This endpoint creates customized running training plans by leveraging OpenAI's GPT-4o
- * to generate structured workout schedules. The plan takes into account the user's
- * experience level, goals, available training days, and specific preferences.
- * 
- * @param req - Next.js request object containing user data and plan options
- * @param req.body.user - User profile with experience, goals, and preferences
- * @param req.body.planType - Optional specific type of training plan
- * @param req.body.targetDistance - Optional target race distance
- * @param req.body.rookie_challenge - Whether to include 14-day rookie challenge
- * 
- * @returns Promise<NextResponse> JSON response containing:
- *   - Success: `{ plan: PlanSchema, source: 'ai' | 'fallback' }`
- *   - Error: `{ error: string, errorType: string, fallbackRequired: boolean }`
- * 
- * @example
- * ```typescript
- * const response = await fetch('/api/generate-plan', {
- *   method: 'POST',
- *   headers: { 'Content-Type': 'application/json' },
- *   body: JSON.stringify({
- *     user: {
- *       experience: 'beginner',
- *       goal: 'habit',
- *       daysPerWeek: 3,
- *       preferredTimes: ['morning']
- *     },
- *     rookie_challenge: true
- *   })
- * });
- * ```
- * 
- * @throws {ValidationError} When user data is missing required fields
- * @throws {APIKeyError} When OpenAI API key is invalid or missing
- * @throws {GenerationError} When AI plan generation fails
- * 
- * @since 1.0.0
- */
-async function generatePlanHandler(req: NextRequest) {
-  let body: any = {};
-  try {
-    body = await req.json();
-  } catch (error) {
-    logger.warn('[generate-plan] Failed to parse request body, using defaults', { error });
-  }
-  
-  // Check if this is an enhanced request with onboarding data
-  if (body.userContext) {
-    return await handleEnhancedPlanRequest(body);
-  }
-  
-  // Handle legacy request format
-  const { user, planType, targetDistance, rookie_challenge, totalWeeks, planPreferences } = body;
+function buildPlanPrompt(
+  user: ReturnType<typeof resolveUser>,
+  totalWeeks: number,
+  planPreferences?: PlanRequest['planPreferences'],
+  planType?: string,
+  targetDistance?: string
+) {
+  const sanitizedPlanType = planType ? sanitizeForPrompt(planType, 50) : '';
+  const sanitizedTarget = targetDistance ? sanitizeForPrompt(targetDistance, 50) : '';
+  const sanitizedVolume = planPreferences?.trainingVolume
+    ? sanitizeForPrompt(planPreferences.trainingVolume, 50)
+    : '';
+  const sanitizedDifficulty = planPreferences?.difficulty
+    ? sanitizeForPrompt(planPreferences.difficulty, 50)
+    : '';
 
-  // Build the comprehensive prompt based on user preferences
-  const prompt = buildPlanPromptV2(user, planType, targetDistance, rookie_challenge, { totalWeeks, planPreferences });
+  const { trainingDays, longRunDay } = resolveTrainingDays(user.daysPerWeek, planPreferences);
 
-  // Use secure OpenAI wrapper
-  const result = await withSecureOpenAI(
-    async () => {
-      const { object: generatedPlan } = await generateObject({
-        model: openai('gpt-4o'),
-        schema: AiPlanSchema,
-        prompt,
-        temperature: 0.7,
-      });
-      return generatedPlan;
-    }
-  );
+  return `Create a running training plan. Return JSON only with this shape:
+{
+  "title": "string",
+  "description": "string",
+  "totalWeeks": ${totalWeeks},
+  "workouts": [
+    {"week": 1, "day": "Mon", "type": "easy", "distance": 4, "duration": 24, "notes": "string"}
+  ]
+}
 
-  // If AI fails, return a fallback plan instead of an error
-  if (!result.success || !result.data) {
-    logger.log('[generate-plan] AI unavailable, using fallback plan generator');
-    
-    const fallbackPlan = generateFallbackPlan(user, { totalWeeks, planPreferences, targetDistance });
-    
-    return NextResponse.json({ 
-      plan: fallbackPlan,
-      source: 'fallback',
-      message: 'AI coach is temporarily unavailable. Using a pre-built plan template.'
-    });
+Runner profile:
+- Experience: ${user.experience}
+- Goal: ${user.goal}
+- Days per week: ${user.daysPerWeek}
+- Preferred times: ${user.preferredTimes.join(', ')}
+${sanitizedPlanType ? `- Plan type: ${sanitizedPlanType}` : ''}
+${sanitizedTarget ? `- Target distance: ${sanitizedTarget}` : ''}
+${sanitizedVolume ? `- Training volume: ${sanitizedVolume}` : ''}
+${sanitizedDifficulty ? `- Difficulty: ${sanitizedDifficulty}` : ''}
+
+Constraints:
+- totalWeeks must be ${totalWeeks}
+- Schedule workouts only on: ${trainingDays.join(', ')}
+- Long run day: ${longRunDay}
+- Include easy, tempo, intervals, and long runs across the plan.
+- Distances are in kilometers, durations in minutes.
+- Keep progression gradual and safe.`;
+}
+
+function extractJson(text: string) {
+  const trimmed = text.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    return trimmed;
   }
+
+  const start = trimmed.indexOf('{');
+  const end = trimmed.lastIndexOf('}');
+  if (start !== -1 && end !== -1 && end > start) {
+    return trimmed.slice(start, end + 1);
+  }
+
+  return '';
+}
+
+export async function POST(req: Request) {
+  const requestId = `plan_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
   try {
-    const normalizedPlan = PlanSchema.parse(normalizeAiPlan(result.data));
-    return NextResponse.json({ 
-      plan: normalizedPlan,
-      source: 'ai'
-    });
-  } catch (error) {
-    logger.warn('[generate-plan] AI output normalization failed, falling back', { error });
-    const fallbackPlan = generateFallbackPlan(user, { totalWeeks, planPreferences, targetDistance });
-    return NextResponse.json({ 
-      plan: fallbackPlan,
-      source: 'fallback',
-      message: 'AI output was incomplete. Using a pre-built plan template.'
-    });
-  }
-}
-
-const securedGeneratePlanHandler = withApiSecurity(withErrorHandling(generatePlanHandler, 'GeneratePlan'));
-
-export async function POST(req: NextRequest) {
-  return securedGeneratePlanHandler(req as ApiRequest);
-}
-
-/**
- * Handles enhanced plan requests with onboarding data integration
- * 
- * @param body - Enhanced plan request with user context, recent runs, and goals
- * @returns Promise<NextResponse> JSON response with personalized plan
- */
-async function handleEnhancedPlanRequest(body: any) {
-  // Validate the enhanced request
-  const requestData = EnhancedPlanRequest.parse(body);
-  
-  // Verify user exists if userId is provided
-  if (requestData.userId) {
-    try {
-      const { dbUtils } = await import('@/lib/dbUtils');
-      const user = await dbUtils.getUserById(requestData.userId);
-      if (!user) {
-        return NextResponse.json(
-          { error: 'User not found', errorType: 'user_not_found', fallbackRequired: true },
-          { status: 404 }
-        );
-      }
-    } catch (userCheckError) {
-      logger.warn('User verification failed:', userCheckError);
+    const contentType = req.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
       return NextResponse.json(
-        { error: 'User verification failed', errorType: 'database_error', fallbackRequired: true },
-        { status: 500 }
+        { error: 'Content-Type must be application/json', requestId },
+        { status: 400 }
       );
     }
-  }
-  
-  // Build enhanced prompt with onboarding data
-  const prompt = buildEnhancedPlanPrompt(requestData);
 
-  // Use secure OpenAI wrapper
-  const result = await withSecureOpenAI(
-    async () => {
-      const { object: generatedPlan } = await generateObject({
+    let body: PlanRequest = {};
+    try {
+      body = (await req.json()) as PlanRequest;
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body', requestId }, { status: 400 });
+    }
+
+    const user = resolveUser(body);
+    const totalWeeks = resolveTotalWeeks(body, user.experience);
+    const fallbackPlan = generateFallbackPlan(user, totalWeeks, body.planPreferences);
+
+    const prompt = buildPlanPrompt(
+      user,
+      totalWeeks,
+      body.planPreferences,
+      body.planType,
+      body.targetDistance
+    );
+
+    const result = await withSecureOpenAI(async () => {
+      return generateText({
         model: openai('gpt-4o'),
-        schema: AiPlanSchema,
         prompt,
         temperature: 0.7,
+        maxOutputTokens: 1200,
       });
-      return generatedPlan;
+    });
+
+    if (!result.success || !result.data) {
+      return NextResponse.json(
+        {
+          plan: fallbackPlan,
+          source: 'fallback',
+          message: result.error?.message || 'AI service unavailable. Using fallback plan.',
+          requestId,
+        },
+        { status: result.error?.status || 503 }
+      );
     }
-  );
 
-  // If AI fails, return a fallback plan instead of an error
-  if (!result.success || !result.data) {
-    logger.log('[generate-plan:enhanced] AI unavailable, using fallback plan generator');
-    
-    const fallbackPlan = generateFallbackPlan({
-      experience: requestData.userContext.experience,
-      goal: requestData.userContext.goal,
-      daysPerWeek: requestData.userContext.daysPerWeek,
-      preferredTimes: requestData.userContext.preferredTimes
-    });
-    
-    return NextResponse.json({ 
-      plan: fallbackPlan,
-      source: 'fallback',
-      message: 'AI coach is temporarily unavailable. Using a pre-built plan template.',
-      adaptationTrigger: requestData.adaptationTrigger,
-      userContext: requestData.userContext
-    });
-  }
+    const text = String((result.data as { text?: string }).text || '');
+    const jsonText = extractJson(text);
+    if (!jsonText) {
+      logger.warn('[generate-plan] AI returned non-JSON output', { requestId });
+      return NextResponse.json(
+        {
+          plan: fallbackPlan,
+          source: 'fallback',
+          message: 'AI response could not be parsed. Using fallback plan.',
+          requestId,
+        },
+        { status: 502 }
+      );
+    }
 
-  try {
-    const normalizedPlan = PlanSchema.parse(normalizeAiPlan(result.data));
-    return NextResponse.json({ 
-      plan: normalizedPlan,
-      source: 'ai',
-      adaptationTrigger: requestData.adaptationTrigger,
-      userContext: requestData.userContext
-    });
-  } catch (error) {
-    logger.warn('[generate-plan:enhanced] AI output normalization failed, falling back', { error });
-    const fallbackPlan = generateFallbackPlan({
-      experience: requestData.userContext.experience,
-      goal: requestData.userContext.goal,
-      daysPerWeek: requestData.userContext.daysPerWeek,
-      preferredTimes: requestData.userContext.preferredTimes
-    });
-    return NextResponse.json({ 
-      plan: fallbackPlan,
-      source: 'fallback',
-      message: 'AI output was incomplete. Using a pre-built plan template.',
-      adaptationTrigger: requestData.adaptationTrigger,
-      userContext: requestData.userContext
-    });
-  }
-}
-
-/**
- * Builds a comprehensive prompt for AI-powered training plan generation.
- * 
- * This function constructs a detailed prompt that guides the AI in creating
- * personalized training plans based on user characteristics, goals, and preferences.
- * The prompt includes specific requirements for workout types, progression patterns,
- * and safety guidelines to ensure the generated plan is appropriate and effective.
- * 
- * @param user - User profile object containing training preferences and experience
- * @param user.experience - User's running experience level ('beginner' | 'intermediate' | 'advanced')
- * @param user.goal - Primary training goal ('habit' | 'distance' | 'speed')
- * @param user.daysPerWeek - Number of training days per week
- * @param user.preferredTimes - Array of preferred training times
- * @param planType - Optional specific plan type for specialized training
- * @param targetDistance - Optional target race distance for goal-specific training
- * @param rookie_challenge - Whether to generate a 14-day beginner-focused plan
- * 
- * @returns Detailed prompt string for AI plan generation
- * 
- * @throws {Error} When required user data fields are missing or invalid
- * 
- * @example
- * ```typescript
- * const prompt = buildPlanPrompt(
- *   {
- *     experience: 'beginner',
- *     goal: 'habit',
- *     daysPerWeek: 3,
- *     preferredTimes: ['morning', 'evening']
- *   },
- *   undefined,
- *   undefined,
- *   true
- * );
- * ```
- * 
- * @since 1.0.0
- */
-function buildPlanPromptV2(
-  user: any,
-  planType?: string,
-  targetDistance?: string,
-  rookie_challenge?: boolean,
-  options?: { totalWeeks?: number; planPreferences?: any }
-): string {
-  if (!user || !user.experience || !user.goal || !user.daysPerWeek || !user.preferredTimes) {
-    logger.warn('[generate-plan] Invalid user data provided, using fallback defaults');
-    user = {
-      experience: 'beginner',
-      goal: 'habit',
-      daysPerWeek: 3,
-      preferredTimes: ['morning'],
-      ...user,
-    };
-  }
-
-  const formatTimeHms = (totalSeconds: number) => {
-    const seconds = Math.max(0, Math.round(totalSeconds));
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    return `${m}:${String(s).padStart(2, '0')}`;
-  };
-
-  const preferences = options?.planPreferences || {};
-  const trainingDays = Array.isArray(preferences.trainingDays)
-    ? preferences.trainingDays.filter((d: any) => isWeekdayShort(d))
-    : null;
-  const longRunDay = isWeekdayShort(preferences.longRunDay) ? (preferences.longRunDay as WeekdayShort) : undefined;
-
-  // Parse race date with timezone awareness to prevent off-by-one errors
-  const raceDateRaw = preferences.raceDate;
-  let raceDate: Date | null = null;
-  if (raceDateRaw) {
+    let parsed: PlanData;
     try {
-      const parsedDate = parseISO(raceDateRaw);
-      if (isValid(parsedDate)) {
-        const userTimezone = user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-        raceDate = fromZonedTime(parsedDate, userTimezone);
-      }
-    } catch (e) {
-      logger.error('Failed to parse race date:', raceDateRaw, e);
-      raceDate = null;
+      parsed = PlanSchema.parse(JSON.parse(jsonText));
+    } catch (error) {
+      logger.warn('[generate-plan] AI output failed validation', { requestId, error });
+      return NextResponse.json(
+        {
+          plan: fallbackPlan,
+          source: 'fallback',
+          message: 'AI output invalid. Using fallback plan.',
+          requestId,
+        },
+        { status: 502 }
+      );
     }
+
+    return NextResponse.json(
+      {
+        plan: normalizePlan(parsed),
+        source: 'ai',
+        requestId,
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    logger.error('[generate-plan] Unexpected error', { requestId, error });
+    return NextResponse.json(
+      {
+        plan: null,
+        source: 'fallback',
+        error: 'Unexpected error. Please try again.',
+        requestId,
+      },
+      { status: 500 }
+    );
   }
-  const raceDay = raceDate && isValid(raceDate) ? getWeekdayShortFromDate(raceDate) : undefined;
-  const raceDistanceKm = getDistanceKmFromTargetDistance(targetDistance);
-
-  const requestedWeeks =
-    typeof options?.totalWeeks === 'number'
-      ? clampNumber(options.totalWeeks, 1, MAX_FALLBACK_WEEKS)
-      : undefined;
-  const defaultWeeks = user.experience === 'beginner' ? 4 : user.experience === 'intermediate' ? 6 : 8;
-  const resolvedWeeks = requestedWeeks ?? (rookie_challenge ? 2 : defaultWeeks);
-
-  const currentRaceTimeSeconds =
-    typeof preferences.currentRaceTimeSeconds === 'number' ? preferences.currentRaceTimeSeconds : undefined;
-  const trainingVolume = preferences.trainingVolume;
-  const difficulty = preferences.difficulty;
-
-  const schedulingLine = trainingDays
-    ? `- Schedule workouts only on: ${trainingDays.join(', ')}`
-    : `- Schedule workouts across the week to match ${user.daysPerWeek} training days.`;
-
-  const raceLine =
-    raceDay && typeof raceDistanceKm === 'number'
-      ? `- Final workout: Week ${resolvedWeeks} ${raceDay} time-trial (${raceDistanceKm}km)`
-      : '';
-
-  // Sanitize all user-controlled inputs to prevent prompt injection
-  const sanitizedPlanType = planType ? sanitizeForPrompt(planType, 50) : '';
-  const sanitizedDistance = targetDistance ? sanitizeForPrompt(targetDistance, 50) : '';
-  const sanitizedVolume = trainingVolume ? sanitizeForPrompt(trainingVolume, 50) : '';
-  const sanitizedDifficulty = difficulty ? sanitizeForPrompt(difficulty, 50) : '';
-  const sanitizedLongRunDay = longRunDay ? sanitizeForPrompt(longRunDay, 20) : '';
-  const sanitizedRaceDay = raceDay ? sanitizeForPrompt(raceDay, 20) : '';
-
-  return `Create a personalized running training plan for a runner with the following profile:
-
-**Runner Profile:**
-- Experience Level: ${user.experience}
-- Primary Goal: ${user.goal === 'habit' ? 'Build consistent running habit' : user.goal === 'distance' ? 'Increase running distance' : 'Improve running speed'}
-- Training Days: ${user.daysPerWeek} days per week
-- Preferred Times: ${user.preferredTimes.join(', ')}
-${sanitizedPlanType ? `- Plan Type: ${sanitizedPlanType}` : ''}
-${sanitizedDistance ? `- Target Distance: ${sanitizedDistance}` : ''}
-${typeof currentRaceTimeSeconds === 'number' ? `- Estimated current race time: ${formatTimeHms(currentRaceTimeSeconds)}` : ''}
-${sanitizedVolume ? `- Training volume preference: ${sanitizedVolume}` : ''}
-${sanitizedDifficulty ? `- Difficulty preference: ${sanitizedDifficulty}` : ''}
-${rookie_challenge ? '\n- This user is a rookie and should receive a 14-day rookie challenge plan focused on habit-building and gradual progression.' : ''}
-
-**Scheduling constraints:**
-${schedulingLine}
-${sanitizedLongRunDay ? `- Weekly long run day: ${sanitizedLongRunDay}` : ''}
-${raceLine}
-${raceDate && isValid(raceDate) ? `- Race date: ${format(raceDate, 'EEEE, MMMM d, yyyy')}` : ''}
-
-**Requirements:**
-- totalWeeks MUST be ${resolvedWeeks} (and workouts must use week numbers 1..${resolvedWeeks})
-- Include variety: easy runs, tempo runs, intervals, long runs, and rest days
-- Follow the 80/20 rule (80% easy, 20% hard efforts)
-- Progress gradually to avoid injury
-- Include specific distances in kilometers
-- Add helpful notes for each workout type
-- If a race day is provided, the final workout should be a time-trial on that day
-
-**Workout Types to Include:**
-- easy: Comfortable pace runs for building aerobic base
-- tempo: Comfortably hard pace runs for lactate threshold
-- intervals: High-intensity interval training
-- long: Weekly long runs for endurance
-- time-trial: Progress testing / race day effort
-- hill: Hill repeats for strength (if appropriate)
-- rest: Complete rest days for recovery
-
-Generate a structured plan that will help this runner achieve their goals safely and effectively.`;
 }
 
-/**
- * Builds an enhanced prompt using comprehensive onboarding data
- * 
- * This function constructs a detailed prompt that incorporates user motivations,
- * barriers, coaching style, recent performance, and current goals to create
- * highly personalized training plans.
- * 
- * @param requestData - Enhanced plan request with full user context
- * @returns Detailed prompt string for AI plan generation
- */
-function buildEnhancedPlanPrompt(requestData: any): string {
-  const { userContext, recentRuns, currentGoals, adaptationTrigger } = requestData;
-
-  // Sanitize user-controlled inputs to prevent prompt injection
-  const sanitizedMotivations = userContext.motivations?.map((m: string) => sanitizeForPrompt(m, 100)) || [];
-  const sanitizedBarriers = userContext.barriers?.map((b: string) => sanitizeForPrompt(b, 100)) || [];
-  const sanitizedTrigger = adaptationTrigger ? sanitizeForPrompt(adaptationTrigger, 200) : '';
-
-  const prompt = `Create a highly personalized running training plan using comprehensive user context:
-
-**Runner Profile:**
-- Experience Level: ${userContext.experience}
-- Primary Goal: ${userContext.goal === 'habit' ? 'Build consistent running habit' : userContext.goal === 'distance' ? 'Increase running distance' : 'Improve running speed'}
-- Training Days: ${userContext.daysPerWeek} days per week
-- Preferred Times: ${userContext.preferredTimes.join(', ')}
-${userContext.age ? `- Age: ${userContext.age} years old` : ''}
-
-**Personal Context:**
-- Motivations: ${sanitizedMotivations.join(', ')}
-- Barriers: ${sanitizedBarriers.join(', ')}
-- Coaching Style: ${userContext.coachingStyle} (adjust tone and detail level accordingly)
-
-**Recent Performance:**
-${recentRuns && recentRuns.length > 0 ? 
-  `- Recent Runs: ${recentRuns.map((run: any) => 
-    `${run.type} run: ${run.distance}km in ${Math.round(run.duration/60)}min (${Math.round(run.pace || 0)}s/km pace)`
-  ).join(', ')}` : 
-  '- No recent run data available'
+export async function GET() {
+  return NextResponse.json({ error: 'Method not allowed' }, { status: 405 });
 }
 
-**Current Goals:**
-${currentGoals && currentGoals.length > 0 ? 
-  currentGoals.map((goal: any) => 
-    `- ${goal.title}: ${goal.currentValue}/${goal.targetValue} (${goal.status})`
-  ).join('\n') : 
-  '- No specific goals set'
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204 });
 }
-
-**Adaptation Context:**
-${sanitizedTrigger ? `- Trigger: ${sanitizedTrigger} (adjust plan accordingly)` : '- New plan generation'}
-
-**Requirements:**
-- Create a ${userContext.experience === 'beginner' ? '4-week' : userContext.experience === 'intermediate' ? '6-week' : '8-week'} progressive training plan
-- Address specific barriers: ${sanitizedBarriers.join(', ')}
-- Align with motivations: ${sanitizedMotivations.join(', ')}
-- Use ${userContext.coachingStyle} coaching style with appropriate tone and detail
-- Include variety: easy runs, tempo runs, intervals, long runs, and rest days
-- Follow the 80/20 rule (80% easy, 20% hard efforts)
-- Progress gradually to avoid injury
-- Include specific distances in kilometers
-- Add personalized notes addressing motivations and barriers
-
-**Workout Types to Include:**
-- easy: Comfortable pace runs for building aerobic base
-- tempo: Comfortably hard pace runs for lactate threshold
-- intervals: High-intensity interval training
-- long: Weekly long runs for endurance
-- time-trial: Occasional time trials for progress testing
-- hill: Hill repeats for strength (if appropriate)
-- rest: Complete rest days for recovery
-
-**Personalization Guidelines:**
-- Start conservatively and build gradually
-- Include at least 1-2 rest days per week
-- Long runs should be 20-30% of weekly volume
-- Tempo runs: 20-40 minutes at threshold pace
-- Intervals: 4-8 x 400m-1000m with recovery
-- Easy runs: 3-8km depending on experience
-- Include motivational notes that address specific barriers
-- Use coaching style appropriate language and detail level
-- Consider recent performance trends for progression
-
-Generate a structured plan that will help this runner achieve their goals safely and effectively, addressing their specific motivations and barriers.`;
-
-  return prompt;
-} 
-
