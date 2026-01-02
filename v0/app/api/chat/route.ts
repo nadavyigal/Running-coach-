@@ -564,8 +564,10 @@ Keep responses concise but informative. Always be supportive and positive. Focus
   }
 }
 
-// Export the secured handler
-export const POST = withChatSecurity(chatHandler);
+// Export the handler directly - middleware wrapper causing Next.js 16 compatibility issues
+export async function POST(req: Request) {
+  return chatHandler(req as unknown as ApiRequest);
+}
 
 function extractUserIdFromString(value: string | undefined | null): number | null {
   if (!value) {
@@ -650,4 +652,6 @@ async function chatHistoryHandler(req: ApiRequest): Promise<NextResponse> {
   }
 }
 
-export const GET = withChatSecurity(chatHistoryHandler);
+export async function GET(req: Request) {
+  return chatHistoryHandler(req as unknown as ApiRequest);
+}

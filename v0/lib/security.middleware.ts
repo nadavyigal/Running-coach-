@@ -79,22 +79,24 @@ export function withSecurity(
   handler: (req: ApiRequest) => Promise<NextResponse>,
   options: SecurityMiddlewareOptions = {}
 ) {
-  return async (request: ApiRequest): Promise<NextResponse> => {
+  return async (request: Request): Promise<NextResponse> => {
+    // Convert Request to NextRequest/ApiRequest for internal use
+    const apiRequest = request as unknown as ApiRequest;
     const startTime = Date.now();
-    request.startTime = startTime;
+    apiRequest.startTime = startTime;
     
     try {
       // Get client IP
-      const clientIP = getClientIP(request);
-      request.clientIP = clientIP;
-      
+      const clientIP = getClientIP(apiRequest);
+      apiRequest.clientIP = clientIP;
+
       // Log request if enabled
       if (options.logRequests !== false) {
-        console.log(`${request.method} ${request.url} from ${clientIP}`);
+        console.log(`${apiRequest.method} ${apiRequest.url} from ${clientIP}`);
       }
-      
+
       // Validate request size
-      if (!validateRequestSize(request)) {
+      if (!validateRequestSize(apiRequest)) {
         securityMonitor.trackSecurityEvent({
           type: 'oversized_request',
           severity: 'warning',
