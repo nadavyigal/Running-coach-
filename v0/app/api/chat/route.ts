@@ -20,13 +20,12 @@ export async function POST(req: Request) {
 
     // Stream the response
     const result = streamText({
-      model: openai('gpt-4o'),
+      model: openai('gpt-4o-mini'),
       messages: messages.map((m: any) => ({
         role: m.role,
         content: m.content
       })),
       system: `You are an AI running coach. Provide helpful, motivating advice about running, training plans, injury prevention, and general fitness. Be encouraging and supportive.`,
-      maxTokens: 500,
     });
 
     // Return streaming response
