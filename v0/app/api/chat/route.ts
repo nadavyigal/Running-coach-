@@ -580,7 +580,8 @@ function getAuthenticatedUserId(req: ApiRequest): number | null {
     }
   }
 
-  const sessionCookie = req.cookies.get('session')
+  // cookies might not exist on plain Request objects
+  const sessionCookie = req.cookies?.get?.('session')
   if (sessionCookie) {
     const parsedCookie = extractUserIdFromString(sessionCookie.value)
     if (parsedCookie != null) {
@@ -640,4 +641,16 @@ export async function GET(req: Request): Promise<NextResponse> {
   apiReq.clientIP = forwardedFor?.split(',')[0]?.trim() || realIP || '127.0.0.1';
 
   return chatHistoryHandler(apiReq);
+}
+
+// Handle CORS preflight requests
+export async function OPTIONS(): Promise<Response> {
+  return new Response(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-id',
+    },
+  });
 }
