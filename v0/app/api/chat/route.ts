@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     console.log('Starting chat with', messages.length, 'messages');
 
     // Stream the response
-    const result = streamText({
+    const result = await streamText({
       model: openaiClient('gpt-4o-mini'),
       messages: messages.map((m: any) => ({
         role: m.role,
@@ -44,8 +44,8 @@ export async function POST(req: Request) {
       system: `You are an AI running coach. Provide helpful, motivating advice about running, training plans, injury prevention, and general fitness. Be encouraging and supportive.`,
     });
 
-    // Return streaming response
-    return result.toDataStreamResponse();
+    // Return streaming response using correct AI SDK method
+    return result.toTextStreamResponse();
 
   } catch (error) {
     console.error('Chat error:', error);
