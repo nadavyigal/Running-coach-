@@ -34,8 +34,15 @@ export async function POST(req: Request) {
 
   } catch (error) {
     console.error('Chat error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error('Error details:', { message: errorMessage, stack: errorStack });
+
     return NextResponse.json(
-      { error: 'An error occurred processing your request' },
+      {
+        error: 'An error occurred processing your request',
+        details: errorMessage
+      },
       { status: 500 }
     );
   }
