@@ -6,7 +6,7 @@ import { chatRepository } from '@/lib/server/chatRepository'
 import type { ChatUserProfile } from '@/lib/models/chat'
 import { withChatSecurity, validateAndSanitizeInput, ApiRequest } from '@/lib/security.middleware'
 // Error handling is managed by the secure wrapper and middleware
-import { withSecureOpenAI } from '@/lib/apiKeyManager'
+import { withSecureOpenAI, validateOpenAIKey, getSecureApiKeyError } from '@/lib/apiKeyManager'
 import { logger } from '@/lib/logger'
 import { rateLimiter, createRateLimitKey, sanitizeChatMessage } from '@/lib/security'
 
@@ -30,7 +30,7 @@ function trackTokenUsage(userId: string, tokens: number): boolean {
   return usage.tokens < MONTHLY_TOKEN_BUDGET
 }
 
-async function chatHandler(req: ApiRequest) {
+async function chatHandler(req: ApiRequest): Promise<Response> {
   logger.log('💬 Chat API: Starting request');
   
   try {
@@ -391,107 +391,87 @@ Keep responses concise but informative. Always be supportive and positive. Focus
     logger.log(`📨 Prepared ${apiMessages.length} messages for OpenAI`);
     logger.log('⚙️ Using model: gpt-4o, maxTokens: 500, temperature: 0.7');
 
-    // Use secure OpenAI wrapper for stream generation
+    // Persist user message before streaming
     await persistUserMessage();
 
-    const result = await withSecureOpenAI(
-      async () => {
-        logger.log('🔄 Calling OpenAI streamText...');
-        
-        const streamResult = await Promise.race([
-          streamText({
-            model: openai("gpt-4o"),
-            messages: apiMessages,
-            maxOutputTokens: 500, // Limit response length to control costs
-            temperature: 0.7,
-          }),
-          timeoutPromise
-        ]) as any;
-
-        logger.log('✅ OpenAI streamText call initiated successfully');
-        return streamResult;
-      }
-    );
-    
-    if (!result.success) {
-      const apiError = result.error || {};
-      const fallbackRequired = Boolean(apiError.fallbackRequired);
-      const status = typeof apiError.status === 'number' ? apiError.status : 503;
-
-      const payload = {
-        error: apiError.message || 'AI service temporarily unavailable. Please try again later.',
-        errorType: apiError.errorType || 'AI_SERVICE_ERROR',
-        fallback: fallbackRequired,
-        fallbackRequired,
+    // Validate OpenAI API key first
+    const keyValidation = validateOpenAIKey();
+    if (!keyValidation.isValid) {
+      const apiError = getSecureApiKeyError(keyValidation);
+      return new Response(JSON.stringify({
+        error: apiError.message,
+        errorType: apiError.errorType,
+        fallback: apiError.fallbackRequired,
+        fallbackRequired: apiError.fallbackRequired,
         redirectToForm: false,
-        message: apiError.message || 'AI service temporarily unavailable. Please try again later.'
-      };
-
-      return new Response(JSON.stringify(payload), {
-        status,
+        message: apiError.message
+      }), {
+        status: apiError.status,
         headers: { "Content-Type": "application/json" }
       });
     }
-    
-    // Ensure the returned stream uses the same '0:{json}' lines format
-    const original = await result.data.toDataStreamResponse();
-    const reader = original.body?.getReader();
-    if (!reader) return original;
+
+    logger.log('🔄 Calling OpenAI streamText...');
+
+    // Call streamText directly (not wrapped in withSecureOpenAI to preserve streaming)
+    const streamResult = streamText({
+      model: openai("gpt-4o"),
+      messages: apiMessages,
+      maxOutputTokens: 500, // Limit response length to control costs
+      temperature: 0.7,
+    });
+
+    logger.log('✅ OpenAI streamText call initiated successfully');
+
+    // Get the text stream and transform it to the format the client expects
+    const textStream = streamResult.textStream;
+
+    let aggregatedContent = '';
     const transformed = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
-        const decoder = new TextDecoder();
-        let aggregatedContent = '';
-        let buffer = '';
-        const handleLine = (line: string) => {
-          if (!line) return;
-          if (line.startsWith('0:')) {
-            controller.enqueue(encoder.encode(line + '\n'));
-            try {
-              const data = JSON.parse(line.slice(2));
-              if (typeof data.textDelta === 'string') {
-                aggregatedContent += data.textDelta;
-              }
-            } catch (parseError) {
-              logger.error('??? Failed to parse streamed chat chunk:', parseError);
+        try {
+          for await (const text of textStream) {
+            if (text) {
+              aggregatedContent += text;
+              // Send in the format the client expects: 0:{"textDelta":"..."}
+              const chunk = `0:${JSON.stringify({ textDelta: text })}\n`;
+              controller.enqueue(encoder.encode(chunk));
             }
-            return;
           }
 
-          aggregatedContent += line;
-          controller.enqueue(encoder.encode(`0:${JSON.stringify({ textDelta: line })}\n`));
-        };
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const text = decoder.decode(value, { stream: true });
-          buffer += text;
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
-          for (const line of lines) {
-            handleLine(line);
+          // Store the complete message after streaming finishes
+          if (normalizedUserId && aggregatedContent) {
+            try {
+              await chatRepository.createChatMessage({
+                userId: normalizedUserId,
+                role: 'assistant',
+                content: aggregatedContent,
+                conversationId,
+                tokenCount: Math.ceil(aggregatedContent.length / 4),
+              });
+            } catch (storageError) {
+              logger.error('❌ Failed to store assistant message from stream:', storageError);
+            }
           }
+
+          controller.close();
+        } catch (streamError) {
+          logger.error('❌ Stream error:', streamError);
+          // Send error as a text delta so client can display it
+          const errorChunk = `0:${JSON.stringify({ textDelta: '\n\n[Error: Failed to complete response. Please try again.]' })}\n`;
+          controller.enqueue(encoder.encode(errorChunk));
+          controller.close();
         }
-        if (buffer.trim()) {
-          handleLine(buffer);
-        }
-        if (normalizedUserId && aggregatedContent) {
-          try {
-            await chatRepository.createChatMessage({
-              userId: normalizedUserId,
-              role: 'assistant',
-              content: aggregatedContent,
-              conversationId,
-              tokenCount: Math.ceil(aggregatedContent.length / 4),
-            });
-          } catch (storageError) {
-            logger.error('❌ Failed to store assistant message from stream:', storageError);
-          }
-        }
-        controller.close();
       }
     });
-    return new Response(transformed, { headers: original.headers });
+
+    return new Response(transformed, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Transfer-Encoding': 'chunked',
+      }
+    });
 
   } catch (error) {
     logger.error('❌ Chat API error occurred:', error);
@@ -558,7 +538,8 @@ Keep responses concise but informative. Always be supportive and positive. Focus
 // Export the secured handler with Next.js 16 compatible function syntax
 export async function POST(req: Request) {
   const apiReq = req as any; // Cast to ApiRequest for middleware compatibility
-  return withChatSecurity(chatHandler)(apiReq);
+  // Cast handler to match withChatSecurity's expected type (Response is compatible with NextResponse at runtime)
+  return withChatSecurity(chatHandler as (req: ApiRequest) => Promise<NextResponse>)(apiReq);
 }
 
 function extractUserIdFromString(value: string | undefined | null): number | null {
