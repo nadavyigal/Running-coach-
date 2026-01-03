@@ -34,8 +34,8 @@ export async function POST(req: Request) {
 
     console.log('Starting chat with', messages.length, 'messages');
 
-    // Stream the response
-    const result = await streamText({
+    // Stream the response - DO NOT await, streamText returns a promise-like object
+    const result = streamText({
       model: openaiClient('gpt-4o-mini'),
       messages: messages.map((m: any) => ({
         role: m.role,
@@ -44,8 +44,8 @@ export async function POST(req: Request) {
       system: `You are an AI running coach. Provide helpful, motivating advice about running, training plans, injury prevention, and general fitness. Be encouraging and supportive.`,
     });
 
-    // Return streaming response using correct AI SDK method
-    return result.toTextStreamResponse();
+    // Return data stream response (compatible with Vercel AI SDK client)
+    return result.toDataStreamResponse();
 
   } catch (error) {
     console.error('Chat error:', error);
