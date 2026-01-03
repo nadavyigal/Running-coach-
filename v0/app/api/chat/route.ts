@@ -1,13 +1,27 @@
 import { NextResponse } from 'next/server';
 import { streamText } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// Create OpenAI client with explicit API key
+const openaiClient = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
 // Simplified chat endpoint - rebuilt for Next.js 16 compatibility
 export async function POST(req: Request) {
   try {
+    // Verify API key is available
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('OPENAI_API_KEY is not set');
+      return NextResponse.json(
+        { error: 'OpenAI API key not configured' },
+        { status: 500 }
+      );
+    }
+
     const body = await req.json();
     const { messages, userId } = body;
 
@@ -18,9 +32,11 @@ export async function POST(req: Request) {
       );
     }
 
+    console.log('Starting chat with', messages.length, 'messages');
+
     // Stream the response
     const result = streamText({
-      model: openai('gpt-4o-mini'),
+      model: openaiClient('gpt-4o-mini'),
       messages: messages.map((m: any) => ({
         role: m.role,
         content: m.content
