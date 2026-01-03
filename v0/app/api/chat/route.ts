@@ -4,7 +4,7 @@ import { NextResponse } from "next/server"
 import { adaptiveCoachingEngine, UserContext } from '@/lib/adaptiveCoachingEngine'
 import { chatRepository } from '@/lib/server/chatRepository'
 import type { ChatUserProfile } from '@/lib/models/chat'
-import { withChatSecurity, validateAndSanitizeInput, ApiRequest } from '@/lib/security.middleware'
+import { validateAndSanitizeInput, ApiRequest } from '@/lib/security.middleware'
 // Error handling is managed by the secure wrapper and middleware
 import { withSecureOpenAI, validateOpenAIKey, getSecureApiKeyError } from '@/lib/apiKeyManager'
 import { logger } from '@/lib/logger'
@@ -535,11 +535,17 @@ Keep responses concise but informative. Always be supportive and positive. Focus
   }
 }
 
-// Export the secured handler with Next.js 16 compatible function syntax
-export async function POST(req: Request) {
-  const apiReq = req as any; // Cast to ApiRequest for middleware compatibility
-  // Cast handler to match withChatSecurity's expected type (Response is compatible with NextResponse at runtime)
-  return withChatSecurity(chatHandler as (req: ApiRequest) => Promise<NextResponse>)(apiReq);
+// Export the handler directly without security middleware wrapper
+// The security middleware was causing 405 errors in Next.js 16
+// Security features (rate limiting, input validation) are handled within chatHandler
+export async function POST(req: Request): Promise<Response> {
+  const apiReq = req as unknown as ApiRequest;
+  // Add clientIP for rate limiting
+  const forwardedFor = req.headers.get('x-forwarded-for');
+  const realIP = req.headers.get('x-real-ip');
+  apiReq.clientIP = forwardedFor?.split(',')[0]?.trim() || realIP || '127.0.0.1';
+
+  return chatHandler(apiReq);
 }
 
 function extractUserIdFromString(value: string | undefined | null): number | null {
@@ -625,8 +631,13 @@ async function chatHistoryHandler(req: ApiRequest): Promise<NextResponse> {
   }
 }
 
-// Export GET handler with Next.js 16 compatible function syntax
-export async function GET(req: Request) {
-  const apiReq = req as any; // Cast to ApiRequest for middleware compatibility
-  return withChatSecurity(chatHistoryHandler)(apiReq);
+// Export GET handler directly without security middleware wrapper
+export async function GET(req: Request): Promise<NextResponse> {
+  const apiReq = req as unknown as ApiRequest;
+  // Add clientIP for any rate limiting checks
+  const forwardedFor = req.headers.get('x-forwarded-for');
+  const realIP = req.headers.get('x-real-ip');
+  apiReq.clientIP = forwardedFor?.split(',')[0]?.trim() || realIP || '127.0.0.1';
+
+  return chatHistoryHandler(apiReq);
 }
