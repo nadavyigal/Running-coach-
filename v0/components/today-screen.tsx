@@ -137,22 +137,8 @@ export function TodayScreen() {
           const stripWorkouts = await dbUtils.getWorkoutsForDateRange(user.id!, stripStart, stripEnd)
           setVisibleWorkouts(stripWorkouts)
 
-          // const todaysWorkout = await dbUtils.getTodaysWorkout(user.id!)
-          // setTodaysWorkout(todaysWorkout)
-
-          // MOCK FOR DEMO RECORDING (Scene 4)
-          const mockMissedWorkout = {
-            id: 777,
-            userId: user.id!,
-            planId: 1,
-            scheduledDate: new Date(new Date().setDate(new Date().getDate() - 1)), // Yesterday
-            type: 'tempo',
-            distance: 5,
-            duration: 30,
-            completed: false,
-            notes: 'Mock missed workout'
-          } as Workout
-          setTodaysWorkout(mockMissedWorkout)
+          const todaysWorkout = await dbUtils.getTodaysWorkout(user.id!)
+          setTodaysWorkout(todaysWorkout)
         }
         setIsLoadingWorkout(false)
       } catch (error) {

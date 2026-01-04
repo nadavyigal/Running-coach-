@@ -11,6 +11,7 @@ import { AddActivityModal } from "@/components/add-activity-modal"
 import { RunMap } from "@/components/maps/RunMap"
 import { type Run, type Workout, type User, type Route } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
+import { recordRunWithSideEffects } from "@/lib/run-recording"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
@@ -773,38 +774,36 @@ export function RecordScreen() {
 	          ? gpsAccuracyHistory.reduce((sum, acc) => sum + acc.accuracyRadius, 0) / gpsAccuracyHistory.length
 	          : undefined
 
- 	      const runData: Omit<Run, 'id' | 'createdAt'> = {
- 	        userId: user.id,
- 	        type: resolveRunType(currentWorkout?.type),
- 	        distance,
- 	        duration,
- 	        pace: duration / distance,
- 	        calories: estimateCalories(duration, distance),
- 	        gpsPath: JSON.stringify(
- 	          gpsPathRef.current.map((point) => ({
- 	            lat: point.latitude,
- 	            lng: point.longitude,
- 	            timestamp: point.timestamp,
- 	            accuracy: point.accuracy,
- 	          }))
- 	        ),
- 	        gpsAccuracyData: JSON.stringify(gpsAccuracyHistory),
- 	        completedAt: new Date(),
- 	        ...(selectedRoute
- 	          ? { notes: `Route: ${selectedRoute.name}`, route: selectedRoute.name }
- 	          : {}),
+	      const gpsPath =
+	        gpsPathRef.current.length > 0
+	          ? JSON.stringify(
+	              gpsPathRef.current.map((point) => ({
+	                lat: point.latitude,
+	                lng: point.longitude,
+	                timestamp: point.timestamp,
+	                accuracy: point.accuracy,
+	              }))
+	            )
+	          : undefined
+
+	      const gpsAccuracyData =
+	        gpsAccuracyHistory.length > 0 ? JSON.stringify(gpsAccuracyHistory) : undefined
+
+	      const { runId } = await recordRunWithSideEffects({
+	        userId: user.id,
+	        distanceKm: distance,
+	        durationSeconds: duration,
+	        completedAt: new Date(),
+	        autoMatchWorkout: true,
+	        ...(currentWorkout?.type ? { type: resolveRunType(currentWorkout.type) } : {}),
+	        ...(typeof currentWorkout?.id === 'number' ? { workoutId: currentWorkout.id } : {}),
+	        ...(selectedRoute ? { notes: `Route: ${selectedRoute.name}`, route: selectedRoute.name } : {}),
+	        ...(gpsPath ? { gpsPath } : {}),
+	        ...(gpsAccuracyData ? { gpsAccuracyData } : {}),
 	        ...(typeof startAccuracy === 'number' ? { startAccuracy } : {}),
 	        ...(typeof endAccuracy === 'number' ? { endAccuracy } : {}),
 	        ...(typeof averageAccuracy === 'number' ? { averageAccuracy } : {}),
-	        ...(typeof currentWorkout?.id === 'number' ? { workoutId: currentWorkout.id } : {}),
-	      }
-
-	      const runId = await dbUtils.createRun(runData)
-
-	      // Mark workout as completed if it exists
-	      if (currentWorkout?.id) {
-	        await dbUtils.markWorkoutCompleted(currentWorkout.id)
-	      }
+	      })
 
       toast({
         title: "Run Saved",
@@ -812,7 +811,6 @@ export function RecordScreen() {
       })
 
       try {
-        window.dispatchEvent(new CustomEvent("run-saved", { detail: { userId: user.id, runId } }))
         window.dispatchEvent(new CustomEvent("navigate-to-run-report", { detail: { runId } }))
       } catch {
         router.push('/')

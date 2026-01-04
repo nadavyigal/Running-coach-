@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Clock, Activity, Save, Upload } from "lucide-react"
 import { type Run } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
+import { recordRunWithSideEffects } from "@/lib/run-recording"
 import { useToast } from "@/hooks/use-toast"
 import { AiActivityAnalysisError, analyzeActivityImage } from "@/lib/ai-activity-client"
 import { trackAnalyticsEvent } from "@/lib/analytics"
@@ -91,29 +92,20 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
 	      const calories = Math.round(runDetails.distanceKm * 60 + (runDetails.durationSeconds / 60) * 3)
 	      const resolvedNotes = (runDetails.notes ?? notes).trim()
 
-	      const runData: Omit<Run, 'id' | 'createdAt'> = {
-	        userId: user.id,
-	        type: runDetails.typeOverride || type,
-	        distance: runDetails.distanceKm,
-	        duration: runDetails.durationSeconds,
-	        pace,
-	        calories,
-	        completedAt: runDetails.completedAt || new Date(),
-	        ...(typeof workoutId === 'number' ? { workoutId } : {}),
-	        ...(resolvedNotes ? { notes: resolvedNotes } : {}),
-	        ...(runDetails.importMeta?.requestId ? { importRequestId: runDetails.importMeta.requestId } : {}),
-	        ...(typeof runDetails.importMeta?.confidence === "number" ? { importConfidencePct: runDetails.importMeta.confidence } : {}),
-	        ...(runDetails.importMeta?.method ? { importMethod: runDetails.importMeta.method } : {}),
-	        ...(runDetails.importMeta?.model ? { importModel: runDetails.importMeta.model } : {}),
-        ...(runDetails.importMeta?.parserVersion ? { importParserVersion: runDetails.importMeta.parserVersion } : {}),
-        ...(runDetails.importMeta ? { importSource: "image" } : {}),
-      }
-
-      await dbUtils.createRun(runData)
-
-      if (workoutId) {
-        await dbUtils.markWorkoutCompleted(workoutId)
-      }
+      await recordRunWithSideEffects({
+        userId: user.id,
+        distanceKm: runDetails.distanceKm,
+        durationSeconds: runDetails.durationSeconds,
+        completedAt: runDetails.completedAt || new Date(),
+        autoMatchWorkout: true,
+        type: runDetails.typeOverride || type,
+        paceSecondsPerKm: pace,
+        calories,
+        ...(resolvedNotes ? { notes: resolvedNotes } : {}),
+        ...(typeof workoutId === 'number' ? { workoutId } : {}),
+        ...(runDetails.importMeta ? { importSource: "image" } : { importSource: "manual" }),
+        ...(runDetails.importMeta ? { importMeta: runDetails.importMeta } : {}),
+      })
 
       toast({
         title: "Run Saved! 🎉",

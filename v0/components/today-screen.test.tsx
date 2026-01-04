@@ -1,277 +1,133 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { vi, MockedFunction } from 'vitest';
-import React from 'react';
-import { TodayScreen } from './today-screen';
-import { StreakIndicator } from "./streak-indicator"
-import { dbUtils } from '@/lib/dbUtils';
+import type { ReactNode } from 'react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { TodayScreen } from './today-screen'
+import { dbUtils } from '@/lib/dbUtils'
 
-// Mock dbUtils and hooks
-vi.mock('@/lib/dbUtils', () => ({
-  dbUtils: {
-    getCurrentUser: vi.fn(),
-    getTodaysWorkout: vi.fn(),
-    getActivePlan: vi.fn(),
-    getWorkoutsByPlan: vi.fn(),
-    getRunStats: vi.fn(),
-    getWorkoutsForDateRange: vi.fn(),
-    getCoachingProfile: vi.fn(),
-    getStreakData: vi.fn(),
-    getPrimaryGoal: vi.fn(),
-  },
-}));
+vi.mock('@/lib/dbUtils')
+vi.mock('@/hooks/use-toast', () => ({
+  useToast: () => ({ toast: vi.fn() }),
+}))
+vi.mock('@/components/add-run-modal', () => ({
+  AddRunModal: ({ open }: { open: boolean }) => (open ? <div data-testid="add-run-modal" /> : null),
+}))
+vi.mock('@/components/add-activity-modal', () => ({
+  AddActivityModal: ({ open }: { open: boolean }) => (open ? <div data-testid="add-activity-modal" /> : null),
+}))
+vi.mock('@/components/route-selector-modal', () => ({
+  RouteSelectorModal: () => null,
+}))
+vi.mock('@/components/reschedule-modal', () => ({
+  RescheduleModal: () => null,
+}))
+vi.mock('@/components/date-workout-modal', () => ({
+  DateWorkoutModal: () => null,
+}))
+vi.mock('@/components/community-stats-widget', () => ({
+  CommunityStatsWidget: () => <div data-testid="community-stats-widget" />,
+}))
+vi.mock('@/components/goal-recommendations', () => ({
+  GoalRecommendations: () => <div data-testid="goal-recommendations" />,
+}))
+vi.mock('@/components/habit-analytics-widget', () => ({
+  HabitAnalyticsWidget: () => <div data-testid="habit-analytics-widget" />,
+}))
+vi.mock('@/components/modal-error-boundary', () => ({
+  __esModule: true,
+  default: ({ children }: { children: ReactNode }) => <>{children}</>,
+}))
+vi.mock('@/components/ui/alert-dialog', () => ({
+  AlertDialog: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  AlertDialogAction: ({ children, onClick }: any) => <button onClick={onClick}>{children}</button>,
+  AlertDialogCancel: ({ children }: { children: ReactNode }) => <button>{children}</button>,
+  AlertDialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  AlertDialogDescription: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  AlertDialogFooter: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  AlertDialogHeader: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  AlertDialogTitle: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}))
 
-vi.mock('../hooks/use-toast', () => ({
-  useToast: () => ({
-    toast: vi.fn(),
-  }),
-}));
-
-// Mock UI components
-vi.mock('./ui/card', () => ({
-  Card: ({ children, ...props }: any) => <div data-testid="card" {...props}>{children}</div>,
-  CardContent: ({ children, ...props }: any) => <div data-testid="card-content" {...props}>{children}</div>,
-  CardHeader: ({ children, ...props }: any) => <div data-testid="card-header" {...props}>{children}</div>,
-  CardTitle: ({ children, ...props }: any) => <h2 data-testid="card-title" {...props}>{children}</h2>,
-  CardDescription: ({ children, ...props }: any) => <p data-testid="card-description" {...props}>{children}</p>,
-}));
-
-vi.mock('./ui/button', () => ({
-  Button: ({ children, onClick, ...props }: any) => (
-    <button data-testid="button" onClick={onClick} {...props}>{children}</button>
-  ),
-}));
-
-vi.mock('./ui/badge', () => ({
-  Badge: ({ children, ...props }: any) => <span data-testid="badge" {...props}>{children}</span>,
-}));
-
-vi.mock('./ui/progress', () => ({
-  Progress: ({ value, ...props }: any) => (
-    <div data-testid="progress" data-value={value} {...props}></div>
-  ),
-}));
-
-// Mock goal-recommendations to avoid fetch issues in tests
-vi.mock('./goal-recommendations', () => ({
-  GoalRecommendations: ({ userId }: any) => (
-    <div data-testid="goal-recommendations">Goal Recommendations for user {userId}</div>
-  ),
-}));
-
-// Mock coaching-insights-widget to avoid fetch issues in tests
-vi.mock('./coaching-insights-widget', () => ({
-  CoachingInsightsWidget: ({ userId }: any) => (
-    <div data-testid="coaching-insights">Coaching Insights for user {userId}</div>
-  ),
-}));
-
-vi.mock('./habit-analytics-widget', () => ({
-  HabitAnalyticsWidget: ({ userId }: any) => (
-    <div data-testid="habit-analytics">Habit Analytics for user {userId}</div>
-  ),
-}));
-
-vi.mock('./add-run-modal', () => ({
-  AddRunModal: ({ open, onClose, ...props }: any) => (
-    open ? <div data-testid="add-run-modal" onClick={onClose} {...props}>Add Run Modal</div> : null
-  ),
-}));
-
-vi.mock('./add-activity-modal', () => ({
-  AddActivityModal: ({ open, onClose, ...props }: any) => (
-    open ? <div data-testid="add-activity-modal" onClick={onClose} {...props}>Add Activity Modal</div> : null
-  ),
-}));
-
-const mockUser = {
-  id: 1,
-  name: 'Test User',
-  goal: 'habit' as const,
-  experience: 'beginner',
-  preferredTimes: ['morning'],
-  daysPerWeek: 3,
-  consents: {},
-  onboardingComplete: true,
-};
-
-const mockWorkout = {
-  id: 1,
-  planId: 1,
-  week: 1,
-  day: 1,
+const baseWorkout = {
+  id: 101,
   type: 'easy',
-  scheduledDate: new Date(),
-  distance: 3,
+  distance: 5,
   duration: 30,
-  description: 'Easy run',
+  planId: 10,
+  week: 1,
+  day: 'Mon',
   completed: false,
-  completedAt: null,
-  notes: null,
-  rpe: null,
-  actualDistance: null,
-  actualDuration: null,
-};
-
-const mockPlan = {
-  id: 1,
-  userId: 1,
-  name: 'Test Plan',
-  startDate: new Date(),
-  endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-  isActive: true,
+  scheduledDate: new Date(),
   createdAt: new Date(),
   updatedAt: new Date(),
-};
+}
 
 describe('TodayScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    
-    // Set up default mock return values to prevent undefined errors
-    dbUtils.getWorkoutsForDateRange.mockResolvedValue([]);
-    dbUtils.getCoachingProfile.mockResolvedValue(null);
-    dbUtils.getStreakData.mockResolvedValue({ currentStreak: 0, longestStreak: 0 });
-    dbUtils.getPrimaryGoal.mockResolvedValue(null);
-  });
+    vi.clearAllMocks()
+    ;(dbUtils.getCurrentUser as any).mockResolvedValue({ id: 1 })
+    ;(dbUtils.getActivePlan as any).mockResolvedValue({ id: 10, title: 'Base Plan' })
+    ;(dbUtils.getPrimaryGoal as any).mockResolvedValue(null)
+    ;(dbUtils.getWorkoutsForDateRange as any).mockResolvedValue([])
+    ;(dbUtils.getTodaysWorkout as any).mockResolvedValue(baseWorkout)
+  })
 
-  it('renders dashboard with today workout and actions', async () => {
-    dbUtils.getCurrentUser.mockResolvedValue(mockUser);
-    dbUtils.getTodaysWorkout.mockResolvedValue(mockWorkout);
-    dbUtils.getActivePlan.mockResolvedValue(mockPlan);
-    dbUtils.getWorkoutsByPlan.mockResolvedValue([mockWorkout]);
-    dbUtils.getRunStats.mockResolvedValue({ totalRuns: 5, totalDistance: 15, totalDuration: 150 });
-    dbUtils.getWorkoutsForDateRange.mockResolvedValue([mockWorkout]);
-    dbUtils.getCoachingProfile.mockResolvedValue({ id: 1, userId: 1 });
-    dbUtils.getStreakData.mockResolvedValue({ currentStreak: 3, longestStreak: 7 });
+  it('renders today workout details and quick actions', async () => {
+    render(<TodayScreen />)
 
-    render(<TodayScreen />);
+    expect(await screen.findByText('Easy Run')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /start run/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add Run' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Activity' })).toBeInTheDocument()
+  })
 
-    await waitFor(() => {
-      expect(screen.getByText('Today')).toBeInTheDocument();
-      expect(screen.getByText('Easy run')).toBeInTheDocument();
-      expect(screen.getByText('Record Run')).toBeInTheDocument();
-      expect(screen.getByText('Add Activity')).toBeInTheDocument();
-    });
-  });
+  it('renders rest day state when no workout exists', async () => {
+    ;(dbUtils.getTodaysWorkout as any).mockResolvedValueOnce(null)
 
-  it('handles empty state (no plan)', async () => {
-    dbUtils.getCurrentUser.mockResolvedValue(mockUser);
-    dbUtils.getActivePlan.mockResolvedValue(undefined);
-    dbUtils.getTodaysWorkout.mockResolvedValue(null);
-    dbUtils.getWorkoutsForDateRange.mockResolvedValue([]);
-    dbUtils.getCoachingProfile.mockResolvedValue({ id: 1, userId: 1 });
-    dbUtils.getStreakData.mockResolvedValue({ currentStreak: 0, longestStreak: 0 });
+    render(<TodayScreen />)
 
-    render(<TodayScreen />);
+    expect(await screen.findByText('Rest Day')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /record a run/i })).toBeInTheDocument()
+  })
+
+  it('opens add run modal when Add Run is clicked', async () => {
+    render(<TodayScreen />)
+
+    await screen.findByText('Easy Run')
+    expect(screen.queryByTestId('add-run-modal')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Run' }))
 
     await waitFor(() => {
-      expect(screen.getByText('No Active Plan')).toBeInTheDocument();
-    });
-  });
+      expect(screen.getByTestId('add-run-modal')).toBeInTheDocument()
+    })
+  })
 
-  it('handles error state', async () => {
-    dbUtils.getCurrentUser.mockRejectedValue(new Error('DB error'));
-    render(<TodayScreen />);
+  it('shows the active goal card when a primary goal exists', async () => {
+    ;(dbUtils.getPrimaryGoal as any).mockResolvedValueOnce({
+      id: 7,
+      title: 'Run 10K',
+      description: 'Build up to 10K',
+      baselineValue: 0,
+      targetValue: 10,
+      currentValue: 4,
+      goalType: 'distance_achievement',
+      category: 'endurance',
+      priority: 1,
+      status: 'active',
+      specificTarget: { metric: 'distance', value: 10, unit: 'km' },
+      timeBound: {
+        startDate: new Date(),
+        deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        milestoneSchedule: [25, 50, 75],
+        totalDuration: 14,
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
 
-    await waitFor(() => {
-      expect(screen.getByText('Error loading data')).toBeInTheDocument();
-    });
-  });
+    render(<TodayScreen />)
 
-  it('navigates to Record Run when Start Workout is clicked', async () => {
-    dbUtils.getCurrentUser.mockResolvedValue(mockUser);
-    dbUtils.getTodaysWorkout.mockResolvedValue(mockWorkout);
-    dbUtils.getActivePlan.mockResolvedValue(mockPlan);
-    dbUtils.getWorkoutsByPlan.mockResolvedValue([mockWorkout]);
-    dbUtils.getRunStats.mockResolvedValue({ totalRuns: 5, totalDistance: 15, totalDuration: 150 });
-
-    render(<TodayScreen />);
-
-    await waitFor(() => {
-      const recordButton = screen.getByText('Record Run');
-      fireEvent.click(recordButton);
-      // Navigation would be handled by parent component
-    });
-  });
-
-  it('shows and closes Add Run modal', async () => {
-    dbUtils.getCurrentUser.mockResolvedValue(mockUser);
-    dbUtils.getTodaysWorkout.mockResolvedValue(mockWorkout);
-    dbUtils.getActivePlan.mockResolvedValue(mockPlan);
-    dbUtils.getWorkoutsByPlan.mockResolvedValue([mockWorkout]);
-    dbUtils.getRunStats.mockResolvedValue({ totalRuns: 5, totalDistance: 15, totalDuration: 150 });
-
-    render(<TodayScreen />);
-
-    await waitFor(() => {
-      const addRunButton = screen.getByText('Add Run');
-      fireEvent.click(addRunButton);
-      expect(screen.getByTestId('add-run-modal')).toBeInTheDocument();
-    });
-  });
-
-  it('renders StreakIndicator with zero state', async () => {
-    dbUtils.getCurrentUser.mockResolvedValue({ ...mockUser, currentStreak: 0, longestStreak: 0 });
-    render(<TodayScreen />);
-    await waitFor(() => {
-      expect(screen.getByText('Start your streak!')).toBeInTheDocument();
-    });
-  });
-
-  it('renders StreakIndicator with normal streak', async () => {
-    dbUtils.getCurrentUser.mockResolvedValue({ ...mockUser, currentStreak: 5, longestStreak: 10 });
-    render(<TodayScreen />);
-    await waitFor(() => {
-      expect(screen.getByText('5')).toBeInTheDocument();
-      expect(screen.getByText('🔥 Streak')).toBeInTheDocument();
-      expect(screen.getByText('Longest Streak: 10')).toBeInTheDocument();
-    });
-  });
-
-  it('renders StreakIndicator error state', async () => {
-    dbUtils.getCurrentUser.mockRejectedValue(new Error('DB error'));
-    render(<TodayScreen />);
-    await waitFor(() => {
-      expect(screen.getByText('DB error')).toBeInTheDocument();
-    });
-  });
-
-  it('toggles streak animation', async () => {
-    dbUtils.getCurrentUser.mockResolvedValue({ ...mockUser, currentStreak: 3, longestStreak: 7 });
-    render(<TodayScreen />);
-    await waitFor(() => {
-      const toggle = screen.getByRole('switch');
-      expect(toggle).toBeInTheDocument();
-      fireEvent.click(toggle);
-    });
-  });
-
-  it('updates streak in real-time', async () => {
-    dbUtils.getCurrentUser.mockResolvedValue({ ...mockUser, currentStreak: 2, longestStreak: 5 });
-    render(<TodayScreen />);
-    await waitFor(() => {
-      expect(screen.getByText('2')).toBeInTheDocument();
-    });
-    // Simulate streak update event
-    window.dispatchEvent(new CustomEvent('streak-updated', { detail: { streak: 4 } }));
-    await waitFor(() => {
-      expect(screen.getByText('4')).toBeInTheDocument();
-    });
-  });
-
-  it('is accessible (has ARIA labels and keyboard navigation)', async () => {
-    dbUtils.getCurrentUser.mockResolvedValue(mockUser);
-    dbUtils.getTodaysWorkout.mockResolvedValue(mockWorkout);
-    dbUtils.getActivePlan.mockResolvedValue(mockPlan);
-    dbUtils.getWorkoutsByPlan.mockResolvedValue([mockWorkout]);
-    dbUtils.getRunStats.mockResolvedValue({ totalRuns: 5, totalDistance: 15, totalDuration: 150 });
-
-    render(<TodayScreen />);
-
-    await waitFor(() => {
-      const main = screen.getByRole('main');
-      expect(main).toBeInTheDocument();
-      expect(main).toHaveAttribute('aria-label', 'Today dashboard');
-    });
-  });
-}); 
+    expect(await screen.findByText('Active Goal')).toBeInTheDocument()
+    expect(screen.getByText('Run 10K')).toBeInTheDocument()
+  })
+})

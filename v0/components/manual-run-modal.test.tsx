@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ManualRunModal } from './manual-run-modal'
 import { dbUtils } from '@/lib/dbUtils'
+import { recordRunWithSideEffects } from '@/lib/run-recording'
 import { planAdjustmentService } from '@/lib/planAdjustmentService'
 
 vi.mock('@/lib/db', () => ({
@@ -15,6 +16,7 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogTitle: ({ children }: any) => <div>{children}</div>
 }))
 vi.mock('@/lib/dbUtils')
+vi.mock('@/lib/run-recording')
 vi.mock('@/lib/planAdjustmentService')
 vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() })
@@ -28,8 +30,7 @@ describe('ManualRunModal manual overrides', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     ;(dbUtils.getCurrentUser as any).mockResolvedValue({ id: 1 })
-    ;(dbUtils.createRun as any).mockResolvedValue(1)
-    ;(dbUtils.markWorkoutCompleted as any).mockResolvedValue(undefined)
+    ;(recordRunWithSideEffects as any).mockResolvedValue({ runId: 1 })
     ;(planAdjustmentService.afterRun as any).mockResolvedValue(undefined)
   })
 
@@ -53,10 +54,10 @@ describe('ManualRunModal manual overrides', () => {
       fireEvent.click(screen.getByRole('button', { name: /save run/i }))
     })
 
-    expect(dbUtils.createRun).toHaveBeenCalled()
-    const saved = (dbUtils.createRun as any).mock.calls[0][0]
-    expect(saved.distance).toBe(7.5)
-    expect(saved.duration).toBe(2400)
+    expect(recordRunWithSideEffects).toHaveBeenCalled()
+    const saved = (recordRunWithSideEffects as any).mock.calls[0][0]
+    expect(saved.distanceKm).toBe(7.5)
+    expect(saved.durationSeconds).toBe(2400)
     expect(saved.notes).toBe('User override')
     expect(onSaved).toHaveBeenCalled()
     expect(onClose).toHaveBeenCalled()

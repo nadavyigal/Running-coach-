@@ -387,6 +387,15 @@ export default function RunSmartApp() {
           const user = await dbUtils.ensureUserReady();
           if (user) {
             logger.log(`[app:init:user] ✅ User ready: id=${user.id}, onboarding=${user.onboardingComplete}`);
+            if (user.id) {
+              try {
+                const { syncUserRunData } = await import("@/lib/run-recording");
+                const syncResult = await syncUserRunData(user.id);
+                logger.log("[app:init:sync] ✅ Run data synchronized", syncResult);
+              } catch (syncError) {
+                logger.warn("[app:init:sync] ⚠️ Failed to sync run data:", syncError);
+              }
+            }
             if (user.onboardingComplete) {
               setIsOnboardingComplete(true);
               setCurrentScreen(requestedMainScreen ?? "today");

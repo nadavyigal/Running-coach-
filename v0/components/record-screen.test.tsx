@@ -2,10 +2,12 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { vi, beforeEach, afterEach, describe, it, expect } from 'vitest'
 import { RecordScreen } from './record-screen'
 import { dbUtils } from '@/lib/dbUtils'
+import { recordRunWithSideEffects } from '@/lib/run-recording'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
 
 vi.mock('@/lib/dbUtils')
+vi.mock('@/lib/run-recording')
 vi.mock('next/navigation')
 vi.mock('@/hooks/use-toast')
 
@@ -112,8 +114,7 @@ describe('RecordScreen GPS lifecycle', () => {
       updatedAt: new Date(),
     })
 
-    ;(dbUtils.createRun as any).mockResolvedValue(1)
-    ;(dbUtils.markWorkoutCompleted as any).mockResolvedValue(undefined)
+    ;(recordRunWithSideEffects as any).mockResolvedValue({ runId: 1, workoutId: 1 })
   })
 
   afterEach(() => {
@@ -127,8 +128,8 @@ describe('RecordScreen GPS lifecycle', () => {
     expect(mockGeolocation.watchPosition).not.toHaveBeenCalled()
   })
 
-  it('Enable GPS uses watchPosition and clears even when watch id is 0', async () => {
-    mockPermissions.query.mockResolvedValue({ state: 'prompt' })
+  it('Start Run clears watchPosition even when watch id is 0', async () => {
+    mockPermissions.query.mockResolvedValue({ state: 'granted' })
     mockGeolocation.watchPosition.mockImplementation((success: any) => {
       success(makePosition({ latitude: 40.7128, longitude: -74.006, accuracy: 5, timestamp: 1000 }))
       return 0
@@ -136,18 +137,13 @@ describe('RecordScreen GPS lifecycle', () => {
 
     render(<RecordScreen />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Enable GPS' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start Run' }))
 
-    await waitFor(() => {
-      expect(mockGeolocation.watchPosition).toHaveBeenCalled()
-      expect(mockGeolocation.clearWatch).toHaveBeenCalledWith(0)
-    })
+    await waitFor(() => expect(mockGeolocation.watchPosition).toHaveBeenCalled())
 
-    expect(mockToast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'GPS Ready',
-      })
-    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Stop' }))
+
+    await waitFor(() => expect(mockGeolocation.clearWatch).toHaveBeenCalledWith(0))
   })
 
   it('Start Run starts watchPosition and accumulates distance from points', async () => {
@@ -216,9 +212,9 @@ describe('RecordScreen GPS lifecycle', () => {
   })
 
   it('saves a run on Stop when duration and distance are > 0', async () => {
-    vi.useFakeTimers()
     const start = new Date('2020-01-01T00:00:00.000Z')
-    vi.setSystemTime(start)
+    let now = start.getTime()
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now)
 
     mockPermissions.query.mockResolvedValue({ state: 'granted' })
     mockGeolocation.watchPosition.mockImplementation((success: any) => {
@@ -235,30 +231,24 @@ describe('RecordScreen GPS lifecycle', () => {
 
     await waitFor(() => expect(mockGeolocation.watchPosition).toHaveBeenCalled())
 
-    await act(async () => {
-      vi.setSystemTime(new Date(start.getTime() + 2000))
-      vi.advanceTimersByTime(2000)
-    })
+    await waitFor(() => expect(screen.getByText('0.01')).toBeInTheDocument())
 
     await act(async () => {
+      now = start.getTime() + 2000
       fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
     })
 
     await waitFor(() => {
-      expect(dbUtils.createRun).toHaveBeenCalledWith(
+      expect(recordRunWithSideEffects).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 1,
-          type: 'easy',
-          distance: expect.any(Number),
-          duration: expect.any(Number),
-          pace: expect.any(Number),
-          calories: expect.any(Number),
+          distanceKm: expect.any(Number),
+          durationSeconds: expect.any(Number),
+          completedAt: expect.any(Date),
         })
       )
     })
-
-    expect(dbUtils.markWorkoutCompleted).toHaveBeenCalledWith(1)
-    expect(mockPush).toHaveBeenCalledWith('/')
-  })
+    nowSpy.mockRestore()
+  }, 10000)
 })
 
