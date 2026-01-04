@@ -11,7 +11,6 @@ export async function GET(request: Request) {
     try {
       const envCheck = validateEnvironmentConfiguration();
       const hasOpenAI = !!process.env.OPENAI_API_KEY;
-      const openAIPrefix = process.env.OPENAI_API_KEY?.substring(0, 8) || 'missing';
 
       return NextResponse.json({
         status: 'ok',
@@ -20,7 +19,7 @@ export async function GET(request: Request) {
         checks: {
           openai: {
             configured: hasOpenAI,
-            prefix: openAIPrefix,
+            // Removed API key prefix exposure for security
             valid: envCheck.isValid
           },
           issues: envCheck.issues
@@ -29,7 +28,7 @@ export async function GET(request: Request) {
     } catch (error) {
       return NextResponse.json({
         status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Health check failed'
       }, { status: 500 });
     }
   }

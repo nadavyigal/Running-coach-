@@ -4,6 +4,7 @@ import { withAuthSecurity, ApiRequest } from '@/lib/security.middleware';
 import { encryptToken } from '../token-crypto';
 import { verifyAndParseState } from '../oauth-state';
 import { logger } from '@/lib/logger';
+import { queueGarminSyncJob, isRedisConfigured } from '@/lib/queue/syncQueue';
 
 // POST - Handle Garmin OAuth callback (SECURED)
 async function handleGarminCallback(req: ApiRequest) {
@@ -142,9 +143,8 @@ async function handleGarminCallback(req: ApiRequest) {
         }) as number;
       }
 
-      // Security: Queue background sync job instead of unsafe setTimeout
-      // In production, use a proper job queue (e.g., BullMQ, Redis Queue)
-      queueGarminSync(deviceId, userId);
+      // Queue background sync job using Redis (with in-memory fallback)
+      await queueGarminSync(deviceId, userId);
 
       return NextResponse.json({
         success: true,
@@ -176,8 +176,9 @@ async function handleGarminCallback(req: ApiRequest) {
 // Export secured handler with authentication
 export const POST = withAuthSecurity(handleGarminCallback);
 
-// Security: Background job queue for async operations
-// In production, replace with Redis-based queue (BullMQ, etc.)
+// Background job queue for Garmin sync operations
+// Uses Redis (BullMQ) when available, falls back to in-memory queue
+
 interface SyncJob {
   deviceId: number;
   userId: number;
@@ -186,11 +187,29 @@ interface SyncJob {
   maxRetries: number;
 }
 
-const syncQueue: SyncJob[] = [];
-let syncWorkerRunning = false;
+// In-memory fallback queue (used when Redis is unavailable)
+const fallbackQueue: SyncJob[] = [];
+let fallbackWorkerRunning = false;
 
-function queueGarminSync(deviceId: number, userId: number) {
-  syncQueue.push({
+async function queueGarminSync(deviceId: number, userId: number) {
+  // Try Redis queue first
+  if (isRedisConfigured()) {
+    const jobId = await queueGarminSyncJob({
+      deviceId,
+      userId,
+      type: 'initial_sync',
+      priority: 1, // Higher priority for initial sync
+    });
+
+    if (jobId) {
+      logger.log(`[Garmin] Sync job queued to Redis: ${jobId}`);
+      return;
+    }
+  }
+
+  // Fallback to in-memory queue
+  logger.warn('[Garmin] Using in-memory fallback queue (Redis unavailable)');
+  fallbackQueue.push({
     deviceId,
     userId,
     scheduledAt: new Date(),
@@ -198,17 +217,17 @@ function queueGarminSync(deviceId: number, userId: number) {
     maxRetries: 3
   });
 
-  if (!syncWorkerRunning) {
-    processSyncQueue();
+  if (!fallbackWorkerRunning) {
+    processFallbackQueue();
   }
 }
 
-async function processSyncQueue() {
-  if (syncWorkerRunning) return;
-  syncWorkerRunning = true;
+async function processFallbackQueue() {
+  if (fallbackWorkerRunning) return;
+  fallbackWorkerRunning = true;
 
-  while (syncQueue.length > 0) {
-    const job = syncQueue.shift();
+  while (fallbackQueue.length > 0) {
+    const job = fallbackQueue.shift();
     if (!job) continue;
 
     try {
@@ -219,7 +238,7 @@ async function processSyncQueue() {
       // Retry logic
       if (job.retryCount < job.maxRetries) {
         job.retryCount++;
-        syncQueue.push(job);
+        fallbackQueue.push(job);
         logger.log(`Retrying sync for device ${job.deviceId} (attempt ${job.retryCount + 1})`);
       } else {
         logger.error(`Max retries reached for device ${job.deviceId}`);
@@ -239,7 +258,7 @@ async function processSyncQueue() {
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
 
-  syncWorkerRunning = false;
+  fallbackWorkerRunning = false;
 }
 
 async function performGarminSync(deviceId: number, userId: number) {
@@ -249,8 +268,7 @@ async function performGarminSync(deviceId: number, userId: number) {
   }
 
   // Note: Token is encrypted, would need decryption in real implementation
-  // For now, we'll log that sync is queued
-  logger.log(`✓ Garmin sync queued for device ${deviceId}, user ${userId}`);
+  logger.log(`[Garmin] Performing sync for device ${deviceId}, user ${userId}`);
 
   // Update last sync time
   await db.wearableDevices.update(deviceId, {

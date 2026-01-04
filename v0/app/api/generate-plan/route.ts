@@ -5,9 +5,21 @@ import { z } from 'zod';
 import { sanitizeForPrompt } from '@/lib/security';
 import { withSecureOpenAI } from '@/lib/apiKeyManager';
 import { logger } from '@/lib/logger';
+import { rateLimiter, securityConfig } from '@/lib/security.config';
+import { securityMonitor } from '@/lib/security.monitoring';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+// Get client IP for rate limiting
+function getClientIP(request: Request): string {
+  const headers = request.headers;
+  const forwardedFor = headers.get('x-forwarded-for');
+  const realIP = headers.get('x-real-ip');
+  if (forwardedFor) return forwardedFor.split(',')[0].trim();
+  if (realIP) return realIP;
+  return '127.0.0.1';
+}
 
 const WeekdaySchema = z.enum(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
 
@@ -294,6 +306,31 @@ function extractJson(text: string) {
 
 export async function POST(req: Request) {
   const requestId = `plan_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
+  // Rate limiting check (10 requests per minute for AI routes)
+  const clientIP = getClientIP(req);
+  const rateLimitResult = await rateLimiter.check(clientIP, securityConfig.apiSecurity.chatRateLimit);
+
+  if (!rateLimitResult.success) {
+    securityMonitor.trackSecurityEvent({
+      type: 'rate_limit_exceeded',
+      severity: 'warning',
+      message: 'Plan generation rate limit exceeded',
+      data: { ip: clientIP, limit: rateLimitResult.limit, requestId },
+    });
+
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please try again later.', requestId },
+      {
+        status: 429,
+        headers: {
+          'X-RateLimit-Limit': rateLimitResult.limit.toString(),
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': rateLimitResult.reset.toISOString(),
+        },
+      }
+    );
+  }
 
   try {
     const contentType = req.headers.get('content-type') || '';

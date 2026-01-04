@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
+import { rateLimiter, securityConfig } from '@/lib/security.config';
+import { securityMonitor } from '@/lib/security.monitoring';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -14,6 +16,15 @@ import {
   type GoalAnalysisContext
 } from '@/lib/goalDiscoveryEngine';
 import { logger } from '@/lib/logger';
+
+// Get client IP for rate limiting
+function getClientIP(request: NextRequest): string {
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  const realIP = request.headers.get('x-real-ip');
+  if (forwardedFor) return forwardedFor.split(',')[0].trim();
+  if (realIP) return realIP;
+  return '127.0.0.1';
+}
 
 // Validation schemas
 const UserProfileSchema = z.object({
@@ -144,7 +155,32 @@ Please provide a structured analysis in JSON format with the following structure
 
 export async function POST(request: NextRequest) {
   logger.log('🎯 Goal Discovery API: Starting goal discovery request');
-  
+
+  // Rate limiting check (10 requests per minute for AI routes)
+  const clientIP = getClientIP(request);
+  const rateLimitResult = await rateLimiter.check(clientIP, securityConfig.apiSecurity.chatRateLimit);
+
+  if (!rateLimitResult.success) {
+    securityMonitor.trackSecurityEvent({
+      type: 'rate_limit_exceeded',
+      severity: 'warning',
+      message: 'Goal discovery rate limit exceeded',
+      data: { ip: clientIP, limit: rateLimitResult.limit },
+    });
+
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please try again later.' },
+      {
+        status: 429,
+        headers: {
+          'X-RateLimit-Limit': rateLimitResult.limit.toString(),
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': rateLimitResult.reset.toISOString(),
+        },
+      }
+    );
+  }
+
   try {
     const body = await request.json();
     logger.log('📝 Request body received for goal discovery');

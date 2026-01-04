@@ -64,11 +64,19 @@ export interface HabitRisk {
 }
 
 export class HabitAnalyticsService {
-  async calculateHabitAnalytics(userId: number): Promise<HabitAnalytics> {
-    if (!db) throw new Error('Database not available');
+  async calculateHabitAnalytics(userId: number): Promise<HabitAnalytics | null> {
+    // Graceful handling when database is not available
+    if (!db) {
+      console.warn('[HabitAnalytics] Database not available');
+      return null;
+    }
 
-    const user = await db.users.get(userId);
-    if (!user) throw new Error('User not found');
+    try {
+      const user = await db.users.get(userId);
+      if (!user) {
+        console.warn(`[HabitAnalytics] User ${userId} not found`);
+        return null;
+      }
 
     const runs = await this.getUserRuns(userId);
     const workouts = await this.getUserWorkouts(userId);
@@ -126,6 +134,10 @@ export class HabitAnalyticsService {
       consistentDuration,
       lastUpdated: new Date()
     };
+    } catch (error) {
+      console.error('[HabitAnalytics] Error calculating analytics:', error);
+      return null;
+    }
   }
 
   private async getUserRuns(userId: number): Promise<Run[]> {

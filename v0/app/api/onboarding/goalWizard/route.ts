@@ -1,7 +1,18 @@
 import { streamText } from "ai"
 import { openai } from "@ai-sdk/openai"
-import { NextRequest } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { logger } from "@/lib/logger"
+import { rateLimiter, securityConfig } from '@/lib/security.config'
+import { securityMonitor } from '@/lib/security.monitoring'
+
+// Get client IP for rate limiting
+function getClientIP(request: NextRequest): string {
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  const realIP = request.headers.get('x-real-ip');
+  if (forwardedFor) return forwardedFor.split(',')[0].trim();
+  if (realIP) return realIP;
+  return '127.0.0.1';
+}
 
 interface OnboardingSession {
   conversationId: string
@@ -374,6 +385,31 @@ function generateGoalsFromConversation(messages: any[]): GoalData[] {
 }
 
 export async function POST(req: NextRequest) {
+  // Rate limiting check (10 requests per minute for AI routes)
+  const clientIP = getClientIP(req);
+  const rateLimitResult = await rateLimiter.check(clientIP, securityConfig.apiSecurity.chatRateLimit);
+
+  if (!rateLimitResult.success) {
+    securityMonitor.trackSecurityEvent({
+      type: 'rate_limit_exceeded',
+      severity: 'warning',
+      message: 'Goal wizard rate limit exceeded',
+      data: { ip: clientIP, limit: rateLimitResult.limit },
+    });
+
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please try again later.' },
+      {
+        status: 429,
+        headers: {
+          'X-RateLimit-Limit': rateLimitResult.limit.toString(),
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': rateLimitResult.reset.toISOString(),
+        },
+      }
+    );
+  }
+
   try {
     const { messages, session, currentPhase } = await req.json()
 
