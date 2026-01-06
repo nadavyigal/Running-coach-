@@ -5,35 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 
 type RechartsModule = typeof import('recharts');
 
-interface GoalProgress {
-  goalId: number;
-  currentValue: number;
-  targetValue: number;
-  baselineValue: number;
-  progressPercentage: number;
-  trajectory: 'on_track' | 'ahead' | 'behind' | 'at_risk';
-  projectedCompletion: string;
-  daysUntilDeadline: number;
-  improvementRate: number;
-  recentTrend: 'improving' | 'stable' | 'declining';
-}
-
-interface Goal {
-  id: number;
-  title: string;
-  description: string;
-  goalType: string;
-  category: string;
-  priority: number;
-  status: string;
-  deadline: string;
-  specificTarget: {
-    metric: string;
-    value: number;
-    unit: string;
-    description: string;
-  };
-}
+import { type Goal } from '@/lib/db';
+import { type GoalProgress } from '@/lib/goalProgressEngine';
 
 interface GoalWithProgress {
   goal: Goal;
