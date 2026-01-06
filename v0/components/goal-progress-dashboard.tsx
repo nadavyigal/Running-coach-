@@ -5,14 +5,11 @@ import dynamic from 'next/dynamic';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Target,
   TrendingUp,
-  AlertTriangle,
   CheckCircle2,
-  Calendar,
   Trophy,
   Flag,
 } from 'lucide-react';
@@ -36,7 +33,7 @@ interface GoalProgressDashboardProps {
 
 interface GoalWithProgress {
   goal: Goal;
-  progress: GoalProgress | null;
+  progress: GoalProgress;
   milestones: GoalMilestone[];
   prediction: {
     probability: number;
@@ -61,6 +58,9 @@ export function GoalProgressDashboard({ userId, className = '' }: GoalProgressDa
           userGoals.map(async (goal) => {
             const progress = await engine.calculateGoalProgress(goal.id!);
             const milestones = await dbUtils.getGoalMilestones(goal.id!);
+
+            if (!progress) return null;
+
             return {
               goal,
               progress,
@@ -74,7 +74,7 @@ export function GoalProgressDashboard({ userId, className = '' }: GoalProgressDa
           })
         );
 
-        setGoals(goalsWithProgress);
+        setGoals(goalsWithProgress.filter((g): g is GoalWithProgress => g !== null));
       } catch (error) {
         console.error("Error loading goals:", error);
       } finally {
