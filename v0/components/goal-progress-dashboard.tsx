@@ -109,287 +109,34 @@ export function GoalProgressDashboard({ userId, className = '' }: GoalProgressDa
     }
   };
 
-  const getTrajectoryIcon = (trajectory: string) => {
-    switch (trajectory) {
-      case 'ahead': return <TrendingUp className="h-4 w-4 text-green-500" />;
-      case 'on_track': return <Target className="h-4 w-4 text-blue-500" />;
-      case 'behind': return <TrendingDown className="h-4 w-4 text-yellow-500" />;
-      case 'at_risk': return <AlertTriangle className="h-4 w-4 text-red-500" />;
-      default: return <Target className="h-4 w-4 text-gray-500" />;
-    }
-  };
-
-  const getTrajectoryColor = (trajectory: string) => {
-    switch (trajectory) {
-      case 'ahead': return 'text-green-600 bg-green-50';
-      case 'on_track': return 'text-blue-600 bg-blue-50';
-      case 'behind': return 'text-yellow-600 bg-yellow-50';
-      case 'at_risk': return 'text-red-600 bg-red-50';
-      default: return 'text-gray-600 bg-gray-50';
-    }
-  };
-
-  const getPriorityBadge = (priority: number) => {
-    switch (priority) {
-      case 1: return <Badge className="bg-red-100 text-red-800">High Priority</Badge>;
-      case 2: return <Badge className="bg-yellow-100 text-yellow-800">Medium Priority</Badge>;
-      case 3: return <Badge className="bg-green-100 text-green-800">Low Priority</Badge>;
-      default: return <Badge variant="outline">Unknown</Badge>;
-    }
-  };
-
-  const formatValue = (value: number, unit: string) => {
-    if (unit === 'seconds') {
-      const minutes = Math.floor(value / 60);
-      const seconds = Math.floor(value % 60);
-      return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    }
-    return `${Math.round(value * 10) / 10} ${unit}`;
-  };
-
-  const renderOverview = () => (
-    <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <Target className="h-8 w-8 text-blue-500" />
-              <div>
-                <p className="text-sm text-gray-600">Active Goals</p>
-                <p className="text-2xl font-bold">{summary?.totalActiveGoals || 0}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <BarChart3 className="h-8 w-8 text-green-500" />
-              <div>
-                <p className="text-sm text-gray-600">Avg Progress</p>
-                <p className="text-2xl font-bold">{Math.round(summary?.averageProgress || 0)}%</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="h-8 w-8 text-green-500" />
-              <div>
-                <p className="text-sm text-gray-600">On Track</p>
-                <p className="text-2xl font-bold">{summary?.goalsOnTrack || 0}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="h-8 w-8 text-red-500" />
-              <div>
-                <p className="text-sm text-gray-600">At Risk</p>
-                <p className="text-2xl font-bold">{summary?.goalsAtRisk || 0}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Goals List */}
-      <div className="space-y-4">
-        {goals.map((goalData) => (
-          <Card key={goalData.goal.id} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-lg font-semibold">{goalData.goal.title}</h3>
-                    {getPriorityBadge(goalData.goal.priority)}
-                    <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${getTrajectoryColor(goalData.progress.trajectory)}`}>
-                      {getTrajectoryIcon(goalData.progress.trajectory)}
-                      {goalData.progress.trajectory.replace('_', ' ')}
-                    </div>
-                  </div>
-                  <p className="text-gray-600 text-sm">{goalData.goal.description}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold">{Math.round(goalData.progress.progressPercentage)}%</p>
-                  <p className="text-xs text-gray-500">{goalData.progress.daysUntilDeadline} days left</p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <Progress value={goalData.progress.progressPercentage} className="h-2" />
-                
-                <div className="flex justify-between text-sm">
-                  <span>
-                    Current: {formatValue(goalData.progress.currentValue, goalData.goal.specificTarget.unit)}
-                  </span>
-                  <span>
-                    Target: {formatValue(goalData.progress.targetValue, goalData.goal.specificTarget.unit)}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 text-sm text-gray-600">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="h-4 w-4" />
-                      Due{' '}
-                      {(() => {
-                        const deadline = new Date(goalData.goal.deadline);
-                        return Number.isNaN(deadline.getTime()) ? '--' : deadline.toLocaleDateString();
-                      })()}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Trophy className="h-4 w-4" />
-                      {Math.round(goalData.prediction.probability * 100)}% likely
-                    </span>
-                  </div>
-                  
-                  {goalData.milestones.filter(m => m.status === 'achieved').length > 0 && (
-                    <div className="flex items-center gap-1">
-                      <Award className="h-4 w-4 text-yellow-500" />
-                      <span className="text-sm text-yellow-600">
-                        {goalData.milestones.filter(m => m.status === 'achieved').length} milestones
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {goals.length === 0 && !loading && (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No Goals Yet</h3>
-            <p className="text-gray-600 mb-4">
-              {filterStatus === 'active'
-                ? "Go to your Profile to create your first goal and get a personalized training plan."
-                : `No ${filterStatus} goals found.`}
-            </p>
-            <p className="text-sm text-gray-500">
-              Tap the Profile icon in the bottom navigation to get started.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  );
-
-
-  const renderMilestones = () => (
-    <div className="space-y-6">
-      {goals.map((goalData) => (
-        <Card key={goalData.goal.id}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Flag className="h-5 w-5" />
-              {goalData.goal.title}
-            </CardTitle>
-            <CardDescription>
-              {goalData.milestones.length} milestones • {goalData.milestones.filter(m => m.status === 'achieved').length} achieved
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {goalData.milestones.map((milestone: any, index: number) => (
-                <div key={milestone.id} className="flex items-center gap-4 p-3 rounded-lg border">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    milestone.status === 'achieved' ? 'bg-green-100 text-green-600' :
-                    milestone.isNext ? 'bg-blue-100 text-blue-600' :
-                    'bg-gray-100 text-gray-600'
-                  }`}>
-                    {milestone.status === 'achieved' ? (
-                      <CheckCircle2 className="h-4 w-4" />
-                    ) : (
-                      <span className="text-sm font-medium">{index + 1}</span>
-                    )}
-                  </div>
-                  
-                  <div className="flex-1">
-                    <h4 className="font-medium">{milestone.title}</h4>
-                    <p className="text-sm text-gray-600">{milestone.description}</p>
-                    {milestone.daysUntilTarget !== null && milestone.daysUntilTarget > 0 && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        {milestone.daysUntilTarget} days remaining
-                      </p>
-                    )}
-                  </div>
-                  
-                  <div className="text-right">
-                    <p className="text-sm font-medium">
-                      {formatValue(milestone.targetValue, goalData.goal.specificTarget.unit)}
-                    </p>
-                    <Badge 
-                      variant={milestone.status === 'achieved' ? "default" : "outline"}
-                      className="mt-1"
-                    >
-                      {milestone.status}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-      
-      {goals.length === 0 && (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <Flag className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No Milestones Yet</h3>
-            <p className="text-gray-600">Create goals to see milestone tracking.</p>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  );
-
   if (loading) {
     return (
-      <Card className={className}>
-        <CardContent className="p-6">
-          <div className="flex items-center gap-3">
-            <Target className="h-5 w-5 animate-pulse text-blue-500" />
-            <div className="text-sm text-gray-600">Loading goals...</div>
-          </div>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (!data || data.goals.length === 0) {
+    return (
+      <Card className="bg-gray-50 border-dashed">
+        <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+          <Target className="h-12 w-12 text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Goals</h3>
+          <p className="text-sm text-gray-500 max-w-sm mb-6">
+            Set a goal to start tracking your progress and get personalized insights.
+          </p>
+          <Button>Create Goal</Button>
         </CardContent>
       </Card>
     );
   }
 
+  const selectedGoalData = selectedGoalId === 'all' 
+    ? null 
+    : data.goals.find(g => g.goal.id.toString() === selectedGoalId);
+
   return (
-    <div className={className}>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Goal Progress</h1>
-          <p className="text-gray-600">Track your running goals and milestones</p>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="active">Active Goals</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="paused">Paused</SelectItem>
-              <SelectItem value="all">All Goals</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">

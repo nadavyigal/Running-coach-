@@ -28,7 +28,7 @@ import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
 import ModalErrorBoundary from "@/components/modal-error-boundary"
-import { type Workout, type Plan, type Route, type Goal, resetDatabaseInstance } from "@/lib/db"
+import { type Workout, type Plan, type Route, type Goal, type Run, resetDatabaseInstance } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { CommunityStatsWidget } from "@/components/community-stats-widget"
@@ -54,6 +54,7 @@ export function TodayScreen() {
   const [todaysWorkout, setTodaysWorkout] = useState<Workout | null>(null)
   const [isLoadingWorkout, setIsLoadingWorkout] = useState(true)
   const [weeklyWorkouts, setWeeklyWorkouts] = useState<Workout[]>([])
+  const [weeklyRuns, setWeeklyRuns] = useState<Run[]>([])
   const [visibleWorkouts, setVisibleWorkouts] = useState<Workout[]>([])
   const [userId, setUserId] = useState<number | null>(null)
   const [plan, setPlan] = useState<Plan | null>(null)
@@ -126,6 +127,10 @@ export function TodayScreen() {
           const workouts = await dbUtils.getWorkoutsForDateRange(user.id!, startOfWeek, endOfWeek)
           setWeeklyWorkouts(workouts)
 
+          // Get runs for the current week (for weekly stats)
+          const runs = await dbUtils.getRunsInTimeRange(user.id!, startOfWeek, endOfWeek)
+          setWeeklyRuns(runs)
+
           // Get workouts for the visible 7-day strip (today -3 ... today +3)
           const stripStart = new Date(today)
           stripStart.setDate(today.getDate() - 3)
@@ -168,6 +173,10 @@ export function TodayScreen() {
       const workouts = await dbUtils.getWorkoutsForDateRange(resolvedUserId, startOfWeek, endOfWeek)
       setWeeklyWorkouts(workouts)
 
+      // Refresh runs as well
+      const runs = await dbUtils.getRunsInTimeRange(resolvedUserId, startOfWeek, endOfWeek)
+      setWeeklyRuns(runs)
+
       const stripStart = new Date(today)
       stripStart.setDate(today.getDate() - 3)
       stripStart.setHours(0, 0, 0, 0)
@@ -195,7 +204,6 @@ export function TodayScreen() {
   }
 
   // Calendar days
-  // Workout color mapping for calendar indicators
   const workoutColorMap: { [key: string]: string } = {
     easy: "bg-green-500",
     tempo: "bg-orange-500",
@@ -356,9 +364,7 @@ export function TodayScreen() {
     return streak
   }
 
-  const totalRuns = weeklyWorkouts.filter(
-    (w) => w.completed && w.type !== "rest"
-  ).length
+  const totalRuns = weeklyRuns.length
   const plannedRuns = weeklyWorkouts.filter((w) => w.type !== "rest").length
   const consistency =
     plannedRuns > 0 ? Math.round((totalRuns / plannedRuns) * 100) : 0
