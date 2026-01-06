@@ -59,7 +59,7 @@ export function MonthlyCalendarView() {
 
           const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
           endOfMonth.setHours(23, 59, 59, 999)
-          
+
           const monthWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfMonth, endOfMonth)
           setWorkouts(monthWorkouts)
         }
@@ -130,7 +130,7 @@ export function MonthlyCalendarView() {
     if (draggedWorkout) {
       return // Don't handle click when dragging
     }
-    
+
     const dateKey = formatDateKey(date)
     const workout = workoutData[dateKey as keyof typeof workoutData]
 
@@ -165,12 +165,12 @@ export function MonthlyCalendarView() {
   const handleDrop = async (e: React.DragEvent, targetDate: Date) => {
     e.preventDefault()
     e.stopPropagation()
-    
+
     if (!draggedWorkout) return
 
     const targetDateKey = formatDateKey(targetDate)
     const existingWorkout = workoutData[targetDateKey as keyof typeof workoutData]
-    
+
     // Don't allow dropping on a date that already has a workout
     if (existingWorkout) {
       alert("This date already has a workout scheduled. Please choose a different date.")
@@ -283,9 +283,8 @@ export function MonthlyCalendarView() {
               return (
                 <div
                   key={index}
-                  className={`h-16 border rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md ${
-                    today ? "bg-green-100 border-green-300 ring-2 ring-green-200" : "hover:bg-gray-50 border-gray-200"
-                  } ${draggedWorkout ? "hover:bg-blue-100 border-blue-300" : ""}`}
+                  className={`h-16 border rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md ${today ? "bg-green-100 border-green-300 ring-2 ring-green-200" : "hover:bg-gray-50 border-gray-200"
+                    } ${draggedWorkout ? "hover:bg-blue-100 border-blue-300" : ""}`}
                   onClick={() => handleDateClick(date)}
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, date)}
@@ -294,7 +293,7 @@ export function MonthlyCalendarView() {
                     {date.getDate()}
                   </span>
                   {workout && (
-                    <div 
+                    <div
                       className="flex flex-col items-center justify-center mt-1 w-full px-1"
                       draggable
                       onDragStart={(e) => handleDragStart(e, workout, date)}
@@ -322,13 +321,13 @@ export function MonthlyCalendarView() {
         <Card className="bg-green-50 border-green-200 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-green-700">{workouts.length}</div>
-            <div className="text-xs text-green-600 font-medium">Planned Runs</div>
+            <div className="text-xs text-green-600 font-medium">Scheduled (Month)</div>
           </CardContent>
         </Card>
         <Card className="bg-blue-50 border-blue-200 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-blue-700">{workouts.filter(w => w.completed).length}</div>
-            <div className="text-xs text-blue-600 font-medium">Completed</div>
+            <div className="text-xs text-blue-600 font-medium">Completed (Month)</div>
           </CardContent>
         </Card>
         <Card className="bg-pink-50 border-pink-200 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
@@ -336,7 +335,7 @@ export function MonthlyCalendarView() {
             <div className="text-2xl font-bold text-pink-700">
               {workouts.length > 0 ? Math.round((workouts.filter(w => w.completed).length / workouts.length) * 100) : 0}%
             </div>
-            <div className="text-xs text-pink-600 font-medium">Success Rate</div>
+            <div className="text-xs text-pink-600 font-medium">Plan Adherence</div>
           </CardContent>
         </Card>
       </div>

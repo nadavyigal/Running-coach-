@@ -53,7 +53,7 @@ export async function POST(req: Request): Promise<Response> {
     const body = await req.json();
     console.log('📝 Request body received');
 
-    const { messages } = body;
+    const { messages, userContext } = body;
 
     if (!messages || !Array.isArray(messages)) {
       console.error('❌ Invalid messages format');
@@ -65,9 +65,13 @@ export async function POST(req: Request): Promise<Response> {
 
     console.log(`📨 Processing ${messages.length} messages`);
 
-    // Prepare messages with system prompt
+    // Prepare messages with system prompt and context
+    const systemContent = userContext
+      ? `${SYSTEM_PROMPT}\n\nCONTEXT FROM USER APP:\n${userContext}`
+      : SYSTEM_PROMPT;
+
     const apiMessages = [
-      { role: "system" as const, content: SYSTEM_PROMPT },
+      { role: "system" as const, content: systemContent },
       ...messages.map((m: any) => ({
         role: m.role as "user" | "assistant",
         content: String(m.content || '')

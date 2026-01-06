@@ -75,7 +75,7 @@ export function ChatScreen() {
   useEffect(() => {
     loadUser()
   }, [])
-  
+
   useEffect(() => {
     if (user) {
       loadChatHistory()
@@ -157,7 +157,7 @@ export function ChatScreen() {
         description: "Failed to load previous messages. Starting fresh conversation.",
         variant: "destructive",
       })
-      
+
       // Fallback to welcome message
       const welcomeMessage: ChatMessage = {
         id: `welcome-${Date.now()}`,
@@ -286,7 +286,7 @@ export function ChatScreen() {
         : {}
       console.log('Stream Response Status:', response.status);
       console.log('Stream Headers:', headerEntries);
-      
+
       const reader = response.body?.getReader?.()
       const decoder = new TextDecoder()
       let aiContent = ""
@@ -332,8 +332,8 @@ export function ChatScreen() {
                 console.log('??? UI Update #', updateCount, 'Content length:', aiContent.length);
 
                 setMessages(prev => {
-                  const updated = prev.map(msg => 
-                    msg.id === assistantMessage.id 
+                  const updated = prev.map(msg =>
+                    msg.id === assistantMessage.id
                       ? { ...msg, content: aiContent }
                       : msg
                   );
@@ -393,8 +393,8 @@ export function ChatScreen() {
           }
         } else {
           aiContent = 'Thanks for your message!';
-          setMessages(prev => prev.map(msg => 
-            msg.id === assistantMessage.id 
+          setMessages(prev => prev.map(msg =>
+            msg.id === assistantMessage.id
               ? { ...msg, content: aiContent }
               : msg
           ));
@@ -408,15 +408,15 @@ export function ChatScreen() {
 
       // Update final message with feedback request if needed
       if (assistantMessage.requestFeedback) {
-        setMessages(prev => 
-          prev.map(msg => 
-            msg.id === assistantMessage.id 
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === assistantMessage.id
               ? { ...msg, requestFeedback: true }
               : msg
           )
         )
       }
-      
+
     } catch (error) {
       console.error('Chat error:', error)
       toast({
@@ -427,7 +427,7 @@ export function ChatScreen() {
 
       // Remove the failed user message and show error message
       setMessages(prev => prev.slice(0, -1))
-      
+
       const errorMessage: ChatMessage = {
         id: `error-${Date.now()}`,
         role: 'assistant',
@@ -445,22 +445,53 @@ export function ChatScreen() {
     if (!contextUser) return "User data not available."
 
     try {
-      // Get last 3 runs for context
-      const recentRuns = await dbUtils.getRunsByUser(contextUser.id!)
-      const lastThreeRuns = recentRuns.slice(-3)
+      // Get detailed user data
+      const [recentRuns, primaryGoal, activePlan] = await Promise.all([
+        dbUtils.getRunsByUser(contextUser.id!),
+        dbUtils.getPrimaryGoal(contextUser.id!),
+        dbUtils.getActivePlan(contextUser.id!)
+      ]);
 
-      let context = `User Profile: ${contextUser.goal} goal, ${contextUser.experience} level, runs ${contextUser.daysPerWeek} days per week.`
-      
-      if (lastThreeRuns.length > 0) {
-        context += ` Recent runs: ${lastThreeRuns.map((run, i) => 
-          `Run ${i + 1}: ${run.distance}km in ${Math.round(run.duration / 60)} min`
-        ).join(', ')}.`
+      // Calculate weekly stats
+      const today = new Date();
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay());
+      const runsThisWeek = recentRuns.filter(r => new Date(r.completedAt) >= startOfWeek);
+      const weeklyDistance = runsThisWeek.reduce((sum, r) => sum + r.distance, 0);
+
+      // Build context string
+      let context = `User Profile:
+      - Experience: ${contextUser.experience} level
+      - Schedule: runs ${contextUser.daysPerWeek} days/week
+      - Total Runs: ${recentRuns.length}
+      - Weekly Activity: ${runsThisWeek.length} runs, ${weeklyDistance.toFixed(1)}km this week
+      `;
+
+      if (primaryGoal) {
+        context += `
+      - Active Goal: "${primaryGoal.title}" - ${primaryGoal.description}
+        - Target: ${primaryGoal.targetValue} ${primaryGoal.specificTarget.unit}
+        - Current Status: ${primaryGoal.currentValue ?? 0} (approx ${(primaryGoal.progressPercentage ?? 0).toFixed(1)}% complete)
+        - Deadline: ${new Date(primaryGoal.timeBound.deadline).toLocaleDateString()}`;
       }
 
-      return context
+      if (activePlan) {
+        context += `
+      - Training Plan: ${activePlan.name} (${activePlan.difficulty} level)`;
+      }
+
+      const lastThreeRuns = recentRuns.slice(-3);
+      if (lastThreeRuns.length > 0) {
+        context += `
+      - Recent Runs: ${lastThreeRuns.map((run, i) =>
+          `[${new Date(run.completedAt).toLocaleDateString()}: ${run.distance}km in ${(run.duration / 60).toFixed(0)}m, ${run.type}]`
+        ).join(', ')}`;
+      }
+
+      return context;
     } catch (error) {
       console.error('Failed to build context:', error)
-      return "Unable to load user context."
+      return "Unable to load complete user context."
     }
   }
 
@@ -482,16 +513,16 @@ export function ChatScreen() {
       content: response.response,
       timestamp: new Date(),
     }
-    
+
     setMessages(prev => [...prev, aiMessage])
-    
+
     // Auto-scroll to new message
     setTimeout(() => scrollToBottom(), 100)
   }
 
   const MessageBubble = ({ message }: { message: ChatMessage }) => {
     const isUser = message.role === 'user'
-    
+
     return (
       <div className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
         {!isUser && (
@@ -501,17 +532,16 @@ export function ChatScreen() {
             </AvatarFallback>
           </Avatar>
         )}
-        
+
         <div className={`max-w-[80%] ${isUser ? 'order-first' : ''}`}>
           <div
-            className={`rounded-lg px-4 py-2 ${
-              isUser
+            className={`rounded-lg px-4 py-2 ${isUser
                 ? 'bg-primary text-primary-foreground ml-auto'
                 : 'bg-muted text-muted-foreground'
-            }`}
+              }`}
           >
             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-            
+
             {/* Show adaptations for assistant messages */}
             {!isUser && message.adaptations && message.adaptations.length > 0 && (
               <div className="mt-2 text-xs opacity-70">
@@ -520,12 +550,12 @@ export function ChatScreen() {
               </div>
             )}
           </div>
-          
+
           <div className="flex items-center gap-2 mt-1 px-1">
             <p className="text-xs text-muted-foreground">
               {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </p>
-            
+
             {/* Feedback buttons for assistant messages */}
             {!isUser && message.coachingInteractionId && (
               <div className="flex items-center gap-1 ml-auto">
@@ -549,7 +579,7 @@ export function ChatScreen() {
                 </Button>
               </div>
             )}
-            
+
             {/* Request feedback indicator */}
             {!isUser && message.requestFeedback && (
               <Badge variant="outline" className="text-xs ml-auto">
@@ -654,7 +684,7 @@ export function ChatScreen() {
               </div>
             </div>
           )}
-          
+
           {/* Enhanced AI Coach Widget */}
           {user && showEnhancedCoach && (
             <div className="mt-4">
@@ -669,7 +699,7 @@ export function ChatScreen() {
         </div>
       </ScrollArea>
 
-      
+
 
       {/* Input */}
       <div className="border-t bg-card p-4">
@@ -681,17 +711,17 @@ export function ChatScreen() {
             disabled={isLoading}
             className="flex-1"
           />
-                     <Button
-             type="submit"
-             disabled={!inputValue.trim() || isLoading}
-             size="icon"
-             aria-label="Send message"
-           >
+          <Button
+            type="submit"
+            disabled={!inputValue.trim() || isLoading}
+            size="icon"
+            aria-label="Send message"
+          >
             <Send className="h-4 w-4" />
           </Button>
         </form>
       </div>
-      
+
       {/* Coaching Feedback Modal */}
       {showFeedbackModal && selectedMessageForFeedback && user && (
         <CoachingFeedbackModal
@@ -712,7 +742,7 @@ export function ChatScreen() {
           }}
         />
       )}
-      
+
       {/* Coaching Preferences Settings Modal */}
       {showCoachingPreferences && user && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -736,7 +766,7 @@ export function ChatScreen() {
           </div>
         </div>
       )}
-      
+
     </div>
   )
 }
