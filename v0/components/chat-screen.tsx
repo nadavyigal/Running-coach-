@@ -20,6 +20,7 @@ import {
 import { type User as UserType } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
+import { useData } from "@/contexts/DataContext"
 import { trackChatMessageSent } from "@/lib/analytics"
 import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
@@ -52,6 +53,17 @@ const buildAuthHeaders = (userId?: number | null): HeadersInit => {
 
 
 export function ChatScreen() {
+  // Get shared data from context for consistent stats
+  const {
+    user: contextUser,
+    primaryGoal,
+    plan,
+    weeklyRuns,
+    weeklyStats,
+    allTimeStats,
+    recentRuns: contextRecentRuns,
+  } = useData()
+
   const defaultWelcome: ChatMessage = {
     id: `welcome-${Date.now()}`,
     role: 'assistant',
@@ -71,6 +83,13 @@ export function ChatScreen() {
   const [selectedMessageForFeedback, setSelectedMessageForFeedback] = useState<ChatMessage | null>(null)
   const [showCoachingPreferences, setShowCoachingPreferences] = useState(false)
   const [showEnhancedCoach, setShowEnhancedCoach] = useState(false)
+
+  // Sync user from context
+  useEffect(() => {
+    if (contextUser) {
+      setUser(contextUser)
+    }
+  }, [contextUser])
 
   useEffect(() => {
     loadUser()
@@ -441,38 +460,64 @@ export function ChatScreen() {
   }
 
   const buildUserContext = async (targetUser?: UserType | null): Promise<string> => {
-    const contextUser = targetUser ?? user
-    if (!contextUser) return "User data not available."
+    const activeUser = targetUser ?? user ?? contextUser
+    if (!activeUser) return "User data not available."
 
     try {
-      // Get detailed user data
-      const [recentRuns, primaryGoal, activePlan] = await Promise.all([
-        dbUtils.getRunsByUser(contextUser.id!),
-        dbUtils.getPrimaryGoal(contextUser.id!),
-        dbUtils.getActivePlan(contextUser.id!)
-      ]);
+      // Use data from context first, fallback to fresh fetch for non-context users
+      const useContextData = !targetUser || targetUser.id === contextUser?.id
 
-      // Calculate weekly stats
-      const today = new Date();
-      const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - today.getDay());
-      const runsThisWeek = recentRuns.filter(r => new Date(r.completedAt) >= startOfWeek);
-      const weeklyDistance = runsThisWeek.reduce((sum, r) => sum + r.distance, 0);
+      let totalRuns: number
+      let runsThisWeekCount: number
+      let weeklyDistanceKm: number
+      let activePlan = plan
+      let activeGoal = primaryGoal
+      let lastThreeRuns = contextRecentRuns.slice(-3)
 
-      // Build context string
+      if (useContextData && contextUser) {
+        // Use pre-loaded context data for consistency
+        totalRuns = allTimeStats.totalRuns
+        runsThisWeekCount = weeklyStats.runsCompleted
+        weeklyDistanceKm = weeklyStats.totalDistanceKm
+      } else {
+        // Fallback to fresh data fetch
+        const [recentRuns, fetchedGoal, fetchedPlan] = await Promise.all([
+          dbUtils.getRunsByUser(activeUser.id!),
+          dbUtils.getPrimaryGoal(activeUser.id!),
+          dbUtils.getActivePlan(activeUser.id!)
+        ]);
+
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay());
+        const runsThisWeek = recentRuns.filter(r => new Date(r.completedAt) >= startOfWeek);
+
+        totalRuns = recentRuns.length
+        runsThisWeekCount = runsThisWeek.length
+        weeklyDistanceKm = runsThisWeek.reduce((sum, r) => sum + r.distance, 0)
+        activePlan = fetchedPlan
+        activeGoal = fetchedGoal
+        lastThreeRuns = recentRuns.slice(-3)
+      }
+
+      // Build context string with consistent data
       let context = `User Profile:
-      - Experience: ${contextUser.experience} level
-      - Schedule: runs ${contextUser.daysPerWeek} days/week
-      - Total Runs: ${recentRuns.length}
-      - Weekly Activity: ${runsThisWeek.length} runs, ${weeklyDistance.toFixed(1)}km this week
+      - Experience: ${activeUser.experience} level
+      - Schedule: runs ${activeUser.daysPerWeek} days/week
+      - Total Runs: ${totalRuns}
+      - Weekly Activity: ${runsThisWeekCount} runs, ${weeklyDistanceKm.toFixed(1)}km this week
       `;
 
-      if (primaryGoal) {
+      if (activeGoal) {
+        // Use stored progressPercentage for consistency with other screens
+        const progressPct = typeof activeGoal.progressPercentage === 'number'
+          ? activeGoal.progressPercentage
+          : 0
         context += `
-      - Active Goal: "${primaryGoal.title}" - ${primaryGoal.description}
-        - Target: ${primaryGoal.targetValue} ${primaryGoal.specificTarget.unit}
-        - Current Status: ${primaryGoal.currentValue ?? 0} (approx ${(primaryGoal.progressPercentage ?? 0).toFixed(1)}% complete)
-        - Deadline: ${new Date(primaryGoal.timeBound.deadline).toLocaleDateString()}`;
+      - Active Goal: "${activeGoal.title}" - ${activeGoal.description}
+        - Target: ${activeGoal.targetValue} ${activeGoal.specificTarget?.unit ?? ''}
+        - Current Status: ${activeGoal.currentValue ?? 0} (${progressPct.toFixed(1)}% complete)
+        - Deadline: ${new Date(activeGoal.timeBound.deadline).toLocaleDateString()}`;
       }
 
       if (activePlan) {
@@ -480,10 +525,9 @@ export function ChatScreen() {
       - Training Plan: ${activePlan.name} (${activePlan.difficulty} level)`;
       }
 
-      const lastThreeRuns = recentRuns.slice(-3);
       if (lastThreeRuns.length > 0) {
         context += `
-      - Recent Runs: ${lastThreeRuns.map((run, i) =>
+      - Recent Runs: ${lastThreeRuns.map((run) =>
           `[${new Date(run.completedAt).toLocaleDateString()}: ${run.distance}km in ${(run.duration / 60).toFixed(0)}m, ${run.type}]`
         ).join(', ')}`;
       }

@@ -8,6 +8,7 @@ import { ReminderInit } from '@/components/reminder-init'
 import { PostHogProvider } from '@/lib/posthog-provider'
 import { ChunkErrorBoundary } from '@/components/chunk-error-boundary'
 import { ServiceWorkerRegister } from '@/components/service-worker-register'
+import { DataProvider } from '@/contexts/DataContext'
 
 // Optimized font loading with next/font
 const inter = Inter({
@@ -113,15 +114,17 @@ export default function RootLayout({
         <ServiceWorkerRegister />
         <ChunkErrorBoundary>
           <PostHogProvider>
-            <ReminderInit />
-            {children}
-            <Toaster />
+            <DataProvider>
+              <ReminderInit />
+              {children}
+              <Toaster />
             {process.env.NEXT_PUBLIC_POSTHOG_SURVEYS_ENABLED !== 'false' && (
-              <Script
-                src="https://us-assets.i.posthog.com/static/surveys.js"
-                strategy="lazyOnload"
-              />
-            )}
+                <Script
+                  src="https://us-assets.i.posthog.com/static/surveys.js"
+                  strategy="lazyOnload"
+                />
+              )}
+            </DataProvider>
           </PostHogProvider>
         </ChunkErrorBoundary>
       </body>

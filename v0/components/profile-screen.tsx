@@ -31,6 +31,7 @@ import { useState, useEffect } from "react"
 import { BadgeCabinet } from "@/components/badge-cabinet";
 import { dbUtils } from "@/lib/dbUtils";
 import { DATABASE } from "@/lib/constants";
+import { useData, useGoalProgress, useDaysRemaining } from "@/contexts/DataContext";
 import { useToast } from "@/components/ui/use-toast";
 import { ShareBadgeModal } from "@/components/share-badge-modal";
 import { Share2, Users } from "lucide-react";
@@ -45,6 +46,21 @@ import { PlanTemplateFlow } from "@/components/plan-template-flow";
 import { type Goal, type Run } from "@/lib/db";
 
 export function ProfileScreen() {
+  // Get shared data from context
+  const {
+    userId: contextUserId,
+    primaryGoal: contextPrimaryGoal,
+    activeGoals,
+    recentRuns: contextRecentRuns,
+    allTimeStats,
+    isLoading: isContextLoading,
+    refresh: refreshContext,
+  } = useData()
+
+  // Use centralized goal progress calculation
+  const primaryGoalProgress = useGoalProgress(contextPrimaryGoal)
+  const primaryGoalDaysRemaining = useDaysRemaining(contextPrimaryGoal)
+
   // Add state for the shoes modal at the top of the component
   const [showAddShoesModal, setShowAddShoesModal] = useState(false)
   const [runningShoes, setRunningShoes] = useState<any[]>([])
@@ -62,6 +78,14 @@ export function ProfileScreen() {
   const [recentRuns, setRecentRuns] = useState<Run[]>([])
   const [isRunsLoading, setIsRunsLoading] = useState(false)
 
+  // Sync from context
+  useEffect(() => {
+    if (contextUserId) setUserId(contextUserId)
+    if (contextPrimaryGoal) setPrimaryGoal(contextPrimaryGoal)
+    if (activeGoals.length > 0) setGoals(activeGoals)
+    if (contextRecentRuns.length > 0) setRecentRuns(contextRecentRuns)
+  }, [contextUserId, contextPrimaryGoal, activeGoals, contextRecentRuns])
+
   const handleShareClick = (badgeId: string, badgeName: string) => {
     setSelectedBadge({ id: badgeId, name: badgeName });
     setIsShareModalOpen(true);
@@ -72,13 +96,21 @@ export function ProfileScreen() {
     setSelectedBadge(null);
   };
 
+  // Legacy helper for backward compatibility - prioritizes stored progressPercentage
   const goalProgressPercent = (goal?: Goal | null) => {
     if (!goal) return 0;
+    // Use stored progressPercentage if available and valid
+    if (typeof goal.progressPercentage === 'number' && goal.progressPercentage >= 0) {
+      return Math.min(100, Math.max(0, goal.progressPercentage));
+    }
     const baseline = typeof goal.baselineValue === 'number' ? goal.baselineValue : 0;
     const target = typeof goal.targetValue === 'number' ? goal.targetValue : 0;
     const current = typeof goal.currentValue === 'number' ? goal.currentValue : baseline;
     const denominator = target - baseline;
-    if (denominator === 0) return 0;
+    if (denominator === 0) return current === target ? 100 : 0;
+    if (goal.goalType === 'time_improvement') {
+      return Math.min(100, Math.max(0, ((baseline - current) / (baseline - target)) * 100));
+    }
     return Math.min(100, Math.max(0, ((current - baseline) / denominator) * 100));
   };
 

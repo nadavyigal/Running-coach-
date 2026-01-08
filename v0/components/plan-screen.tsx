@@ -13,48 +13,75 @@ import { PlanComplexityIndicator } from "@/components/plan-complexity-indicator"
 import { type Plan, type Workout, type Goal } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
+import { useData, useGoalProgress, useDaysRemaining } from "@/contexts/DataContext"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { formatLocalizedDate } from "@/lib/timezone-utils"
 
 export function PlanScreen() {
+  // Get shared data from context
+  const {
+    plan: contextPlan,
+    primaryGoal,
+    userId,
+    isLoading: isContextLoading,
+    refresh: refreshContext,
+  } = useData()
+
+  // Use centralized goal progress calculation
+  const goalProgress = useGoalProgress(primaryGoal)
+  const goalDaysRemaining = useDaysRemaining(primaryGoal)
+
   const [currentView, setCurrentView] = useState<"monthly" | "biweekly" | "progress">("monthly")
-  // const [currentMonth, setCurrentMonth] = useState(new Date())
   const [showAddRunModal, setShowAddRunModal] = useState(false)
   const [showDateWorkoutModal, setShowDateWorkoutModal] = useState(false)
   const [selectedDateWorkout, setSelectedDateWorkout] = useState<any>(null)
   const [plan, setPlan] = useState<Plan | null>(null)
-  const [primaryGoal, setPrimaryGoal] = useState<Goal | null>(null)
   const [workouts, setWorkouts] = useState<Workout[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
+
+  // Sync plan from context
+  useEffect(() => {
+    if (contextPlan) {
+      setPlan(contextPlan)
+    }
+  }, [contextPlan])
 
   // Calculate challenge day progress
   const calculateChallengeProgress = () => {
     if (!plan || !plan.startDate) {
       return { currentDay: 0, totalDays: 21 }
     }
-    
+
     const startDate = new Date(plan.startDate)
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     startDate.setHours(0, 0, 0, 0)
-    
+
     const daysDiff = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
     const totalDays = plan.totalWeeks ? plan.totalWeeks * 7 : 21
     const currentDay = Math.max(1, Math.min(daysDiff + 1, totalDays))
-    
+
     return { currentDay, totalDays }
   }
 
   const challengeProgress = calculateChallengeProgress()
 
+  // Legacy helper for backward compatibility
   const goalProgressPercent = (goal?: Goal | null) => {
     if (!goal) return 0
+    // Use stored progressPercentage if available
+    if (typeof goal.progressPercentage === 'number' && goal.progressPercentage >= 0) {
+      return Math.min(100, Math.max(0, goal.progressPercentage))
+    }
     const baseline = typeof goal.baselineValue === 'number' ? goal.baselineValue : 0
     const target = typeof goal.targetValue === 'number' ? goal.targetValue : 0
     const current = typeof goal.currentValue === 'number' ? goal.currentValue : baseline
     const denominator = target - baseline
-    if (denominator === 0) return 0
+    if (denominator === 0) return current === target ? 100 : 0
+    if (goal.goalType === 'time_improvement') {
+      return Math.min(100, Math.max(0, ((baseline - current) / (baseline - target)) * 100))
+    }
     return Math.min(100, Math.max(0, ((current - baseline) / denominator) * 100))
   }
 
@@ -77,49 +104,18 @@ export function PlanScreen() {
     rest: { color: "bg-gray-400", label: "Rest Day" },
   }
 
-  // Load plan data on component mount
+  // Load workouts when plan is available (plan and primaryGoal come from context)
   useEffect(() => {
-    const loadPlanData = async () => {
-      try {
-        const user = await dbUtils.getCurrentUser()
-        if (!user) {
-          console.warn('⚠️ PlanScreen: No current user found; skipping plan load')
-          setIsLoading(false)
-          return
-        }
+    const loadWorkouts = async () => {
+      if (!userId || !plan?.id) {
+        setIsLoading(false)
+        return
+      }
 
-        console.log('🔍 PlanScreen: Current user:', user)
-        let activePlan = await dbUtils.getActivePlan(user.id!)
-        console.log('🔍 PlanScreen: Active plan query result:', activePlan)
-        
-        // Fallback: if no active plan found, ensure user has one
-        if (!activePlan) {
-          console.log('No active plan found, attempting to create/recover one...')
-          try {
-            activePlan = await dbUtils.ensureUserHasActivePlan(user.id!)
-            console.log('Successfully created/recovered plan:', activePlan.title)
-          } catch (planError) {
-            const errorInfo = dbUtils.handleDatabaseError(planError, 'creation/recovery')
-            toast({
-              variant: "destructive",
-              title: errorInfo.title,
-              description: errorInfo.description,
-            })
-            throw planError
-          }
-        }
-        
-        if (activePlan) {
-          setPlan(activePlan)
-          // Use existing util to fetch workouts for a plan
-          const planWorkouts = await dbUtils.getPlanWorkouts(activePlan.id!)
-          setWorkouts(planWorkouts)
-          const goal = await dbUtils.getPrimaryGoal(user.id!)
-          setPrimaryGoal(goal)
-          console.log('📅 PlanScreen: Loaded plan and', planWorkouts.length, 'workouts')
-        } else {
-          console.warn('⚠️ PlanScreen: Still no active plan after ensureUserHasActivePlan')
-        }
+      try {
+        const planWorkouts = await dbUtils.getPlanWorkouts(plan.id)
+        setWorkouts(planWorkouts)
+        console.log('📅 PlanScreen: Loaded', planWorkouts.length, 'workouts for plan', plan.id)
       } catch (error) {
         const errorInfo = dbUtils.handleDatabaseError(error, 'loading')
         toast({
@@ -132,8 +128,8 @@ export function PlanScreen() {
       }
     }
 
-    loadPlanData()
-  }, [toast])
+    loadWorkouts()
+  }, [userId, plan?.id, toast])
 
   // Organize workouts by week
   const organizeWorkoutsByWeek = () => {

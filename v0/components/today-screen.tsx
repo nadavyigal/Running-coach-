@@ -30,6 +30,7 @@ import { DateWorkoutModal } from "@/components/date-workout-modal"
 import ModalErrorBoundary from "@/components/modal-error-boundary"
 import { type Workout, type Plan, type Route, type Goal, type Run, resetDatabaseInstance } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
+import { useData, useGoalProgress, useDaysRemaining } from "@/contexts/DataContext"
 import { useToast } from "@/hooks/use-toast"
 import { CommunityStatsWidget } from "@/components/community-stats-widget"
 import { GoalRecommendations } from "@/components/goal-recommendations"
@@ -46,6 +47,22 @@ import {
 } from "@/components/ui/alert-dialog"
 
 export function TodayScreen() {
+  // Get shared data from context
+  const {
+    userId,
+    plan,
+    primaryGoal,
+    weeklyRuns,
+    weeklyWorkouts,
+    weeklyStats,
+    isLoading: isContextLoading,
+    refresh: refreshContext,
+  } = useData()
+
+  // Use centralized goal progress calculation
+  const goalProgress = useGoalProgress(primaryGoal)
+  const daysRemaining = useDaysRemaining(primaryGoal)
+
   const [dailyTip, setDailyTip] = useState(
     "Focus on your breathing rhythm today. Try the 3:2 pattern - inhale for 3 steps, exhale for 2 steps. This will help you maintain a steady pace!",
   )
@@ -53,12 +70,7 @@ export function TodayScreen() {
   const [showWorkoutBreakdown, setShowWorkoutBreakdown] = useState(false)
   const [todaysWorkout, setTodaysWorkout] = useState<Workout | null>(null)
   const [isLoadingWorkout, setIsLoadingWorkout] = useState(true)
-  const [weeklyWorkouts, setWeeklyWorkouts] = useState<Workout[]>([])
-  const [weeklyRuns, setWeeklyRuns] = useState<Run[]>([])
   const [visibleWorkouts, setVisibleWorkouts] = useState<Workout[]>([])
-  const [userId, setUserId] = useState<number | null>(null)
-  const [plan, setPlan] = useState<Plan | null>(null)
-  const [primaryGoal, setPrimaryGoal] = useState<Goal | null>(null)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [showAddRunModal, setShowAddRunModal] = useState(false)
   const [showAddActivityModal, setShowAddActivityModal] = useState(false)
@@ -80,13 +92,21 @@ export function TodayScreen() {
     "Track your progress! Celebrate small wins - every kilometer counts towards your goal.",
   ]
 
+  // Legacy helper for backward compatibility with components that pass goal directly
   const goalProgressPercent = (goal?: Goal | null) => {
     if (!goal) return 0
+    // Use stored progressPercentage if available
+    if (typeof goal.progressPercentage === 'number' && goal.progressPercentage >= 0) {
+      return Math.min(100, Math.max(0, goal.progressPercentage))
+    }
     const baseline = typeof goal.baselineValue === 'number' ? goal.baselineValue : 0
     const target = typeof goal.targetValue === 'number' ? goal.targetValue : 0
     const current = typeof goal.currentValue === 'number' ? goal.currentValue : baseline
     const denominator = target - baseline
-    if (denominator === 0) return 0
+    if (denominator === 0) return current === target ? 100 : 0
+    if (goal.goalType === 'time_improvement') {
+      return Math.min(100, Math.max(0, ((baseline - current) / (baseline - target)) * 100))
+    }
     return Math.min(100, Math.max(0, ((current - baseline) / denominator) * 100))
   }
 
@@ -103,79 +123,51 @@ export function TodayScreen() {
     setDailyTip(tips.at(nextIndex) ?? tips[0] ?? dailyTip)
   }
 
-  // Initialize data
+  // Initialize local data (todaysWorkout and visibleWorkouts are screen-specific)
   useEffect(() => {
-    const initializeData = async () => {
+    const initializeLocalData = async () => {
+      if (!userId) {
+        setIsLoadingWorkout(false)
+        return
+      }
+
       try {
-        const user = await dbUtils.getCurrentUser()
-        if (user) {
-          setUserId(user.id!)
-          const userPlan = await dbUtils.getActivePlan(user.id!)
-          setPlan(userPlan)
-          const goal = await dbUtils.getPrimaryGoal(user.id!)
-          setPrimaryGoal(goal)
+        const today = new Date()
 
-          // Get workouts for the current week (for weekly stats)
-          const today = new Date()
-          const startOfWeek = new Date(today)
-          startOfWeek.setDate(today.getDate() - today.getDay()) // Start of week (Sunday)
-          const endOfWeek = new Date(startOfWeek)
-          endOfWeek.setDate(startOfWeek.getDate() + 6) // End of week (Saturday)
-          startOfWeek.setHours(0, 0, 0, 0)
-          endOfWeek.setHours(23, 59, 59, 999)
+        // Get workouts for the visible 7-day strip (today -3 ... today +3)
+        const stripStart = new Date(today)
+        stripStart.setDate(today.getDate() - 3)
+        stripStart.setHours(0, 0, 0, 0)
+        const stripEnd = new Date(today)
+        stripEnd.setDate(today.getDate() + 3)
+        stripEnd.setHours(23, 59, 59, 999)
 
-          const workouts = await dbUtils.getWorkoutsForDateRange(user.id!, startOfWeek, endOfWeek)
-          setWeeklyWorkouts(workouts)
+        const [stripWorkouts, todayWorkout] = await Promise.all([
+          dbUtils.getWorkoutsForDateRange(userId, stripStart, stripEnd),
+          dbUtils.getTodaysWorkout(userId),
+        ])
 
-          // Get runs for the current week (for weekly stats)
-          const runs = await dbUtils.getRunsInTimeRange(user.id!, startOfWeek, endOfWeek)
-          setWeeklyRuns(runs)
-
-          // Get workouts for the visible 7-day strip (today -3 ... today +3)
-          const stripStart = new Date(today)
-          stripStart.setDate(today.getDate() - 3)
-          stripStart.setHours(0, 0, 0, 0)
-          const stripEnd = new Date(today)
-          stripEnd.setDate(today.getDate() + 3)
-          stripEnd.setHours(23, 59, 59, 999)
-
-          const stripWorkouts = await dbUtils.getWorkoutsForDateRange(user.id!, stripStart, stripEnd)
-          setVisibleWorkouts(stripWorkouts)
-
-          const todaysWorkout = await dbUtils.getTodaysWorkout(user.id!)
-          setTodaysWorkout(todaysWorkout)
-        }
+        setVisibleWorkouts(stripWorkouts)
+        setTodaysWorkout(todayWorkout)
         setIsLoadingWorkout(false)
       } catch (error) {
-        console.error("Error initializing data:", error)
+        console.error("Error initializing local data:", error)
         setIsLoadingWorkout(false)
       }
     }
 
-    initializeData()
-  }, [])
+    initializeLocalData()
+  }, [userId])
 
   const refreshWorkouts = async () => {
     try {
       const resolvedUserId = userId ?? (await dbUtils.getCurrentUser())?.id ?? null
       if (!resolvedUserId) return
 
+      // Refresh context data (weeklyRuns, weeklyWorkouts, goals, etc.)
+      await refreshContext()
+
       const today = new Date()
-
-      const startOfWeek = new Date(today)
-      startOfWeek.setDate(today.getDate() - today.getDay())
-      startOfWeek.setHours(0, 0, 0, 0)
-
-      const endOfWeek = new Date(startOfWeek)
-      endOfWeek.setDate(startOfWeek.getDate() + 6)
-      endOfWeek.setHours(23, 59, 59, 999)
-
-      const workouts = await dbUtils.getWorkoutsForDateRange(resolvedUserId, startOfWeek, endOfWeek)
-      setWeeklyWorkouts(workouts)
-
-      // Refresh runs as well
-      const runs = await dbUtils.getRunsInTimeRange(resolvedUserId, startOfWeek, endOfWeek)
-      setWeeklyRuns(runs)
 
       const stripStart = new Date(today)
       stripStart.setDate(today.getDate() - 3)
@@ -185,11 +177,13 @@ export function TodayScreen() {
       stripEnd.setDate(today.getDate() + 3)
       stripEnd.setHours(23, 59, 59, 999)
 
-      const stripWorkouts = await dbUtils.getWorkoutsForDateRange(resolvedUserId, stripStart, stripEnd)
-      setVisibleWorkouts(stripWorkouts)
+      const [stripWorkouts, todayWorkout] = await Promise.all([
+        dbUtils.getWorkoutsForDateRange(resolvedUserId, stripStart, stripEnd),
+        dbUtils.getTodaysWorkout(resolvedUserId),
+      ])
 
-      const todaysWorkout = await dbUtils.getTodaysWorkout(resolvedUserId)
-      setTodaysWorkout(todaysWorkout)
+      setVisibleWorkouts(stripWorkouts)
+      setTodaysWorkout(todayWorkout)
     } catch (error) {
       console.error("Error refreshing workouts:", error)
     }
@@ -364,10 +358,10 @@ export function TodayScreen() {
     return streak
   }
 
-  const totalRuns = weeklyRuns.length
-  const plannedRuns = weeklyWorkouts.filter((w) => w.type !== "rest").length
-  const consistency =
-    plannedRuns > 0 ? Math.round((totalRuns / plannedRuns) * 100) : 0
+  // Use stats from context for consistency
+  const totalRuns = weeklyStats.runsCompleted
+  const plannedRuns = weeklyStats.plannedWorkouts
+  const consistency = weeklyStats.consistencyRate
   const streak = calculateStreak()
 
   const handleRouteSelected = (route: Route) => {
