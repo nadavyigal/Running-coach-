@@ -277,6 +277,25 @@ const updateGoalsFromRuns = async ({
 
   for (const goal of goals) {
     if (typeof goal.id !== "number") continue
+
+    // Fix stale goals with invalid currentValue - set to baseline
+    const needsCurrentValueFix =
+      typeof goal.currentValue !== "number" ||
+      !Number.isFinite(goal.currentValue) ||
+      goal.currentValue === 0
+
+    if (needsCurrentValueFix && typeof goal.baselineValue === "number" && Number.isFinite(goal.baselineValue)) {
+      await dbUtils.updateGoal(goal.id, {
+        currentValue: goal.baselineValue,
+        progressPercentage: 0,
+      })
+      // Update local copy for subsequent calculations
+      goal.currentValue = goal.baselineValue
+      goal.progressPercentage = 0
+      updatedGoals += 1
+      console.log(`[updateGoalsFromRuns] Fixed stale goal ${goal.id}: set currentValue to baselineValue (${goal.baselineValue})`)
+    }
+
     const window = resolveGoalWindow(goal, resolvedMeasurementDate)
     if (!window) continue
 
@@ -284,6 +303,9 @@ const updateGoalsFromRuns = async ({
       ? filterRunsForGoal(runs, window.start, window.end)
       : await dbUtils.getRunsInTimeRange(userId, window.start, window.end)
     const measuredValue = computeGoalMeasurement(goal, runsForGoal)
+
+    // For time_improvement goals without matching runs, keep current progress as-is
+    // but ensure the goal state is valid (already fixed above if needed)
     if (measuredValue === null) continue
 
     const progressPercentage = dbUtils.calculateGoalProgressPercentage(

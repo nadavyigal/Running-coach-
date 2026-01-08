@@ -206,7 +206,7 @@ export function PerformanceAnalyticsDashboard({ userId = 1 }: PerformanceAnalyti
   };
 
   const formatPace = (paceSecondsPerKm: number): string => {
-    if (paceSecondsPerKm === 0) return '--:--';
+    if (!paceSecondsPerKm || paceSecondsPerKm <= 0 || !Number.isFinite(paceSecondsPerKm)) return '--:--';
     const minutes = Math.floor(paceSecondsPerKm / 60);
     const seconds = Math.floor(paceSecondsPerKm % 60);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -354,7 +354,7 @@ export function PerformanceAnalyticsDashboard({ userId = 1 }: PerformanceAnalyti
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               {getChangeIcon(data.comparison.averagePace.change)}
               <span className={getChangeColor(data.comparison.averagePace.change, true)}>
-                {Math.abs(data.comparison.averagePace.change)} sec/km
+                {Math.round(Math.abs(data.comparison.averagePace.change))} sec/km
               </span>
               vs previous period
             </div>

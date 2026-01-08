@@ -293,15 +293,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("run-saved", handleRunSaved)
   }, [refreshRuns, refreshGoals])
 
-  // Listen for goal updates
+  // Listen for goal updates - also sync to recalculate progress from runs
   useEffect(() => {
-    const handleGoalUpdated = () => {
+    const handleGoalUpdated = async () => {
+      if (userId) {
+        // Sync to fix any stale goal data and recalculate progress
+        await syncUserRunData(userId)
+      }
       refreshGoals()
     }
 
     window.addEventListener("goal-updated", handleGoalUpdated)
     return () => window.removeEventListener("goal-updated", handleGoalUpdated)
-  }, [refreshGoals])
+  }, [refreshGoals, userId])
 
   const value: DataContextValue = {
     user,

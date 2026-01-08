@@ -280,6 +280,11 @@ export function SimpleGoalForm({ isOpen, onClose, userId, onGoalCreated }: Simpl
       const result = await dbUtils.getGoalWithMilestones(goalId);
       onGoalCreated?.(result.goal);
 
+      // Notify DataContext that goals have been updated
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('goal-updated'));
+      }
+
       // Close the dialog
       onClose();
 

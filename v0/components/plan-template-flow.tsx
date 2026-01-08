@@ -458,6 +458,7 @@ export function PlanTemplateFlow({ isOpen, onClose, userId, onCompleted }: PlanT
       handleClose()
 
       if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('goal-updated'))
         window.dispatchEvent(new CustomEvent('navigate-to-plan'))
       }
     } catch (error) {
