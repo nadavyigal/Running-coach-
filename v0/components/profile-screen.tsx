@@ -557,22 +557,22 @@ export function ProfileScreen() {
             <Card>
               <CardContent className="p-4 text-center">
                 <Route className="h-6 w-6 text-green-500 mx-auto mb-2" />
-                <div className="text-lg font-bold">42.3 km</div>
+                <div className="text-lg font-bold">{allTimeStats.totalDistanceKm.toFixed(1)} km</div>
                 <div className="text-xs text-gray-600">Total Distance</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
                 <Clock className="h-6 w-6 text-blue-500 mx-auto mb-2" />
-                <div className="text-lg font-bold">320 min</div>
+                <div className="text-lg font-bold">{Math.round(allTimeStats.totalDurationSeconds / 60)} min</div>
                 <div className="text-xs text-gray-600">Total Time</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
                 <Flame className="h-6 w-6 text-orange-500 mx-auto mb-2" />
-                <div className="text-lg font-bold">5</div>
-                <div className="text-xs text-gray-600">Day Streak</div>
+                <div className="text-lg font-bold">{allTimeStats.totalRuns}</div>
+                <div className="text-xs text-gray-600">Total Runs</div>
               </CardContent>
             </Card>
           </div>
