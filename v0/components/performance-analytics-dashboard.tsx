@@ -352,11 +352,17 @@ export function PerformanceAnalyticsDashboard({ userId = 1 }: PerformanceAnalyti
           <CardContent>
             <div className="text-2xl font-bold">{formatPace(data.summary.averagePace)}</div>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              {getChangeIcon(data.comparison.averagePace.change)}
-              <span className={getChangeColor(data.comparison.averagePace.change, true)}>
-                {Math.round(Math.abs(data.comparison.averagePace.change))} sec/km
-              </span>
-              vs previous period
+              {data.comparison.averagePace.previous > 0 ? (
+                <>
+                  {getChangeIcon(data.comparison.averagePace.change)}
+                  <span className={getChangeColor(data.comparison.averagePace.change, true)}>
+                    {Math.round(Math.abs(data.comparison.averagePace.change))} sec/km
+                  </span>
+                  vs previous period
+                </>
+              ) : (
+                <span className="text-gray-500">No previous data</span>
+              )}
             </div>
           </CardContent>
         </Card>

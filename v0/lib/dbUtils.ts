@@ -2617,12 +2617,16 @@ async function calculatePerformanceTrends(runs: Run[]) {
       };
     }
 
-    // Calculate average pace (seconds per km)
-    const totalPace = runs.reduce((sum, run) => {
-      const pace = run.distance > 0 ? run.duration / run.distance : 0;
-      return sum + pace;
-    }, 0);
-    const averagePace = totalPace / runs.length;
+    // Calculate average pace (seconds per km) - filter out unrealistic paces
+    // Valid pace range: 2-20 min/km (120-1200 sec/km)
+    const validPaces = runs
+      .filter(run => run.distance >= 0.1 && run.duration > 0)
+      .map(run => run.duration / run.distance)
+      .filter(pace => pace >= 120 && pace <= 1200);
+
+    const averagePace = validPaces.length > 0
+      ? validPaces.reduce((sum, pace) => sum + pace, 0) / validPaces.length
+      : 0;
 
     // Calculate consistency score (based on regularity of runs)
     const firstRun = runs.at(0);
