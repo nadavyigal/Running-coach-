@@ -5,6 +5,16 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Settings,
   User,
   Route,
@@ -77,6 +87,8 @@ export function ProfileScreen() {
   const [primaryGoal, setPrimaryGoal] = useState<Goal | null>(null);
   const [recentRuns, setRecentRuns] = useState<Run[]>([])
   const [isRunsLoading, setIsRunsLoading] = useState(false)
+  const [goalToDelete, setGoalToDelete] = useState<Goal | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
   // Sync from context
   useEffect(() => {
@@ -94,6 +106,38 @@ export function ProfileScreen() {
   const handleCloseShareModal = () => {
     setIsShareModalOpen(false);
     setSelectedBadge(null);
+  };
+
+  const handleDeleteGoal = async () => {
+    if (!goalToDelete?.id) return;
+    try {
+      await dbUtils.deleteGoal(goalToDelete.id);
+      // Update local state
+      setGoals(prev => prev.filter(g => g.id !== goalToDelete.id));
+      if (primaryGoal?.id === goalToDelete.id) {
+        setPrimaryGoal(null);
+      }
+      // Refresh context data
+      refreshContext();
+      toast({
+        title: "Goal deleted",
+        description: `"${goalToDelete.title}" has been removed.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to delete goal. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setGoalToDelete(null);
+    }
+  };
+
+  const openDeleteDialog = (goal: Goal) => {
+    setGoalToDelete(goal);
+    setIsDeleteDialogOpen(true);
   };
 
   // Legacy helper for backward compatibility - prioritizes stored progressPercentage
@@ -456,21 +500,30 @@ export function ProfileScreen() {
                       <h3 className="text-lg font-semibold text-gray-900">{primaryGoal.title}</h3>
                       <p className="text-sm text-gray-700">{primaryGoal.description}</p>
                     </div>
-                    <div className="text-right space-y-1">
-                      {getDaysRemaining(primaryGoal) !== null && (
-                        <Badge variant="secondary" className="text-xs">
-                          {getDaysRemaining(primaryGoal)} days left
-                        </Badge>
-                      )}
-                      {primaryGoal.timeBound?.deadline && (
-                        <div className="text-xs text-gray-500">
-                          Target date:{' '}
-                          {(() => {
-                            const deadline = new Date(primaryGoal.timeBound.deadline);
-                            return Number.isNaN(deadline.getTime()) ? '--' : deadline.toLocaleDateString();
-                          })()}
-                        </div>
-                      )}
+                    <div className="flex items-start gap-2">
+                      <div className="text-right space-y-1">
+                        {getDaysRemaining(primaryGoal) !== null && (
+                          <Badge variant="secondary" className="text-xs">
+                            {getDaysRemaining(primaryGoal)} days left
+                          </Badge>
+                        )}
+                        {primaryGoal.timeBound?.deadline && (
+                          <div className="text-xs text-gray-500">
+                            Target date:{' '}
+                            {(() => {
+                              const deadline = new Date(primaryGoal.timeBound.deadline);
+                              return Number.isNaN(deadline.getTime()) ? '--' : deadline.toLocaleDateString();
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => openDeleteDialog(primaryGoal)}
+                        className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                        title="Delete goal"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
 
@@ -543,9 +596,7 @@ export function ProfileScreen() {
                   <h2 className="text-xl font-bold">Runner</h2>
                   <p className="text-gray-600">Beginner Runner</p>
                   <div className="flex gap-2 text-sm text-gray-500 mt-1">
-                    <span>5 days active</span>
-                    <span>•</span>
-                    <span>12 total runs</span>
+                    <span>{allTimeStats.totalRuns} total runs</span>
                   </div>
                 </div>
               </div>
@@ -907,6 +958,28 @@ export function ProfileScreen() {
               </div>
             </div>
           )}
+
+          {/* Delete Goal Confirmation Dialog */}
+          <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Goal?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete &quot;{goalToDelete?.title}&quot; and all progress history.
+                  This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setGoalToDelete(null)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteGoal}
+                  className="bg-red-500 hover:bg-red-600"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </>
       )}
     </div>

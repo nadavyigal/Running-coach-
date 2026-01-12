@@ -228,18 +228,17 @@ const computeGoalMeasurement = (goal: Goal, runs: Run[]) => {
     case "health":
       return runs.length
     case "time_improvement": {
-      const targetDistanceKm = goalMetricDistanceKm(goal.specificTarget?.metric)
-      if (!targetDistanceKm) return null
-      const tolerance = Math.max(0.25, targetDistanceKm * 0.05)
-      const matchingRuns = runs.filter((run) => {
-        if (!Number.isFinite(run.distance) || run.distance <= 0) return false
-        return Math.abs(run.distance - targetDistanceKm) <= tolerance
-      })
-      const durations = matchingRuns
-        .map((run) => run.duration)
-        .filter((duration) => Number.isFinite(duration) && duration > 0)
-      if (durations.length === 0) return null
-      return Math.min(...durations)
+      // Count ALL runs toward progress - track total training volume
+      // Progress is based on cumulative distance run toward the goal
+      const totalDistance = runs.reduce((sum, run) => {
+        if (!Number.isFinite(run.distance) || run.distance <= 0) return sum
+        return sum + run.distance
+      }, 0)
+
+      if (totalDistance <= 0) return null
+
+      // Return total distance as progress metric (will be compared to target volume)
+      return totalDistance
     }
     default:
       return null

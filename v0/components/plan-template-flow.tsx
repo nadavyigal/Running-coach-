@@ -8,6 +8,16 @@ import { PLAN_TEMPLATES, type PlanTemplateFilter, type PlanTemplate } from '@/li
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useToast } from '@/components/ui/use-toast'
 import { dbUtils } from '@/lib/dbUtils'
 import { regenerateTrainingPlan } from '@/lib/plan-regeneration'
@@ -271,6 +281,11 @@ export function PlanTemplateFlow({ isOpen, onClose, userId, onCompleted }: PlanT
   const [initialDaysPerWeek, setInitialDaysPerWeek] = useState<number | undefined>(undefined)
   const [isGenerating, setIsGenerating] = useState(false)
 
+  // Goal conflict dialog state
+  const [showGoalConflict, setShowGoalConflict] = useState(false)
+  const [existingGoals, setExistingGoals] = useState<Goal[]>([])
+  const [pendingWizardResult, setPendingWizardResult] = useState<PlanTemplateWizardResult | null>(null)
+
   const selectedTemplate = useMemo(
     () => PLAN_TEMPLATES.find((t) => t.id === selectedTemplateId) || null,
     [selectedTemplateId]
@@ -368,7 +383,35 @@ export function PlanTemplateFlow({ isOpen, onClose, userId, onCompleted }: PlanT
   const handleWizardSubmit = async (result: PlanTemplateWizardResult) => {
     if (!selectedTemplate) return
     if (isGenerating) return
+
+    // Check for existing active goals before proceeding
+    try {
+      const activeGoals = await dbUtils.getUserGoals(userId, 'active')
+      if (activeGoals.length > 0) {
+        setExistingGoals(activeGoals)
+        setPendingWizardResult(result)
+        setShowGoalConflict(true)
+        return
+      }
+    } catch {
+      // Continue if we can't check for existing goals
+    }
+
+    await proceedWithGoalCreation(result)
+  }
+
+  const proceedWithGoalCreation = async (result: PlanTemplateWizardResult, replaceExisting = false) => {
+    if (!selectedTemplate) return
     setIsGenerating(true)
+
+    // Archive existing goals if replacing
+    if (replaceExisting && existingGoals.length > 0) {
+      for (const goal of existingGoals) {
+        if (goal.id) {
+          await dbUtils.updateGoal(goal.id, { status: 'cancelled' })
+        }
+      }
+    }
 
     let createdGoalId: number | null = null
     try {
@@ -533,6 +576,61 @@ export function PlanTemplateFlow({ isOpen, onClose, userId, onCompleted }: PlanT
           </div>
         )}
       </DialogContent>
+
+      {/* Goal Conflict Dialog */}
+      <AlertDialog open={showGoalConflict} onOpenChange={setShowGoalConflict}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>You have an existing goal</AlertDialogTitle>
+            <AlertDialogDescription>
+              You already have {existingGoals.length === 1 ? 'an active goal' : `${existingGoals.length} active goals`}:
+              <span className="block mt-2 font-medium text-foreground">
+                {existingGoals.map(g => g.title).join(', ')}
+              </span>
+              <span className="block mt-2">
+                What would you like to do with {existingGoals.length === 1 ? 'it' : 'them'}?
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel
+              onClick={() => {
+                setShowGoalConflict(false)
+                setPendingWizardResult(null)
+                setExistingGoals([])
+              }}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowGoalConflict(false)
+                if (pendingWizardResult) {
+                  proceedWithGoalCreation(pendingWizardResult, false)
+                }
+                setPendingWizardResult(null)
+                setExistingGoals([])
+              }}
+              className="bg-blue-500 hover:bg-blue-600"
+            >
+              Keep Both
+            </AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => {
+                setShowGoalConflict(false)
+                if (pendingWizardResult) {
+                  proceedWithGoalCreation(pendingWizardResult, true)
+                }
+                setPendingWizardResult(null)
+                setExistingGoals([])
+              }}
+              className="bg-orange-500 hover:bg-orange-600"
+            >
+              Replace Existing
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   )
 }

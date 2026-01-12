@@ -2667,11 +2667,14 @@ async function calculatePerformanceTrends(runs: Run[]) {
     const paceImprovement = firstHalfAvgPace > 0 ? ((firstHalfAvgPace - secondHalfAvgPace) / firstHalfAvgPace) * 100 : 0;
     const performanceScore = Math.max(0, Math.min(100, 50 + (consistencyScore * 0.3) + (paceImprovement * 0.7)));
 
-    // Generate progression data
-    const paceProgression = runs.map(run => ({
-      date: new Date(run.completedAt ?? run.createdAt),
-      pace: run.distance > 0 ? run.duration / run.distance : 0
-    }));
+    // Generate progression data - filter unrealistic paces (2-20 min/km = 120-1200 sec/km)
+    const paceProgression = runs
+      .filter(run => run.distance >= 0.1 && run.duration > 0)
+      .map(run => {
+        const pace = run.duration / run.distance;
+        return { date: new Date(run.completedAt ?? run.createdAt), pace };
+      })
+      .filter(p => p.pace >= 120 && p.pace <= 1200);
 
     const distanceProgression = runs.map(run => ({
       date: new Date(run.completedAt ?? run.createdAt),
@@ -3114,9 +3117,12 @@ function calculateGoalProgressPercentage(
   if (![baselineValue, currentValue, targetValue].every(Number.isFinite)) return 0;
   if (baselineValue === targetValue) return clamp(currentValue === targetValue ? 100 : 0);
 
+  // For time_improvement goals, we now track cumulative training volume (distance)
+  // Progress = currentValue / targetValue * 100 (higher is better)
+  // baseline is typically 0 for volume-based tracking
   const raw =
     goalType === 'time_improvement'
-      ? ((baselineValue - currentValue) / (baselineValue - targetValue)) * 100
+      ? (currentValue / targetValue) * 100  // Volume-based: more distance = more progress
       : ((currentValue - baselineValue) / (targetValue - baselineValue)) * 100;
 
   return clamp(raw);
