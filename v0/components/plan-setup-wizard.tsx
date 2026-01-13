@@ -111,7 +111,8 @@ function buildRaceDayOptions(raceWeekStart: Date) {
 }
 
 const WHEEL_ITEM_HEIGHT = 48
-const WHEEL_PADDING_ITEMS = 2
+const WHEEL_VISIBLE_ITEMS = 5 // h-60 = 240px / 48px = 5 items visible
+const WHEEL_CENTER_OFFSET = Math.floor(WHEEL_VISIBLE_ITEMS / 2) // 2 items above center
 
 function WheelColumn(props: {
   value: number
@@ -126,25 +127,53 @@ function WheelColumn(props: {
   const ref = useRef<HTMLDivElement | null>(null)
   const scrollTimeout = useRef<number | null>(null)
   const isUserScrolling = useRef(false)
+  const isInitialized = useRef(false)
 
+  // Build items array with padding for center alignment
   const items = useMemo(() => {
     const values = Array.from({ length: max - min + 1 }, (_, idx) => min + idx)
+    // Add padding items so first/last values can be centered
     return [
-      ...Array.from({ length: WHEEL_PADDING_ITEMS }).map(() => null),
+      ...Array.from({ length: WHEEL_CENTER_OFFSET }).map(() => null),
       ...values,
-      ...Array.from({ length: WHEEL_PADDING_ITEMS }).map(() => null),
+      ...Array.from({ length: WHEEL_CENTER_OFFSET }).map(() => null),
     ]
   }, [min, max])
 
+  // Get scroll position for a given value
+  const getScrollTopForValue = (val: number) => {
+    const valueIndex = val - min // Index within actual values (0-based)
+    // The item is at index (valueIndex + WHEEL_CENTER_OFFSET) in items array
+    // To center it, we scroll so that item is at the center position
+    return valueIndex * WHEEL_ITEM_HEIGHT
+  }
+
+  // Get value from current scroll position
+  const getValueFromScrollTop = (scrollTop: number) => {
+    const valueIndex = Math.round(scrollTop / WHEEL_ITEM_HEIGHT)
+    return Math.min(max, Math.max(min, min + valueIndex))
+  }
+
+  // Initialize scroll position on mount
   useEffect(() => {
-    // Don't auto-scroll if user is actively scrolling
+    if (isInitialized.current) return
+    const container = ref.current
+    if (!container) return
+    container.scrollTop = getScrollTopForValue(value)
+    isInitialized.current = true
+  }, [])
+
+  // Sync scroll position when value changes externally
+  useEffect(() => {
+    if (!isInitialized.current) return
     if (isUserScrolling.current) return
     const container = ref.current
     if (!container) return
-    const targetIndex = items.findIndex((item) => item === value)
-    if (targetIndex === -1) return
-    container.scrollTo({ top: targetIndex * WHEEL_ITEM_HEIGHT, behavior: 'auto' })
-  }, [items, value])
+    const targetScrollTop = getScrollTopForValue(value)
+    if (Math.abs(container.scrollTop - targetScrollTop) > 2) {
+      container.scrollTop = targetScrollTop
+    }
+  }, [value, min])
 
   const handleScroll = () => {
     isUserScrolling.current = true
@@ -152,18 +181,21 @@ function WheelColumn(props: {
     scrollTimeout.current = window.setTimeout(() => {
       const container = ref.current
       if (!container) return
-      const rawIndex = Math.round(container.scrollTop / WHEEL_ITEM_HEIGHT)
-      const item = items[rawIndex]
-      if (typeof item === 'number') {
-        // Always call onChange to ensure state is in sync
-        onChange(item)
-      }
-      container.scrollTo({ top: rawIndex * WHEEL_ITEM_HEIGHT, behavior: 'smooth' })
-      // Reset user scrolling flag after a short delay
+
+      const newValue = getValueFromScrollTop(container.scrollTop)
+      const snappedScrollTop = getScrollTopForValue(newValue)
+
+      // Update state with the new value
+      onChange(newValue)
+
+      // Snap to exact position
+      container.scrollTo({ top: snappedScrollTop, behavior: 'smooth' })
+
+      // Reset user scrolling flag after animation completes
       setTimeout(() => {
         isUserScrolling.current = false
-      }, 100)
-    }, 80)
+      }, 150)
+    }, 100)
   }
 
   return (
@@ -172,8 +204,9 @@ function WheelColumn(props: {
         ref={ref}
         aria-label={ariaLabel}
         role="listbox"
-        className="h-60 overflow-y-auto no-scrollbar snap-y snap-mandatory"
+        className="h-60 overflow-y-auto no-scrollbar"
         onScroll={handleScroll}
+        style={{ scrollSnapType: 'y mandatory' }}
       >
         {items.map((item, idx) => {
           const isSelected = item === value
@@ -182,26 +215,30 @@ function WheelColumn(props: {
               key={`${ariaLabel}-${idx}`}
               type="button"
               className={cn(
-                'w-full h-12 snap-center flex items-center justify-center text-xl transition',
+                'w-full h-12 flex items-center justify-center text-xl transition',
                 item === null ? 'opacity-0 pointer-events-none' : 'opacity-40',
                 isSelected && 'opacity-100 font-semibold text-white'
               )}
+              style={{ scrollSnapAlign: 'center' }}
               onClick={() => {
                 if (typeof item !== 'number') return
                 onChange(item)
-                ref.current?.scrollTo({ top: idx * WHEEL_ITEM_HEIGHT, behavior: 'smooth' })
+                const container = ref.current
+                if (container) {
+                  container.scrollTo({ top: getScrollTopForValue(item), behavior: 'smooth' })
+                }
               }}
             >
               {typeof item === 'number'
                 ? `${padTo2 ? String(item).padStart(2, '0') : item}${suffix ?? ''}`
-                : '00'}
+                : ''}
             </button>
           )
         })}
       </div>
       <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-12 rounded-lg border border-white/10 bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-neutral-950 to-transparent" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-neutral-950 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-neutral-950 via-neutral-950/80 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-neutral-950 via-neutral-950/80 to-transparent" />
     </div>
   )
 }
@@ -404,7 +441,7 @@ export function PlanSetupWizard(props: {
 
   return (
     <div className="relative h-full w-screen max-w-full flex flex-col bg-neutral-950 text-white overflow-hidden">
-      <div className="px-4 pt-4 pb-3">
+      <div className="px-4 pb-3" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 1rem))' }}>
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" className="text-white hover:bg-white/5 -ml-2" onClick={handleBack}>
             <ArrowLeft className="h-5 w-5" />
@@ -423,7 +460,7 @@ export function PlanSetupWizard(props: {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-32">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-28">
         {step === 1 ? (
           <div className="pt-2 space-y-5">
             <div className="flex items-start justify-between gap-2">
@@ -963,7 +1000,7 @@ export function PlanSetupWizard(props: {
         </div>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 px-4 pb-6 pt-4 bg-gradient-to-t from-neutral-950 via-neutral-950 to-transparent">
+      <div className="absolute bottom-0 left-0 right-0 px-4 pt-4 bg-gradient-to-t from-neutral-950 via-neutral-950 to-transparent" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom, 1.5rem))' }}>
         <Button
           type="button"
           className={cn(
