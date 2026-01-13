@@ -440,7 +440,7 @@ export function PlanSetupWizard(props: {
   }
 
   return (
-    <div className="relative h-full w-screen max-w-full flex flex-col bg-neutral-950 text-white overflow-hidden">
+    <div className="h-[100dvh] w-screen max-w-full grid grid-rows-[auto_1fr_auto] bg-neutral-950 text-white overflow-hidden">
       <div className="px-4 pb-3" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 1rem))' }}>
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" className="text-white hover:bg-white/5 -ml-2" onClick={handleBack}>
@@ -460,7 +460,7 @@ export function PlanSetupWizard(props: {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-28">
+      <div className="overflow-y-auto overflow-x-hidden px-4 pb-4">
         {step === 1 ? (
           <div className="pt-2 space-y-5">
             <div className="flex items-start justify-between gap-2">
@@ -1000,7 +1000,7 @@ export function PlanSetupWizard(props: {
         </div>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 px-4 pt-4 bg-gradient-to-t from-neutral-950 via-neutral-950 to-transparent" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom, 1.5rem))' }}>
+      <div className="px-4 pt-3 bg-neutral-950" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom, 1.5rem))' }}>
         <Button
           type="button"
           className={cn(
