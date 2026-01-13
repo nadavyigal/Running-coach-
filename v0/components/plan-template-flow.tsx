@@ -126,10 +126,10 @@ function CatalogView(props: {
   const { filter, onFilterChange, templates, onClose, onSelectTemplate } = props
 
   return (
-    <div className="relative h-[100dvh] flex flex-col bg-neutral-950 text-white">
+    <div className="relative h-full w-screen max-w-full flex flex-col bg-neutral-950 text-white overflow-hidden">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(110%_70%_at_50%_0%,rgba(16,185,129,0.16),rgba(0,0,0,0))]" />
 
-      <div className="relative px-5 pt-4 pb-2">
+      <div className="relative px-4 pt-4 pb-2">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" className="text-white" onClick={onClose}>
             <ArrowLeft className="h-5 w-5" />
@@ -140,10 +140,10 @@ function CatalogView(props: {
           </Button>
         </div>
 
-        <h1 className="mt-4 text-4xl font-semibold tracking-tight">All plans</h1>
+        <h1 className="mt-4 text-2xl font-semibold tracking-tight">All plans</h1>
       </div>
 
-      <div className="relative px-5 pb-4">
+      <div className="relative px-4 pb-4">
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
           {FILTERS.map((f) => (
             <Button
@@ -151,7 +151,7 @@ function CatalogView(props: {
               type="button"
               onClick={() => onFilterChange(f.id)}
               className={cn(
-                'h-9 rounded-full px-5 shrink-0 text-sm font-medium border transition-colors',
+                'h-9 rounded-full px-4 shrink-0 text-sm font-medium border transition-colors',
                 filter === f.id
                   ? 'bg-emerald-400 text-neutral-950 border-emerald-300 shadow-[0_10px_24px_rgba(16,185,129,0.22)] hover:bg-emerald-300'
                   : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10 hover:text-white'
@@ -163,7 +163,7 @@ function CatalogView(props: {
         </div>
       </div>
 
-      <div className="relative flex-1 overflow-y-auto px-5 pb-8 space-y-4">
+      <div className="relative flex-1 overflow-y-auto px-4 pb-8 space-y-4 overflow-x-hidden">
         {templates.map((template) => {
           const accent = getAccentStyle(template.accentClassName)
           return (
@@ -212,7 +212,7 @@ function DetailView(props: {
   const { template, onBack, onClose, onCreate, onLearnMore } = props
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-neutral-950 text-white">
+    <div className="h-[100dvh] w-screen max-w-full flex flex-col bg-neutral-950 text-white overflow-hidden">
       <div className="relative h-[44vh] min-h-[260px]">
         <Image
           src={template.heroImageSrc}
@@ -525,7 +525,7 @@ export function PlanTemplateFlow({ isOpen, onClose, userId, onCompleted }: PlanT
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => (open ? null : handleClose())}>
-      <DialogContent className="max-w-md h-[100dvh] p-0 overflow-hidden border-0">
+      <DialogContent className="!left-0 !top-0 !translate-x-0 !translate-y-0 !max-w-none w-screen h-[100dvh] p-0 overflow-hidden border-0 gap-0 rounded-none" hideClose>
         {view === 'catalog' && (
           <CatalogView
             filter={filter}

@@ -7,7 +7,6 @@ import { ArrowLeft, Check, HelpCircle, X } from 'lucide-react'
 import { type PlanDistanceKey, type PlanTemplate } from '@/lib/plan-templates'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Calendar } from '@/components/ui/calendar'
 
 export type Weekday = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
@@ -126,6 +125,7 @@ function WheelColumn(props: {
   const { value, min, max, padTo2, suffix, ariaLabel, onChange } = props
   const ref = useRef<HTMLDivElement | null>(null)
   const scrollTimeout = useRef<number | null>(null)
+  const isUserScrolling = useRef(false)
 
   const items = useMemo(() => {
     const values = Array.from({ length: max - min + 1 }, (_, idx) => min + idx)
@@ -137,6 +137,8 @@ function WheelColumn(props: {
   }, [min, max])
 
   useEffect(() => {
+    // Don't auto-scroll if user is actively scrolling
+    if (isUserScrolling.current) return
     const container = ref.current
     if (!container) return
     const targetIndex = items.findIndex((item) => item === value)
@@ -145,21 +147,27 @@ function WheelColumn(props: {
   }, [items, value])
 
   const handleScroll = () => {
+    isUserScrolling.current = true
     if (scrollTimeout.current) window.clearTimeout(scrollTimeout.current)
     scrollTimeout.current = window.setTimeout(() => {
       const container = ref.current
       if (!container) return
       const rawIndex = Math.round(container.scrollTop / WHEEL_ITEM_HEIGHT)
       const item = items[rawIndex]
-      if (typeof item === 'number' && item !== value) {
+      if (typeof item === 'number') {
+        // Always call onChange to ensure state is in sync
         onChange(item)
       }
       container.scrollTo({ top: rawIndex * WHEEL_ITEM_HEIGHT, behavior: 'smooth' })
+      // Reset user scrolling flag after a short delay
+      setTimeout(() => {
+        isUserScrolling.current = false
+      }, 100)
     }, 80)
   }
 
   return (
-    <div className="relative w-24">
+    <div className="relative w-20">
       <div
         ref={ref}
         aria-label={ariaLabel}
@@ -174,7 +182,7 @@ function WheelColumn(props: {
               key={`${ariaLabel}-${idx}`}
               type="button"
               className={cn(
-                'w-full h-12 snap-center flex items-center justify-center text-2xl transition',
+                'w-full h-12 snap-center flex items-center justify-center text-xl transition',
                 item === null ? 'opacity-0 pointer-events-none' : 'opacity-40',
                 isSelected && 'opacity-100 font-semibold text-white'
               )}
@@ -191,7 +199,7 @@ function WheelColumn(props: {
           )
         })}
       </div>
-      <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-12 rounded-xl border border-white/10 bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-12 rounded-lg border border-white/10 bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-neutral-950 to-transparent" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-neutral-950 to-transparent" />
     </div>
@@ -395,14 +403,14 @@ export function PlanSetupWizard(props: {
   }
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-neutral-950 text-white">
-      <div className="px-5 pt-5 pb-4">
+    <div className="relative h-full w-screen max-w-full flex flex-col bg-neutral-950 text-white overflow-hidden">
+      <div className="px-4 pt-4 pb-3">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" className="text-white hover:bg-white/5 -ml-2" onClick={handleBack}>
-            <ArrowLeft className="h-6 w-6" />
+            <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex-1 flex items-center justify-center">
-            <div className="h-1 w-48 bg-white/10 rounded-full overflow-hidden">
+            <div className="h-1 w-40 bg-white/10 rounded-full overflow-hidden">
               <div
                 className="h-full bg-emerald-400 transition-all duration-300 ease-out"
                 style={{ width: `${progressPercent}%` }}
@@ -410,16 +418,16 @@ export function PlanSetupWizard(props: {
             </div>
           </div>
           <Button variant="ghost" size="icon" className="text-white hover:bg-white/5 -mr-2" onClick={onClose}>
-            <X className="h-6 w-6" />
+            <X className="h-5 w-5" />
           </Button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 pb-32">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-32">
         {step === 1 ? (
           <div className="pt-2 space-y-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
                 <h2 className="text-2xl font-semibold tracking-tight leading-tight">
                   What&apos;s your estimated <span className="text-emerald-400">current</span> race time?
                 </h2>
@@ -427,12 +435,12 @@ export function PlanSetupWizard(props: {
                   Choose a time reflective of your <span className="text-emerald-400">current</span> fitness level — don&apos;t use an out of date PB or goal time!
                 </p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
 
-            <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
               {DISTANCE_CHIPS.map((chip) => {
                 const active = distanceKey === chip.key
                 return (
@@ -445,7 +453,7 @@ export function PlanSetupWizard(props: {
                       onDistanceChange?.(chip.key)
                     }}
                     className={cn(
-                      'h-11 rounded-full px-7 shrink-0 text-sm font-medium border transition-all duration-200',
+                      'h-10 rounded-full px-4 shrink-0 text-sm font-medium border transition-all duration-200',
                       active
                         ? 'bg-emerald-400 text-neutral-950 border-emerald-400 shadow-lg shadow-emerald-500/25 hover:bg-emerald-300'
                         : 'bg-white/[0.03] text-white/70 border-white/10 hover:bg-white/[0.06] hover:text-white hover:border-white/20'
@@ -498,21 +506,21 @@ export function PlanSetupWizard(props: {
             </div>
 
             <div className="text-center text-white/60 text-sm pt-3 leading-relaxed">
-              I can currently run a <span className="text-emerald-400 font-medium">{template.distanceLabel}</span> in{' '}
+              I can currently run a <span className="text-emerald-400 font-medium">{DISTANCE_CHIPS.find(c => c.key === distanceKey)?.label ?? template.distanceLabel}</span> in{' '}
               <span className="text-white font-semibold">{formatTimeHms(currentRaceTimeSeconds)}</span>
             </div>
           </div>
         ) : null}
         {step === 2 ? (
           <div className="pt-2 space-y-8">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-3xl font-semibold leading-tight">How many days per week would you like to run?</h2>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-2xl font-semibold leading-tight">How many days per week would you like to run?</h2>
                 <p className="text-white/60 mt-4 leading-relaxed text-[15px]">
                   This should be at most once more than you currently run per week to reduce the risk of injury
                 </p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
@@ -531,9 +539,9 @@ export function PlanSetupWizard(props: {
         ) : null}
         {step === 3 ? (
           <div className="pt-2 space-y-8">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-3xl font-semibold leading-tight">Which days are you free to run on?</h2>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-2xl font-semibold leading-tight">Which days are you free to run on?</h2>
                 <p className="text-white/60 mt-4 leading-relaxed text-[15px]">
                   Please select every day available to you, spaced throughout the week, so we can choose the most optimal days to run.
                 </p>
@@ -546,7 +554,7 @@ export function PlanSetupWizard(props: {
                   Please select at least {daysPerWeek} days to continue
                 </p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
@@ -582,12 +590,12 @@ export function PlanSetupWizard(props: {
         ) : null}
         {step === 4 ? (
           <div className="pt-2 space-y-8">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-3xl font-semibold leading-tight">Which day do you want to do your long runs on?</h2>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-2xl font-semibold leading-tight">Which day do you want to do your long runs on?</h2>
                 <p className="text-white/60 mt-4 leading-relaxed text-[15px]">Choose one to continue</p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
@@ -609,12 +617,12 @@ export function PlanSetupWizard(props: {
         ) : null}
         {step === 5 ? (
           <div className="pt-2 space-y-8">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-3xl font-semibold tracking-tight leading-tight">When do you want to start your plan?</h2>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-2xl font-semibold tracking-tight leading-tight">When do you want to start your plan?</h2>
                 <p className="text-white/60 mt-4 leading-relaxed text-[15px]">Pick a start date that suits you best (you can change this later)</p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
@@ -623,7 +631,7 @@ export function PlanSetupWizard(props: {
               <button type="button" onClick={() => setStartPreset('today')} className="w-full text-left">
                 <div
                   className={cn(
-                    'relative overflow-hidden rounded-3xl border px-6 py-5 text-white shadow-lg transition-all duration-200 bg-gradient-to-br',
+                    'relative overflow-hidden rounded-3xl border px-5 py-5 text-white shadow-lg transition-all duration-200 bg-gradient-to-br',
                     startPreset !== 'custom'
                       ? 'border-emerald-400/40 from-emerald-500/10 via-emerald-500/5 to-transparent ring-1 ring-inset ring-emerald-400/20'
                       : 'border-white/10 from-white/[0.03] to-transparent hover:border-white/20'
@@ -631,7 +639,7 @@ export function PlanSetupWizard(props: {
                 >
                   <div className="text-sm text-white/50 font-medium">{format(startPresetDate, 'MMM d, yyyy')}</div>
                   <div className="mt-2 text-2xl font-semibold tracking-tight">Now</div>
-                  <div className="mt-5 flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
+                  <div className="mt-5 flex gap-2 overflow-x-auto no-scrollbar pb-1">
                     {[
                       { id: 'today', label: 'Today' },
                       { id: 'tomorrow', label: 'Tomorrow' },
@@ -646,7 +654,7 @@ export function PlanSetupWizard(props: {
                           setStartPreset(chip.id as any)
                         }}
                         className={cn(
-                          'h-11 rounded-full px-7 shrink-0 text-sm font-medium border transition-all duration-200',
+                          'h-10 rounded-full px-5 shrink-0 text-sm font-medium border transition-all duration-200',
                           startPreset === chip.id
                             ? 'bg-emerald-400 text-neutral-950 border-emerald-400 shadow-lg shadow-emerald-500/25 hover:bg-emerald-300'
                             : 'bg-white/[0.06] text-white/70 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20'
@@ -679,12 +687,12 @@ export function PlanSetupWizard(props: {
         ) : null}
         {step === 6 ? (
           <div className="pt-2 space-y-8">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-3xl font-semibold leading-tight">How long do you want your plan to be?</h2>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-2xl font-semibold leading-tight">How long do you want your plan to be?</h2>
                 <p className="text-white/60 mt-4 leading-relaxed text-[15px]">Choose how long you would like your plan to be.</p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
@@ -762,14 +770,14 @@ export function PlanSetupWizard(props: {
         ) : null}
         {step === 7 ? (
           <div className="pt-2 space-y-8">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-3xl font-semibold leading-tight">Which day do you want to do your {template.distanceLabel} race on?</h2>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-2xl font-semibold leading-tight">Which day do you want to do your {template.distanceLabel} race on?</h2>
                 <p className="text-white/60 mt-4 leading-relaxed text-[15px]">
                   The last run of your training plan will be a {template.distanceLabel} race. Select the day that you want to go and get that personal best!
                 </p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
@@ -789,14 +797,14 @@ export function PlanSetupWizard(props: {
         ) : null}
         {step === 8 ? (
           <div className="pt-2 space-y-8">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-3xl font-semibold leading-tight">Set your training preferences</h2>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-2xl font-semibold leading-tight">Set your training preferences</h2>
                 <p className="text-white/60 mt-4 leading-relaxed text-[15px]">
                   We&apos;ve customized your training volume and difficulty for you. You can revisit this later in &apos;Manage Plan&apos;.
                 </p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5" aria-label="Help">
+              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0" aria-label="Help">
                 <HelpCircle className="h-5 w-5" />
               </Button>
             </div>
@@ -891,7 +899,7 @@ export function PlanSetupWizard(props: {
         {step === 9 ? (
           <div className="pt-2 space-y-8">
             <div>
-              <h2 className="text-3xl font-semibold leading-tight">Your plan is nearly ready</h2>
+              <h2 className="text-2xl font-semibold leading-tight">Your plan is nearly ready</h2>
             </div>
 
             <div className="flex flex-col items-center justify-center py-6">
@@ -932,7 +940,7 @@ export function PlanSetupWizard(props: {
               <ul className="space-y-3.5">
                 <li className="flex items-start gap-3 text-white/80 text-[15px]">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-2 shrink-0"></div>
-                  <span>Your estimated current {template.distanceLabel} time is <span className="text-white font-medium">{formatTimeHms(currentRaceTimeSeconds)}</span></span>
+                  <span>Your estimated current {DISTANCE_CHIPS.find(c => c.key === distanceKey)?.label ?? template.distanceLabel} time is <span className="text-white font-medium">{formatTimeHms(currentRaceTimeSeconds)}</span></span>
                 </li>
                 <li className="flex items-start gap-3 text-white/80 text-[15px]">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-2 shrink-0"></div>
@@ -955,7 +963,7 @@ export function PlanSetupWizard(props: {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto px-6 pb-6 pt-4 bg-gradient-to-t from-neutral-950 via-neutral-950 to-transparent">
+      <div className="absolute bottom-0 left-0 right-0 px-4 pb-6 pt-4 bg-gradient-to-t from-neutral-950 via-neutral-950 to-transparent">
         <Button
           type="button"
           className={cn(
