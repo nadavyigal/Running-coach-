@@ -29,8 +29,11 @@ import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
 import ModalErrorBoundary from "@/components/modal-error-boundary"
 import { type Workout, type Plan, type Route, type Goal, type Run, resetDatabaseInstance } from "@/lib/db"
-import { dbUtils } from "@/lib/dbUtils"
+import { dbUtils, getUserPaceZones } from "@/lib/dbUtils"
 import { useData, useGoalProgress, useDaysRemaining } from "@/contexts/DataContext"
+import { WorkoutPhasesCompact } from "@/components/workout-phases-display"
+import { generateStructuredWorkout, type StructuredWorkout } from "@/lib/workout-steps"
+import { getDefaultPaceZones, type PaceZones } from "@/lib/pace-zones"
 import { useToast } from "@/hooks/use-toast"
 import { CommunityStatsWidget } from "@/components/community-stats-widget"
 import { GoalRecommendations } from "@/components/goal-recommendations"
@@ -70,6 +73,8 @@ export function TodayScreen() {
   const [showWorkoutBreakdown, setShowWorkoutBreakdown] = useState(false)
   const [todaysWorkout, setTodaysWorkout] = useState<Workout | null>(null)
   const [isLoadingWorkout, setIsLoadingWorkout] = useState(true)
+  const [structuredWorkout, setStructuredWorkout] = useState<StructuredWorkout | null>(null)
+  const [userPaceZones, setUserPaceZones] = useState<PaceZones | null>(null)
   const [visibleWorkouts, setVisibleWorkouts] = useState<Workout[]>([])
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [showAddRunModal, setShowAddRunModal] = useState(false)
@@ -158,6 +163,55 @@ export function TodayScreen() {
 
     initializeLocalData()
   }, [userId])
+
+  // Load structured workout with pace zones when todaysWorkout changes
+  useEffect(() => {
+    const loadStructuredWorkout = async () => {
+      if (!todaysWorkout || !userId) {
+        setStructuredWorkout(null)
+        return
+      }
+
+      try {
+        // Get user's pace zones (from VDOT or defaults)
+        const paceZones = await getUserPaceZones(userId)
+
+        if (paceZones) {
+          setUserPaceZones(paceZones)
+
+          // Get user experience level for workout structure
+          const user = await dbUtils.getCurrentUser()
+          const experience = user?.experience || 'intermediate'
+
+          // Generate structured workout
+          const structured = generateStructuredWorkout(
+            todaysWorkout.type,
+            paceZones,
+            todaysWorkout.distance,
+            experience
+          )
+          setStructuredWorkout(structured)
+        } else {
+          // Use defaults if no pace zones available
+          const defaultZones = getDefaultPaceZones('intermediate')
+          setUserPaceZones(defaultZones)
+
+          const structured = generateStructuredWorkout(
+            todaysWorkout.type,
+            defaultZones,
+            todaysWorkout.distance,
+            'intermediate'
+          )
+          setStructuredWorkout(structured)
+        }
+      } catch (error) {
+        console.error("Error loading structured workout:", error)
+        setStructuredWorkout(null)
+      }
+    }
+
+    loadStructuredWorkout()
+  }, [todaysWorkout, userId])
 
   const refreshWorkouts = async () => {
     try {
@@ -575,28 +629,32 @@ export function TodayScreen() {
                 </Button>
               </div>
 
-              {/* Workout Breakdown */}
+              {/* Workout Breakdown - Garmin Style */}
               {showWorkoutBreakdown && (
                 <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 space-y-3 animate-in fade-in-0 slide-in-from-top-4 duration-300">
                   <h4 className="font-semibold text-sm uppercase tracking-wide">
                     Workout Phases
                   </h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-white/60" />
-                      <span className="text-sm">Warm-up: 5-10 min easy pace</span>
+                  {structuredWorkout ? (
+                    <WorkoutPhasesCompact workout={structuredWorkout} darkMode />
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-white/60" />
+                        <span className="text-sm">Warm-up: 5-10 min easy pace</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-white" />
+                        <span className="text-sm font-semibold">
+                          Main: {todaysWorkout.distance}km at target pace
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-white/60" />
+                        <span className="text-sm">Cool-down: 5 min walk</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-white" />
-                      <span className="text-sm font-semibold">
-                        Main: {todaysWorkout.distance}km at target pace
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-white/60" />
-                      <span className="text-sm">Cool-down: 5 min walk</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
 

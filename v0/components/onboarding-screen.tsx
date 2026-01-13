@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
 import { MonitorIcon as Running, Calendar, Route, Gauge, Sun, CloudSun, Moon, Loader2 } from "lucide-react"
-import { dbUtils } from "@/lib/dbUtils"
+import { dbUtils, setReferenceRace } from "@/lib/dbUtils"
+import { calculateVDOT, formatPace, getPaceZonesFromVDOT } from "@/lib/pace-zones"
 import { useToast } from "@/hooks/use-toast"
 import {
   trackOnboardingStarted,
@@ -113,6 +114,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     setDaysPerWeek([3]);
     setRpe(null);
     setAge(null);
+    setReferenceRaceDistance(10);
+    setReferenceRaceMinutes(null);
+    setReferenceRaceSeconds(null);
+    setSkipReferenceRace(false);
     setConsents({
       data: false,
       gdpr: false,
@@ -133,6 +138,11 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [daysPerWeek, setDaysPerWeek] = useState([3])
   const [rpe, setRpe] = useState<number | null>(null)
   const [age, setAge] = useState<number | null>(null)
+  // Reference race for pace zone calculation
+  const [referenceRaceDistance, setReferenceRaceDistance] = useState<number>(10) // Default 10K
+  const [referenceRaceMinutes, setReferenceRaceMinutes] = useState<number | null>(null)
+  const [referenceRaceSeconds, setReferenceRaceSeconds] = useState<number | null>(null)
+  const [skipReferenceRace, setSkipReferenceRace] = useState(false)
   const [consents, setConsents] = useState({
     data: false,
     gdpr: false,
@@ -152,7 +162,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   })
   const { toast } = useToast()
 
-  const totalSteps = 6
+  const totalSteps = 7
 
   const nextStep = () => {
     if (currentStep < totalSteps) {
@@ -175,6 +185,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         case 4:
           return age !== null && age >= 10 && age <= 100
         case 5:
+          // Reference race is optional (can skip)
+          return skipReferenceRace || (referenceRaceMinutes !== null && referenceRaceMinutes > 0)
+        case 6:
           return (Array.isArray(selectedTimes) && selectedTimes.length > 0) && (Array.isArray(daysPerWeek) && (daysPerWeek[0] ?? 0) >= 2)
         default:
           return true
@@ -192,6 +205,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           case 4:
             return { field: 'age', message: 'Valid age (10-100) is required' }
           case 5:
+            return { field: 'referenceRace', message: 'Enter your race time or skip this step' }
+          case 6:
             return { field: 'schedule', message: 'At least one time slot and 2+ days per week required' }
           default:
             return { field: 'unknown', message: 'Validation failed' }
@@ -261,6 +276,18 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           privacySettings: formData.privacySettings
         }, { artificialDelayMs: 300 })
         console.log('✅ Atomic commit complete:', { userId, planId })
+
+        // Save reference race data for pace zone calculations
+        if (!skipReferenceRace && referenceRaceMinutes && referenceRaceMinutes > 0) {
+          const totalSeconds = (referenceRaceMinutes * 60) + (referenceRaceSeconds || 0)
+          try {
+            await setReferenceRace(userId, referenceRaceDistance, totalSeconds)
+            console.log('✅ Reference race saved for VDOT calculation')
+          } catch (raceError) {
+            console.warn('⚠️ Failed to save reference race:', raceError)
+            // Non-critical error, continue with onboarding
+          }
+        }
 
         // Generate AI-powered training plan with enhanced error handling
         if (isOnline) {
@@ -534,6 +561,134 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         )
 
       case 5:
+        // Reference race step for pace zone calculation
+        const getReferenceRaceTimeSeconds = () => {
+          if (skipReferenceRace) return null
+          const mins = referenceRaceMinutes || 0
+          const secs = referenceRaceSeconds || 0
+          return mins * 60 + secs
+        }
+
+        const previewVDOT = () => {
+          const timeSeconds = getReferenceRaceTimeSeconds()
+          if (!timeSeconds || timeSeconds <= 0) return null
+          try {
+            const vdot = calculateVDOT(referenceRaceDistance, timeSeconds)
+            const zones = getPaceZonesFromVDOT(vdot)
+            return { vdot, zones }
+          } catch {
+            return null
+          }
+        }
+
+        const preview = !skipReferenceRace ? previewVDOT() : null
+
+        return (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-center">What's your best recent race time?</h2>
+            <p className="text-sm text-gray-600 text-center">
+              This helps us calculate your personalized training paces
+            </p>
+
+            {/* Distance selector */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Race Distance</label>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { value: 5, label: "5K" },
+                  { value: 10, label: "10K" },
+                  { value: 21.1, label: "Half" },
+                  { value: 42.2, label: "Full" },
+                ].map((dist) => (
+                  <Button
+                    key={dist.value}
+                    variant={referenceRaceDistance === dist.value ? "default" : "outline"}
+                    className={referenceRaceDistance === dist.value ? "bg-green-500" : ""}
+                    onClick={() => setReferenceRaceDistance(dist.value)}
+                    disabled={skipReferenceRace}
+                  >
+                    {dist.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Time input */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Race Time</label>
+              <div className="flex gap-2 items-center justify-center">
+                <input
+                  type="number"
+                  placeholder="Min"
+                  value={referenceRaceMinutes ?? ""}
+                  onChange={(e) => setReferenceRaceMinutes(e.target.value ? parseInt(e.target.value) : null)}
+                  className="w-20 p-3 border border-gray-300 rounded-md text-center"
+                  min="0"
+                  max="300"
+                  disabled={skipReferenceRace}
+                />
+                <span className="text-xl font-bold">:</span>
+                <input
+                  type="number"
+                  placeholder="Sec"
+                  value={referenceRaceSeconds ?? ""}
+                  onChange={(e) => setReferenceRaceSeconds(e.target.value ? parseInt(e.target.value) : null)}
+                  className="w-20 p-3 border border-gray-300 rounded-md text-center"
+                  min="0"
+                  max="59"
+                  disabled={skipReferenceRace}
+                />
+              </div>
+            </div>
+
+            {/* Preview calculated paces */}
+            {preview && (
+              <Card className="bg-green-50 border-green-200">
+                <CardContent className="p-4">
+                  <h4 className="font-semibold text-green-800 mb-2">Your Training Paces</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="text-gray-600">Easy:</span>{" "}
+                      <span className="font-medium">{preview.zones.easy.label}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Tempo:</span>{" "}
+                      <span className="font-medium">{preview.zones.tempo.label}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Interval:</span>{" "}
+                      <span className="font-medium">{preview.zones.interval.label}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">VDOT:</span>{" "}
+                      <span className="font-medium">{preview.vdot}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Skip option */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="skipRace"
+                checked={skipReferenceRace}
+                onChange={(e) => setSkipReferenceRace(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="skipRace" className="text-sm text-gray-600">
+                I don't know / Skip this step
+              </label>
+            </div>
+
+            <Button onClick={nextStep} disabled={!canProceed()} className="w-full bg-green-500 hover:bg-green-600">
+              Continue
+            </Button>
+          </div>
+        )
+
+      case 6:
         return (
           <div className="space-y-6">
             <h2 className="text-2xl font-bold text-center">When can you run?</h2>
@@ -575,7 +730,18 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           </div>
         )
 
-      case 6:
+      case 7:
+        // Format reference race for display
+        const formatReferenceRace = () => {
+          if (skipReferenceRace) return 'Not provided'
+          if (!referenceRaceMinutes) return 'Not provided'
+          const distanceLabel = referenceRaceDistance === 21.1 ? 'Half Marathon' :
+            referenceRaceDistance === 42.2 ? 'Marathon' : `${referenceRaceDistance}K`
+          const mins = referenceRaceMinutes || 0
+          const secs = referenceRaceSeconds || 0
+          return `${distanceLabel} in ${mins}:${secs.toString().padStart(2, '0')}`
+        }
+
         return (
           <div className="space-y-6" role="region" aria-label="Summary and Confirmation">
             <h2 className="text-2xl font-bold text-center" id="summary-heading">Summary & Confirmation</h2>
@@ -585,16 +751,16 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                   <li><strong>Goal:</strong> {selectedGoal}</li>
                   <li><strong>Experience:</strong> {selectedExperience}</li>
                   <li><strong>Age:</strong> {age !== null ? age : 'Not provided'}</li>
+                  <li><strong>Reference Race:</strong> {formatReferenceRace()}</li>
                   <li><strong>Preferred Times:</strong> {selectedTimes.join(', ')}</li>
                   <li><strong>Days/Week:</strong> {daysPerWeek[0]}</li>
-                  <li><strong>RPE:</strong> {rpe !== null ? rpe : 'Not provided'}</li>
                 </ul>
               </CardContent>
             </Card>
-            <Button 
-              onClick={handleComplete} 
-              disabled={!canProceed() || isGeneratingPlan} 
-              className="w-full bg-green-500 hover:bg-green-600" 
+            <Button
+              onClick={handleComplete}
+              disabled={!canProceed() || isGeneratingPlan}
+              className="w-full bg-green-500 hover:bg-green-600"
               aria-label="Start My Journey"
             >
               {isGeneratingPlan ? (

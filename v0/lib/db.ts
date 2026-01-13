@@ -267,6 +267,12 @@ export interface User {
   trialEndDate?: Date; // 14-30 days from signup
   subscriptionStartDate?: Date;
   subscriptionEndDate?: Date;
+
+  // Reference race for pace zone calculations (VDOT)
+  referenceRaceDistance?: number;  // km (5, 10, 21.1, 42.2)
+  referenceRaceTime?: number;      // seconds
+  referenceRaceDate?: Date;
+  calculatedVDOT?: number;         // cached VDOT score
 }
 
 export interface PlanSetupPreferences {

@@ -24,7 +24,10 @@ import {
 } from "lucide-react"
 import { useState, useEffect } from "react"
 import { getRunBreakdown } from "@/lib/run-breakdowns"
-import { getUserExperience, getCurrentUser } from "@/lib/dbUtils"
+import { getUserExperience, getCurrentUser, getUserPaceZones } from "@/lib/dbUtils"
+import { WorkoutPhasesDisplay } from "@/components/workout-phases-display"
+import { generateStructuredWorkout, type StructuredWorkout } from "@/lib/workout-steps"
+import { getDefaultPaceZones, type PaceZones } from "@/lib/pace-zones"
 
 interface DateWorkoutModalProps {
   isOpen: boolean
@@ -42,8 +45,9 @@ interface DateWorkoutModalProps {
 export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalProps) {
   const [showWorkoutBreakdown, setShowWorkoutBreakdown] = useState(false)
   const [breakdown, setBreakdown] = useState<any>(null)
+  const [structuredWorkout, setStructuredWorkout] = useState<StructuredWorkout | null>(null)
 
-  // Fetch workout breakdown based on user experience
+  // Fetch workout breakdown and structured workout based on user experience
   useEffect(() => {
     if (isOpen && workout) {
       const fetchBreakdown = async () => {
@@ -54,6 +58,21 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
           const experience = await getUserExperience(user.id)
           const workoutBreakdown = getRunBreakdown(workout.type, experience)
           setBreakdown(workoutBreakdown)
+
+          // Load structured workout with pace zones
+          const paceZones = await getUserPaceZones(user.id)
+          const zones = paceZones || getDefaultPaceZones(experience)
+
+          // Parse distance from string (e.g., "5 km" -> 5)
+          const distanceNum = parseFloat(workout.distance) || 5
+
+          const structured = generateStructuredWorkout(
+            workout.type,
+            zones,
+            distanceNum,
+            experience
+          )
+          setStructuredWorkout(structured)
         } catch (error) {
           console.error('Error fetching workout breakdown:', error)
         }
@@ -184,89 +203,29 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
               </Button>
             </div>
 
-            {showWorkoutBreakdown && breakdown && (
-              <div className="space-y-3 animate-in slide-in-from-top duration-300">
-                {/* Warm-up */}
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <Flame className="h-5 w-5 text-orange-500 mt-1" />
-                      <div className="flex-1">
-                        <h4 className="font-semibold mb-1">Warm-up</h4>
-                        <p className="text-sm text-gray-600">{breakdown.warmup}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+            {showWorkoutBreakdown && structuredWorkout && (
+              <div className="animate-in slide-in-from-top duration-300">
+                {/* Garmin-style structured workout display */}
+                <WorkoutPhasesDisplay workout={structuredWorkout} />
 
-                {/* Drills */}
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <Zap className="h-5 w-5 text-yellow-500 mt-1" />
-                      <div className="flex-1">
-                        <h4 className="font-semibold mb-1">Drills</h4>
-                        <p className="text-sm text-gray-600">{breakdown.drills}</p>
+                {/* Coach Notes from text breakdown */}
+                {breakdown?.coachNotes && (
+                  <Card className="mt-3">
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        <MessageSquare className="h-5 w-5 text-indigo-500 mt-1" />
+                        <div className="flex-1">
+                          <h4 className="font-semibold mb-1">Coach Notes</h4>
+                          <p className="text-sm text-gray-600">{breakdown.coachNotes}</p>
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Main Set */}
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <Play className="h-5 w-5 text-green-500 mt-1" />
-                      <div className="flex-1">
-                        <h4 className="font-semibold mb-1">Main Set</h4>
-                        <p className="text-sm text-gray-600">{breakdown.mainSet}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Total Time */}
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <Timer className="h-5 w-5 text-blue-500 mt-1" />
-                      <div className="flex-1">
-                        <h4 className="font-semibold mb-1">Total Time</h4>
-                        <p className="text-sm text-gray-600">{breakdown.totalTime}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Frequency */}
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <Calendar className="h-5 w-5 text-purple-500 mt-1" />
-                      <div className="flex-1">
-                        <h4 className="font-semibold mb-1">Frequency</h4>
-                        <p className="text-sm text-gray-600">{breakdown.frequency}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Coach Notes */}
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <MessageSquare className="h-5 w-5 text-indigo-500 mt-1" />
-                      <div className="flex-1">
-                        <h4 className="font-semibold mb-1">Coach Notes</h4>
-                        <p className="text-sm text-gray-600">{breakdown.coachNotes}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             )}
 
-            {showWorkoutBreakdown && !breakdown && (
+            {showWorkoutBreakdown && !structuredWorkout && (
               <div className="text-center py-4 text-gray-500 text-sm">
                 Workout breakdown not available for this run type
               </div>

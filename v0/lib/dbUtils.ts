@@ -1213,11 +1213,69 @@ export async function deleteGoal(goalId: number): Promise<void> {
     if (db) {
       // Delete related milestones first
       await db.goalMilestones.where('goalId').equals(goalId).delete();
+      // Delete progress history
+      await db.goalProgressHistory.where('goalId').equals(goalId).delete();
       // Delete the goal
       await db.goals.delete(goalId);
-      console.log('✅ Goal and related milestones deleted successfully:', goalId);
+      console.log('✅ Goal and related data deleted successfully:', goalId);
     }
   }, 'deleteGoal');
+}
+
+/**
+ * Merge two goals - combines progress history and milestones from source into target
+ */
+export async function mergeGoals(
+  userId: number,
+  sourceGoalId: number,
+  targetGoalId: number,
+  options: { deleteSource: boolean; combineProgress: boolean }
+): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+
+    const sourceGoal = await db.goals.get(sourceGoalId);
+    const targetGoal = await db.goals.get(targetGoalId);
+
+    if (!sourceGoal || !targetGoal) {
+      throw new Error('One or both goals not found');
+    }
+
+    if (sourceGoal.userId !== userId || targetGoal.userId !== userId) {
+      throw new Error('Goals do not belong to the specified user');
+    }
+
+    await db.transaction('rw', [db.goals, db.goalMilestones, db.goalProgressHistory], async () => {
+      // Move progress history from source to target
+      if (options.combineProgress) {
+        await db.goalProgressHistory
+          .where('goalId')
+          .equals(sourceGoalId)
+          .modify({ goalId: targetGoalId });
+      }
+
+      // Move milestones from source to target
+      await db.goalMilestones
+        .where('goalId')
+        .equals(sourceGoalId)
+        .modify({ goalId: targetGoalId });
+
+      // Delete or archive source goal
+      if (options.deleteSource) {
+        await db.goals.delete(sourceGoalId);
+      } else {
+        await db.goals.update(sourceGoalId, {
+          status: 'cancelled',
+          updatedAt: nowUTC()
+        });
+      }
+
+      // Update target goal timestamp
+      await db.goals.update(targetGoalId, { updatedAt: nowUTC() });
+    });
+
+    console.log('✅ Goals merged successfully:', sourceGoalId, '->', targetGoalId);
+  }, 'mergeGoals');
 }
 
 // ============================================================================
@@ -2176,6 +2234,126 @@ export async function calculateTargetPaces(raceGoal: RaceGoal): Promise<{ easy: 
     
     return { easy, tempo, threshold, interval };
   }, 'calculateTargetPaces', null);
+}
+
+// ============================================================================
+// PACE ZONES & VDOT UTILITIES
+// ============================================================================
+
+import {
+  calculateVDOT,
+  getPaceZonesFromVDOT,
+  getDefaultPaceZones,
+  type PaceZones
+} from './pace-zones';
+
+/**
+ * Set reference race for a user and calculate VDOT
+ * @param userId - User ID
+ * @param distance - Race distance in km (5, 10, 21.1, 42.2)
+ * @param timeSeconds - Race time in seconds
+ */
+export async function setReferenceRace(
+  userId: number,
+  distance: number,
+  timeSeconds: number
+): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+
+    const vdot = calculateVDOT(distance, timeSeconds);
+
+    await db.users.update(userId, {
+      referenceRaceDistance: distance,
+      referenceRaceTime: timeSeconds,
+      referenceRaceDate: new Date(),
+      calculatedVDOT: vdot,
+      updatedAt: new Date()
+    });
+
+    console.log(`✅ Reference race set for user ${userId}: ${distance}km in ${timeSeconds}s (VDOT: ${vdot})`);
+  }, 'setReferenceRace');
+}
+
+/**
+ * Get pace zones for a user based on their reference race or defaults
+ * @param userId - User ID
+ * @returns PaceZones object with all training paces
+ */
+export async function getUserPaceZones(userId: number): Promise<PaceZones | null> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+
+    const user = await db.users.get(userId);
+    if (!user) return null;
+
+    // If user has a calculated VDOT, use it
+    if (user.calculatedVDOT) {
+      return getPaceZonesFromVDOT(user.calculatedVDOT);
+    }
+
+    // If user has reference race data, calculate VDOT
+    if (user.referenceRaceDistance && user.referenceRaceTime) {
+      const vdot = calculateVDOT(user.referenceRaceDistance, user.referenceRaceTime);
+
+      // Cache the VDOT for future use
+      await db.users.update(userId, {
+        calculatedVDOT: vdot,
+        updatedAt: new Date()
+      });
+
+      return getPaceZonesFromVDOT(vdot);
+    }
+
+    // Fall back to experience-based defaults
+    return getDefaultPaceZones(user.experience);
+  }, 'getUserPaceZones', null);
+}
+
+/**
+ * Recalculate VDOT for a user from their reference race
+ * @param userId - User ID
+ * @returns New VDOT value or null if no reference race
+ */
+export async function recalculateVDOT(userId: number): Promise<number | null> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+
+    const user = await db.users.get(userId);
+    if (!user || !user.referenceRaceDistance || !user.referenceRaceTime) {
+      return null;
+    }
+
+    const vdot = calculateVDOT(user.referenceRaceDistance, user.referenceRaceTime);
+
+    await db.users.update(userId, {
+      calculatedVDOT: vdot,
+      updatedAt: new Date()
+    });
+
+    console.log(`✅ VDOT recalculated for user ${userId}: ${vdot}`);
+    return vdot;
+  }, 'recalculateVDOT', null);
+}
+
+/**
+ * Clear reference race data for a user (reset to defaults)
+ * @param userId - User ID
+ */
+export async function clearReferenceRace(userId: number): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+
+    await db.users.update(userId, {
+      referenceRaceDistance: undefined,
+      referenceRaceTime: undefined,
+      referenceRaceDate: undefined,
+      calculatedVDOT: undefined,
+      updatedAt: new Date()
+    });
+
+    console.log(`✅ Reference race cleared for user ${userId}`);
+  }, 'clearReferenceRace');
 }
 
 // ============================================================================
@@ -3884,7 +4062,13 @@ export const dbUtils = {
   getRaceGoalById,
   assessFitnessLevel,
   calculateTargetPaces,
-  
+
+  // Pace zones & VDOT
+  setReferenceRace,
+  getUserPaceZones,
+  recalculateVDOT,
+  clearReferenceRace,
+
   // Plan management
   createPlan,
 	  updatePlan,
