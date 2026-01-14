@@ -119,40 +119,57 @@ export function generateStructuredWorkout(
   targetDistance: number,
   experience: 'beginner' | 'intermediate' | 'advanced'
 ): StructuredWorkout {
-  const type = workoutType.toLowerCase();
+  // Normalize workout type: lowercase, replace common words, handle spaces
+  const type = workoutType
+    .toLowerCase()
+    .replace(/\s+run$/i, '')     // Remove trailing "run" (e.g., "Easy Run" -> "easy")
+    .replace(/\s+/g, '-')        // Replace spaces with dashes
+    .trim();
 
-  switch (type) {
-    case 'easy':
-    case 'recovery':
-      return generateEasyWorkout(paceZones, targetDistance, experience);
-
-    case 'tempo':
-    case 'threshold':
-      return generateTempoWorkout(paceZones, targetDistance, experience);
-
-    case 'intervals':
-    case 'vo2max':
-      return generateIntervalsWorkout(paceZones, targetDistance, experience);
-
-    case 'long':
-    case 'long-progression':
-      return generateLongRunWorkout(paceZones, targetDistance, experience);
-
-    case 'hill':
-      return generateHillWorkout(paceZones, targetDistance, experience);
-
-    case 'fartlek':
-      return generateFartlekWorkout(paceZones, targetDistance, experience);
-
-    case 'strides':
-      return generateStridesWorkout(paceZones, targetDistance, experience);
-
-    case 'race-pace':
-      return generateRacePaceWorkout(paceZones, targetDistance, experience);
-
-    default:
-      return generateEasyWorkout(paceZones, targetDistance, experience);
+  // Easy/Recovery runs
+  if (type === 'easy' || type === 'recovery' || type.includes('easy') || type.includes('recovery')) {
+    return generateEasyWorkout(paceZones, targetDistance, experience);
   }
+
+  // Tempo/Threshold runs
+  if (type === 'tempo' || type === 'threshold' || type.includes('tempo') || type.includes('threshold')) {
+    return generateTempoWorkout(paceZones, targetDistance, experience);
+  }
+
+  // Intervals/VO2max
+  if (type === 'intervals' || type === 'vo2max' || type === 'interval' ||
+      type.includes('interval') || type.includes('vo2') || type.includes('speed')) {
+    return generateIntervalsWorkout(paceZones, targetDistance, experience);
+  }
+
+  // Long runs
+  if (type === 'long' || type === 'long-progression' || type.includes('long')) {
+    return generateLongRunWorkout(paceZones, targetDistance, experience);
+  }
+
+  // Hill workouts
+  if (type === 'hill' || type.includes('hill')) {
+    return generateHillWorkout(paceZones, targetDistance, experience);
+  }
+
+  // Fartlek
+  if (type === 'fartlek' || type.includes('fartlek')) {
+    return generateFartlekWorkout(paceZones, targetDistance, experience);
+  }
+
+  // Strides
+  if (type === 'strides' || type.includes('stride')) {
+    return generateStridesWorkout(paceZones, targetDistance, experience);
+  }
+
+  // Race pace
+  if (type === 'race-pace' || type === 'race' || type.includes('race')) {
+    return generateRacePaceWorkout(paceZones, targetDistance, experience);
+  }
+
+  // Default to easy workout
+  console.log(`[generateStructuredWorkout] Unknown workout type "${workoutType}", defaulting to easy`);
+  return generateEasyWorkout(paceZones, targetDistance, experience);
 }
 
 /**

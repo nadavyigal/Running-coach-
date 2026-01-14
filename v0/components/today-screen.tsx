@@ -34,6 +34,7 @@ import { useData, useGoalProgress, useDaysRemaining } from "@/contexts/DataConte
 import { WorkoutPhasesCompact } from "@/components/workout-phases-display"
 import { generateStructuredWorkout, type StructuredWorkout } from "@/lib/workout-steps"
 import { getDefaultPaceZones, type PaceZones } from "@/lib/pace-zones"
+import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine"
 import { useToast } from "@/hooks/use-toast"
 import { CommunityStatsWidget } from "@/components/community-stats-widget"
 import { GoalRecommendations } from "@/components/goal-recommendations"
@@ -75,6 +76,7 @@ export function TodayScreen() {
   const [isLoadingWorkout, setIsLoadingWorkout] = useState(true)
   const [structuredWorkout, setStructuredWorkout] = useState<StructuredWorkout | null>(null)
   const [userPaceZones, setUserPaceZones] = useState<PaceZones | null>(null)
+  const [engineGoalProgress, setEngineGoalProgress] = useState<GoalProgress | null>(null)
   const [visibleWorkouts, setVisibleWorkouts] = useState<Workout[]>([])
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [showAddRunModal, setShowAddRunModal] = useState(false)
@@ -167,51 +169,89 @@ export function TodayScreen() {
   // Load structured workout with pace zones when todaysWorkout changes
   useEffect(() => {
     const loadStructuredWorkout = async () => {
+      console.log("[TodayScreen] loadStructuredWorkout called:", { todaysWorkout, userId })
+
       if (!todaysWorkout || !userId) {
+        console.log("[TodayScreen] No workout or userId, clearing structuredWorkout")
         setStructuredWorkout(null)
         return
       }
 
       try {
         // Get user's pace zones (from VDOT or defaults)
-        const paceZones = await getUserPaceZones(userId)
+        let paceZones = await getUserPaceZones(userId)
+        console.log("[TodayScreen] Got pace zones:", paceZones ? "yes" : "null")
 
-        if (paceZones) {
-          setUserPaceZones(paceZones)
-
-          // Get user experience level for workout structure
-          const user = await dbUtils.getCurrentUser()
-          const experience = user?.experience || 'intermediate'
-
-          // Generate structured workout
-          const structured = generateStructuredWorkout(
-            todaysWorkout.type,
-            paceZones,
-            todaysWorkout.distance,
-            experience
-          )
-          setStructuredWorkout(structured)
-        } else {
+        if (!paceZones) {
           // Use defaults if no pace zones available
-          const defaultZones = getDefaultPaceZones('intermediate')
-          setUserPaceZones(defaultZones)
-
-          const structured = generateStructuredWorkout(
-            todaysWorkout.type,
-            defaultZones,
-            todaysWorkout.distance,
-            'intermediate'
-          )
-          setStructuredWorkout(structured)
+          console.log("[TodayScreen] Using default pace zones")
+          paceZones = getDefaultPaceZones('intermediate')
         }
+
+        setUserPaceZones(paceZones)
+
+        // Get user experience level for workout structure
+        const user = await dbUtils.getCurrentUser()
+        const experience = user?.experience || 'intermediate'
+
+        console.log("[TodayScreen] Generating structured workout:", {
+          type: todaysWorkout.type,
+          distance: todaysWorkout.distance,
+          experience
+        })
+
+        // Generate structured workout
+        const structured = generateStructuredWorkout(
+          todaysWorkout.type,
+          paceZones,
+          todaysWorkout.distance,
+          experience
+        )
+
+        console.log("[TodayScreen] Generated structured workout:", structured?.name)
+        setStructuredWorkout(structured)
       } catch (error) {
-        console.error("Error loading structured workout:", error)
+        console.error("[TodayScreen] Error loading structured workout:", error)
         setStructuredWorkout(null)
       }
     }
 
     loadStructuredWorkout()
   }, [todaysWorkout, userId])
+
+  // Load goal progress using GoalProgressEngine for consistency with Profile/Overview
+  useEffect(() => {
+    const loadGoalProgress = async () => {
+      if (!primaryGoal?.id) {
+        setEngineGoalProgress(null)
+        return
+      }
+
+      try {
+        const engine = new GoalProgressEngine()
+        const progress = await engine.calculateGoalProgress(primaryGoal.id)
+        setEngineGoalProgress(progress)
+      } catch (error) {
+        console.error("Error loading goal progress:", error)
+        setEngineGoalProgress(null)
+      }
+    }
+
+    loadGoalProgress()
+  }, [primaryGoal])
+
+  // Helper to get consistent goal progress
+  const getGoalProgressPercent = (): number => {
+    if (engineGoalProgress) {
+      return engineGoalProgress.progressPercentage
+    }
+    return goalProgress // Fallback to hook value
+  }
+
+  // Helper to get goal trajectory
+  const getGoalTrajectory = (): string | null => {
+    return engineGoalProgress?.trajectory ?? null
+  }
 
   const refreshWorkouts = async () => {
     try {
@@ -450,9 +490,24 @@ export function TodayScreen() {
               <div>
                 <div className="flex justify-between text-xs text-gray-700 mb-1">
                   <span>Progress</span>
-                  <span>{Math.round(goalProgressPercent(primaryGoal))}%</span>
+                  <div className="flex items-center gap-2">
+                    <span>{Math.round(getGoalProgressPercent())}%</span>
+                    {getGoalTrajectory() && (
+                      <Badge
+                        variant="outline"
+                        className={`text-xs capitalize ${
+                          getGoalTrajectory() === 'ahead' ? 'text-emerald-600 border-emerald-300' :
+                          getGoalTrajectory() === 'on_track' ? 'text-blue-600 border-blue-300' :
+                          getGoalTrajectory() === 'behind' ? 'text-amber-600 border-amber-300' :
+                          'text-red-600 border-red-300'
+                        }`}
+                      >
+                        {getGoalTrajectory()?.replace('_', ' ')}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-                <Progress value={goalProgressPercent(primaryGoal)} className="h-2" />
+                <Progress value={getGoalProgressPercent()} className="h-2" />
               </div>
             </CardContent>
           </Card>
