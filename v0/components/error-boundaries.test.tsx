@@ -445,7 +445,7 @@ describe('Error Boundaries', () => {
       const finalMemory = process.memoryUsage().heapUsed;
       const memoryGrowth = finalMemory - initialMemory;
 
-      expect(memoryGrowth).toBeGreaterThanOrEqual(0);
+      expect(Math.abs(memoryGrowth)).toBeLessThan(20 * 1024 * 1024);
     });
 
     it('should handle rapid successive errors efficiently', async () => {

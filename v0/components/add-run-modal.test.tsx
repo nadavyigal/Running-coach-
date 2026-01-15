@@ -4,15 +4,43 @@ import { AddRunModal } from './add-run-modal'
 import { useToast } from '@/hooks/use-toast'
 import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
+import { dbUtils } from '@/lib/dbUtils'
 
 vi.mock('@/hooks/use-toast')
 vi.mock('ai')
 vi.mock('@ai-sdk/openai')
+vi.mock('@/lib/dbUtils', () => ({
+  dbUtils: {
+    getCurrentUser: vi.fn(),
+    ensureUserHasActivePlan: vi.fn(),
+    createWorkout: vi.fn(),
+    handleDatabaseError: vi.fn()
+  }
+}))
 
 describe('AddRunModal', () => {
   it('shows success toast when workout scheduled', async () => {
     const mockToast = vi.fn()
     ;(useToast as any).mockReturnValue({ toast: mockToast })
+    ;(dbUtils.getCurrentUser as any).mockResolvedValue({
+      id: 1,
+      goal: 'habit',
+      experience: 'beginner',
+      preferredTimes: ['morning'],
+      daysPerWeek: 3,
+      onboardingComplete: true
+    })
+    ;(dbUtils.ensureUserHasActivePlan as any).mockResolvedValue({
+      id: 1,
+      userId: 1,
+      title: 'Test Plan',
+      startDate: new Date(),
+      endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      totalWeeks: 2,
+      isActive: true
+    })
+    ;(dbUtils.createWorkout as any).mockResolvedValue(1)
+    ;(dbUtils.handleDatabaseError as any).mockReturnValue({ userMessage: 'Error' })
 
     // Mock generateText to return a valid workout plan
     ;(generateText as any).mockResolvedValue({
@@ -40,7 +68,7 @@ describe('AddRunModal', () => {
       }),
     })
 
-    render(<AddRunModal isOpen={true} onClose={() => {}} />)
+    render(<AddRunModal open={true} onOpenChange={() => {}} />)
 
     // Simulate selecting a workout type
     fireEvent.click(screen.getByText('Easy Run'))
@@ -57,7 +85,7 @@ describe('AddRunModal', () => {
     })
 
     expect(mockToast).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Workout Scheduled! 🎉' })
+      expect.objectContaining({ title: expect.stringContaining('Workout Scheduled!') })
     )
   })
 })

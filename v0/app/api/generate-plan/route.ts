@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { generateText } from 'ai';
+import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { sanitizeForPrompt } from '@/lib/security';
@@ -51,6 +51,7 @@ type PlanRequest = {
     daysPerWeek?: number;
     preferredTimes?: string[];
     age?: number;
+    averageWeeklyKm?: number;
   };
   userContext?: {
     goal?: 'habit' | 'distance' | 'speed';
@@ -61,6 +62,7 @@ type PlanRequest = {
     motivations?: string[];
     barriers?: string[];
     coachingStyle?: string;
+    averageWeeklyKm?: number;
   };
   planType?: string;
   targetDistance?: string;
@@ -114,17 +116,16 @@ function resolveUser(body: PlanRequest) {
     daysPerWeek,
     preferredTimes,
     age: typeof source.age === 'number' ? source.age : undefined,
+    averageWeeklyKm: typeof source.averageWeeklyKm === 'number' ? source.averageWeeklyKm : undefined,
   };
 }
 
-function resolveTotalWeeks(body: PlanRequest, experience: string) {
+function resolveTotalWeeks(body: PlanRequest) {
   if (typeof body.totalWeeks === 'number' && Number.isFinite(body.totalWeeks)) {
     return clampNumber(Math.round(body.totalWeeks), 1, 16);
   }
-  if (body.rookie_challenge) {
-    return 2;
-  }
-  return experience === 'beginner' ? 4 : experience === 'intermediate' ? 6 : 8;
+  if (body.rookie_challenge) return 2;
+  return 2;
 }
 
 function resolveTrainingDays(daysPerWeek: number, planPreferences?: PlanRequest['planPreferences']) {
@@ -191,8 +192,13 @@ function generateFallbackPlan(
   const daysPerWeek = resolveDaysPerWeek(user.daysPerWeek);
   const { trainingDays, longRunDay } = resolveTrainingDays(daysPerWeek, planPreferences);
 
-  const baseDistance =
-    user.experience === 'beginner' ? 3 : user.experience === 'intermediate' ? 5 : 7;
+  let baseDistance: number;
+  if (typeof user.averageWeeklyKm === 'number' && user.averageWeeklyKm > 0) {
+    baseDistance = (user.averageWeeklyKm * 0.9) / daysPerWeek;
+  } else {
+    baseDistance =
+      user.experience === 'beginner' ? 3 : user.experience === 'intermediate' ? 5 : 7;
+  }
 
   const workouts: PlanData['workouts'] = [];
 
@@ -257,6 +263,9 @@ function buildPlanPrompt(
   const sanitizedDifficulty = planPreferences?.difficulty
     ? sanitizeForPrompt(planPreferences.difficulty, 50)
     : '';
+  const weeklyKmContext = user.averageWeeklyKm
+    ? `- Current weekly volume: ${user.averageWeeklyKm}km/week (use as starting baseline)`
+    : '';
 
   const { trainingDays, longRunDay } = resolveTrainingDays(user.daysPerWeek, planPreferences);
 
@@ -275,6 +284,7 @@ Runner profile:
 - Goal: ${user.goal}
 - Days per week: ${user.daysPerWeek}
 - Preferred times: ${user.preferredTimes.join(', ')}
+${weeklyKmContext}
 ${sanitizedPlanType ? `- Plan type: ${sanitizedPlanType}` : ''}
 ${sanitizedTarget ? `- Target distance: ${sanitizedTarget}` : ''}
 ${sanitizedVolume ? `- Training volume: ${sanitizedVolume}` : ''}
@@ -349,7 +359,7 @@ export async function POST(req: Request) {
     }
 
     const user = resolveUser(body);
-    const totalWeeks = resolveTotalWeeks(body, user.experience);
+    const totalWeeks = resolveTotalWeeks(body);
     const fallbackPlan = generateFallbackPlan(user, totalWeeks, body.planPreferences);
 
     const prompt = buildPlanPrompt(
@@ -361,8 +371,9 @@ export async function POST(req: Request) {
     );
 
     const result = await withSecureOpenAI(async () => {
-      return generateText({
+      return generateObject({
         model: openai('gpt-4o'),
+        schema: PlanSchema,
         prompt,
         temperature: 0.7,
         maxOutputTokens: 1200,
@@ -374,38 +385,22 @@ export async function POST(req: Request) {
         {
           plan: fallbackPlan,
           source: 'fallback',
-          message: result.error?.message || 'AI service unavailable. Using fallback plan.',
+          error: result.error?.message || 'AI service unavailable. Using fallback plan.',
+          fallbackRequired: Boolean(result.error?.fallbackRequired),
           requestId,
         },
         { status: result.error?.status || 503 }
       );
     }
 
-    const text = String((result.data as { text?: string }).text || '');
-    const jsonText = extractJson(text);
-    if (!jsonText) {
-      logger.warn('[generate-plan] AI returned non-JSON output', { requestId });
+    const generated = result.data as { object?: PlanData };
+    if (!generated.object) {
+      logger.warn('[generate-plan] AI returned empty plan object', { requestId });
       return NextResponse.json(
         {
           plan: fallbackPlan,
           source: 'fallback',
-          message: 'AI response could not be parsed. Using fallback plan.',
-          requestId,
-        },
-        { status: 502 }
-      );
-    }
-
-    let parsed: PlanData;
-    try {
-      parsed = PlanSchema.parse(JSON.parse(jsonText));
-    } catch (error) {
-      logger.warn('[generate-plan] AI output failed validation', { requestId, error });
-      return NextResponse.json(
-        {
-          plan: fallbackPlan,
-          source: 'fallback',
-          message: 'AI output invalid. Using fallback plan.',
+          error: 'AI response could not be parsed. Using fallback plan.',
           requestId,
         },
         { status: 502 }
@@ -414,7 +409,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       {
-        plan: normalizePlan(parsed),
+        plan: normalizePlan(generated.object),
         source: 'ai',
         requestId,
       },

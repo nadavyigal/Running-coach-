@@ -73,7 +73,7 @@ describe('Future Scheduling', () => {
     const mockDate = new Date('2024-01-15')
     vi.setSystemTime(mockDate)
 
-    render(React.createElement(AddRunModal, { isOpen: true, onClose: vi.fn() }))
+    render(React.createElement(AddRunModal, { open: true, onOpenChange: vi.fn() }))
 
     // Click on a workout type to trigger the configure step
     const easyRunCard = screen.getByText('Easy Run')

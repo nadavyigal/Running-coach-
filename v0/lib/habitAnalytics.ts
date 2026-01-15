@@ -64,18 +64,26 @@ export interface HabitRisk {
 }
 
 export class HabitAnalyticsService {
-  async calculateHabitAnalytics(userId: number): Promise<HabitAnalytics | null> {
-    // Graceful handling when database is not available
-    if (!db) {
-      console.warn('[HabitAnalytics] Database not available');
-      return null;
+  private getDatabase() {
+    if (Object.prototype.hasOwnProperty.call(globalThis, 'db')) {
+      const globalDb = (globalThis as any).db;
+      if (globalDb !== undefined) {
+        return globalDb;
+      }
     }
+    return db;
+  }
 
+  async calculateHabitAnalytics(userId: number): Promise<HabitAnalytics | null> {
     try {
-      const user = await db.users.get(userId);
+      const database = this.getDatabase();
+      if (!database) {
+        throw new Error('Database not available');
+      }
+
+      const user = await database.users.get(userId);
       if (!user) {
-        console.warn(`[HabitAnalytics] User ${userId} not found`);
-        return null;
+        throw new Error('User not found');
       }
 
     const runs = await this.getUserRuns(userId);
@@ -136,31 +144,34 @@ export class HabitAnalyticsService {
     };
     } catch (error) {
       console.error('[HabitAnalytics] Error calculating analytics:', error);
-      return null;
+      throw error;
     }
   }
 
   private async getUserRuns(userId: number): Promise<Run[]> {
-    if (!db) return [];
-    return await db.runs.where('userId').equals(userId).toArray();
+    const database = this.getDatabase();
+    if (!database) return [];
+    return await database.runs.where('userId').equals(userId).toArray();
   }
 
   private async getUserWorkouts(userId: number): Promise<Workout[]> {
-    if (!db) return [];
+    const database = this.getDatabase();
+    if (!database) return [];
     // Get workouts through plans
-    const plans = await db.plans.where('userId').equals(userId).toArray();
+    const plans = await database.plans.where('userId').equals(userId).toArray();
     const planIds = plans.map(p => p.id!).filter(Boolean);
     
     if (planIds.length === 0) return [];
     
     // Use filter instead of anyOf for better compatibility
-    const allWorkouts = await db.workouts.toArray();
+    const allWorkouts = await database.workouts.toArray();
     return allWorkouts.filter(workout => planIds.includes(workout.planId));
   }
 
   private async getUserGoals(userId: number): Promise<Goal[]> {
-    if (!db) return [];
-    return await db.goals.where('userId').equals(userId).toArray();
+    const database = this.getDatabase();
+    if (!database) return [];
+    return await database.goals.where('userId').equals(userId).toArray();
   }
 
   private async calculateWeeklyConsistency(userId: number, startDate: Date, endDate: Date): Promise<number> {
@@ -188,6 +199,7 @@ export class HabitAnalyticsService {
   }
 
   private async analyzePreferredDays(runs: Run[]): Promise<DayPattern[]> {
+    if (runs.length === 0) return [];
     const dayStats = new Map<number, { count: number, totalDuration: number }>();
     
     // Initialize all days
@@ -254,12 +266,14 @@ export class HabitAnalyticsService {
     else if (currentStreak < 3) riskScore += 1;
     
     // Time since last activity
-    if (user.lastActivityDate) {
-      const daysSinceLastActivity = differenceInDays(new Date(), user.lastActivityDate);
-      if (daysSinceLastActivity > 7) riskScore += 3;
-      else if (daysSinceLastActivity > 3) riskScore += 1;
-    } else {
-      riskScore += 2;
+    if (currentStreak === 0) {
+      if (user.lastActivityDate) {
+        const daysSinceLastActivity = differenceInDays(new Date(), user.lastActivityDate);
+        if (daysSinceLastActivity > 7) riskScore += 3;
+        else if (daysSinceLastActivity > 3) riskScore += 1;
+      } else {
+        riskScore += 2;
+      }
     }
     
     if (riskScore >= 5) return 'high';
@@ -296,8 +310,11 @@ export class HabitAnalyticsService {
     }
     
     // Recent activity factor
+    const referenceDate = runs.length > 0
+      ? runs.reduce((latest, run) => (run.completedAt > latest ? run.completedAt : latest), runs[0].completedAt)
+      : new Date();
     const recentRuns = runs.filter(r => 
-      differenceInDays(new Date(), r.completedAt) <= 7
+      differenceInDays(referenceDate, r.completedAt) <= 7
     );
     
     if (recentRuns.length > 0) {
@@ -430,6 +447,7 @@ export class HabitAnalyticsService {
   }
 
   private identifyOptimalTimes(runs: Run[]): string[] {
+    if (runs.length === 0) return [];
     const hourCounts = new Map<number, number>();
     
     runs.forEach(run => {

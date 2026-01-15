@@ -143,7 +143,7 @@ Every request generates a unique `requestId` for traceability:
 ### Required
 
 ```bash
-OPENAI_API_KEY=sk-your-api-key-here
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY
 ```
 
 ### Optional: Chat Runtime Tuning

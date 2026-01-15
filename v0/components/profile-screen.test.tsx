@@ -14,6 +14,7 @@ vi.mock('./badge-cabinet', () => ({
 vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getCurrentUser: vi.fn(),
+    initializeDatabase: vi.fn(),
     checkAndUnlockBadges: vi.fn(),
   },
 }));
@@ -28,6 +29,7 @@ vi.mock('@/components/ui/use-toast', () => ({
 describe('ProfileScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (dbUtils.initializeDatabase as vi.Mock).mockResolvedValue(true);
     (dbUtils.getCurrentUser as vi.Mock).mockResolvedValue({ id: 1 });
     (dbUtils.checkAndUnlockBadges as vi.Mock).mockResolvedValue([]);
   });

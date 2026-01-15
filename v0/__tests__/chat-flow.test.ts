@@ -30,7 +30,8 @@ vi.mock('../lib/db', () => ({
       })),
       clear: vi.fn()
     }
-  }
+  },
+  resetDatabaseInstance: vi.fn()
 }))
 
 interface ChatMessage {

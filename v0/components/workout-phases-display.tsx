@@ -7,14 +7,12 @@
  * durations, and pace targets matching Garmin Connect format.
  */
 
-import { Card, CardContent } from "@/components/ui/card"
 import {
   StructuredWorkout,
   WorkoutStep,
   RepeatBlock,
   isRepeatBlock,
-  formatStepDuration,
-  STEP_COLORS
+  formatStepDuration
 } from "@/lib/workout-steps"
 import { formatPace, formatPaceRange, getTargetPace } from "@/lib/pace-zones"
 
@@ -29,9 +27,7 @@ export function WorkoutPhasesDisplay({
   compact = false,
   darkMode = false
 }: WorkoutPhasesDisplayProps) {
-  const textColor = darkMode ? "text-white" : "text-gray-900"
   const subtextColor = darkMode ? "text-white/70" : "text-gray-600"
-  const cardBg = darkMode ? "bg-white/10 border-white/20" : "bg-gray-50"
 
   return (
     <div className="space-y-3">
@@ -176,7 +172,6 @@ interface RepeatBlockCardProps {
 
 function RepeatBlockCard({ block, compact = false, darkMode = false }: RepeatBlockCardProps) {
   const textColor = darkMode ? "text-white" : "text-gray-900"
-  const subtextColor = darkMode ? "text-white/70" : "text-gray-600"
   const borderColor = darkMode ? "border-white/30" : "border-gray-300"
   const bgColor = darkMode ? "bg-white/5" : "bg-gray-50"
 

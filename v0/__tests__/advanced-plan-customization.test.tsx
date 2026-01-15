@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { vi } from 'vitest';
+import { vi, afterAll } from 'vitest';
 import { PlanCustomizationDashboard } from '../components/plan-customization-dashboard';
 import { RaceGoalModal } from '../components/race-goal-modal';
 import { RaceGoalsScreen } from '../components/race-goals-screen';
@@ -9,7 +9,7 @@ import { dbUtils } from '@/lib/dbUtils';
 
 // Mock global fetch
 global.fetch = vi.fn();
-global.window = { dispatchEvent: vi.fn() } as any;
+const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent').mockImplementation(() => true);
 
 // Mock dependencies
 vi.mock('@/lib/dbUtils', () => ({
@@ -42,6 +42,9 @@ vi.mock('../hooks/use-toast', () => ({
 }));
 
 describe('Advanced Plan Customization', () => {
+  afterAll(() => {
+    dispatchEventSpy.mockRestore();
+  });
   describe('RaceGoalModal', () => {
     const mockProps = {
       isOpen: true,

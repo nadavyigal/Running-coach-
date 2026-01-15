@@ -133,7 +133,7 @@ npm run start
 1. **Environment Variables** (.env.production)
    ```
    NEXT_PUBLIC_APP_URL=https://your-domain.com
-   OPENAI_API_KEY=sk-... (keep secret!)
+   OPENAI_API_KEY=YOUR_OPENAI_API_KEY (keep secret!)
    NEXT_PUBLIC_POSTHOG_KEY=phc_...
    NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
    ```

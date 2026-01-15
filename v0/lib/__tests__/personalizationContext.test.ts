@@ -18,6 +18,7 @@ vi.mock('../db', () => ({
       where: vi.fn(),
     },
   },
+  resetDatabaseInstance: vi.fn(),
 }));
 
 describe('buildPersonalizationContext', () => {

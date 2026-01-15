@@ -33,7 +33,8 @@ vi.mock('./db', () => ({
         }))
       }))
     }
-  }
+  },
+  resetDatabaseInstance: vi.fn()
 }))
 
 vi.mock('./conversationStorage', () => ({

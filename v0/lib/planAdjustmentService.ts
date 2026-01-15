@@ -18,7 +18,17 @@ class PlanAdjustmentService {
         await dbUtils.updatePlan(activePlan.id!, { isActive: false })
       }
 
-      await generateFallbackPlan(user)
+      const planData = await generateFallbackPlan(user)
+      const planId = await dbUtils.createPlan(planData.plan)
+
+      await Promise.all(
+        planData.workouts.map((workout) =>
+          dbUtils.createWorkout({
+            ...workout,
+            planId
+          })
+        )
+      )
 
       // Try to show toast notification, but don't fail if toast context is unavailable
       try {

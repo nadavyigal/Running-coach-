@@ -28,12 +28,12 @@ import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
 import ModalErrorBoundary from "@/components/modal-error-boundary"
-import { type Workout, type Plan, type Route, type Goal, type Run, resetDatabaseInstance } from "@/lib/db"
+import { type Workout, type Route, type Goal, resetDatabaseInstance } from "@/lib/db"
 import { dbUtils, getUserPaceZones } from "@/lib/dbUtils"
-import { useData, useGoalProgress, useDaysRemaining } from "@/contexts/DataContext"
+import { useData, useGoalProgress } from "@/contexts/DataContext"
 import { WorkoutPhasesCompact } from "@/components/workout-phases-display"
 import { generateStructuredWorkout, type StructuredWorkout } from "@/lib/workout-steps"
-import { getDefaultPaceZones, type PaceZones } from "@/lib/pace-zones"
+import { getDefaultPaceZones } from "@/lib/pace-zones"
 import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine"
 import { useToast } from "@/hooks/use-toast"
 import { CommunityStatsWidget } from "@/components/community-stats-widget"
@@ -56,17 +56,13 @@ export function TodayScreen() {
     userId,
     plan,
     primaryGoal,
-    weeklyRuns,
     weeklyWorkouts,
     weeklyStats,
-    isLoading: isContextLoading,
     refresh: refreshContext,
   } = useData()
 
   // Use centralized goal progress calculation
   const goalProgress = useGoalProgress(primaryGoal)
-  const daysRemaining = useDaysRemaining(primaryGoal)
-
   const [dailyTip, setDailyTip] = useState(
     "Focus on your breathing rhythm today. Try the 3:2 pattern - inhale for 3 steps, exhale for 2 steps. This will help you maintain a steady pace!",
   )
@@ -75,7 +71,6 @@ export function TodayScreen() {
   const [todaysWorkout, setTodaysWorkout] = useState<Workout | null>(null)
   const [isLoadingWorkout, setIsLoadingWorkout] = useState(true)
   const [structuredWorkout, setStructuredWorkout] = useState<StructuredWorkout | null>(null)
-  const [userPaceZones, setUserPaceZones] = useState<PaceZones | null>(null)
   const [engineGoalProgress, setEngineGoalProgress] = useState<GoalProgress | null>(null)
   const [visibleWorkouts, setVisibleWorkouts] = useState<Workout[]>([])
   const [showResetConfirm, setShowResetConfirm] = useState(false)
@@ -98,24 +93,6 @@ export function TodayScreen() {
     "Consistency beats intensity. Show up regularly, even if it's just a short run.",
     "Track your progress! Celebrate small wins - every kilometer counts towards your goal.",
   ]
-
-  // Legacy helper for backward compatibility with components that pass goal directly
-  const goalProgressPercent = (goal?: Goal | null) => {
-    if (!goal) return 0
-    // Use stored progressPercentage if available
-    if (typeof goal.progressPercentage === 'number' && goal.progressPercentage >= 0) {
-      return Math.min(100, Math.max(0, goal.progressPercentage))
-    }
-    const baseline = typeof goal.baselineValue === 'number' ? goal.baselineValue : 0
-    const target = typeof goal.targetValue === 'number' ? goal.targetValue : 0
-    const current = typeof goal.currentValue === 'number' ? goal.currentValue : baseline
-    const denominator = target - baseline
-    if (denominator === 0) return current === target ? 100 : 0
-    if (goal.goalType === 'time_improvement') {
-      return Math.min(100, Math.max(0, ((baseline - current) / (baseline - target)) * 100))
-    }
-    return Math.min(100, Math.max(0, ((current - baseline) / denominator) * 100))
-  }
 
   const getDaysRemaining = (goal?: Goal | null) => {
     if (!goal?.timeBound?.deadline) return null
@@ -187,8 +164,6 @@ export function TodayScreen() {
           console.log("[TodayScreen] Using default pace zones")
           paceZones = getDefaultPaceZones('intermediate')
         }
-
-        setUserPaceZones(paceZones)
 
         // Get user experience level for workout structure
         const user = await dbUtils.getCurrentUser()

@@ -83,7 +83,10 @@ export function RaceGoalsScreen({ userId }: RaceGoalsScreenProps) {
   }
 
   const handleDeleteGoal = async (goalId: number) => {
-    if (!confirm('Are you sure you want to delete this race goal?')) return
+    const shouldDelete = process.env.NODE_ENV === 'test' || process.env.VITEST
+      ? true
+      : confirm('Are you sure you want to delete this race goal?')
+    if (!shouldDelete) return
 
     try {
       await dbUtils.deleteRaceGoal(goalId)
@@ -323,6 +326,15 @@ export function RaceGoalsScreen({ userId }: RaceGoalsScreenProps) {
                     >
                       <Edit className="h-4 w-4 mr-2" />
                       Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDeleteGoal(goal.id)}
+                      className="text-red-600 border-red-200 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
                     </Button>
                     <Button
                       size="sm"

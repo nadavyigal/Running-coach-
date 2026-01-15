@@ -134,7 +134,7 @@ vercel env add NEXT_PUBLIC_APP_URL
 ```env
 # Production .env
 NEXT_PUBLIC_APP_URL=https://your-domain.vercel.app
-OPENAI_API_KEY=sk-... (server-side only!)
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY (server-side only!)
 NEXT_PUBLIC_POSTHOG_KEY=phc_...
 NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
 ```

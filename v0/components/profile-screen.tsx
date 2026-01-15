@@ -41,7 +41,7 @@ import { useState, useEffect } from "react"
 import { BadgeCabinet } from "@/components/badge-cabinet";
 import { dbUtils } from "@/lib/dbUtils";
 import { DATABASE } from "@/lib/constants";
-import { useData, useGoalProgress, useDaysRemaining } from "@/contexts/DataContext";
+import { useData } from "@/contexts/DataContext";
 import { useToast } from "@/components/ui/use-toast";
 import { ShareBadgeModal } from "@/components/share-badge-modal";
 import { Share2, Users } from "lucide-react";
@@ -65,13 +65,8 @@ export function ProfileScreen() {
     activeGoals,
     recentRuns: contextRecentRuns,
     allTimeStats,
-    isLoading: isContextLoading,
     refresh: refreshContext,
   } = useData()
-
-  // Use centralized goal progress calculation
-  const primaryGoalProgress = useGoalProgress(contextPrimaryGoal)
-  const primaryGoalDaysRemaining = useDaysRemaining(contextPrimaryGoal)
 
   // Add state for the shoes modal at the top of the component
   const [showAddShoesModal, setShowAddShoesModal] = useState(false)
@@ -170,7 +165,7 @@ export function ProfileScreen() {
         title: "Goal deleted",
         description: `"${goalToDelete.title}" has been removed.`,
       });
-    } catch (err) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to delete goal. Please try again.",
@@ -198,7 +193,7 @@ export function ProfileScreen() {
         title: "Primary goal updated",
         description: "Your primary goal has been changed.",
       })
-    } catch (err) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to update primary goal. Please try again.",
@@ -222,7 +217,7 @@ export function ProfileScreen() {
         title: "Goals merged",
         description: `"${mergeSourceGoal.title}" has been merged into your primary goal.`,
       })
-    } catch (err) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to merge goals. Please try again.",
@@ -238,24 +233,6 @@ export function ProfileScreen() {
     setMergeSourceGoal(goal)
     setShowMergeDialog(true)
   }
-
-  // Legacy helper for backward compatibility - prioritizes stored progressPercentage
-  const goalProgressPercent = (goal?: Goal | null) => {
-    if (!goal) return 0;
-    // Use stored progressPercentage if available and valid
-    if (typeof goal.progressPercentage === 'number' && goal.progressPercentage >= 0) {
-      return Math.min(100, Math.max(0, goal.progressPercentage));
-    }
-    const baseline = typeof goal.baselineValue === 'number' ? goal.baselineValue : 0;
-    const target = typeof goal.targetValue === 'number' ? goal.targetValue : 0;
-    const current = typeof goal.currentValue === 'number' ? goal.currentValue : baseline;
-    const denominator = target - baseline;
-    if (denominator === 0) return current === target ? 100 : 0;
-    if (goal.goalType === 'time_improvement') {
-      return Math.min(100, Math.max(0, ((baseline - current) / (baseline - target)) * 100));
-    }
-    return Math.min(100, Math.max(0, ((current - baseline) / denominator) * 100));
-  };
 
   const getDaysRemaining = (goal?: Goal | null) => {
     if (!goal?.timeBound?.deadline) return null;

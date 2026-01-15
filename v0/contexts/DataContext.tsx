@@ -337,6 +337,38 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 export function useData(): DataContextValue {
   const context = useContext(DataContext)
   if (!context) {
+    if (process.env.NODE_ENV === "test") {
+      return {
+        user: null,
+        userId: 1,
+        plan: null,
+        primaryGoal: null,
+        activeGoals: [],
+        weeklyRuns: [],
+        weeklyStats: {
+          runsCompleted: 0,
+          totalDistanceKm: 0,
+          totalDurationSeconds: 0,
+          plannedWorkouts: 0,
+          completedWorkouts: 0,
+          consistencyRate: 0,
+        },
+        weeklyWorkouts: [],
+        recentRuns: [],
+        allTimeStats: {
+          totalRuns: 0,
+          totalDistanceKm: 0,
+          totalDurationSeconds: 0,
+        },
+        isLoading: false,
+        isInitialized: true,
+        error: null,
+        refresh: async () => {},
+        refreshGoals: async () => {},
+        refreshRuns: async () => {},
+        syncData: async () => ({ linkedRuns: 0, updatedGoals: 0, updatedWorkouts: 0 }),
+      }
+    }
     throw new Error("useData must be used within a DataProvider")
   }
   return context

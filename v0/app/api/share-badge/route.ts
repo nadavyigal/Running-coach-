@@ -1,95 +1,34 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import crypto from 'crypto';
 import { logger } from '@/lib/logger';
 
 export async function POST(request: Request) {
   try {
-    const { badgeId, userId } = await request.json();
+    const { badgeId } = await request.json();
 
-    // Input validation
-    if (!badgeId || !userId) {
-      return NextResponse.json(
-        { message: 'Badge ID and User ID are required.' },
-        { status: 400 }
-      );
+    if (!badgeId) {
+      return NextResponse.json({ message: 'Badge ID is required.' }, { status: 400 });
     }
 
-    // Convert string badgeId to number if needed
-    const numericBadgeId = typeof badgeId === 'string' ? parseInt(badgeId, 10) : badgeId;
-    const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
-
-    if (isNaN(numericBadgeId) || isNaN(numericUserId)) {
-      return NextResponse.json(
-        { message: 'Invalid Badge ID or User ID format.' },
-        { status: 400 }
-      );
+    const badgeIdValue = typeof badgeId === 'string' || typeof badgeId === 'number' ? String(badgeId).trim() : '';
+    if (!badgeIdValue) {
+      return NextResponse.json({ message: 'Invalid Badge ID format.' }, { status: 400 });
     }
 
-    // Validate that the badge exists and belongs to the user
-    const badge = await db.badges
-      .where('id')
-      .equals(numericBadgeId)
-      .and(badge => badge.userId === numericUserId)
-      .first();
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://runsmart.com';
+    const shareableLink = `${baseUrl}/share/badge/${badgeIdValue}`;
 
-    if (!badge) {
-      return NextResponse.json(
-        { message: 'Badge not found or does not belong to the user.' },
-        { status: 404 }
-      );
-    }
-
-    // Generate a unique token for this share
-    const token = crypto.randomBytes(16).toString('hex');
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://runsmart.app';
-    const shareableLink = `${baseUrl}/share/badge/${token}`;
-
-    // For now, we'll create a simplified tracking mechanism
-    // In a real app, you'd want to store this in a dedicated shareTokens table
-    logger.log('Generated share token:', {
-      badgeId: numericBadgeId,
-      userId: numericUserId,
-      token,
+    logger.log('Generated badge share link:', {
+      badgeId: badgeIdValue,
       shareableLink,
-      badgeType: badge.type,
-      badgeMilestone: badge.milestone,
-      createdAt: new Date()
+      createdAt: new Date(),
     });
 
-    // Track badge sharing event
-    try {
-      // We could store share analytics in a separate table
-      // For now, just log the event
-      logger.log(`Badge shared: ${badge.type} milestone ${badge.milestone} by user ${numericUserId}`);
-    } catch (analyticsError) {
-      logger.warn('Failed to track badge sharing event:', analyticsError);
-      // Don't fail the request if analytics fails
-    }
-
-    return NextResponse.json({ 
+    return NextResponse.json({
       shareableLink,
-      badgeName: badge.type,
-      badgeMilestone: badge.milestone,
-      token // Include token for potential future reference
     });
 
   } catch (error) {
     logger.error('Error generating shareable link:', error);
-    
-    // Provide more specific error messages
-    if (error instanceof Error) {
-      if (error.message.includes('Database')) {
-        return NextResponse.json(
-          { message: 'Database error occurred. Please try again.' },
-          { status: 503 }
-        );
-      }
-    }
-
-    return NextResponse.json(
-      { message: 'Internal server error. Please try again later.' },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: 'Error generating shareable link' }, { status: 500 });
   }
 }

@@ -634,20 +634,21 @@ function getValidationErrorMessage(error: unknown): string {
   
   const errorObj = error as Error;
   const message = errorObj.message || '';
+  const normalized = message.toLowerCase();
   
-  if (message.includes('age')) {
+  if (normalized.includes('age')) {
     return 'Please enter a valid age between 10 and 100.';
   }
-  if (message.includes('goal')) {
+  if (normalized.includes('goal')) {
     return 'Please select a running goal to continue.';
   }
-  if (message.includes('experience')) {
+  if (normalized.includes('experience')) {
     return 'Please select your running experience level.';
   }
-  if (message.includes('consent')) {
+  if (normalized.includes('consent')) {
     return 'Please accept the required terms to continue.';
   }
-  if (message.includes('time')) {
+  if (normalized.includes('time')) {
     return 'Please select at least one preferred running time.';
   }
   

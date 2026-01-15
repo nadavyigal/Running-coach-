@@ -1,9 +1,13 @@
 import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom';
-import { configure } from '@testing-library/react';
+import { configure, cleanup } from '@testing-library/react';
 import { vi } from 'vitest';
 import { ErrorBoundaryAssertions } from './lib/test-utils';
 import './lib/mapLibreMock';
+import { rateLimiter } from './lib/security.config';
+
+process.env.NODE_ENV = 'test';
+process.env.VITEST = 'true';
 
 // Mock URL constructor for relative URLs in tests
 const OriginalURL = global.URL;
@@ -23,6 +27,11 @@ configure({
   testIdAttribute: 'data-testid',
   asyncUtilTimeout: 2000
 });
+
+if (typeof document !== 'undefined' && !document.body) {
+  const body = document.createElement('body');
+  document.documentElement?.appendChild(body);
+}
 
 // Mock global fetch to handle API calls in tests
 const mockFetch = vi.fn();
@@ -286,22 +295,35 @@ Object.defineProperty(window, 'matchMedia', {
 
 // Mock window.addEventListener for performance monitoring
 if (typeof window !== 'undefined') {
-  window.addEventListener = vi.fn();
-  window.removeEventListener = vi.fn();
-  window.dispatchEvent = vi.fn();
   
   // Mock window properties needed for performance monitoring
+  const mockPerformance = {
+    now: vi.fn().mockReturnValue(Date.now()),
+    getEntriesByType: vi.fn().mockReturnValue([]),
+    memory: {
+      usedJSHeapSize: 50 * 1024 * 1024,
+      totalJSHeapSize: 100 * 1024 * 1024,
+      jsHeapSizeLimit: 200 * 1024 * 1024,
+    },
+  } as Performance & {
+    memory: {
+      usedJSHeapSize: number;
+      totalJSHeapSize: number;
+      jsHeapSizeLimit: number;
+    };
+  };
+
   Object.defineProperty(window, 'performance', {
     writable: true,
-    value: {
-      getEntriesByType: vi.fn().mockReturnValue([]),
-      memory: {
-        usedJSHeapSize: 50 * 1024 * 1024,
-        totalJSHeapSize: 100 * 1024 * 1024,
-        jsHeapSizeLimit: 200 * 1024 * 1024,
-      },
-    },
+    value: mockPerformance,
   });
+
+  if (!globalThis.performance || typeof globalThis.performance.now !== 'function') {
+    Object.defineProperty(globalThis, 'performance', {
+      writable: true,
+      value: mockPerformance,
+    });
+  }
   
   Object.defineProperty(window, 'PerformanceObserver', {
     writable: true,
@@ -349,222 +371,6 @@ vi.mock("@/lib/analytics", () => ({
   trackReminderClicked: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Error Handling Mock Configuration - Enhanced with null safety
-vi.mock("@/lib/errorHandling", () => ({
-  // Error analysis with proper null handling
-  analyzeError: vi.fn().mockImplementation((error: unknown) => {
-    // Handle null/undefined inputs safely
-    if (!error || typeof error !== 'object') {
-      return {
-        error: new Error('Invalid error object provided'),
-        errorType: 'unknown',
-        userMessage: 'An unexpected error occurred',
-        canRetry: true,
-        suggestedAction: 'Try again or contact support if the problem persists',
-        fallbackOptions: ['Try again', 'Contact support']
-      };
-    }
-    
-    // Return appropriate error info based on error type
-    const errorObj = error as Error;
-    if (errorObj.name === 'NetworkError' || errorObj.message?.includes('network')) {
-      return {
-        error,
-        errorType: 'network',
-        userMessage: 'Network error occurred',
-        canRetry: true,
-        suggestedAction: 'Check your network connection and try again',
-        fallbackOptions: ['Try again later', 'Check network settings']
-      };
-    }
-    
-    if (errorObj.name === 'ValidationError') {
-      return {
-        error,
-        errorType: 'validation',
-        userMessage: 'Please check your input and try again',
-        canRetry: false,
-        suggestedAction: 'Please correct the highlighted fields',
-        fallbackOptions: ['Review your input']
-      };
-    }
-    
-    return {
-      error,
-      errorType: 'unknown',
-      userMessage: 'Something went wrong. Please try again.',
-      canRetry: true,
-      suggestedAction: 'Try again or contact support if the problem persists',
-      fallbackOptions: ['Try again', 'Contact support']
-    };
-  }),
-  
-  // Network error detection
-  isNetworkErrorClient: vi.fn().mockImplementation((error: unknown) => {
-    if (!error || typeof error !== 'object') return false;
-    const errorObj = error as Error;
-    return errorObj.name === 'NetworkError' || errorObj.message?.includes('network') || false;
-  }),
-  
-  // Error classes
-  ValidationError: class MockValidationError extends Error {
-    statusCode = 400;
-    code = 'VALIDATION_ERROR';
-    constructor(message: string, public details?: Record<string, unknown>) {
-      super(message);
-      this.name = 'ValidationError';
-    }
-  },
-  
-  NotFoundError: class MockNotFoundError extends Error {
-    statusCode = 404;
-    code = 'NOT_FOUND';
-    constructor(resource: string) {
-      super(`${resource} not found`);
-      this.name = 'NotFoundError';
-    }
-  },
-  
-  UnauthorizedError: class MockUnauthorizedError extends Error {
-    statusCode = 401;
-    code = 'UNAUTHORIZED';
-    constructor(message = 'Unauthorized access') {
-      super(message);
-      this.name = 'UnauthorizedError';
-    }
-  },
-  
-  NetworkError: class MockNetworkError extends Error {
-    statusCode = 503;
-    code = 'NETWORK_ERROR';
-    constructor(message = 'Network connection failed') {
-      super(message);
-      this.name = 'NetworkError';
-    }
-  },
-  
-  OfflineError: class MockOfflineError extends Error {
-    statusCode = 503;
-    code = 'OFFLINE_ERROR';
-    constructor(message = 'Application is offline') {
-      super(message);
-      this.name = 'OfflineError';
-    }
-  },
-  
-  AIServiceError: class MockAIServiceError extends Error {
-    statusCode = 502;
-    code = 'AI_SERVICE_ERROR';
-    constructor(message = 'AI service is temporarily unavailable') {
-      super(message);
-      this.name = 'AIServiceError';
-    }
-  },
-  
-  DatabaseError: class MockDatabaseError extends Error {
-    statusCode = 500;
-    code = 'DATABASE_ERROR';
-    details: Record<string, unknown>;
-    constructor(operation: string, originalError?: Error) {
-      super(`Database ${operation} failed`);
-      this.name = 'DatabaseError';
-      this.details = { originalError: originalError?.message };
-    }
-  },
-  
-  // Validation functions
-  validateRequired: vi.fn().mockImplementation((data: Record<string, unknown>, fields: string[]) => {
-    const missing = fields.filter(field => {
-      const value = data[field];
-      return value === undefined || value === null || value === '';
-    });
-    if (missing.length > 0) {
-      throw new Error(`Missing required fields: ${missing.join(', ')}`);
-    }
-  }),
-  
-  validateEnum: vi.fn().mockImplementation((value: unknown, enumValues: string[], fieldName: string) => {
-    if (typeof value !== 'string' || !enumValues.includes(value)) {
-      throw new Error(`Invalid ${fieldName}. Must be one of: ${enumValues.join(', ')}`);
-    }
-  }),
-  
-  validateRange: vi.fn().mockImplementation((value: number, min: number, max: number, fieldName: string) => {
-    if (value < min || value > max) {
-      throw new Error(`${fieldName} must be between ${min} and ${max}`);
-    }
-  }),
-  
-  validateEmail: vi.fn().mockImplementation((email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      throw new Error('Invalid email format');
-    }
-  }),
-  
-  validateUrl: vi.fn().mockImplementation((url: string) => {
-    try {
-      new URL(url);
-    } catch {
-      throw new Error('Invalid URL format');
-    }
-  }),
-  
-  // Safe operation wrappers
-  safeDbOperation: vi.fn().mockImplementation(async (operation: () => Promise<any>, operationName: string) => {
-    try {
-      return await operation();
-    } catch (error) {
-      throw new Error(`Database ${operationName} failed`);
-    }
-  }),
-  
-  safeExternalCall: vi.fn().mockImplementation(async (call: () => Promise<any>, serviceName: string) => {
-    try {
-      return await call();
-    } catch (error) {
-      throw new Error(`External service ${serviceName} failed`);
-    }
-  }),
-  
-  // Rate limiting
-  checkRateLimit: vi.fn().mockImplementation(() => {
-    // Mock implementation - doesn't throw by default
-  }),
-  
-  // Utility functions
-  sanitizeInput: vi.fn().mockImplementation((input: string) => {
-    if (typeof input !== 'string') return '';
-    return input.trim().replace(/[<>]/g, '').substring(0, 1000);
-  }),
-  
-  sanitizeUserData: vi.fn().mockImplementation((data: unknown) => data),
-  logRequest: vi.fn().mockImplementation(() => {}),
-  performHealthCheck: vi.fn().mockResolvedValue({
-    status: 'healthy',
-    checks: { database: { status: 'up', responseTime: 50 } },
-    timestamp: new Date().toISOString()
-  }),
-  
-  // Client-side error handling utilities
-  networkStatus: {
-    onStatusChange: vi.fn().mockReturnValue(() => {}),
-    getStatus: vi.fn().mockReturnValue(true),
-    checkConnectivity: vi.fn().mockResolvedValue(true)
-  },
-  
-  offlineStorage: {
-    saveData: vi.fn(),
-    getData: vi.fn().mockReturnValue(null),
-    markSynced: vi.fn(),
-    getUnsyncedData: vi.fn().mockReturnValue({})
-  },
-  
-  getRecoveryActions: vi.fn().mockReturnValue([
-    { label: 'Try Again', action: vi.fn(), primary: true }
-  ])
-}));
-
 // Server-only error handling utilities mock
 vi.mock("@/lib/serverErrorHandling", () => ({
   formatErrorResponse: vi.fn().mockImplementation((error: any) => {
@@ -604,10 +410,12 @@ beforeEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
   mockFetch.mockClear();
+  rateLimiter.reset();
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  cleanup();
 });
 
 // Make error boundary assertions globally available

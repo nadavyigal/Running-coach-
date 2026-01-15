@@ -14,6 +14,11 @@ vi.mock('@/lib/dbUtils', () => ({
     createPlan: vi.fn(),
     createWorkout: vi.fn(),
     deactivateAllUserPlans: vi.fn(),
+    getActivePlan: vi.fn(),
+    updatePlan: vi.fn(),
+    updateUser: vi.fn(),
+    getUserById: vi.fn(),
+    cleanupUserData: vi.fn(),
     validateUserOnboardingState: vi.fn(),
     cleanupFailedOnboarding: vi.fn(),
     repairUserState: vi.fn(),
@@ -52,6 +57,7 @@ vi.mock('../lib/planGenerator', () => ({
 
 vi.mock('../lib/analytics', () => ({
   trackEngagementEvent: vi.fn(),
+  trackAnalyticsEvent: vi.fn(),
 }));
 
 describe('Story 1.5: Onboarding Component Conflicts and Plan Creation Issues', () => {

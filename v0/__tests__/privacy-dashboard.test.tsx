@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { PrivacyDashboard, UserPrivacySettings } from '@/components/privacy-dashboard'
 import { useToast } from '@/hooks/use-toast'
@@ -15,26 +15,9 @@ global.URL.createObjectURL = vi.fn(() => 'mock-url')
 global.URL.revokeObjectURL = vi.fn()
 
 // Mock document.createElement and appendChild
-const mockCreateElement = vi.fn()
-const mockAppendChild = vi.fn()
-const mockRemoveChild = vi.fn()
 const mockClick = vi.fn()
-
-Object.defineProperty(document, 'createElement', {
-  value: mockCreateElement.mockReturnValue({
-    click: mockClick,
-    href: '',
-    download: ''
-  })
-})
-
-Object.defineProperty(document.body, 'appendChild', {
-  value: mockAppendChild
-})
-
-Object.defineProperty(document.body, 'removeChild', {
-  value: mockRemoveChild
-})
+const originalCreateElement = document.createElement.bind(document)
+let createElementSpy: ReturnType<typeof vi.spyOn>
 
 describe('PrivacyDashboard', () => {
   const mockToast = vi.fn()
@@ -59,6 +42,17 @@ describe('PrivacyDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     ;(useToast as any).mockReturnValue({ toast: mockToast })
+    createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+      const element = originalCreateElement(tagName)
+      if (tagName.toLowerCase() === 'a') {
+        ;(element as HTMLAnchorElement).click = mockClick
+      }
+      return element
+    })
+  })
+
+  afterEach(() => {
+    createElementSpy.mockRestore()
   })
 
   it('renders privacy dashboard with correct title', () => {
@@ -107,7 +101,7 @@ describe('PrivacyDashboard', () => {
       />
     )
 
-    const analyticsSwitch = screen.getByRole('checkbox', { name: /analytics/i })
+    const analyticsSwitch = screen.getByRole('switch', { name: /Analytics & Insights data collection/i })
     fireEvent.click(analyticsSwitch)
 
     await waitFor(() => {
@@ -134,7 +128,7 @@ describe('PrivacyDashboard', () => {
       />
     )
 
-    const locationSwitch = screen.getByRole('checkbox', { name: /location/i })
+    const locationSwitch = screen.getByRole('switch', { name: /Location Data data collection/i })
     expect(locationSwitch).toBeDisabled()
   })
 
@@ -174,7 +168,7 @@ describe('PrivacyDashboard', () => {
     expect(screen.getByText('Denied')).toBeInTheDocument()
   })
 
-  it('shows empty state for consent history when none exists', () => {
+  it('shows empty state for consent history when none exists', async () => {
     render(
       <PrivacyDashboard
         user={defaultUser}
@@ -185,7 +179,9 @@ describe('PrivacyDashboard', () => {
     const accordionTrigger = screen.getByText('View Consent History')
     fireEvent.click(accordionTrigger)
 
-    expect(screen.getByText('No consent changes recorded yet.')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('No consent changes recorded yet.')).toBeInTheDocument()
+    })
   })
 
   it('handles data export functionality', async () => {
@@ -280,7 +276,7 @@ describe('PrivacyDashboard', () => {
       />
     )
 
-    const analyticsSwitch = screen.getByRole('checkbox', { name: /analytics/i })
+    const analyticsSwitch = screen.getByRole('switch', { name: /Analytics & Insights data collection/i })
     fireEvent.click(analyticsSwitch)
 
     await waitFor(() => {

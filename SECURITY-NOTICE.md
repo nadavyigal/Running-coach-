@@ -10,7 +10,7 @@ Your `.env.local` file contains exposed API keys that must be rotated before lau
 - **Current Status**: EXPOSED in `.env.local`
 - **Action**: Go to https://platform.openai.com/api-keys
 - **Steps**:
-  1. Revoke the existing key: `sk-proj-OLFxQdamFVWzka4itbH3...`
+  1. Revoke the existing key: `YOUR_OPENAI_API_KEY`
   2. Create a new secret key
   3. Update `V0/.env.local` with the new key
   4. Set usage limits in OpenAI dashboard

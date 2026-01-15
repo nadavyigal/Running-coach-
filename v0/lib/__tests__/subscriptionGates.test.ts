@@ -9,6 +9,7 @@ vi.mock('../db', () => ({
       get: vi.fn(),
     },
   },
+  resetDatabaseInstance: vi.fn(),
 }));
 
 describe('SubscriptionGate', () => {

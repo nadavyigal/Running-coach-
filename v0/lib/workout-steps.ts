@@ -9,7 +9,6 @@ import {
   PaceZones,
   PaceRange,
   formatPace,
-  formatPaceRange,
   getTargetPace,
   formatTime
 } from './pace-zones';

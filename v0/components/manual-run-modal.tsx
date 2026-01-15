@@ -6,9 +6,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
-import { Clock, Activity, Save, Upload } from "lucide-react"
+import { format } from "date-fns"
+import { Clock, Activity, Save, Upload, CalendarIcon } from "lucide-react"
 import { type Run } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { recordRunWithSideEffects } from "@/lib/run-recording"
@@ -28,6 +31,7 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
   const [duration, setDuration] = useState("")
   const [type, setType] = useState<'easy' | 'tempo' | 'intervals' | 'long' | 'time-trial' | 'hill' | 'other'>('easy')
   const [notes, setNotes] = useState("")
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -47,11 +51,33 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
     }
   }, [previewUrl])
 
+  const getDateRange = () => {
+    const today = new Date()
+    today.setHours(23, 59, 59, 999)
+    const fourteenDaysAgo = new Date()
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
+    fourteenDaysAgo.setHours(0, 0, 0, 0)
+    return { today, fourteenDaysAgo }
+  }
+
+  const isDateDisabled = (date: Date) => {
+    const { today, fourteenDaysAgo } = getDateRange()
+    return date > today || date < fourteenDaysAgo
+  }
+
+  const clampDateToRange = (date: Date) => {
+    const { today, fourteenDaysAgo } = getDateRange()
+    if (date > today) return today
+    if (date < fourteenDaysAgo) return fourteenDaysAgo
+    return date
+  }
+
   const resetForm = () => {
     setDistance("")
     setDuration("")
     setType('easy')
     setNotes("")
+    setSelectedDate(new Date())
     setImageImportMeta(null)
     setPreviewUrl((current) => {
       if (current) URL.revokeObjectURL(current)
@@ -158,6 +184,7 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
 	      distanceKm,
 	      durationSeconds,
 	      notes,
+      completedAt: selectedDate,
 	      ...(imageImportMeta ? { importMeta: imageImportMeta } : {}),
 	    })
 	  }
@@ -203,6 +230,9 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
       const durationSeconds = result.durationSeconds
       const confidence = result.confidence ?? 0
 
+      const normalizedDate = result.completedAt ? clampDateToRange(new Date(result.completedAt)) : selectedDate
+      setSelectedDate(normalizedDate)
+
       setDistance(result.distanceKm.toString())
       setDuration(formatDuration(durationSeconds))
 	      setType((result.type as Run['type']) || 'easy')
@@ -238,7 +268,7 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
 	            durationSeconds,
 	            ...(result.notes ? { notes: result.notes } : {}),
 	            typeOverride: (result.type as Run["type"]) || "easy",
-	            completedAt: result.completedAt ? new Date(result.completedAt) : new Date(),
+	            completedAt: normalizedDate,
 	            importMeta: {
 	              confidence,
 	              ...(result.requestId ? { requestId: result.requestId } : {}),
@@ -354,6 +384,29 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
                 </Button>
               ))}
             </div>
+          </div>
+
+          {/* Activity Date */}
+          <div className="space-y-2">
+            <Label>Activity Date</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-full justify-start text-left font-normal">
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {format(selectedDate, "PPP")}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => date && setSelectedDate(date)}
+                  disabled={isDateDisabled}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            <p className="text-xs text-gray-500">Log activities from the past 14 days</p>
           </div>
 
           {/* AI Upload */}

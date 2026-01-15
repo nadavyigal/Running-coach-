@@ -311,6 +311,7 @@ export function RaceGoalModal({ isOpen, onClose, onSuccess, userId, editingGoal 
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowTargetTimeHelper(!showTargetTimeHelper)}
+                  aria-label="Info"
                 >
                   <Info className="h-4 w-4" />
                 </Button>

@@ -16,7 +16,13 @@ interface PlanComplexityIndicatorProps {
 }
 
 export function PlanComplexityIndicator({ plan, userId, className = '' }: PlanComplexityIndicatorProps) {
-  const [complexity, setComplexity] = useState<PlanComplexityEngine | null>(null);
+  const initialComplexity: PlanComplexityEngine = {
+    userExperience: plan.fitnessLevel ?? 'beginner',
+    planLevel: plan.complexityLevel ?? 'basic',
+    adaptationFactors: plan.adaptationFactors ?? [],
+    complexityScore: plan.complexityScore ?? 0
+  };
+  const [complexity, setComplexity] = useState<PlanComplexityEngine | null>(initialComplexity);
   const [loading, setLoading] = useState(true);
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
@@ -40,7 +46,7 @@ export function PlanComplexityIndicator({ plan, userId, className = '' }: PlanCo
     loadComplexity();
   }, [plan, userId]);
 
-  if (loading) {
+  if (loading && !complexity) {
     return (
       <Card className={`animate-pulse ${className}`}>
         <CardHeader className="pb-3">
@@ -63,7 +69,7 @@ export function PlanComplexityIndicator({ plan, userId, className = '' }: PlanCo
 
   return (
     <TooltipProvider>
-      <Card className={className}>
+      <Card className={className} data-testid="plan-complexity-indicator">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-medium">Plan Complexity</CardTitle>
@@ -89,7 +95,7 @@ export function PlanComplexityIndicator({ plan, userId, className = '' }: PlanCo
                 {complexity.complexityScore}/100
               </Badge>
             </div>
-            <Progress value={complexity.complexityScore} className="h-2" />
+            <Progress value={complexity.complexityScore} className="h-2" data-testid="complexity-progress" />
             <p className="text-xs text-gray-500">{complexityDescription}</p>
           </div>
 

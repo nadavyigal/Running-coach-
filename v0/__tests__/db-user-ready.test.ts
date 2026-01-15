@@ -4,7 +4,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 vi.mock('../lib/db', () => ({
   getDatabase: vi.fn(),
   isDatabaseAvailable: vi.fn(() => true),
-  safeDbOperation: vi.fn()
+  safeDbOperation: vi.fn(),
+  resetDatabaseInstance: vi.fn()
 }))
 
 import { ensureUserReady, getCurrentUser, performStartupMigration } from '@/lib/dbUtils'

@@ -39,7 +39,8 @@ vi.mock('./db', () => ({
         })
       })
     }
-  }
+  },
+  resetDatabaseInstance: vi.fn()
 }));
 
 describe('DataFusionEngine', () => {

@@ -16,10 +16,6 @@ import {
   Link,
   ChevronDown,
   ChevronUp,
-  Flame,
-  Zap,
-  Timer,
-  Calendar,
   MessageSquare,
 } from "lucide-react"
 import { useState, useEffect } from "react"
@@ -27,7 +23,7 @@ import { getRunBreakdown } from "@/lib/run-breakdowns"
 import { getUserExperience, getCurrentUser, getUserPaceZones } from "@/lib/dbUtils"
 import { WorkoutPhasesDisplay } from "@/components/workout-phases-display"
 import { generateStructuredWorkout, type StructuredWorkout } from "@/lib/workout-steps"
-import { getDefaultPaceZones, type PaceZones } from "@/lib/pace-zones"
+import { getDefaultPaceZones } from "@/lib/pace-zones"
 
 interface DateWorkoutModalProps {
   isOpen: boolean

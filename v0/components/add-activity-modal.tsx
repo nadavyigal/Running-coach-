@@ -77,6 +77,24 @@ export function AddActivityModal({
   }, [initialStep, open])
 
   const formattedSelectedDate = useMemo(() => (selectedDate ? format(selectedDate, "PPP") : "Pick a date"), [selectedDate])
+  const getDateRange = () => {
+    const today = new Date()
+    today.setHours(23, 59, 59, 999)
+    const fourteenDaysAgo = new Date()
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
+    fourteenDaysAgo.setHours(0, 0, 0, 0)
+    return { today, fourteenDaysAgo }
+  }
+  const isDateDisabled = (date: Date) => {
+    const { today, fourteenDaysAgo } = getDateRange()
+    return date > today || date < fourteenDaysAgo
+  }
+  const clampDateToRange = (date: Date) => {
+    const { today, fourteenDaysAgo } = getDateRange()
+    if (date > today) return today
+    if (date < fourteenDaysAgo) return fourteenDaysAgo
+    return date
+  }
 
   const importMethods = [
     {
@@ -306,7 +324,7 @@ export function AddActivityModal({
       }).catch(() => undefined)
 
       const normalizedDate = result.completedAt ? new Date(result.completedAt) : new Date()
-      setSelectedDate(normalizedDate)
+      setSelectedDate(clampDateToRange(normalizedDate))
       setImageImportMeta({
         ...(result.requestId ? { requestId: result.requestId } : {}),
         ...(typeof result.confidence === "number" ? { confidence: result.confidence } : {}),
@@ -442,10 +460,14 @@ export function AddActivityModal({
                     mode="single"
                     selected={selectedDate}
                     onSelect={(date) => date && setSelectedDate(date)}
+                    disabled={isDateDisabled}
                     initialFocus
                   />
                 </PopoverContent>
               </Popover>
+              <p className="text-xs text-gray-500 text-center mt-2">
+                You can log activities from the past 14 days
+              </p>
             </div>
 
             {/* Activity Type */}

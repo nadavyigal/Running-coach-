@@ -24,9 +24,9 @@ const mockPlan: Plan = {
 
 describe('PlanComplexityIndicator', () => {
   it('renders complexity level badge and progress', () => {
-    render(<PlanComplexityIndicator plan={mockPlan} />)
+    render(<PlanComplexityIndicator plan={mockPlan} userId={1} />)
     expect(screen.getByTestId('plan-complexity-indicator')).toBeInTheDocument()
-    expect(screen.getByText('standard')).toBeInTheDocument()
+    expect(screen.getByText('Standard')).toBeInTheDocument()
     const progress = screen.getByTestId('complexity-progress')
     expect(progress).toBeInTheDocument()
   })

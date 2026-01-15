@@ -273,6 +273,8 @@ export interface User {
   referenceRaceTime?: number;      // seconds
   referenceRaceDate?: Date;
   calculatedVDOT?: number;         // cached VDOT score
+  // Average weekly running volume from onboarding (for "regular" runners)
+  averageWeeklyKm?: number;
 }
 
 export interface PlanSetupPreferences {
@@ -1093,7 +1095,7 @@ export class RunSmartDB extends Dexie {
       runningDynamicsData: '++id, userId, deviceId, timestamp, createdAt, [userId+timestamp], [deviceId+timestamp]',
 
       // Sync Jobs: Optimized for status and priority queries
-      syncJobs: '++id, userId, deviceType, status, priority, createdAt, [userId+status], [status+priority]',
+      syncJobs: '++id, userId, deviceId, type, status, priority, createdAt, [userId+status], [status+priority], [userId+deviceId+type]',
 
       // Onboarding Sessions: Optimized for conversation tracking
       onboardingSessions: '++id, userId, conversationId, goalDiscoveryPhase, isCompleted, createdAt, [userId+isCompleted], [conversationId+goalDiscoveryPhase]',
@@ -1182,33 +1184,38 @@ export class RunSmartDB extends Dexie {
       console.log(`✓ Database upgrade complete: Updated ${users.length} users with subscription fields`);
     });
 
+    this.version(4).stores({
+      syncJobs: '++id, userId, deviceId, type, status, priority, createdAt, [userId+status], [status+priority], [userId+deviceId+type]',
+    });
+
   }
 }
 
 // Check IndexedDB compatibility and availability
 function checkIndexedDBSupport(): boolean {
   try {
-    // Check if we're in a browser environment
-    if (typeof window === 'undefined') {
-      console.warn('⚠️ Not in browser environment, IndexedDB not available');
+    const indexedDBRef =
+      typeof window !== 'undefined' && window.indexedDB
+        ? window.indexedDB
+        : (globalThis as { indexedDB?: IDBFactory }).indexedDB;
+
+    if (typeof indexedDBRef === 'undefined') {
+      console.error('??? IndexedDB API not available in this environment');
       return false;
     }
-    
-    // Check if IndexedDB API exists
-    if (typeof window.indexedDB === 'undefined') {
-      console.error('❌ IndexedDB API not available in this browser');
+
+    if (indexedDBRef === null) {
+      console.error('??? IndexedDB is disabled (private browsing mode?)');
       return false;
     }
-    
-    // Check if IndexedDB is null (can happen in private browsing mode)
-    if (window.indexedDB === null) {
-      console.error('❌ IndexedDB is disabled (private browsing mode?)');
-      return false;
+
+    if (typeof window !== 'undefined' && !window.indexedDB) {
+      window.indexedDB = indexedDBRef;
     }
-    
+
     return true;
   } catch (error) {
-    console.error('❌ Error checking IndexedDB support:', error);
+    console.error('??? Error checking IndexedDB support:', error);
     return false;
   }
 }
