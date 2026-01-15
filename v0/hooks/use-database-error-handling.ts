@@ -240,7 +240,11 @@ export function useDatabaseErrorHandling() {
     
     try {
       // Test 1: Database availability
-      if (!db.isOpen()) {
+      if (typeof db.isOpen === 'function') {
+        if (!db.isOpen()) {
+          await db.open();
+        }
+      } else if (typeof db.open === 'function') {
         await db.open();
       }
 

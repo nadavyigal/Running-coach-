@@ -74,27 +74,46 @@ export class GoalProgressEngine {
     currentProgress: number, 
     progressHistory: GoalProgressHistory[]
   ): GoalProgress['trajectory'] {
-    const timeElapsed = this.getTimeElapsedPercentage(goal);
+    const timeElapsed = this.getTimeElapsedPercentage(goal, progressHistory);
     const expectedProgress = timeElapsed;
+    const progressGap = currentProgress - expectedProgress;
     
     // Consider recent trend for trajectory analysis
     const recentTrend = this.analyzeRecentTrend(progressHistory);
     
-    if (currentProgress >= expectedProgress * 1.2) {
+    if (progressGap >= 30) {
       return 'ahead';
-    } else if (currentProgress >= expectedProgress * 0.9) {
+    } else if (progressGap >= -10) {
       return recentTrend === 'declining' ? 'behind' : 'on_track';
-    } else if (currentProgress >= expectedProgress * 0.6) {
+    } else if (progressGap >= -30) {
       return 'behind';
     } else {
       return 'at_risk';
     }
   }
 
-  private getTimeElapsedPercentage(goal: Goal): number {
+  private getTimeElapsedPercentage(goal: Goal, progressHistory: GoalProgressHistory[] = []): number {
     const now = new Date();
-    const startTime = goal.timeBound.startDate.getTime();
-    const endTime = goal.timeBound.deadline.getTime();
+    const earliestMeasurement = progressHistory.reduce<Date | null>((earliest, entry) => {
+      if (!(entry.measurementDate instanceof Date)) {
+        return earliest;
+      }
+      if (!earliest || entry.measurementDate.getTime() < earliest.getTime()) {
+        return entry.measurementDate;
+      }
+      return earliest;
+    }, null);
+
+    const startDate = earliestMeasurement && earliestMeasurement.getTime() < goal.timeBound.startDate.getTime()
+      ? earliestMeasurement
+      : goal.timeBound.startDate;
+    const startTime = startDate.getTime();
+    const totalDurationDays = Number.isFinite(goal.timeBound.totalDuration) && goal.timeBound.totalDuration > 0
+      ? goal.timeBound.totalDuration
+      : null;
+    const endTime = totalDurationDays
+      ? startTime + totalDurationDays * 24 * 60 * 60 * 1000
+      : goal.timeBound.deadline.getTime();
     const currentTime = now.getTime();
     
     if (currentTime <= startTime) return 0;

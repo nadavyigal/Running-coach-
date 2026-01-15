@@ -59,7 +59,7 @@ export class SecurityMonitor {
   }
 
   private initializeMonitoring() {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || process.env.NODE_ENV === 'test') return;
 
     // Monitor user activity patterns
     this.monitorUserActivity();
@@ -198,20 +198,28 @@ export class SecurityMonitor {
     // Monitor for script injection attempts
     const originalCreateElement = document.createElement;
     const trackSecurityEvent = this.trackSecurityEvent.bind(this);
-    document.createElement = function(tagName: string) {
-      const element = originalCreateElement.call(document, tagName);
-      
-      if (tagName.toLowerCase() === 'script') {
-        trackSecurityEvent({
-          type: 'script_creation',
-          severity: 'warning',
-          message: 'Dynamic script element creation detected',
-          data: { tagName },
-        });
+    const proto = Object.getPrototypeOf(document) as Document;
+    const descriptor = Object.getOwnPropertyDescriptor(proto, 'createElement');
+    if (!descriptor || descriptor.writable) {
+      try {
+        document.createElement = function(tagName: string) {
+          const element = originalCreateElement.call(document, tagName);
+          
+          if (tagName.toLowerCase() === 'script') {
+            trackSecurityEvent({
+              type: 'script_creation',
+              severity: 'warning',
+              message: 'Dynamic script element creation detected',
+              data: { tagName },
+            });
+          }
+          
+          return element;
+        };
+      } catch {
+        // Ignore in environments where createElement cannot be reassigned.
       }
-      
-      return element;
-    };
+    }
   }
 
   // Monitor DOM manipulation

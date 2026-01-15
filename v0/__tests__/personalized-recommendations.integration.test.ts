@@ -26,6 +26,7 @@ vi.mock('../lib/db', () => ({
       where: vi.fn(),
     },
   },
+  resetDatabaseInstance: vi.fn(),
 }));
 
 describe('Personalized Recommendations Integration', () => {

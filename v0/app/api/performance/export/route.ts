@@ -52,14 +52,18 @@ function formatRunsAsCSV(runs: any[]): string {
 
 function formatMetricsAsCSV(metrics: any[]): string {
   const headers = ['Date', 'Average Pace (s/km)', 'Total Distance (km)', 'Total Duration (min)', 'Consistency Score', 'Performance Score'];
-  const rows = metrics.map(metric => [
-    new Date(metric.date).toISOString().split('T')[0],
-    metric.averagePace.toFixed(2),
-    metric.totalDistance.toFixed(2),
-    Math.round(metric.totalDuration / 60),
-    metric.consistencyScore.toFixed(1),
-    metric.performanceScore.toFixed(1),
-  ]);
+  const metricsList = Array.isArray(metrics) ? metrics : metrics ? [metrics] : [];
+  const rows = metricsList.map(metric => {
+    const metricDate = metric?.date ? new Date(metric.date) : new Date();
+    return [
+      metricDate.toISOString().split('T')[0],
+      Number(metric?.averagePace ?? 0).toFixed(2),
+      Number(metric?.totalDistance ?? 0).toFixed(2),
+      Math.round(Number(metric?.totalDuration ?? 0) / 60),
+      Number(metric?.consistencyScore ?? 0).toFixed(1),
+      Number(metric?.performanceScore ?? 0).toFixed(1),
+    ];
+  });
   
   return [headers, ...rows]
     .map(row => row.map(cell => `"${cell}"`).join(','))
@@ -68,13 +72,36 @@ function formatMetricsAsCSV(metrics: any[]): string {
 
 function formatRecordsAsCSV(records: any[]): string {
   const headers = ['Distance', 'Best Time', 'Best Pace', 'Date Achieved', 'Type'];
-  const rows = records.map(record => [
-    record.distance.toFixed(2),
-    `${Math.floor(record.timeForDistance / 60)}:${(record.timeForDistance % 60).toString().padStart(2, '0')}`,
-    `${Math.floor(record.bestPace / 60)}:${(record.bestPace % 60).toString().padStart(2, '0')}`,
-    new Date(record.dateAchieved).toISOString().split('T')[0],
-    record.recordType,
-  ]);
+  const rows = records.map(record => {
+    const distance =
+      typeof record.distance === 'number'
+        ? record.distance
+        : typeof record.value === 'number'
+          ? record.value
+          : 0;
+    const timeForDistance =
+      typeof record.timeForDistance === 'number'
+        ? record.timeForDistance
+        : typeof record.value === 'number'
+          ? record.value
+          : 0;
+    const bestPace =
+      typeof record.bestPace === 'number'
+        ? record.bestPace
+        : distance > 0
+          ? timeForDistance / distance
+          : 0;
+    const dateAchieved = record.dateAchieved || record.achievedAt || record.date;
+    const recordType = record.recordType || record.type || 'record';
+
+    return [
+      distance.toFixed(2),
+      `${Math.floor(timeForDistance / 60)}:${(timeForDistance % 60).toString().padStart(2, '0')}`,
+      `${Math.floor(bestPace / 60)}:${(bestPace % 60).toString().padStart(2, '0')}`,
+      dateAchieved ? new Date(dateAchieved).toISOString().split('T')[0] : '',
+      recordType,
+    ];
+  });
   
   return [headers, ...rows]
     .map(row => row.map(cell => `"${cell}"`).join(','))

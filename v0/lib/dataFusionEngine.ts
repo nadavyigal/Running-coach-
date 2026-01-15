@@ -35,6 +35,8 @@ export interface UserPreferences {
 }
 
 export class DataFusionEngine {
+  public db = db;
+
   /**
    * Main method to fuse data points from multiple sources
    */
@@ -463,12 +465,12 @@ export class DataFusionEngine {
 
   // Get the fusion rule for a user and data type
   async getFusionRule(userId: number, dataType: string): Promise<DataFusionRule | undefined> {
-    return db.dataFusionRules.where({ userId, dataType }).first();
+    return this.db.dataFusionRules.where({ userId, dataType }).first();
   }
 
   // Get all active data sources for a user
   async getDataSources(userId: number, dataType?: string): Promise<DataSource[]> {
-    const sources = await db.dataSources.where({ userId, isActive: true }).toArray();
+    const sources = await this.db.dataSources.where({ userId, isActive: true }).toArray();
     if (dataType) {
       return sources.filter(ds => ds.dataTypes.includes(dataType));
     }
@@ -477,7 +479,7 @@ export class DataFusionEngine {
 
   // Update data source priority
   async updateDataSourcePriority(userId: number, deviceId: string, priority: number): Promise<void> {
-    await db.dataSources.where({ userId, deviceId }).modify({
+    await this.db.dataSources.where({ userId, deviceId }).modify({
       priority,
       updatedAt: new Date()
     });
@@ -485,15 +487,15 @@ export class DataFusionEngine {
 
   // Update or create fusion rule
   async updateFusionRule(ruleData: Omit<DataFusionRule, 'id' | 'createdAt'>): Promise<number> {
-    const existingRule = await db.dataFusionRules
+    const existingRule = await this.db.dataFusionRules
       .where({ userId: ruleData.userId, dataType: ruleData.dataType })
       .first();
     
     if (existingRule) {
-      await db.dataFusionRules.update(existingRule.id!, ruleData);
+      await this.db.dataFusionRules.update(existingRule.id!, ruleData);
       return existingRule.id!;
     } else {
-      return await db.dataFusionRules.add({
+      return await this.db.dataFusionRules.add({
         ...ruleData,
         updatedAt: new Date(),
         createdAt: new Date()
@@ -511,12 +513,12 @@ export class DataFusionEngine {
 
   // Save a fused data point to the database
   async saveFusedDataPoint(point: FusedDataPoint): Promise<number> {
-    return db.fusedDataPoints.add(point);
+    return this.db.fusedDataPoints.add(point);
   }
 
   // Log a data conflict
   async logDataConflict(conflict: DataConflict): Promise<number> {
-    return db.dataConflicts.add(conflict);
+    return this.db.dataConflicts.add(conflict);
   }
 }
 

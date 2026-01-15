@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
-import Link from 'next/link'
-import { Check, ChevronRight, HelpCircle, Trophy, Users, Zap } from 'lucide-react'
+import { Check, ChevronRight, Trophy, Users, Zap } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
@@ -245,7 +244,7 @@ export default function BetaSignupPage() {
                   { step: 3, title: 'Get your invite', body: 'Receive an email with your exclusive access link.' },
                   { step: 4, title: 'Start running', body: 'Complete onboarding and record your first 3 runs.' },
                   { step: 5, title: 'Lock in benefits', body: 'Permanently unlock the 50% discount and Pioneer badge.' },
-               ].map((item, index) => (
+               ].map((item) => (
                   <div key={item.step} className="relative pl-8 pb-8 md:pl-0 md:pb-0 md:text-center group">
                      <div className="absolute -left-[9px] top-0 bg-background border-2 border-muted rounded-full w-4 h-4 md:-top-[41px] md:left-1/2 md:-translate-x-1/2 group-hover:border-primary transition-colors"></div>
 

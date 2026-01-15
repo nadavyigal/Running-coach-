@@ -322,7 +322,6 @@ export const createTestSubjectiveWellness = (overrides: Partial<any> = {}) => ({
 // Mock reset utilities
 export const resetAllMocks = () => {
   vi.clearAllMocks();
-  vi.resetAllMocks();
 };
 
 // Custom render function with error boundary
@@ -406,18 +405,36 @@ export const mockGeolocation = (
 };
 
 // Performance test utilities
-export const measurePerformance = async (fn: () => Promise<void> | void) => {
-  const start = performance.now();
-  await fn();
-  const end = performance.now();
-  return end - start;
+const getPerformanceNow = () => {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    const now = performance.now();
+    return Number.isFinite(now) ? now : Date.now();
+  }
+  return Date.now();
+};
+
+export const measurePerformance = (fn: () => Promise<void> | void) => {
+  const start = getPerformanceNow();
+  const result = fn();
+
+  if (result && typeof (result as Promise<void>).then === 'function') {
+    return (result as Promise<void>).then(() => {
+      const end = getPerformanceNow();
+      const duration = end - start;
+      return Number.isFinite(duration) ? duration : 0;
+    });
+  }
+
+  const end = getPerformanceNow();
+  const duration = end - start;
+  return Number.isFinite(duration) ? duration : 0;
 };
 
 export const expectPerformance = async (
   fn: () => Promise<void> | void,
   maxTimeMs: number
 ) => {
-  const duration = await measurePerformance(fn);
+  const duration = await Promise.resolve(measurePerformance(fn));
   expect(duration).toBeLessThan(maxTimeMs);
 };
 

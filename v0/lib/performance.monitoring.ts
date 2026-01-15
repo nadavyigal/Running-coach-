@@ -86,7 +86,11 @@ export class PerformanceMonitor {
   trackPageLoad() {
     if (typeof window === 'undefined' || !performance) return;
 
-    const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
+    const entries = performance.getEntriesByType('navigation');
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return;
+    }
+    const navigation = entries[0] as PerformanceNavigationTiming;
     if (navigation) {
       const loadTime = navigation.loadEventEnd - navigation.fetchStart;
       this.metrics.pageLoadTime = loadTime;

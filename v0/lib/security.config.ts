@@ -222,6 +222,11 @@ class RateLimiter {
       }
     }
   }
+
+  // Reset rate limit state (useful for tests)
+  reset() {
+    this.requests.clear();
+  }
 }
 
 export const rateLimiter = new RateLimiter();

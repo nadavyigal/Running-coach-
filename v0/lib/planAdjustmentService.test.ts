@@ -11,13 +11,16 @@ vi.mock('./db', () => ({
     users: {
       get: vi.fn()
     }
-  }
+  },
+  resetDatabaseInstance: vi.fn()
 }))
 
 vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getActivePlan: vi.fn(),
-    updatePlan: vi.fn()
+    updatePlan: vi.fn(),
+    createPlan: vi.fn(),
+    createWorkout: vi.fn()
   }
 }))
 
@@ -47,6 +50,8 @@ describe('PlanAdjustmentService', () => {
       vi.mocked(db.users.get).mockResolvedValue(mockUser)
       vi.mocked(dbUtils.getActivePlan).mockResolvedValue(mockActivePlan)
       vi.mocked(dbUtils.updatePlan).mockResolvedValue()
+      vi.mocked(dbUtils.createPlan).mockResolvedValue(1)
+      vi.mocked(dbUtils.createWorkout).mockResolvedValue(1)
       vi.mocked(generateFallbackPlan).mockResolvedValue({ plan: mockActivePlan, workouts: [] })
       vi.mocked(trackPlanAdjustmentEvent).mockResolvedValue()
 
@@ -58,6 +63,7 @@ describe('PlanAdjustmentService', () => {
       expect(dbUtils.getActivePlan).toHaveBeenCalledWith(1)
       expect(dbUtils.updatePlan).toHaveBeenCalledWith(1, { isActive: false })
       expect(generateFallbackPlan).toHaveBeenCalledWith(mockUser)
+      expect(dbUtils.createPlan).toHaveBeenCalledWith(mockActivePlan)
       expect(trackPlanAdjustmentEvent).toHaveBeenCalledWith('plan_adjusted', { reason: 'post-run' })
     })
 
@@ -75,6 +81,8 @@ describe('PlanAdjustmentService', () => {
       
       vi.mocked(db.users.get).mockResolvedValue(mockUser)
       vi.mocked(dbUtils.getActivePlan).mockResolvedValue(null)
+      vi.mocked(dbUtils.createPlan).mockResolvedValue(1)
+      vi.mocked(dbUtils.createWorkout).mockResolvedValue(1)
       vi.mocked(generateFallbackPlan).mockResolvedValue({ plan: {}, workouts: [] })
       vi.mocked(trackPlanAdjustmentEvent).mockRejectedValue(new Error('Analytics service unavailable'))
 

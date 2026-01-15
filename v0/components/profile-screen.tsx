@@ -41,7 +41,7 @@ import { useState, useEffect } from "react"
 import { BadgeCabinet } from "@/components/badge-cabinet";
 import { dbUtils } from "@/lib/dbUtils";
 import { DATABASE } from "@/lib/constants";
-import { useData, useGoalProgress, useDaysRemaining } from "@/contexts/DataContext";
+import { useData } from "@/contexts/DataContext";
 import { useToast } from "@/components/ui/use-toast";
 import { ShareBadgeModal } from "@/components/share-badge-modal";
 import { Share2, Users } from "lucide-react";
@@ -51,9 +51,11 @@ import { CoachingInsightsWidget } from "@/components/coaching-insights-widget";
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
 import { GoalProgressDashboard } from "@/components/goal-progress-dashboard";
 import { PerformanceAnalyticsDashboard } from "@/components/performance-analytics-dashboard";
-import { Brain, Target } from "lucide-react";
+import { Brain, Target, GitMerge, Star } from "lucide-react";
 import { PlanTemplateFlow } from "@/components/plan-template-flow";
 import { type Goal, type Run } from "@/lib/db";
+import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export function ProfileScreen() {
   // Get shared data from context
@@ -63,13 +65,8 @@ export function ProfileScreen() {
     activeGoals,
     recentRuns: contextRecentRuns,
     allTimeStats,
-    isLoading: isContextLoading,
     refresh: refreshContext,
   } = useData()
-
-  // Use centralized goal progress calculation
-  const primaryGoalProgress = useGoalProgress(contextPrimaryGoal)
-  const primaryGoalDaysRemaining = useDaysRemaining(contextPrimaryGoal)
 
   // Add state for the shoes modal at the top of the component
   const [showAddShoesModal, setShowAddShoesModal] = useState(false)
@@ -89,6 +86,10 @@ export function ProfileScreen() {
   const [isRunsLoading, setIsRunsLoading] = useState(false)
   const [goalToDelete, setGoalToDelete] = useState<Goal | null>(null)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [goalProgressMap, setGoalProgressMap] = useState<Map<number, GoalProgress>>(new Map())
+  const [showMergeDialog, setShowMergeDialog] = useState(false)
+  const [mergeSourceGoal, setMergeSourceGoal] = useState<Goal | null>(null)
+  const [isSwitchingPrimary, setIsSwitchingPrimary] = useState(false)
 
   // Sync from context
   useEffect(() => {
@@ -97,6 +98,47 @@ export function ProfileScreen() {
     if (activeGoals.length > 0) setGoals(activeGoals)
     if (contextRecentRuns.length > 0) setRecentRuns(contextRecentRuns)
   }, [contextUserId, contextPrimaryGoal, activeGoals, contextRecentRuns])
+
+  // Load goal progress using GoalProgressEngine for consistency with GoalProgressDashboard
+  useEffect(() => {
+    const loadGoalProgress = async () => {
+      if (goals.length === 0) return
+
+      const engine = new GoalProgressEngine()
+      const progressMap = new Map<number, GoalProgress>()
+
+      for (const goal of goals) {
+        if (goal.id) {
+          try {
+            const progress = await engine.calculateGoalProgress(goal.id)
+            if (progress) {
+              progressMap.set(goal.id, progress)
+            }
+          } catch (err) {
+            console.error(`Error calculating progress for goal ${goal.id}:`, err)
+          }
+        }
+      }
+
+      setGoalProgressMap(progressMap)
+    }
+
+    loadGoalProgress()
+  }, [goals])
+
+  // Helper to get progress for a goal (uses engine-calculated progress)
+  const getGoalProgress = (goalId?: number): number => {
+    if (!goalId) return 0
+    const progress = goalProgressMap.get(goalId)
+    return progress?.progressPercentage ?? 0
+  }
+
+  // Helper to get trajectory for a goal
+  const getGoalTrajectory = (goalId?: number): string | null => {
+    if (!goalId) return null
+    const progress = goalProgressMap.get(goalId)
+    return progress?.trajectory ?? null
+  }
 
   const handleShareClick = (badgeId: string, badgeName: string) => {
     setSelectedBadge({ id: badgeId, name: badgeName });
@@ -123,7 +165,7 @@ export function ProfileScreen() {
         title: "Goal deleted",
         description: `"${goalToDelete.title}" has been removed.`,
       });
-    } catch (err) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to delete goal. Please try again.",
@@ -140,23 +182,57 @@ export function ProfileScreen() {
     setIsDeleteDialogOpen(true);
   };
 
-  // Legacy helper for backward compatibility - prioritizes stored progressPercentage
-  const goalProgressPercent = (goal?: Goal | null) => {
-    if (!goal) return 0;
-    // Use stored progressPercentage if available and valid
-    if (typeof goal.progressPercentage === 'number' && goal.progressPercentage >= 0) {
-      return Math.min(100, Math.max(0, goal.progressPercentage));
+  // Handle switching primary goal
+  const handleSetPrimary = async (goalId: number) => {
+    if (!userId) return
+    setIsSwitchingPrimary(true)
+    try {
+      await dbUtils.setPrimaryGoal(userId, goalId)
+      await refreshContext()
+      toast({
+        title: "Primary goal updated",
+        description: "Your primary goal has been changed.",
+      })
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to update primary goal. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSwitchingPrimary(false)
     }
-    const baseline = typeof goal.baselineValue === 'number' ? goal.baselineValue : 0;
-    const target = typeof goal.targetValue === 'number' ? goal.targetValue : 0;
-    const current = typeof goal.currentValue === 'number' ? goal.currentValue : baseline;
-    const denominator = target - baseline;
-    if (denominator === 0) return current === target ? 100 : 0;
-    if (goal.goalType === 'time_improvement') {
-      return Math.min(100, Math.max(0, ((baseline - current) / (baseline - target)) * 100));
+  }
+
+  // Handle merging goals
+  const handleMergeGoal = async () => {
+    if (!mergeSourceGoal?.id || !primaryGoal?.id || !userId) return
+    try {
+      await dbUtils.mergeGoals(userId, mergeSourceGoal.id, primaryGoal.id, {
+        deleteSource: true,
+        combineProgress: true,
+      })
+      await refreshContext()
+      toast({
+        title: "Goals merged",
+        description: `"${mergeSourceGoal.title}" has been merged into your primary goal.`,
+      })
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to merge goals. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setShowMergeDialog(false)
+      setMergeSourceGoal(null)
     }
-    return Math.min(100, Math.max(0, ((current - baseline) / denominator) * 100));
-  };
+  }
+
+  const openMergeDialog = (goal: Goal) => {
+    setMergeSourceGoal(goal)
+    setShowMergeDialog(true)
+  }
 
   const getDaysRemaining = (goal?: Goal | null) => {
     if (!goal?.timeBound?.deadline) return null;
@@ -530,9 +606,24 @@ export function ProfileScreen() {
                   <div className="space-y-1">
                     <div className="flex justify-between text-sm text-gray-700">
                       <span>Progress</span>
-                      <span>{Math.round(goalProgressPercent(primaryGoal))}%</span>
+                      <div className="flex items-center gap-2">
+                        <span>{Math.round(getGoalProgress(primaryGoal.id))}%</span>
+                        {getGoalTrajectory(primaryGoal.id) && (
+                          <Badge
+                            variant="outline"
+                            className={`text-xs capitalize ${
+                              getGoalTrajectory(primaryGoal.id) === 'ahead' ? 'text-emerald-600 border-emerald-300' :
+                              getGoalTrajectory(primaryGoal.id) === 'on_track' ? 'text-blue-600 border-blue-300' :
+                              getGoalTrajectory(primaryGoal.id) === 'behind' ? 'text-amber-600 border-amber-300' :
+                              'text-red-600 border-red-300'
+                            }`}
+                          >
+                            {getGoalTrajectory(primaryGoal.id)?.replace('_', ' ')}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
-                    <Progress value={goalProgressPercent(primaryGoal)} className="h-2" />
+                    <Progress value={getGoalProgress(primaryGoal.id)} className="h-2" />
                     <p className="text-xs text-gray-600">
                       This plan is designed to help you achieve your goal by the target date.
                     </p>
@@ -564,19 +655,61 @@ export function ProfileScreen() {
                     .filter(g => !primaryGoal || g.id !== primaryGoal.id)
                     .map(goal => (
                       <div key={goal.id} className="p-3 rounded-lg border bg-gray-50">
-                        <div className="flex justify-between items-center">
-                          <div>
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
                             <h4 className="font-semibold text-gray-900">{goal.title}</h4>
                             <p className="text-xs text-gray-600">{goal.description}</p>
                           </div>
-                          <Badge variant="outline" className="text-xs">{goal.status}</Badge>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 px-2 text-xs"
+                              onClick={() => goal.id && handleSetPrimary(goal.id)}
+                              disabled={isSwitchingPrimary}
+                              title="Set as primary goal"
+                            >
+                              <Star className="h-3.5 w-3.5 mr-1" />
+                              Primary
+                            </Button>
+                            {primaryGoal && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-2 text-xs"
+                                onClick={() => openMergeDialog(goal)}
+                                title="Merge into primary goal"
+                              >
+                                <GitMerge className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            <button
+                              onClick={() => openDeleteDialog(goal)}
+                              className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                              title="Delete goal"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
                         <div className="mt-2">
                           <div className="flex justify-between text-xs text-gray-600 mb-1">
                             <span>Progress</span>
-                            <span>{Math.round(goalProgressPercent(goal))}%</span>
+                            <div className="flex items-center gap-2">
+                              <span>{Math.round(getGoalProgress(goal.id))}%</span>
+                              {getGoalTrajectory(goal.id) && (
+                                <span className={`capitalize ${
+                                  getGoalTrajectory(goal.id) === 'ahead' ? 'text-emerald-600' :
+                                  getGoalTrajectory(goal.id) === 'on_track' ? 'text-blue-600' :
+                                  getGoalTrajectory(goal.id) === 'behind' ? 'text-amber-600' :
+                                  'text-red-600'
+                                }`}>
+                                  {getGoalTrajectory(goal.id)?.replace('_', ' ')}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <Progress value={goalProgressPercent(goal)} className="h-1.5" />
+                          <Progress value={getGoalProgress(goal.id)} className="h-1.5" />
                         </div>
                       </div>
                     ))}
@@ -964,9 +1097,18 @@ export function ProfileScreen() {
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Delete Goal?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will permanently delete &quot;{goalToDelete?.title}&quot; and all progress history.
-                  This action cannot be undone.
+                <AlertDialogDescription asChild>
+                  <div>
+                    <p className="mb-3">
+                      This will permanently delete &quot;{goalToDelete?.title}&quot; including:
+                    </p>
+                    <ul className="list-disc list-inside text-sm space-y-1 mb-3">
+                      <li>All progress history and milestones</li>
+                      <li>Associated training plan workouts</li>
+                      <li>Analytics and insights data</li>
+                    </ul>
+                    <p className="font-medium text-red-600">This action cannot be undone.</p>
+                  </div>
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -975,11 +1117,44 @@ export function ProfileScreen() {
                   onClick={handleDeleteGoal}
                   className="bg-red-500 hover:bg-red-600"
                 >
-                  Delete
+                  Delete Goal
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* Merge Goal Dialog */}
+          <Dialog open={showMergeDialog} onOpenChange={setShowMergeDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Merge Goal</DialogTitle>
+                <DialogDescription asChild>
+                  <div>
+                    <p className="mb-3">
+                      Merge &quot;{mergeSourceGoal?.title}&quot; into your primary goal &quot;{primaryGoal?.title}&quot;?
+                    </p>
+                    <p className="text-sm text-gray-600 mb-3">
+                      This will:
+                    </p>
+                    <ul className="list-disc list-inside text-sm space-y-1 mb-3">
+                      <li>Transfer all progress history to your primary goal</li>
+                      <li>Move milestones to your primary goal</li>
+                      <li>Delete the merged goal</li>
+                    </ul>
+                  </div>
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex justify-end gap-2 pt-4">
+                <Button variant="outline" onClick={() => setShowMergeDialog(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleMergeGoal} className="bg-blue-500 hover:bg-blue-600">
+                  <GitMerge className="h-4 w-4 mr-2" />
+                  Merge Goals
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </div>

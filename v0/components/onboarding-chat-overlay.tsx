@@ -977,7 +977,10 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete }: Onboardin
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md w-full h-[90vh] sm:h-[80vh] p-0 sm:rounded-lg">
+      <DialogContent
+        data-testid="onboarding-chat-overlay"
+        className="max-w-md w-full h-[90vh] sm:h-[80vh] p-0 sm:rounded-lg"
+      >
         <div className="flex flex-col h-full bg-background">
       {/* Header */}
       <div className="border-b bg-card p-4">

@@ -27,5 +27,9 @@
       "Bash(NODE_ENV=production npm run build:*)"
     ],
     "deny": []
-  }
+  },
+  "enabledMcpjsonServers": [
+    "supabase"
+  ],
+  "enableAllProjectMcpServers": true
 }

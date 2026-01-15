@@ -9,7 +9,7 @@ import 'fake-indexeddb/auto'
 
 describe('OnboardingScreen - Atomic Finish', () => {
   beforeEach(() => {
-    vi.resetAllMocks()
+    vi.clearAllMocks()
   })
 
   it('disables Finish during commit and navigates only after profile-ready', async () => {
@@ -30,24 +30,17 @@ describe('OnboardingScreen - Atomic Finish', () => {
     fireEvent.click(screen.getByText(/Beginner/i))
     fireEvent.click(screen.getByRole('button', { name: /continue/i }))
 
-    // Optional RPE
-    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-
     // Age
     const ageInput = screen.getByLabelText(/your age/i)
     fireEvent.change(ageInput, { target: { value: '25' } })
     fireEvent.click(screen.getByRole('button', { name: /continue/i }))
 
+    // Reference race (optional)
+    fireEvent.click(screen.getByLabelText(/Skip this step/i))
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
     // Schedule
     fireEvent.click(screen.getByText(/Morning/i))
-    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-
-    // Consents
-    fireEvent.click(screen.getByLabelText(/processing of my health data/i))
-    fireEvent.click(screen.getByLabelText(/Privacy Policy/i))
-    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-
-    // Privacy step
     fireEvent.click(screen.getByRole('button', { name: /continue/i }))
 
     // Finish
@@ -77,11 +70,9 @@ describe('OnboardingScreen - Atomic Finish', () => {
     const ageInput = screen.getByLabelText(/your age/i)
     fireEvent.change(ageInput, { target: { value: '25' } })
     fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+    fireEvent.click(screen.getByLabelText(/Skip this step/i))
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
     fireEvent.click(screen.getByText(/Morning/i))
-    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-    fireEvent.click(screen.getByLabelText(/processing of my health data/i))
-    fireEvent.click(screen.getByLabelText(/Privacy Policy/i))
-    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
     fireEvent.click(screen.getByRole('button', { name: /continue/i }))
 
     fireEvent.click(screen.getByRole('button', { name: /Start My Journey/i }))

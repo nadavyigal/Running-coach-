@@ -114,7 +114,7 @@ Create a `.env.local` file with production values (DO NOT commit to Git):
 # .env.local (LOCAL ONLY - DO NOT COMMIT)
 
 # OpenAI API
-OPENAI_API_KEY=sk-proj-...your-key-here
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY
 
 # PostHog Analytics
 NEXT_PUBLIC_POSTHOG_KEY=phc_...your-key-here

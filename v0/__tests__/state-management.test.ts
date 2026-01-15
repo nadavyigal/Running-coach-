@@ -22,6 +22,7 @@ vi.mock('../lib/db', () => ({
       clear: vi.fn()
     }
   },
+  resetDatabaseInstance: vi.fn(),
   dbUtils: {
     createUser: vi.fn(),
     updateUser: vi.fn(),

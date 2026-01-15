@@ -41,9 +41,9 @@ export class BackgroundSyncManager {
   }
 
   start() {
-    if (this.isRunning) return;
+    if (this._isRunning) return;
     
-    this.isRunning = true;
+    this._isRunning = true;
     console.log('Background sync manager started');
     
     this.syncInterval = setInterval(() => {
@@ -55,9 +55,9 @@ export class BackgroundSyncManager {
   }
 
   stop() {
-    if (!this.isRunning) return;
+    if (!this._isRunning) return;
     
-    this.isRunning = false;
+    this._isRunning = false;
     if (this.syncInterval) {
       clearInterval(this.syncInterval);
       this.syncInterval = null;
@@ -207,12 +207,18 @@ export class BackgroundSyncManager {
     } catch (error) {
       console.error(`Error in sync job ${job.id}:`, error);
       
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const newRetryCount = job.retryCount + 1;
-      
-      if (newRetryCount >= job.maxRetries) {
+      const isRetryable = ![
+        'Device not found',
+        'Unsupported device type',
+        'Device not connected'
+      ].includes(errorMessage);
+
+      if (!isRetryable || newRetryCount >= job.maxRetries) {
         await db.syncJobs.update(job.id!, {
           status: 'failed',
-          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          errorMessage,
           retryCount: newRetryCount,
           updatedAt: new Date()
         });
@@ -223,7 +229,7 @@ export class BackgroundSyncManager {
           status: 'pending',
           scheduledAt: new Date(Date.now() + retryDelayMs),
           retryCount: newRetryCount,
-          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          errorMessage,
           updatedAt: new Date()
         });
       }
@@ -273,6 +279,8 @@ export class BackgroundSyncManager {
       await this.syncGarminActivities(job, device);
     } else if (device.type === 'apple_watch') {
       await this.syncAppleWatchActivities(job, device);
+    } else {
+      throw new Error('Unsupported device type');
     }
   }
 

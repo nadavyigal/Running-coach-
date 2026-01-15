@@ -60,6 +60,10 @@ export function EnhancedAICoach({ user, onResponse, className = '' }: EnhancedAI
   const [recommendations, setRecommendations] = useState<AdaptiveRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [context, setContext] = useState<AICoachContext | null>(null);
+  const formatLabel = (value?: string) => {
+    if (!value) return '';
+    return value.charAt(0).toUpperCase() + value.slice(1);
+  };
 
   const mapCoachingStyle = (
     style: User['coachingStyle'] | undefined
@@ -435,11 +439,11 @@ export function EnhancedAICoach({ user, onResponse, className = '' }: EnhancedAI
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div>
               <span className="text-gray-500">Experience:</span>
-              <p className="font-medium capitalize">{user.experience}</p>
+              <p className="font-medium">{formatLabel(user.experience)}</p>
             </div>
             <div>
               <span className="text-gray-500">Goal:</span>
-              <p className="font-medium capitalize">{user.goal}</p>
+              <p className="font-medium">{formatLabel(user.goal)}</p>
             </div>
             <div>
               <span className="text-gray-500">Target Frequency:</span>
@@ -447,7 +451,7 @@ export function EnhancedAICoach({ user, onResponse, className = '' }: EnhancedAI
             </div>
             <div>
               <span className="text-gray-500">Coaching Style:</span>
-              <p className="font-medium capitalize">{user.coachingStyle || 'encouraging'}</p>
+              <p className="font-medium">{formatLabel(user.coachingStyle || 'encouraging')}</p>
             </div>
           </div>
         </CardContent>
@@ -466,6 +470,9 @@ export function SimpleEnhancedAICoach({ user, onResponse }: { user: User; onResp
     if (!text.trim() || isLoading) return
     setIsLoading(true)
     try {
+      if (user.id) {
+        await dbUtils.getRunsByUser(user.id)
+      }
       // Simplified fallback for compatibility
       const fallback = {
         response: `Hi ${user.name}, I understand you want to know about: ${text}`,

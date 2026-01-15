@@ -14,13 +14,36 @@ vi.mock('./analytics', () => ({
   trackReminderEvent: vi.fn()
 }))
 
-vi.mock('./db', () => ({
+vi.mock('./dbUtils', () => ({
   dbUtils: {
     getCurrentUser: vi.fn(() => Promise.resolve({ id: 1 })),
     updateReminderSettings: vi.fn(() => Promise.resolve()),
     getReminderSettings: vi.fn(() => Promise.resolve({ enabled: false, time: '10:00' }))
   }
 }))
+
+vi.mock('./db', () => {
+  const mockDb = {
+    users: {
+      toArray: vi.fn(() => Promise.resolve([])),
+      where: vi.fn(() => ({
+        equals: vi.fn(() => ({
+          first: vi.fn(() => Promise.resolve(null))
+        }))
+      })),
+      add: vi.fn(() => Promise.resolve(1)),
+      update: vi.fn(() => Promise.resolve(1))
+    }
+  };
+
+  return {
+    db: mockDb,
+    isDatabaseAvailable: vi.fn(() => Promise.resolve(true)),
+    safeDbOperation: vi.fn((fn) => fn()),
+    getDatabase: vi.fn(() => mockDb),
+    resetDatabaseInstance: vi.fn()
+  };
+})
 
 import { reminderService } from './reminderService'
 import { toast } from '@/hooks/use-toast'

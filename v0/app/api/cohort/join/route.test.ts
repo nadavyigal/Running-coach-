@@ -6,24 +6,14 @@ import { vi } from 'vitest';
 
 vi.mock('@/lib/db', () => ({
   db: {
-    cohorts: {
-      where: vi.fn(() => ({
-        equals: vi.fn(() => ({
-          first: vi.fn(),
-        })),
-      })),
+    cohort: {
+      findUnique: vi.fn(),
     },
-    cohortMembers: {
-      where: vi.fn(() => ({
-        equals: vi.fn(() => ({
-          and: vi.fn(() => ({
-            first: vi.fn(),
-          })),
-        })),
-      })),
-      add: vi.fn(),
+    cohortMember: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
     },
-    users: {
+    user: {
       update: vi.fn(),
     },
   },

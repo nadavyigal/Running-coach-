@@ -86,7 +86,8 @@ export function PrivacyDashboard({ user, onSettingsChange }: PrivacyDashboardPro
     setIsExporting(true)
     try {
       // Simulate data export
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      const delayMs = process.env.NODE_ENV === 'test' ? 0 : 2000
+      await new Promise(resolve => setTimeout(resolve, delayMs))
       
       const exportData = {
         user: {
@@ -129,7 +130,8 @@ export function PrivacyDashboard({ user, onSettingsChange }: PrivacyDashboardPro
     setIsDeleting(true)
     try {
       // Simulate data deletion
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      const delayMs = process.env.NODE_ENV === 'test' ? 0 : 3000
+      await new Promise(resolve => setTimeout(resolve, delayMs))
       
       const newSettings = {
         ...settings,
@@ -237,6 +239,7 @@ export function PrivacyDashboard({ user, onSettingsChange }: PrivacyDashboardPro
                 onCheckedChange={(checked) => 
                   handleSettingChange(category.key as keyof UserPrivacySettings['dataCollection'], checked)
                 }
+                aria-label={`${category.title} data collection`}
                 disabled={category.required}
               />
             </div>

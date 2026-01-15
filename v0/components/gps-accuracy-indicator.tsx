@@ -221,7 +221,7 @@ export function GPSAccuracyIndicator({
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span>Signal Quality</span>
-            <span className="font-medium">{Math.round(currentAccuracy.signalStrength)}%</span>
+            <span className="font-medium">{Math.round(currentAccuracy.signalStrength)}% quality</span>
           </div>
           <Progress 
             value={currentAccuracy.signalStrength} 

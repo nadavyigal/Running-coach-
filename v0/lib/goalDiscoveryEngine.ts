@@ -171,6 +171,17 @@ class GoalDiscoveryEngine {
     try {
       console.log('🎯 Goal Discovery Engine: Starting goal discovery for profile:', userProfile);
 
+      const validExperiences = ['beginner', 'intermediate', 'advanced'];
+      if (
+        !validExperiences.includes(userProfile.experience) ||
+        !Number.isFinite(userProfile.currentFitnessLevel) ||
+        userProfile.currentFitnessLevel <= 0 ||
+        userProfile.availableTime.daysPerWeek <= 0 ||
+        userProfile.availableTime.minutesPerSession <= 0
+      ) {
+        throw new Error('Invalid user profile');
+      }
+
       // Step 1: Analyze user context and extract insights
       const insights = await this.analyzeUserContext(userProfile, context);
       console.log('📊 Context insights:', insights);
@@ -351,6 +362,7 @@ class GoalDiscoveryEngine {
       // Adjust target based on user profile
       const adjustedTarget = this.adjustTargetForUser(template.baseTarget, userProfile, category);
 
+      const reasoning = this.buildGoalReasoning(userProfile, category);
       const goal: DiscoveredGoal = {
         id: `${category}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         title: template.title,
@@ -359,7 +371,7 @@ class GoalDiscoveryEngine {
         category: template.category,
         priority: category === 'consistency' ? 1 : 2,
         confidence: 0, // Will be calculated in scoring
-        reasoning: `Recommended for ${userProfile.experience} runners based on your profile`,
+        reasoning,
         specificTarget: {
           metric: adjustedTarget.metric,
           value: adjustedTarget.value,
@@ -394,19 +406,57 @@ class GoalDiscoveryEngine {
     }
   }
 
+  private buildGoalReasoning(userProfile: UserProfile, category: string): string {
+    const experienceNote = `Recommended for ${userProfile.experience} runners`;
+    const hasHealthConstraints =
+      userProfile.physicalLimitations.length > 0 ||
+      userProfile.pastInjuries.length > 0 ||
+      (userProfile.age ?? 0) >= 60;
+
+    if (category === 'health') {
+      if (hasHealthConstraints) {
+        return `${experienceNote} with a gentle, safe focus on health.`;
+      }
+      return `${experienceNote} to support long-term health and fitness.`;
+    }
+
+    if (hasHealthConstraints) {
+      return `${experienceNote} with a careful approach that respects your limitations.`;
+    }
+
+    return `${experienceNote} based on your profile.`;
+  }
+
   // Helper methods for scoring and analysis
   private calculateBaseSuitability(goal: DiscoveredGoal, userProfile: UserProfile): number {
     let score = 0.5; // base score
 
     // Experience level alignment
-    if (userProfile.experience === 'beginner' && goal.category === 'consistency') score += 0.3;
-    if (userProfile.experience === 'intermediate' && ['speed', 'endurance'].includes(goal.category)) score += 0.2;
-    if (userProfile.experience === 'advanced' && goal.category === 'speed') score += 0.2;
+    if (userProfile.experience === 'beginner' && goal.category === 'consistency') score += 0.4;
+    if (userProfile.experience === 'intermediate' && ['speed', 'endurance'].includes(goal.category)) score += 0.25;
+    if (userProfile.experience === 'advanced' && goal.category === 'speed') score += 0.3;
 
     // Age considerations
     if (userProfile.age) {
-      if (userProfile.age > 50 && goal.category === 'health') score += 0.1;
+      if (userProfile.age > 50 && goal.category === 'health') score += 0.2;
       if (userProfile.age < 30 && goal.category === 'speed') score += 0.1;
+    }
+
+    const motivationLower = userProfile.motivations.map((m) => m.toLowerCase());
+    if (goal.category === 'health' && motivationLower.some((m) => m.includes('health') || m.includes('fitness'))) {
+      score += 0.2;
+    }
+
+    const hasHealthConstraints =
+      userProfile.physicalLimitations.length > 0 ||
+      userProfile.pastInjuries.length > 0 ||
+      (userProfile.age ?? 0) >= 60;
+    if (hasHealthConstraints) {
+      if (goal.category === 'health') {
+        score += 0.35;
+      } else {
+        score -= 0.15;
+      }
     }
 
     return Math.max(0, Math.min(1, score));
@@ -420,7 +470,7 @@ class GoalDiscoveryEngine {
 
     // Check alignment with goal category
     if (goal.category === 'health' && motivationLower.some(m => m.includes('health') || m.includes('fitness'))) {
-      alignmentScore += 0.4;
+      alignmentScore += 0.6;
     }
     if (goal.category === 'speed' && motivationLower.some(m => m.includes('fast') || m.includes('time') || m.includes('race'))) {
       alignmentScore += 0.4;
@@ -613,6 +663,10 @@ class GoalDiscoveryEngine {
       adjustedTarget.value *= 1.2; // 20% more challenging
     }
 
+    const boundedFitness = Math.min(Math.max(userProfile.currentFitnessLevel, 1), 10);
+    const fitnessFactor = 0.7 + (boundedFitness / 10) * 0.6;
+    adjustedTarget.value *= fitnessFactor;
+
     // Adjust based on available time
     if (userProfile.availableTime.daysPerWeek < 3) {
       adjustedTarget.value *= 0.9; // Slightly easier for limited time
@@ -623,6 +677,7 @@ class GoalDiscoveryEngine {
       case 'consistency':
         adjustedTarget.metric = 'weekly_runs';
         adjustedTarget.baseline = Math.max(1, userProfile.availableTime.daysPerWeek - 1);
+        adjustedTarget.value = Math.min(adjustedTarget.value, userProfile.availableTime.daysPerWeek);
         break;
       case 'distance':
         adjustedTarget.metric = 'max_distance';
@@ -742,6 +797,10 @@ class GoalDiscoveryEngine {
 
     if (userProfile.experience === 'beginner') {
       recommendations.push('Start slowly and prioritize consistency over intensity');
+    }
+
+    if (userProfile.physicalLimitations.length > 0 || userProfile.pastInjuries.length > 0) {
+      recommendations.push('Adopt a gentle, careful progression and prioritize recovery');
     }
 
     if (userProfile.barriers.length > 0) {

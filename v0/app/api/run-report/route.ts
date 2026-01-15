@@ -9,8 +9,7 @@ import { logger } from '@/lib/logger'
 import { withApiSecurity, type ApiRequest } from '@/lib/security.middleware'
 
 const RUN_TYPES = ['easy', 'tempo', 'intervals', 'long', 'time-trial', 'hill', 'other'] as const
-const RunTypeSchema = z.enum(RUN_TYPES)
-type RunType = z.infer<typeof RunTypeSchema>
+type RunType = (typeof RUN_TYPES)[number]
 
 const WorkoutSchema = z
   .object({

@@ -255,32 +255,32 @@ describe('Rate Limiting', () => {
   });
 
   it('should allow requests within limit', () => {
-    expect(() => checkRateLimit('test', 5, 1000)).not.toThrow();
-    expect(() => checkRateLimit('test', 5, 1000)).not.toThrow();
+    expect(() => checkRateLimit('test-allow', 5, 1000)).not.toThrow();
+    expect(() => checkRateLimit('test-allow', 5, 1000)).not.toThrow();
   });
 
   it('should throw RateLimitError when limit exceeded', () => {
     // Exceed the limit
     for (let i = 0; i < 5; i++) {
-      checkRateLimit('test', 5, 1000);
+      checkRateLimit('test-exceed', 5, 1000);
     }
     
-    expect(() => checkRateLimit('test', 5, 1000)).toThrow();
+    expect(() => checkRateLimit('test-exceed', 5, 1000)).toThrow();
   });
 
   it('should reset after time window', () => {
     // Exceed the limit
     for (let i = 0; i < 5; i++) {
-      checkRateLimit('test', 5, 1000);
+      checkRateLimit('test-reset', 5, 1000);
     }
     
-    expect(() => checkRateLimit('test', 5, 1000)).toThrow();
+    expect(() => checkRateLimit('test-reset', 5, 1000)).toThrow();
     
     // Fast-forward past the window
     vi.advanceTimersByTime(1001);
     
     // Should work again
-    expect(() => checkRateLimit('test', 5, 1000)).not.toThrow();
+    expect(() => checkRateLimit('test-reset', 5, 1000)).not.toThrow();
   });
 });
 

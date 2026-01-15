@@ -61,7 +61,7 @@ export default function TermsPage() {
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-foreground">Limitation of liability</h2>
             <p>
-              The beta is provided "as is" without warranties of any kind. To the fullest extent
+              The beta is provided &quot;as is&quot; without warranties of any kind. To the fullest extent
               permitted by law, Run-Smart is not liable for damages arising from use of the beta.
             </p>
           </section>

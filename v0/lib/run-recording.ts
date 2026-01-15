@@ -162,38 +162,6 @@ const mapWorkoutToRunType = (workoutType: Workout["type"]): Run["type"] => {
 
 export const workoutTypeToRunType = mapWorkoutToRunType
 
-const goalMetricDistanceKm = (metric?: string) => {
-  if (!metric) return null
-  const normalized = metric.toLowerCase()
-
-  const metricMap: Record<string, number> = {
-    "5k_time": 5,
-    "10k_time": 10,
-    "half_marathon_time": 21.097,
-    "marathon_time": 42.195,
-    "10_mile_time": 16.093,
-  }
-
-  if (metricMap[normalized]) return metricMap[normalized]
-
-  if (normalized.includes("half") && normalized.includes("marathon")) return 21.097
-  if (normalized.includes("marathon")) return 42.195
-
-  const mileMatch = normalized.match(/(\d+(?:\.\d+)?)_?mile/)
-  if (mileMatch) {
-    const miles = Number.parseFloat(mileMatch[1])
-    return Number.isFinite(miles) ? miles * 1.60934 : null
-  }
-
-  const kmMatch = normalized.match(/(\d+(?:\.\d+)?)(?:k|km)/)
-  if (kmMatch) {
-    const km = Number.parseFloat(kmMatch[1])
-    return Number.isFinite(km) ? km : null
-  }
-
-  return null
-}
-
 const resolveRunDate = (run: Run) => normalizeDate(run.completedAt ?? run.createdAt)
 
 const resolveGoalWindow = (goal: Goal, measurementDate: Date) => {

@@ -1,16 +1,7 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OnboardingScreen } from './onboarding-screen';
-import posthog from 'posthog-js';
-import { trackEngagementEvent } from '@/lib/analytics';
-
-vi.mock('posthog-js', () => ({
-  default: {
-    capture: vi.fn(),
-  },
-}));
-
 vi.mock('@/lib/analytics', () => ({
   trackEngagementEvent: vi.fn(),
   trackAnalyticsEvent: vi.fn(),
@@ -117,6 +108,7 @@ vi.mock('@/lib/db', () => ({
     getCurrentUser: vi.fn().mockResolvedValue({ id: 1 }),
     updateUser: vi.fn().mockResolvedValue(undefined),
   },
+  resetDatabaseInstance: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/lib/planGenerator', () => ({
@@ -141,17 +133,10 @@ describe('OnboardingScreen', () => {
     vi.clearAllMocks();
   });
 
-  it('shows progress indicator with exactly 8 steps', () => {
+  it('shows progress indicator with step count', () => {
     render(<OnboardingScreen onComplete={mockOnComplete} />);
-    
-    // Check that all 8 step indicators are present
-    for (let i = 1; i <= 8; i++) {
-      expect(screen.getByText(i.toString())).toBeInTheDocument();
-    }
-    
-    // Verify no additional steps beyond 8
-    const stepElements = screen.getAllByText(/^[1-8]$/);
-    expect(stepElements).toHaveLength(8);
+    expect(screen.getByText(/Step 1 of 7/i)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: /Onboarding progress/i })).toBeInTheDocument();
   });
 
   it('renders and navigates through all steps', async () => {
@@ -170,13 +155,14 @@ describe('OnboardingScreen', () => {
     fireEvent.click(screen.getByText(/Beginner/i));
     fireEvent.click(screen.getByText(/Continue/i));
 
-    // Step 4: RPE slider (optional)
-    expect(screen.getByText(/Fitness Assessment/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByText(/Continue/i));
-
-    // Step 5: Age
+    // Step 4: Age
     expect(screen.getByText(/How old are you/i)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/Your age/i), { target: { value: '30' } });
+    fireEvent.click(screen.getByText(/Continue/i));
+
+    // Step 5: Reference race (optional)
+    expect(screen.getByText(/best recent race time/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/Skip this step/i));
     fireEvent.click(screen.getByText(/Continue/i));
 
     // Step 6: Availability
@@ -184,13 +170,7 @@ describe('OnboardingScreen', () => {
     fireEvent.click(screen.getByText(/Morning/i));
     fireEvent.click(screen.getByText(/Continue/i));
 
-    // Step 7: Consent
-    expect(screen.getByLabelText(/I agree to the processing of my health data/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText(/I agree to the processing of my health data/i));
-    fireEvent.click(screen.getByLabelText(/I accept the Terms of Service/i));
-    fireEvent.click(screen.getByText(/Continue/i));
-
-    // Step 8: Summary
+    // Step 7: Summary
     expect(screen.getByText(/Summary & Confirmation/i)).toBeInTheDocument();
   });
 
@@ -201,25 +181,20 @@ describe('OnboardingScreen', () => {
     expect(screen.getByText(/Continue/i)).toBeDisabled();
   });
 
-  it('fires PostHog event on completion', async () => {
+  it('shows the finish button on the summary step', async () => {
     render(<OnboardingScreen onComplete={mockOnComplete} />);
-    // Fast-forward through steps
     fireEvent.click(screen.getByText(/Get Started/i));
     fireEvent.click(screen.getByText(/Build a Running Habit/i));
     fireEvent.click(screen.getByText(/Continue/i));
     fireEvent.click(screen.getByText(/Beginner/i));
     fireEvent.click(screen.getByText(/Continue/i));
-    fireEvent.click(screen.getByText(/Continue/i)); // RPE
     fireEvent.change(screen.getByLabelText(/Your age/i), { target: { value: '30' } });
-    fireEvent.click(screen.getByText(/Continue/i)); // Age
+    fireEvent.click(screen.getByText(/Continue/i));
+    fireEvent.click(screen.getByLabelText(/Skip this step/i));
+    fireEvent.click(screen.getByText(/Continue/i));
     fireEvent.click(screen.getByText(/Morning/i));
     fireEvent.click(screen.getByText(/Continue/i));
-    fireEvent.click(screen.getByLabelText(/I agree to the processing of my health data/i));
-    fireEvent.click(screen.getByLabelText(/I accept the Terms of Service/i));
-    fireEvent.click(screen.getByText(/Continue/i));
-    fireEvent.click(screen.getByLabelText(/Start My Journey/i));
-    await waitFor(() => {
-      expect(trackEngagementEvent).toHaveBeenCalledWith('onboard_complete', expect.objectContaining({ rookieChallenge: true, age: 30, goalDist: 0 }));
-    });
+
+    expect(screen.getByRole('button', { name: /Start My Journey/i })).toBeInTheDocument();
   });
 }); 

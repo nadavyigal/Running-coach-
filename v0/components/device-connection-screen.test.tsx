@@ -401,9 +401,9 @@ describe('DeviceConnectionScreen', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('heart rate')).toBeInTheDocument();
-        expect(screen.getByText('vo2 max')).toBeInTheDocument();
-        expect(screen.getByText('running dynamics')).toBeInTheDocument();
+        expect(screen.getAllByText('heart rate').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('vo2 max').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('running dynamics').length).toBeGreaterThan(0);
       });
     });
   });

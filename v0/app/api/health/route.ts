@@ -25,7 +25,7 @@ export async function GET(request: Request) {
           issues: envCheck.issues
         }
       });
-    } catch (error) {
+    } catch {
       return NextResponse.json({
         status: 'error',
         error: 'Health check failed'

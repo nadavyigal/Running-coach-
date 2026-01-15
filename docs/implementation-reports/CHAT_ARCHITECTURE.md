@@ -183,7 +183,7 @@ Every request generates a unique `requestId` for full traceability:
 
 ```bash
 # OpenAI Configuration
-OPENAI_API_KEY=sk-your-api-key-here
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY
 
 # Optional: Model Configuration
 CHAT_DEFAULT_MODEL=gpt-4o-mini

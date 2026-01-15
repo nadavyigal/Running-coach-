@@ -94,29 +94,33 @@ export function getSecureApiKeyError(validation: ApiKeyValidationResult): {
   errorType: string;
   fallbackRequired: boolean;
 } {
+  const isOpenAI = validation.service === 'openai';
+  const openAIMessage = 'OpenAI API key is not configured or is invalid';
+  const openAIStatus = 422;
+
   switch (validation.errorCode) {
     case 'MISSING':
       return {
-        message: `${validation.service.toUpperCase()} service is not configured. Please contact support.`,
-        status: 503,
-        errorType: 'SERVICE_UNAVAILABLE',
+        message: isOpenAI ? openAIMessage : `${validation.service.toUpperCase()} service is not configured. Please contact support.`,
+        status: isOpenAI ? openAIStatus : 503,
+        errorType: isOpenAI ? 'INVALID_CONFIGURATION' : 'SERVICE_UNAVAILABLE',
         fallbackRequired: true
       };
     
     case 'INVALID_FORMAT':
     case 'INVALID_KEY':
       return {
-        message: `${validation.service.toUpperCase()} service authentication failed. Please contact support.`,
-        status: 503,
-        errorType: 'SERVICE_UNAVAILABLE',
+        message: isOpenAI ? openAIMessage : `${validation.service.toUpperCase()} service authentication failed. Please contact support.`,
+        status: isOpenAI ? openAIStatus : 503,
+        errorType: isOpenAI ? 'INVALID_CONFIGURATION' : 'SERVICE_UNAVAILABLE',
         fallbackRequired: true
       };
     
     default:
       return {
-        message: 'External service is temporarily unavailable. Please try again later.',
-        status: 503,
-        errorType: 'SERVICE_UNAVAILABLE',
+        message: isOpenAI ? openAIMessage : 'External service is temporarily unavailable. Please try again later.',
+        status: isOpenAI ? openAIStatus : 503,
+        errorType: isOpenAI ? 'INVALID_CONFIGURATION' : 'SERVICE_UNAVAILABLE',
         fallbackRequired: true
       };
   }

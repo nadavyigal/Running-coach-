@@ -28,9 +28,13 @@ import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
 import ModalErrorBoundary from "@/components/modal-error-boundary"
-import { type Workout, type Plan, type Route, type Goal, type Run, resetDatabaseInstance } from "@/lib/db"
-import { dbUtils } from "@/lib/dbUtils"
-import { useData, useGoalProgress, useDaysRemaining } from "@/contexts/DataContext"
+import { type Workout, type Route, type Goal, resetDatabaseInstance } from "@/lib/db"
+import { dbUtils, getUserPaceZones } from "@/lib/dbUtils"
+import { useData, useGoalProgress } from "@/contexts/DataContext"
+import { WorkoutPhasesCompact } from "@/components/workout-phases-display"
+import { generateStructuredWorkout, type StructuredWorkout } from "@/lib/workout-steps"
+import { getDefaultPaceZones } from "@/lib/pace-zones"
+import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine"
 import { useToast } from "@/hooks/use-toast"
 import { CommunityStatsWidget } from "@/components/community-stats-widget"
 import { GoalRecommendations } from "@/components/goal-recommendations"
@@ -52,17 +56,13 @@ export function TodayScreen() {
     userId,
     plan,
     primaryGoal,
-    weeklyRuns,
     weeklyWorkouts,
     weeklyStats,
-    isLoading: isContextLoading,
     refresh: refreshContext,
   } = useData()
 
   // Use centralized goal progress calculation
   const goalProgress = useGoalProgress(primaryGoal)
-  const daysRemaining = useDaysRemaining(primaryGoal)
-
   const [dailyTip, setDailyTip] = useState(
     "Focus on your breathing rhythm today. Try the 3:2 pattern - inhale for 3 steps, exhale for 2 steps. This will help you maintain a steady pace!",
   )
@@ -70,6 +70,8 @@ export function TodayScreen() {
   const [showWorkoutBreakdown, setShowWorkoutBreakdown] = useState(false)
   const [todaysWorkout, setTodaysWorkout] = useState<Workout | null>(null)
   const [isLoadingWorkout, setIsLoadingWorkout] = useState(true)
+  const [structuredWorkout, setStructuredWorkout] = useState<StructuredWorkout | null>(null)
+  const [engineGoalProgress, setEngineGoalProgress] = useState<GoalProgress | null>(null)
   const [visibleWorkouts, setVisibleWorkouts] = useState<Workout[]>([])
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [showAddRunModal, setShowAddRunModal] = useState(false)
@@ -91,24 +93,6 @@ export function TodayScreen() {
     "Consistency beats intensity. Show up regularly, even if it's just a short run.",
     "Track your progress! Celebrate small wins - every kilometer counts towards your goal.",
   ]
-
-  // Legacy helper for backward compatibility with components that pass goal directly
-  const goalProgressPercent = (goal?: Goal | null) => {
-    if (!goal) return 0
-    // Use stored progressPercentage if available
-    if (typeof goal.progressPercentage === 'number' && goal.progressPercentage >= 0) {
-      return Math.min(100, Math.max(0, goal.progressPercentage))
-    }
-    const baseline = typeof goal.baselineValue === 'number' ? goal.baselineValue : 0
-    const target = typeof goal.targetValue === 'number' ? goal.targetValue : 0
-    const current = typeof goal.currentValue === 'number' ? goal.currentValue : baseline
-    const denominator = target - baseline
-    if (denominator === 0) return current === target ? 100 : 0
-    if (goal.goalType === 'time_improvement') {
-      return Math.min(100, Math.max(0, ((baseline - current) / (baseline - target)) * 100))
-    }
-    return Math.min(100, Math.max(0, ((current - baseline) / denominator) * 100))
-  }
 
   const getDaysRemaining = (goal?: Goal | null) => {
     if (!goal?.timeBound?.deadline) return null
@@ -158,6 +142,91 @@ export function TodayScreen() {
 
     initializeLocalData()
   }, [userId])
+
+  // Load structured workout with pace zones when todaysWorkout changes
+  useEffect(() => {
+    const loadStructuredWorkout = async () => {
+      console.log("[TodayScreen] loadStructuredWorkout called:", { todaysWorkout, userId })
+
+      if (!todaysWorkout || !userId) {
+        console.log("[TodayScreen] No workout or userId, clearing structuredWorkout")
+        setStructuredWorkout(null)
+        return
+      }
+
+      try {
+        // Get user's pace zones (from VDOT or defaults)
+        let paceZones = await getUserPaceZones(userId)
+        console.log("[TodayScreen] Got pace zones:", paceZones ? "yes" : "null")
+
+        if (!paceZones) {
+          // Use defaults if no pace zones available
+          console.log("[TodayScreen] Using default pace zones")
+          paceZones = getDefaultPaceZones('intermediate')
+        }
+
+        // Get user experience level for workout structure
+        const user = await dbUtils.getCurrentUser()
+        const experience = user?.experience || 'intermediate'
+
+        console.log("[TodayScreen] Generating structured workout:", {
+          type: todaysWorkout.type,
+          distance: todaysWorkout.distance,
+          experience
+        })
+
+        // Generate structured workout
+        const structured = generateStructuredWorkout(
+          todaysWorkout.type,
+          paceZones,
+          todaysWorkout.distance,
+          experience
+        )
+
+        console.log("[TodayScreen] Generated structured workout:", structured?.name)
+        setStructuredWorkout(structured)
+      } catch (error) {
+        console.error("[TodayScreen] Error loading structured workout:", error)
+        setStructuredWorkout(null)
+      }
+    }
+
+    loadStructuredWorkout()
+  }, [todaysWorkout, userId])
+
+  // Load goal progress using GoalProgressEngine for consistency with Profile/Overview
+  useEffect(() => {
+    const loadGoalProgress = async () => {
+      if (!primaryGoal?.id) {
+        setEngineGoalProgress(null)
+        return
+      }
+
+      try {
+        const engine = new GoalProgressEngine()
+        const progress = await engine.calculateGoalProgress(primaryGoal.id)
+        setEngineGoalProgress(progress)
+      } catch (error) {
+        console.error("Error loading goal progress:", error)
+        setEngineGoalProgress(null)
+      }
+    }
+
+    loadGoalProgress()
+  }, [primaryGoal])
+
+  // Helper to get consistent goal progress
+  const getGoalProgressPercent = (): number => {
+    if (engineGoalProgress) {
+      return engineGoalProgress.progressPercentage
+    }
+    return goalProgress // Fallback to hook value
+  }
+
+  // Helper to get goal trajectory
+  const getGoalTrajectory = (): string | null => {
+    return engineGoalProgress?.trajectory ?? null
+  }
 
   const refreshWorkouts = async () => {
     try {
@@ -396,9 +465,24 @@ export function TodayScreen() {
               <div>
                 <div className="flex justify-between text-xs text-gray-700 mb-1">
                   <span>Progress</span>
-                  <span>{Math.round(goalProgressPercent(primaryGoal))}%</span>
+                  <div className="flex items-center gap-2">
+                    <span>{Math.round(getGoalProgressPercent())}%</span>
+                    {getGoalTrajectory() && (
+                      <Badge
+                        variant="outline"
+                        className={`text-xs capitalize ${
+                          getGoalTrajectory() === 'ahead' ? 'text-emerald-600 border-emerald-300' :
+                          getGoalTrajectory() === 'on_track' ? 'text-blue-600 border-blue-300' :
+                          getGoalTrajectory() === 'behind' ? 'text-amber-600 border-amber-300' :
+                          'text-red-600 border-red-300'
+                        }`}
+                      >
+                        {getGoalTrajectory()?.replace('_', ' ')}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-                <Progress value={goalProgressPercent(primaryGoal)} className="h-2" />
+                <Progress value={getGoalProgressPercent()} className="h-2" />
               </div>
             </CardContent>
           </Card>
@@ -575,28 +659,32 @@ export function TodayScreen() {
                 </Button>
               </div>
 
-              {/* Workout Breakdown */}
+              {/* Workout Breakdown - Garmin Style */}
               {showWorkoutBreakdown && (
                 <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 space-y-3 animate-in fade-in-0 slide-in-from-top-4 duration-300">
                   <h4 className="font-semibold text-sm uppercase tracking-wide">
                     Workout Phases
                   </h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-white/60" />
-                      <span className="text-sm">Warm-up: 5-10 min easy pace</span>
+                  {structuredWorkout ? (
+                    <WorkoutPhasesCompact workout={structuredWorkout} darkMode />
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-white/60" />
+                        <span className="text-sm">Warm-up: 5-10 min easy pace</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-white" />
+                        <span className="text-sm font-semibold">
+                          Main: {todaysWorkout.distance}km at target pace
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-white/60" />
+                        <span className="text-sm">Cool-down: 5 min walk</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-white" />
-                      <span className="text-sm font-semibold">
-                        Main: {todaysWorkout.distance}km at target pace
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-white/60" />
-                      <span className="text-sm">Cool-down: 5 min walk</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
 

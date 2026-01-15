@@ -751,7 +751,7 @@ export class RecoveryEngine {
    */
   private static selectMotivationalFrame(
     motivations: string[],
-    coachingStyle: string
+    _coachingStyle: string
   ): string {
     if (motivations.length === 0) return '';
 

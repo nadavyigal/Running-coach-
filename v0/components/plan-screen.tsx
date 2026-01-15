@@ -13,7 +13,7 @@ import { PlanComplexityIndicator } from "@/components/plan-complexity-indicator"
 import { type Plan, type Workout, type Goal } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
-import { useData, useGoalProgress, useDaysRemaining } from "@/contexts/DataContext"
+import { useData } from "@/contexts/DataContext"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { formatLocalizedDate } from "@/lib/timezone-utils"
 
@@ -23,13 +23,7 @@ export function PlanScreen() {
     plan: contextPlan,
     primaryGoal,
     userId,
-    isLoading: isContextLoading,
-    refresh: refreshContext,
   } = useData()
-
-  // Use centralized goal progress calculation
-  const goalProgress = useGoalProgress(primaryGoal)
-  const goalDaysRemaining = useDaysRemaining(primaryGoal)
 
   const [currentView, setCurrentView] = useState<"monthly" | "biweekly" | "progress">("monthly")
   const [showAddRunModal, setShowAddRunModal] = useState(false)

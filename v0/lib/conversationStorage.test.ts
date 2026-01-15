@@ -25,7 +25,8 @@ vi.mock('./db', () => ({
       where: vi.fn(),
       toArray: vi.fn().mockResolvedValue([])
     }
-  }
+  },
+  resetDatabaseInstance: vi.fn()
 }))
 
 vi.mock('./onboardingStateValidator', () => ({

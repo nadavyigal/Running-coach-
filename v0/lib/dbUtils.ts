@@ -110,7 +110,7 @@ export async function initializeDatabase(): Promise<boolean> {
  */
 export async function closeDatabase(): Promise<void> {
   try {
-    if (db && db.isOpen()) {
+    if (db && typeof db.isOpen === 'function' && db.isOpen()) {
       await db.close();
       console.log('✅ Database closed successfully');
     }
@@ -379,6 +379,9 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
     };
     if (typeof profile.rpe === 'number') (normalizedProfileRequired as any).rpe = profile.rpe;
     if (typeof profile.age === 'number') (normalizedProfileRequired as any).age = profile.age;
+    if (typeof profile.averageWeeklyKm === 'number' && profile.averageWeeklyKm > 0) {
+      (normalizedProfileRequired as any).averageWeeklyKm = profile.averageWeeklyKm;
+    }
     if (Array.isArray(profile.motivations)) (normalizedProfileRequired as any).motivations = profile.motivations;
     if (Array.isArray(profile.barriers)) (normalizedProfileRequired as any).barriers = profile.barriers;
     if (profile.coachingStyle) (normalizedProfileRequired as any).coachingStyle = profile.coachingStyle as any;
@@ -431,8 +434,8 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
           title: 'Default Running Plan',
           description: 'A basic running plan to get you started',
           startDate: nowUTC(),
-          endDate: addDaysUTC(30),
-          totalWeeks: 4,
+          endDate: addDaysUTC(14),
+          totalWeeks: 2,
           isActive: true,
           planType: 'basic',
           trainingDaysPerWeek: normalizedProfileRequired.daysPerWeek || 3,
@@ -450,7 +453,7 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
         // Use bulkAdd for better performance and faster transaction completion on mobile
         const workoutDays = ['Mon', 'Wed', 'Fri'];
         const workoutsToAdd: Omit<Workout, 'id'>[] = [];
-        for (let week = 1; week <= 4; week++) {
+        for (let week = 1; week <= 2; week++) {
           for (const day of workoutDays.slice(0, planData.trainingDaysPerWeek || 3)) {
             workoutsToAdd.push({
               planId,
@@ -1153,6 +1156,10 @@ export async function getUserGoals(userId: number, status?: Goal['status']): Pro
   }, 'getUserGoals', []);
 }
 
+export async function getGoalsByUser(userId: number, status?: Goal['status']): Promise<Goal[]> {
+  return getUserGoals(userId, status);
+}
+
 export async function getPrimaryGoal(userId: number): Promise<Goal | null> {
   return safeDbOperation(async () => {
     if (!db) throw new Error('Database not available');
@@ -1213,11 +1220,135 @@ export async function deleteGoal(goalId: number): Promise<void> {
     if (db) {
       // Delete related milestones first
       await db.goalMilestones.where('goalId').equals(goalId).delete();
+      // Delete progress history
+      await db.goalProgressHistory.where('goalId').equals(goalId).delete();
       // Delete the goal
       await db.goals.delete(goalId);
-      console.log('✅ Goal and related milestones deleted successfully:', goalId);
+      console.log('✅ Goal and related data deleted successfully:', goalId);
     }
   }, 'deleteGoal');
+}
+
+/**
+ * Merge two goals - combines progress history and milestones from source into target
+ */
+export async function mergeGoals(
+  userId: number,
+  sourceGoalId: number,
+  targetGoalId: number,
+  options: { deleteSource: boolean; combineProgress: boolean }
+): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+
+    const sourceGoal = await db.goals.get(sourceGoalId);
+    const targetGoal = await db.goals.get(targetGoalId);
+
+    if (!sourceGoal || !targetGoal) {
+      throw new Error('One or both goals not found');
+    }
+
+    if (sourceGoal.userId !== userId || targetGoal.userId !== userId) {
+      throw new Error('Goals do not belong to the specified user');
+    }
+
+    await db.transaction('rw', [db.goals, db.goalMilestones, db.goalProgressHistory], async () => {
+      // Move progress history from source to target
+      if (options.combineProgress) {
+        await db.goalProgressHistory
+          .where('goalId')
+          .equals(sourceGoalId)
+          .modify({ goalId: targetGoalId });
+      }
+
+      // Move milestones from source to target
+      await db.goalMilestones
+        .where('goalId')
+        .equals(sourceGoalId)
+        .modify({ goalId: targetGoalId });
+
+      // Delete or archive source goal
+      if (options.deleteSource) {
+        await db.goals.delete(sourceGoalId);
+      } else {
+        await db.goals.update(sourceGoalId, {
+          status: 'cancelled',
+          updatedAt: nowUTC()
+        });
+      }
+
+      // Update target goal timestamp
+      await db.goals.update(targetGoalId, { updatedAt: nowUTC() });
+    });
+
+    console.log('✅ Goals merged successfully:', sourceGoalId, '->', targetGoalId);
+  }, 'mergeGoals');
+}
+
+export async function generateGoalMilestones(goalId: number): Promise<GoalMilestone[]> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) return [];
+
+    const goal = await database.goals.get(goalId);
+    if (!goal) return [];
+
+    const schedule = Array.isArray(goal.timeBound?.milestoneSchedule) && goal.timeBound.milestoneSchedule.length > 0
+      ? [...goal.timeBound.milestoneSchedule].sort((a, b) => a - b)
+      : [25, 50, 75];
+
+    const startDate = goal.timeBound?.startDate instanceof Date ? goal.timeBound.startDate : new Date();
+    const deadline = goal.timeBound?.deadline instanceof Date
+      ? goal.timeBound.deadline
+      : new Date(startDate.getTime() + (goal.timeBound?.totalDuration ?? 0) * 24 * 60 * 60 * 1000);
+
+    const durationMs = Math.max(1, deadline.getTime() - startDate.getTime());
+    const roundValue = (value: number) => Math.round(value * 100) / 100;
+
+    await database.goalMilestones.where('goalId').equals(goalId).delete();
+
+    const milestones: Omit<GoalMilestone, 'id'>[] = schedule.map((percent, index) => {
+      const ratio = percent / 100;
+      const targetValue = roundValue(goal.baselineValue + (goal.targetValue - goal.baselineValue) * ratio);
+
+      return {
+        goalId,
+        milestoneOrder: index + 1,
+        title: `Milestone ${percent}%`,
+        description: `Reach ${targetValue}${goal.specificTarget?.unit ? ` ${goal.specificTarget.unit}` : ''}`,
+        targetValue,
+        targetDate: new Date(startDate.getTime() + durationMs * ratio),
+        status: 'pending',
+        achievedDate: undefined,
+        achievedValue: undefined,
+        celebrationShown: false,
+        createdAt: new Date(),
+      };
+    });
+
+    if (milestones.length === 0) return [];
+
+    await database.goalMilestones.bulkAdd(milestones);
+    return await database.goalMilestones.where('goalId').equals(goalId).toArray();
+  }, 'generateGoalMilestones', []);
+}
+
+export async function markMilestoneAchieved(milestoneId: number, achievedValue?: number): Promise<void> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) throw new Error('Database not available');
+
+    const updates: Partial<GoalMilestone> = {
+      status: 'achieved',
+      achievedDate: new Date(),
+    };
+
+    if (typeof achievedValue === 'number') {
+      updates.achievedValue = achievedValue;
+    }
+
+    await database.goalMilestones.update(milestoneId, updates);
+  }, 'markMilestoneAchieved');
 }
 
 // ============================================================================
@@ -1347,8 +1478,8 @@ export async function ensureUserHasActivePlan(userId: number): Promise<Plan> {
           title: 'Default Running Plan',
           description: 'A basic running plan to get you started',
           startDate: nowUTC(),
-          endDate: addDaysUTC(30), // 30 days from now in UTC
-          totalWeeks: 4,
+          endDate: addDaysUTC(14), // 14 days from now in UTC
+          totalWeeks: 2,
           isActive: true,
           planType: 'basic',
           trainingDaysPerWeek: user.daysPerWeek || 3,
@@ -1364,7 +1495,7 @@ export async function ensureUserHasActivePlan(userId: number): Promise<Plan> {
         
         // Create some basic workouts for the plan (use short day names to align with UI sorting)
         const workoutDays = ['Mon', 'Wed', 'Fri'];
-        for (let week = 1; week <= 4; week++) {
+        for (let week = 1; week <= 2; week++) {
           for (const day of workoutDays.slice(0, user.daysPerWeek || 3)) {
             const workoutData: Omit<Workout, 'id' | 'createdAt' | 'updatedAt'> = {
               planId,
@@ -1427,21 +1558,43 @@ export async function getPlanWithWorkouts(planId: number): Promise<{ plan: Plan 
  * Normalize a date value - converts strings or Date objects to proper Date instances
  * This must be defined before functions that use it
  */
-function normalizeDate(dateValue: any): Date | null {
+export function normalizeDate(dateValue: any): Date | null {
   if (!dateValue) return null;
   if (dateValue instanceof Date) {
     // Check if it's a valid date
-    return isNaN(dateValue.getTime()) ? null : dateValue;
+    if (isNaN(dateValue.getTime())) return null;
+    const normalized = new Date(dateValue.getTime());
+    normalized.setHours(0, 0, 0, 0);
+    return normalized;
   }
   if (typeof dateValue === 'string') {
     const parsed = new Date(dateValue);
-    return isNaN(parsed.getTime()) ? null : parsed;
+    if (isNaN(parsed.getTime())) return null;
+    parsed.setHours(0, 0, 0, 0);
+    return parsed;
   }
   if (typeof dateValue === 'number') {
     const parsed = new Date(dateValue);
-    return isNaN(parsed.getTime()) ? null : parsed;
+    if (isNaN(parsed.getTime())) return null;
+    parsed.setHours(0, 0, 0, 0);
+    return parsed;
   }
   return null;
+}
+
+export function isSameDay(date1: Date, date2: Date): boolean {
+  const normalized1 = normalizeDate(date1);
+  const normalized2 = normalizeDate(date2);
+  if (!normalized1 || !normalized2) return false;
+  return normalized1.getTime() === normalized2.getTime();
+}
+
+export function getDaysDifference(date1: Date, date2: Date): number {
+  const normalized1 = normalizeDate(date1);
+  const normalized2 = normalizeDate(date2);
+  if (!normalized1 || !normalized2) return 0;
+  const diffMs = Math.abs(normalized1.getTime() - normalized2.getTime());
+  return Math.round(diffMs / (1000 * 60 * 60 * 24));
 }
 
 /**
@@ -1660,6 +1813,14 @@ export async function markWorkoutCompleted(workoutId: number): Promise<void> {
       completed: true,
       updatedAt: new Date()
     });
+
+    const workout = await db.workouts.get(workoutId);
+    if (workout?.planId) {
+      const plan = await db.plans.get(workout.planId);
+      if (plan?.userId) {
+        await updateUserStreak(plan.userId);
+      }
+    }
   }, 'markWorkoutCompleted');
 }
 
@@ -1686,7 +1847,11 @@ export async function recordRun(runData: Omit<Run, 'id' | 'createdAt'>): Promise
  * Create run with GPS accuracy data
  */
 export async function createRun(runData: Omit<Run, 'id' | 'createdAt'>): Promise<number> {
-  return recordRun(runData);
+  const runId = await recordRun(runData);
+  if (runData.userId) {
+    await updateUserStreak(runData.userId);
+  }
+  return runId;
 }
 
 export async function getRunById(runId: number): Promise<Run | null> {
@@ -1761,6 +1926,154 @@ export async function getRunStats(userId: number, days: number = 30): Promise<{
       longestRun: 0
     };
   }, 'getRunStats');
+}
+
+// ========================================================================
+// STREAK UTILITIES
+// ========================================================================
+
+export async function calculateCurrentStreak(userId: number): Promise<number> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) return 0;
+
+    const runs = await database.runs.where('userId').equals(userId).toArray();
+    if (runs.length === 0) return 0;
+
+    const sortedRuns = runs
+      .map((run) => {
+        const activityDate = new Date(run.completedAt ?? run.createdAt ?? 0);
+        return { activityDate };
+      })
+      .filter((run) => !Number.isNaN(run.activityDate.getTime()))
+      .sort((a, b) => b.activityDate.getTime() - a.activityDate.getTime());
+
+    if (sortedRuns.length === 0) return 0;
+
+    const now = new Date();
+    const lastRunAt = sortedRuns[0].activityDate;
+    const diffMs = now.getTime() - lastRunAt.getTime();
+    const withinGrace = diffMs <= 24 * 60 * 60 * 1000 || isSameDay(now, lastRunAt);
+    if (!withinGrace) return 0;
+
+    const uniqueDates: Date[] = [];
+    const seen = new Set<string>();
+    for (const run of sortedRuns) {
+      const normalized = normalizeDate(run.activityDate);
+      if (!normalized) continue;
+      const key = normalized.toISOString();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      uniqueDates.push(normalized);
+    }
+
+    let streak = 1;
+    for (let i = 1; i < uniqueDates.length; i += 1) {
+      const diffDays = getDaysDifference(uniqueDates[i - 1], uniqueDates[i]);
+      if (diffDays === 1) {
+        streak += 1;
+      } else {
+        break;
+      }
+      if (streak >= 365) break;
+    }
+
+    return streak;
+  }, 'calculateCurrentStreak', 0);
+}
+
+export async function updateUserStreak(userId: number): Promise<void> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) return;
+
+    const user = await database.users.get(userId);
+    if (!user) return;
+
+    const runs = await database.runs.where('userId').equals(userId).toArray();
+    let lastActivityDate: Date | null = null;
+    if (runs.length > 0) {
+      const lastRun = runs.reduce((latest, run) => {
+        const runDate = new Date(run.completedAt ?? run.createdAt ?? 0);
+        return runDate.getTime() > latest.getTime() ? runDate : latest;
+      }, new Date(0));
+      lastActivityDate = normalizeDate(lastRun);
+    }
+
+    const currentStreak = await calculateCurrentStreak(userId);
+    const longestStreak = Math.max(user.longestStreak ?? 0, currentStreak);
+
+    if (currentStreak > 0) {
+      const badgeMilestones: Array<{ milestone: number; type: 'bronze' | 'silver' | 'gold' }> = [
+        { milestone: 3, type: 'bronze' },
+        { milestone: 7, type: 'silver' },
+        { milestone: 30, type: 'gold' }
+      ];
+      const existingBadges = await database.badges.where('userId').equals(userId).toArray();
+      const toAward = badgeMilestones.filter((badge) =>
+        currentStreak >= badge.milestone &&
+        !existingBadges.some((existing) => existing.milestone === badge.milestone && existing.type === badge.type)
+      );
+
+      for (const badge of toAward) {
+        await database.badges.add({
+          userId,
+          type: badge.type,
+          milestone: badge.milestone,
+          unlockedAt: new Date(),
+          streakValueAchieved: currentStreak,
+        });
+      }
+    }
+
+    await database.users.update(userId, {
+      currentStreak,
+      longestStreak,
+      lastActivityDate,
+      streakLastUpdated: new Date()
+    });
+  }, 'updateUserStreak');
+}
+
+export async function getStreakStats(userId: number): Promise<{
+  currentStreak: number;
+  longestStreak: number;
+  lastActivityDate: Date | null;
+  streakLastUpdated: Date | null;
+}> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) {
+      return {
+        currentStreak: 0,
+        longestStreak: 0,
+        lastActivityDate: null,
+        streakLastUpdated: null
+      };
+    }
+
+    const user = await database.users.get(userId);
+    if (!user) {
+      return {
+        currentStreak: 0,
+        longestStreak: 0,
+        lastActivityDate: null,
+        streakLastUpdated: null
+      };
+    }
+
+    return {
+      currentStreak: user.currentStreak ?? 0,
+      longestStreak: user.longestStreak ?? 0,
+      lastActivityDate: user.lastActivityDate ?? null,
+      streakLastUpdated: user.streakLastUpdated ?? null
+    };
+  }, 'getStreakStats', {
+    currentStreak: 0,
+    longestStreak: 0,
+    lastActivityDate: null,
+    streakLastUpdated: null
+  });
 }
 
 // ============================================================================
@@ -2179,6 +2492,126 @@ export async function calculateTargetPaces(raceGoal: RaceGoal): Promise<{ easy: 
 }
 
 // ============================================================================
+// PACE ZONES & VDOT UTILITIES
+// ============================================================================
+
+import {
+  calculateVDOT,
+  getPaceZonesFromVDOT,
+  getDefaultPaceZones,
+  type PaceZones
+} from './pace-zones';
+
+/**
+ * Set reference race for a user and calculate VDOT
+ * @param userId - User ID
+ * @param distance - Race distance in km (5, 10, 21.1, 42.2)
+ * @param timeSeconds - Race time in seconds
+ */
+export async function setReferenceRace(
+  userId: number,
+  distance: number,
+  timeSeconds: number
+): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+
+    const vdot = calculateVDOT(distance, timeSeconds);
+
+    await db.users.update(userId, {
+      referenceRaceDistance: distance,
+      referenceRaceTime: timeSeconds,
+      referenceRaceDate: new Date(),
+      calculatedVDOT: vdot,
+      updatedAt: new Date()
+    });
+
+    console.log(`✅ Reference race set for user ${userId}: ${distance}km in ${timeSeconds}s (VDOT: ${vdot})`);
+  }, 'setReferenceRace');
+}
+
+/**
+ * Get pace zones for a user based on their reference race or defaults
+ * @param userId - User ID
+ * @returns PaceZones object with all training paces
+ */
+export async function getUserPaceZones(userId: number): Promise<PaceZones | null> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+
+    const user = await db.users.get(userId);
+    if (!user) return null;
+
+    // If user has a calculated VDOT, use it
+    if (user.calculatedVDOT) {
+      return getPaceZonesFromVDOT(user.calculatedVDOT);
+    }
+
+    // If user has reference race data, calculate VDOT
+    if (user.referenceRaceDistance && user.referenceRaceTime) {
+      const vdot = calculateVDOT(user.referenceRaceDistance, user.referenceRaceTime);
+
+      // Cache the VDOT for future use
+      await db.users.update(userId, {
+        calculatedVDOT: vdot,
+        updatedAt: new Date()
+      });
+
+      return getPaceZonesFromVDOT(vdot);
+    }
+
+    // Fall back to experience-based defaults
+    return getDefaultPaceZones(user.experience);
+  }, 'getUserPaceZones', null);
+}
+
+/**
+ * Recalculate VDOT for a user from their reference race
+ * @param userId - User ID
+ * @returns New VDOT value or null if no reference race
+ */
+export async function recalculateVDOT(userId: number): Promise<number | null> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+
+    const user = await db.users.get(userId);
+    if (!user || !user.referenceRaceDistance || !user.referenceRaceTime) {
+      return null;
+    }
+
+    const vdot = calculateVDOT(user.referenceRaceDistance, user.referenceRaceTime);
+
+    await db.users.update(userId, {
+      calculatedVDOT: vdot,
+      updatedAt: new Date()
+    });
+
+    console.log(`✅ VDOT recalculated for user ${userId}: ${vdot}`);
+    return vdot;
+  }, 'recalculateVDOT', null);
+}
+
+/**
+ * Clear reference race data for a user (reset to defaults)
+ * @param userId - User ID
+ */
+export async function clearReferenceRace(userId: number): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) throw new Error('Database not available');
+
+    await db.users.update(userId, {
+      referenceRaceDistance: undefined,
+      referenceRaceTime: undefined,
+      referenceRaceDate: undefined,
+      calculatedVDOT: undefined,
+      updatedAt: new Date()
+    });
+
+    console.log(`✅ Reference race cleared for user ${userId}`);
+  }, 'clearReferenceRace');
+}
+
+// ============================================================================
 // DATA FUSION UTILITIES
 // ============================================================================
 
@@ -2419,7 +2852,7 @@ export async function recoverFromDatabaseError(): Promise<boolean> {
     console.log('🔄 Attempting database recovery...');
     
     // Close existing database connection
-    if (db && db.isOpen()) {
+    if (db && typeof db.isOpen === 'function' && db.isOpen()) {
       await db.close();
       console.log('✅ Closed existing database connection');
     }
@@ -2755,6 +3188,10 @@ async function getPersonalRecords(userId: number) {
   return safeDbOperation(async () => {
     const database = getDatabase();
     if (!database) return [];
+    const storedRecords = await database.personalRecords.where('userId').equals(userId).toArray();
+    if (storedRecords.length > 0) {
+      return storedRecords;
+    }
     const runs = await database.runs.where('userId').equals(userId).toArray();
 
     if (runs.length === 0) {
@@ -3117,12 +3554,9 @@ function calculateGoalProgressPercentage(
   if (![baselineValue, currentValue, targetValue].every(Number.isFinite)) return 0;
   if (baselineValue === targetValue) return clamp(currentValue === targetValue ? 100 : 0);
 
-  // For time_improvement goals, we now track cumulative training volume (distance)
-  // Progress = currentValue / targetValue * 100 (higher is better)
-  // baseline is typically 0 for volume-based tracking
   const raw =
     goalType === 'time_improvement'
-      ? (currentValue / targetValue) * 100  // Volume-based: more distance = more progress
+      ? ((baselineValue - currentValue) / (baselineValue - targetValue)) * 100
       : ((currentValue - baselineValue) / (targetValue - baselineValue)) * 100;
 
   return clamp(raw);
@@ -3861,11 +4295,14 @@ export const dbUtils = {
   deleteGoal,
   updateGoal,
   getUserGoals,
+  getGoalsByUser,
   getPrimaryGoal,
   setPrimaryGoal,
   getGoal,
   getGoalWithMilestones,
   getGoalMilestones,
+  generateGoalMilestones,
+  markMilestoneAchieved,
   getGoalProgressHistory,
   calculateGoalProgressPercentage,
   recordGoalProgress,
@@ -3884,7 +4321,13 @@ export const dbUtils = {
   getRaceGoalById,
   assessFitnessLevel,
   calculateTargetPaces,
-  
+
+  // Pace zones & VDOT
+  setReferenceRace,
+  getUserPaceZones,
+  recalculateVDOT,
+  clearReferenceRace,
+
   // Plan management
   createPlan,
 	  updatePlan,
@@ -3915,6 +4358,12 @@ export const dbUtils = {
   getUserRuns,
   getRunStats,
   getUserBadges,
+  calculateCurrentStreak,
+  updateUserStreak,
+  getStreakStats,
+  normalizeDate,
+  isSameDay,
+  getDaysDifference,
   
   // Recovery & wellness
   saveSleepData,

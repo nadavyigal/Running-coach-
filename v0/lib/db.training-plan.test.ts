@@ -41,8 +41,8 @@ describe('Training Plan Creation', () => {
     expect(plan.id).toBeGreaterThan(0)
     expect(plan.userId).toBe(userId)
     expect(plan.isActive).toBe(true)
-    expect(plan.title).toBe('Recovery Training Plan')
-    expect(plan.totalWeeks).toBe(12)
+    expect(plan.title).toBe('Default Running Plan')
+    expect(plan.totalWeeks).toBe(2)
     expect(plan.planType).toBe('basic')
     
     // Verify we can retrieve the plan via getActivePlan

@@ -6,4 +6,7 @@ __tests__
 playwright-report
 coverage
 reports
+scripts
+/*.js
+/page-*.tsx
 

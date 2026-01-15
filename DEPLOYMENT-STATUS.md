@@ -16,7 +16,7 @@ The Running Coach application has been successfully deployed to Vercel with the 
 ### 1. API Key Rotation
 **Status**: ✅ Complete
 
-- **OpenAI API Key**: `sk-proj-s2Qc...yazOoA` - Validated ✅
+- **OpenAI API Key**: `YOUR_OPENAI_API_KEY` - Validated ✅
 - **Resend API Key**: `re_QeS...c7Vp` - Validated ✅
 - **PostHog API Key**: `phc_2Rcj...LZ6` - Validated ✅
 
@@ -147,7 +147,7 @@ byte index 12 is not a char boundary; it is inside 'ס' (bytes 11..13)
 
 ### Environment Variables (Vercel)
 ```
-OPENAI_API_KEY=sk-proj-s2Qc...yazOoA ✅
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY ✅
 RESEND_API_KEY=re_QeS...c7Vp ✅
 NEXT_PUBLIC_POSTHOG_API_KEY=phc_2Rcj...LZ6 ✅
 NEXT_PUBLIC_SUPABASE_URL=https://dxqglotcyirxzyqaxqln.supabase.co ✅

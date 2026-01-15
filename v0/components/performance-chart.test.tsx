@@ -137,7 +137,7 @@ describe('PerformanceChart', () => {
     );
 
     expect(screen.getByText('3 data points')).toBeInTheDocument();
-    expect(screen.getByText('Trend: ↘ Declining')).toBeInTheDocument();
+    expect(screen.getByText('Trend: Declining')).toBeInTheDocument();
   });
 
   it('shows correct color for line and trend', () => {
@@ -173,7 +173,7 @@ describe('PerformanceChart', () => {
 
     expect(screen.getByText('Single Point')).toBeInTheDocument();
     expect(screen.getByText('1 data points')).toBeInTheDocument();
-    expect(screen.getByText('Trend: → Stable')).toBeInTheDocument();
+    expect(screen.getByText('Trend: Stable')).toBeInTheDocument();
   });
 
   it('formats data correctly for chart', () => {
@@ -214,6 +214,6 @@ describe('PerformanceChart', () => {
     );
 
     expect(screen.getByText('Improving Chart')).toBeInTheDocument();
-    expect(screen.getByText('Trend: ↗ Improving')).toBeInTheDocument();
+    expect(screen.getByText('Trend: Improving')).toBeInTheDocument();
   });
 });

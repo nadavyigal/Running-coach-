@@ -2,9 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { format } from 'date-fns';
-import { useEffect, useState } from 'react';
-
-type RechartsModule = typeof import('recharts');
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from 'recharts';
 
 interface PerformanceChartProps {
   title: string;
@@ -27,18 +25,6 @@ export function PerformanceChart({
   showTrend = true,
   height = 300 
 }: PerformanceChartProps) {
-  const [recharts, setRecharts] = useState<RechartsModule | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    import('recharts').then((mod) => {
-      if (mounted) setRecharts(mod);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
   // Transform data for chart
   const chartData = data
     .map((item) => {
@@ -63,6 +49,9 @@ export function PerformanceChart({
 
   // Calculate trend line
   const calculateTrend = () => {
+    if (chartData.length == 1) {
+      return { slope: 0, intercept: chartData[0][dataKey] };
+    }
     if (chartData.length < 2) return null;
     
     const n = chartData.length;
@@ -78,6 +67,13 @@ export function PerformanceChart({
   };
 
   const trend = showTrend ? calculateTrend() : null;
+  const trendLabel = trend
+    ? trend.slope > 0
+      ? 'Improving'
+      : trend.slope < 0
+        ? 'Declining'
+        : 'Stable'
+    : null;
 
   const customTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -129,24 +125,6 @@ export function PerformanceChart({
     );
   }
 
-  if (!recharts) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{title}</CardTitle>
-          {yAxisLabel && <CardDescription>{yAxisLabel}</CardDescription>}
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center h-64 text-gray-500">
-            Loading chart…
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } = recharts;
-
   return (
     <Card>
       <CardHeader>
@@ -190,7 +168,7 @@ export function PerformanceChart({
             />
             
             {/* Trend line */}
-            {trend && showTrend && firstPoint && lastPoint && (
+            {trend && showTrend && chartData.length > 1 && firstPoint && lastPoint && (
               <ReferenceLine
                 segment={[
                   { x: firstPoint.date, y: trend.slope * firstPoint.date + trend.intercept },
@@ -209,10 +187,9 @@ export function PerformanceChart({
           <span>
             {chartData.length} data points
           </span>
-          {trend && (
+          {trendLabel && (
             <span>
-              Trend: {trend.slope > 0 ? '↗' : trend.slope < 0 ? '↘' : '→'} 
-              {trend.slope > 0 ? ' Improving' : trend.slope < 0 ? ' Declining' : ' Stable'}
+              Trend: {trendLabel}
             </span>
           )}
         </div>

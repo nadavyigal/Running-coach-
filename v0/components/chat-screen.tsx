@@ -58,7 +58,6 @@ export function ChatScreen() {
     user: contextUser,
     primaryGoal,
     plan,
-    weeklyRuns,
     weeklyStats,
     allTimeStats,
     recentRuns: contextRecentRuns,

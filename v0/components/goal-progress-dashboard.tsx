@@ -12,9 +12,7 @@ import {
   CheckCircle2,
   Trophy,
   Flag,
-  Trash2,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { dbUtils } from '@/lib/dbUtils';
 import { GoalProgressEngine, type GoalProgress } from '@/lib/goalProgressEngine';
 import type { Goal, GoalMilestone } from '@/lib/db';

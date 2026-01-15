@@ -84,7 +84,7 @@ export class OnboardingManager {
 
     // Check concurrent operation limit
     if (this.activeOperations.size >= this.maxConcurrentOperations) {
-      throw new Error(`Maximum concurrent operations (${this.maxConcurrentOperations}) exceeded`);
+      await Promise.race(this.activeOperations.values());
     }
 
     console.log(`🚀 Starting operation ${operationId}`);
@@ -260,8 +260,10 @@ export class OnboardingManager {
       if (existingUser) {
         console.log('👤 User already exists, updating instead of creating new:', existingUser.id);
         const updatedUser = await this.updateExistingUser(existingUser, profile);
+        const planId = await this.generateTrainingPlanForUser(updatedUser);
         return {
           user: updatedUser,
+          planId,
           success: true
         };
       }
@@ -302,7 +304,7 @@ export class OnboardingManager {
         throw new Error('Failed to retrieve created user');
       }
 
-      const planId = await this.generateTrainingPlan(user);
+      const planId = await this.generateTrainingPlanForUser(user);
       console.log('✅ Training plan created with ID:', planId);
 
       // Step 5: Mark onboarding as complete
@@ -403,7 +405,7 @@ export class OnboardingManager {
   /**
    * Generate training plan with unified logic
    */
-  private async generateTrainingPlan(user: User): Promise<number> {
+  private async generateTrainingPlanForUser(user: User): Promise<number> {
     try {
       console.log('🎯 Generating training plan for user:', user.id);
       
@@ -425,6 +427,20 @@ export class OnboardingManager {
       const planId = await this.createPlanWithConflictPrevention(user, fallbackPlanData);
       return planId;
     }
+  }
+
+  /**
+   * Public entrypoint for generating a plan from onboarding form data.
+   */
+  public async generateTrainingPlan(
+    profileInput: Omit<OnboardingProfile, 'onboardingComplete'> & { onboardingComplete?: boolean }
+  ): Promise<OnboardingResult> {
+    const profile: OnboardingProfile = {
+      ...profileInput,
+      onboardingComplete: profileInput.onboardingComplete ?? true,
+    };
+
+    return await this.createUserWithProfile(profile);
   }
 
 

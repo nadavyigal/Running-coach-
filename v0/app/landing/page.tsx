@@ -273,7 +273,7 @@ export default function MarketingHomePage() {
           <AccordionItem value="missed">
             <AccordionTrigger>What if I miss workouts?</AccordionTrigger>
             <AccordionContent>
-              Life happens - that's the point. Your AI coach adapts your plan when you miss sessions. No
+              Life happens - that&apos;s the point. Your AI coach adapts your plan when you miss sessions. No
               guilt, just adjustment.
             </AccordionContent>
           </AccordionItem>

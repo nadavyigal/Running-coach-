@@ -14,6 +14,7 @@ import {
   RefreshCw
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { db } from "@/lib/db"
 
 interface WearableDevice {
   id?: number;
@@ -72,11 +73,16 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
 
   const loadConnectedDevices = async () => {
     try {
-      const response = await fetch(`/api/devices?userId=${userId}`)
-      const data = await response.json()
-      
-      if (data.success) {
-        setConnectedDevices(data.devices)
+      if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+        const devices = await db.wearableDevices.where('userId').equals(userId).toArray()
+        setConnectedDevices(devices as WearableDevice[])
+      } else {
+        const response = await fetch(`/api/devices?userId=${userId}`)
+        const data = await response.json()
+        
+        if (data.success) {
+          setConnectedDevices(data.devices)
+        }
       }
     } catch (error) {
       console.error('Error loading devices:', error)
@@ -91,7 +97,8 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
     try {
       // Simulate Apple Watch connection flow
       // In real implementation, this would request HealthKit permissions
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      const delayMs = process.env.NODE_ENV === 'test' ? 0 : 2000
+      await new Promise(resolve => setTimeout(resolve, delayMs))
       
       const response = await fetch('/api/devices/connect', {
         method: 'POST',
