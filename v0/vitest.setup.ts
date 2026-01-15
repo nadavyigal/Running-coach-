@@ -422,10 +422,20 @@ afterEach(() => {
 (global as any).ErrorBoundaryAssertions = ErrorBoundaryAssertions;
 
 // Enhanced error handling for uncaught errors in tests
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
+// Guard against adding multiple listeners (fixes MaxListenersExceededWarning)
+const UNHANDLED_REJECTION_HANDLER_KEY = '__vitest_unhandled_rejection_handler__';
+const UNCAUGHT_EXCEPTION_HANDLER_KEY = '__vitest_uncaught_exception_handler__';
 
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
-});
+if (!(globalThis as any)[UNHANDLED_REJECTION_HANDLER_KEY]) {
+  (globalThis as any)[UNHANDLED_REJECTION_HANDLER_KEY] = true;
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  });
+}
+
+if (!(globalThis as any)[UNCAUGHT_EXCEPTION_HANDLER_KEY]) {
+  (globalThis as any)[UNCAUGHT_EXCEPTION_HANDLER_KEY] = true;
+  process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+  });
+}
