@@ -20,7 +20,7 @@ describe('OnboardingScreen - Atomic Finish', () => {
     render(<OnboardingScreen onComplete={onComplete} />)
 
     // Step 1 -> 2
-    fireEvent.click(screen.getByRole('button', { name: /get started/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
 
     // Select goal
     fireEvent.click(screen.getByText(/Build a Running Habit/i))
@@ -44,7 +44,7 @@ describe('OnboardingScreen - Atomic Finish', () => {
     fireEvent.click(screen.getByRole('button', { name: /continue/i }))
 
     // Finish
-    fireEvent.click(screen.getByRole('button', { name: /Start My Journey/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Complete Setup/i }))
 
     await waitFor(() => {
       expect(completeSpy).toHaveBeenCalled()
@@ -61,7 +61,7 @@ describe('OnboardingScreen - Atomic Finish', () => {
     render(<OnboardingScreen onComplete={onComplete} />)
 
     // Minimal path to Finish same as above
-    fireEvent.click(screen.getByRole('button', { name: /get started/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
     fireEvent.click(screen.getByText(/Build a Running Habit/i))
     fireEvent.click(screen.getByRole('button', { name: /continue/i }))
     fireEvent.click(screen.getByText(/Beginner/i))
@@ -75,7 +75,7 @@ describe('OnboardingScreen - Atomic Finish', () => {
     fireEvent.click(screen.getByText(/Morning/i))
     fireEvent.click(screen.getByRole('button', { name: /continue/i }))
 
-    fireEvent.click(screen.getByRole('button', { name: /Start My Journey/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Complete Setup/i }))
 
     await waitFor(() => {
       expect(onComplete).not.toHaveBeenCalled()

@@ -1,9 +1,10 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react"
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from "react"
 import type { User, Plan, Goal, Run, Workout } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { syncUserRunData } from "@/lib/run-recording"
+import { restoreUserMemory, syncUserMemory } from "@/lib/userMemory"
 
 // ============================================================================
 // TYPES
@@ -122,6 +123,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const [isInitialized, setIsInitialized] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const memorySyncTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const userId = user?.id ?? null
 
@@ -185,6 +187,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       // Fetch all data in parallel
       const [
+        refreshedUser,
         activePlan,
         primary,
         active,
@@ -193,6 +196,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         all,
         workouts,
       ] = await Promise.all([
+        dbUtils.getUser(userId),
         dbUtils.getActivePlan(userId),
         dbUtils.getPrimaryGoal(userId),
         dbUtils.getUserGoals(userId, "active"),
@@ -202,6 +206,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         dbUtils.getWorkoutsForDateRange(userId, start, end),
       ])
 
+      if (refreshedUser) {
+        setUser(refreshedUser)
+      }
       setPlan(activePlan)
       setPrimaryGoal(primary)
       setActiveGoals(active)
@@ -243,8 +250,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       try {
         const currentUser = await dbUtils.getCurrentUser()
         if (!currentUser) {
-          setIsLoading(false)
-          setIsInitialized(true)
+          const restored = await restoreUserMemory()
+          if (restored) {
+            setUser(restored)
+          } else {
+            setIsLoading(false)
+            setIsInitialized(true)
+          }
           return
         }
 
@@ -281,6 +293,36 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         })
     }
   }, [user?.id, refresh])
+
+  useEffect(() => {
+    if (!user?.id) return
+
+    if (memorySyncTimeout.current) {
+      clearTimeout(memorySyncTimeout.current)
+    }
+
+    memorySyncTimeout.current = setTimeout(() => {
+      syncUserMemory(user.id).catch((syncError) => {
+        console.warn("[DataContext] User memory sync failed:", syncError)
+      })
+    }, 2000)
+
+    return () => {
+      if (memorySyncTimeout.current) {
+        clearTimeout(memorySyncTimeout.current)
+        memorySyncTimeout.current = null
+      }
+    }
+  }, [
+    user?.id,
+    user?.updatedAt ? new Date(user.updatedAt).getTime() : 0,
+    plan?.id,
+    plan?.updatedAt ? new Date(plan.updatedAt).getTime() : 0,
+    weeklyWorkouts.length,
+    weeklyRuns.length,
+    activeGoals.length,
+    allRuns.length,
+  ])
 
   // Listen for run-saved events to refresh data
   useEffect(() => {

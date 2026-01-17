@@ -275,6 +275,84 @@ export interface User {
   calculatedVDOT?: number;         // cached VDOT score
   // Average weekly running volume from onboarding (for "regular" runners)
   averageWeeklyKm?: number;
+
+  // ==========================================
+  // ADVANCED PHYSIOLOGICAL METRICS
+  // ==========================================
+
+  /** Lactate threshold pace (seconds per km) */
+  lactateThreshold?: number;
+
+  /** Heart rate at lactate threshold (bpm) */
+  lactateThresholdHR?: number;
+
+  /** VO2 Max (ml/kg/min) - maximal oxygen uptake */
+  vo2Max?: number;
+
+  /** HRV baseline (milliseconds, RMSSD method) */
+  hrvBaseline?: number;
+
+  /** Maximum heart rate (bpm) - measured or calculated */
+  maxHeartRate?: number;
+
+  /** How max HR was determined */
+  maxHeartRateSource?: 'measured' | 'calculated' | 'user_provided';
+
+  /** Resting heart rate (bpm) - measured in morning */
+  restingHeartRate?: number;
+
+  // ==========================================
+  // HISTORICAL RUNNING DATA
+  // ==========================================
+
+  /** Array of past significant runs for training context */
+  historicalRuns?: Array<{
+    distance: number;      // km
+    time: number;          // seconds
+    date: Date;
+    type?: 'race' | 'long_run' | 'workout' | 'easy';
+    notes?: string;
+    surface?: 'road' | 'trail' | 'track' | 'treadmill';
+  }>;
+
+  /** Best recent pace per km (cached for quick access) */
+  bestRecentPacePerKm?: number;
+
+  /** Weekly distance trend (last 12 weeks before onboarding) */
+  weeklyDistanceHistory?: number[];  // [week1_km, week2_km, ...]
+
+  /** Previous training block details (if returning runner) */
+  previousTrainingBlock?: {
+    endDate: Date;
+    peakWeeklyDistance: number;  // km
+    longestRun: number;           // km
+    injuries?: string[];
+  };
+
+  // ==========================================
+  // FITNESS ASSESSMENTS
+  // ==========================================
+
+  /** Functional Threshold Pace (FTP) in seconds per km */
+  functionalThresholdPace?: number;
+
+  /** Critical Speed (CS) in km/h */
+  criticalSpeed?: number;
+
+  /** D' (D prime) - anaerobic capacity in meters */
+  dPrime?: number;
+
+  /** Lactate threshold as % of VO2 Max */
+  lactateThresholdPercent?: number;
+
+  /** Running economy (ml O2/kg/km) - lower is better */
+  runningEconomy?: number;
+
+  /** Metabolic fitness score (0-100, derived from multiple metrics) */
+  metabolicFitnessScore?: number;
+
+  /** Last fitness assessment date */
+  lastFitnessAssessment?: Date;
 }
 
 export interface PlanSetupPreferences {

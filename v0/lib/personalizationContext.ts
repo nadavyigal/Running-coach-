@@ -1,4 +1,4 @@
-import { Goal } from './db';
+import { Goal, db } from './db';
 import { dbUtils } from './dbUtils';
 import { RecoveryEngine } from './recoveryEngine';
 import { logger } from './logger';
@@ -39,6 +39,26 @@ export interface PersonalizationContext {
     factors: string[];
   };
 
+  /** Advanced physiological metrics (if available) */
+  advancedMetrics?: {
+    vdot?: number;
+    vo2Max?: number;
+    lactateThreshold?: number; // seconds per km
+    lactateThresholdHR?: number; // bpm
+    hrvBaseline?: number; // ms
+    maxHeartRate?: number; // bpm
+    restingHeartRate?: number; // bpm
+    runningEconomy?: number; // ml O2/kg/km
+  };
+
+  /** Historical training data */
+  historicalData?: {
+    bestRecentPace?: number; // seconds per km
+    weeklyVolumeTrend?: number[]; // last 12 weeks (km)
+    significantRuns?: number; // count
+    previousPeakVolume?: number; // km per week
+  };
+
   /** Coaching profile preferences (if available) */
   coachingPreferences?: {
     communicationStyle: any;
@@ -64,11 +84,20 @@ export class PersonalizationContextBuilder {
       logger.info(`Building personalization context for user ${userId}`);
 
       // Fetch all data in parallel for performance
-      const [userProfile, activeGoals, activitySummary, recoveryContext] = await Promise.all([
+      const [
+        userProfile,
+        activeGoals,
+        activitySummary,
+        recoveryContext,
+        advancedMetrics,
+        historicalData,
+      ] = await Promise.all([
         this.getUserProfile(userId),
         this.getActiveGoals(userId),
         this.getActivitySummary(userId),
         this.getRecoveryContext(userId),
+        this.getAdvancedMetrics(userId),
+        this.getHistoricalData(userId),
       ]);
 
       // Build the context
@@ -77,6 +106,8 @@ export class PersonalizationContextBuilder {
         activeGoals,
         recentActivity: activitySummary,
         recoveryStatus: recoveryContext,
+        advancedMetrics,
+        historicalData,
         personalizationStrength: 0,
         recommendationStrategy: 'basic',
       };
@@ -234,6 +265,69 @@ export class PersonalizationContextBuilder {
   }
 
   /**
+   * Get advanced physiological metrics if available
+   */
+  private static async getAdvancedMetrics(userId: number) {
+    try {
+      const user = await dbUtils.getUser(userId);
+      if (!user) return undefined;
+
+      const hasMetrics = Boolean(
+        user.vo2Max ||
+          user.lactateThreshold ||
+          user.hrvBaseline ||
+          user.maxHeartRate ||
+          user.calculatedVDOT
+      );
+
+      if (!hasMetrics) return undefined;
+
+      let restingHR = user.restingHeartRate;
+      if (!restingHR && db?.heartRateZoneSettings?.where) {
+        const hrSettings = await db.heartRateZoneSettings
+          .where('userId')
+          .equals(userId)
+          .first();
+        restingHR = hrSettings?.restingHeartRate;
+      }
+
+      return {
+        vdot: user.calculatedVDOT,
+        vo2Max: user.vo2Max,
+        lactateThreshold: user.lactateThreshold,
+        lactateThresholdHR: user.lactateThresholdHR,
+        hrvBaseline: user.hrvBaseline,
+        maxHeartRate: user.maxHeartRate,
+        restingHeartRate: restingHR,
+        runningEconomy: user.runningEconomy,
+      };
+    } catch (error) {
+      logger.error('[PersonalizationContext] Failed to fetch advanced metrics:', error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Get historical training data summary
+   */
+  private static async getHistoricalData(userId: number) {
+    try {
+      const user = await dbUtils.getUser(userId);
+      if (!user) return undefined;
+
+      return {
+        bestRecentPace: user.bestRecentPacePerKm,
+        weeklyVolumeTrend: user.weeklyDistanceHistory,
+        significantRuns: user.historicalRuns?.length || 0,
+        previousPeakVolume: user.previousTrainingBlock?.peakWeeklyDistance,
+      };
+    } catch (error) {
+      logger.error('[PersonalizationContext] Failed to fetch historical data:', error);
+      return undefined;
+    }
+  }
+
+  /**
    * Validate personalization context
    * @param context - Context to validate
    * @returns True if valid, false otherwise
@@ -261,29 +355,39 @@ export class PersonalizationContextBuilder {
    * @returns Strength score 0-100
    */
   static getContextStrength(context: PersonalizationContext): number {
-    let strength = 0;
+    let score = 0;
 
-    // Base profile data (40 points)
-    if (context.userProfile.goal) strength += 10;
-    if (context.userProfile.experience) strength += 10;
-    if (context.userProfile.coachingStyle) strength += 10;
-    if (context.userProfile.age) strength += 5;
-    if (context.userProfile.motivations.length > 0) strength += 5;
+    // Base profile (30 points)
+    if (context.userProfile.goal) score += 10;
+    if (context.userProfile.experience) score += 10;
+    if (context.userProfile.age) score += 5;
+    if (context.userProfile.daysPerWeek) score += 5;
 
-    // Goals (30 points)
-    if (context.activeGoals.length > 0) strength += 15;
-    if (context.activeGoals.length > 1) strength += 10;
-    if (context.activeGoals.some((g) => g.isPrimary)) strength += 5;
+    // Goals (20 points)
+    if (context.activeGoals.length > 0) score += 10;
+    if (context.activeGoals.length > 1) score += 10;
 
-    // Activity data (20 points)
-    if (context.recentActivity.runsLast30Days > 0) strength += 10;
-    if (context.recentActivity.runsLast30Days >= 4) strength += 5;
-    if (context.recentActivity.consistency > 50) strength += 5;
+    // Recent activity (20 points)
+    if (context.recentActivity.runsLast7Days > 0) score += 10;
+    if (context.recentActivity.consistency > 50) score += 10;
 
-    // Recovery data (10 points)
-    if (context.recoveryStatus) strength += 10;
+    // Advanced metrics (20 points)
+    if (context.advancedMetrics) {
+      if (context.advancedMetrics.vdot) score += 5;
+      if (context.advancedMetrics.vo2Max) score += 5;
+      if (context.advancedMetrics.lactateThreshold) score += 5;
+      if (context.advancedMetrics.maxHeartRate) score += 5;
+    }
 
-    return Math.min(100, strength);
+    // Historical data (10 points)
+    if (context.historicalData) {
+      if (context.historicalData.significantRuns && context.historicalData.significantRuns > 0) {
+        score += 5;
+      }
+      if (context.historicalData.weeklyVolumeTrend) score += 5;
+    }
+
+    return Math.min(score, 100);
   }
 
   /**
@@ -329,4 +433,13 @@ export class PersonalizationContextBuilder {
       recommendationStrategy: 'basic',
     };
   }
+}
+
+/**
+ * Convenience function to build personalization context
+ * @param userId - User ID to build context for
+ * @returns Personalization context
+ */
+export async function buildPersonalizationContext(userId: number): Promise<PersonalizationContext> {
+  return PersonalizationContextBuilder.build(userId);
 }
