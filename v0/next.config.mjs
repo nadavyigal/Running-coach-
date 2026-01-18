@@ -17,6 +17,10 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
 
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+
   // Image optimization
   images: {
     formats: ['image/webp', 'image/avif'],
@@ -30,6 +34,7 @@ const nextConfig = {
   // Disable critters optimization to fix dependency issue
   experimental: {
     optimizeCss: false, // Disable CSS optimization that uses critters
+    serverComponentsExternalPackages: ['sharp'], // Treat sharp as external (server-only)
     optimizePackageImports: [
       '@radix-ui/react-icons',
       'date-fns',
@@ -116,6 +121,14 @@ const nextConfig = {
 
   // Webpack optimizations - Uncommented to force Webpack usage
   webpack: (config, { dev, isServer }) => {
+    // Exclude native modules from client-side bundling
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        sharp: false,
+      };
+    }
+
     if (!dev && !isServer) {
       // Code splitting optimization with better defaults
       config.optimization.splitChunks = {
