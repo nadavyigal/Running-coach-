@@ -170,3 +170,18 @@ export const trackRouteWizardMapToggled = async (properties?: Record<string, any
 export const trackRouteSelectedFromMap = async (properties?: Record<string, any>) => {
   await trackEvent('route_selected_from_map', properties)
 }
+
+// Authentication events
+export const trackAuthEvent = async (
+  eventType: 'signup' | 'login' | 'logout' | 'migration'
+) => {
+  await trackEvent('auth_event', { event_type: eventType })
+}
+
+// Sync events
+export const trackSyncEvent = async (
+  eventType: 'sync_started' | 'sync_completed' | 'sync_failed',
+  recordCount?: number
+) => {
+  await trackEvent('sync_event', { event_type: eventType, record_count: recordCount })
+}
