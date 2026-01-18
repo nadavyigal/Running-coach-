@@ -1,30 +1,19 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
-import { Slider } from "@/components/ui/slider"
 import {
   AlertCircle,
   ArrowLeft,
-  ArrowRight,
   Calendar,
   CheckCircle2,
-  Clock,
-  CloudSun,
   Gauge,
-  Moon,
+  HelpCircle,
   Route,
   Sparkles,
-  Sun,
-  Target,
   TrendingUp,
-  User,
 } from "lucide-react"
 import { dbUtils, setReferenceRace } from "@/lib/dbUtils"
-import { calculateVDOT, getPaceZonesFromVDOT } from "@/lib/pace-zones"
 import { useToast } from "@/hooks/use-toast"
 import {
   trackOnboardingStarted,
@@ -41,6 +30,254 @@ import { onboardingManager } from "@/lib/onboardingManager"
 import OnboardingErrorBoundary from "@/components/onboarding-error-boundary"
 import { UserPrivacySettings } from "@/components/privacy-dashboard"
 import { cn } from "@/lib/utils"
+
+type Weekday = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
+
+const WEEKDAYS: Array<{ key: Weekday; label: string; weekdayIndex: number }> = [
+  { key: 'Mon', label: 'Monday', weekdayIndex: 1 },
+  { key: 'Tue', label: 'Tuesday', weekdayIndex: 2 },
+  { key: 'Wed', label: 'Wednesday', weekdayIndex: 3 },
+  { key: 'Thu', label: 'Thursday', weekdayIndex: 4 },
+  { key: 'Fri', label: 'Friday', weekdayIndex: 5 },
+  { key: 'Sat', label: 'Saturday', weekdayIndex: 6 },
+  { key: 'Sun', label: 'Sunday', weekdayIndex: 0 },
+]
+
+const ALL_WEEKDAYS: Weekday[] = WEEKDAYS.map((day) => day.key)
+
+const DISTANCE_CHIPS = [
+  { value: 5, label: '5K' },
+  { value: 10, label: '10K' },
+  { value: 21.1, label: 'Half' },
+  { value: 42.2, label: 'Full' },
+]
+
+const WHEEL_ITEM_HEIGHT = 48
+const WHEEL_VISIBLE_ITEMS = 5
+const WHEEL_CENTER_OFFSET = Math.floor(WHEEL_VISIBLE_ITEMS / 2)
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function formatTimeHms(totalSeconds: number) {
+  const seconds = clampNumber(Math.round(totalSeconds), 0, 99 * 3600)
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+function getDefaultRaceTimeSeconds(distanceKm: number) {
+  if (distanceKm === 5) return 30 * 60
+  if (distanceKm === 10) return 58 * 60
+  if (distanceKm === 21.1) return 2 * 60 * 60
+  if (distanceKm === 42.2) return 4 * 60 * 60 + 30 * 60
+  return 60 * 60
+}
+
+function getWeekdayLabel(day: Weekday) {
+  return WEEKDAYS.find((d) => d.key === day)?.label || day
+}
+
+function selectTrainingDays(availableDays: Weekday[], daysPerWeek: number, longRunDay: Weekday): Weekday[] {
+  const dayToIndex: Record<Weekday, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 }
+  const indexToDay: Record<number, Weekday> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' }
+
+  const availableSet = new Set(availableDays)
+  const desired = Math.min(Math.max(daysPerWeek, 2), 6)
+  const chosen = new Set<Weekday>()
+
+  if (availableSet.has(longRunDay)) chosen.add(longRunDay)
+
+  const candidates = availableDays
+    .slice()
+    .sort((a, b) => dayToIndex[a] - dayToIndex[b])
+
+  const circularDistance = (a: number, b: number) => {
+    const diff = Math.abs(a - b)
+    return Math.min(diff, 7 - diff)
+  }
+
+  while (chosen.size < desired) {
+    let best: Weekday | null = null
+    let bestScore = -1
+
+    for (const candidate of candidates) {
+      if (chosen.has(candidate)) continue
+      const candidateIndex = dayToIndex[candidate]
+      const distances = Array.from(chosen).map((d) => circularDistance(candidateIndex, dayToIndex[d]))
+      const minDistance = distances.length ? Math.min(...distances) : 7
+      if (minDistance > bestScore) {
+        bestScore = minDistance
+        best = candidate
+      }
+    }
+
+    if (!best) break
+    chosen.add(best)
+  }
+
+  return Array.from(chosen)
+    .map((d) => ({ d, idx: dayToIndex[d] }))
+    .sort((a, b) => a.idx - b.idx)
+    .map((x) => indexToDay[x.idx] ?? 'Sun')
+}
+
+function SelectCard(props: {
+  selected: boolean
+  onClick: () => void
+  title: string
+  subtitle?: string
+  left?: ReactNode
+  right?: ReactNode
+}) {
+  const { selected, onClick, title, subtitle, left, right } = props
+  return (
+    <button type="button" onClick={onClick} className="w-full text-left">
+      <div
+        className={cn(
+          'relative overflow-hidden border rounded-3xl px-6 py-5 flex items-center justify-between shadow-lg transition-all duration-200 bg-gradient-to-br',
+          selected
+            ? 'border-emerald-400/60 ring-2 ring-inset ring-emerald-400/30 from-emerald-500/[0.15] via-emerald-500/[0.08] to-emerald-500/[0.03] text-white'
+            : 'border-white/[0.15] hover:border-white/30 from-white/[0.08] via-white/[0.05] to-white/[0.02] text-white hover:from-white/[0.12]'
+        )}
+      >
+        <div className="flex items-center gap-4">
+          {left && (
+            <div className="h-11 w-11 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-emerald-300">
+              {left}
+            </div>
+          )}
+          <div className="flex-1">
+            <div className="text-lg font-medium">{title}</div>
+            {subtitle && <div className="text-sm text-white/60 mt-1.5 leading-relaxed">{subtitle}</div>}
+          </div>
+        </div>
+        {right && <div className="ml-4">{right}</div>}
+      </div>
+    </button>
+  )
+}
+
+function WheelColumn(props: {
+  value: number
+  min: number
+  max: number
+  padTo2?: boolean
+  suffix?: string
+  ariaLabel: string
+  onChange: (value: number) => void
+}) {
+  const { value, min, max, padTo2, suffix, ariaLabel, onChange } = props
+  const ref = useRef<HTMLDivElement | null>(null)
+  const scrollTimeout = useRef<number | null>(null)
+  const isUserScrolling = useRef(false)
+  const isInitialized = useRef(false)
+
+  const items = useMemo(() => {
+    const values = Array.from({ length: max - min + 1 }, (_, idx) => min + idx)
+    return [
+      ...Array.from({ length: WHEEL_CENTER_OFFSET }).map(() => null),
+      ...values,
+      ...Array.from({ length: WHEEL_CENTER_OFFSET }).map(() => null),
+    ]
+  }, [min, max])
+
+  const getScrollTopForValue = (val: number) => {
+    const valueIndex = val - min
+    return valueIndex * WHEEL_ITEM_HEIGHT
+  }
+
+  const getValueFromScrollTop = (scrollTop: number) => {
+    const valueIndex = Math.round(scrollTop / WHEEL_ITEM_HEIGHT)
+    return Math.min(max, Math.max(min, min + valueIndex))
+  }
+
+  useEffect(() => {
+    if (isInitialized.current) return
+    const container = ref.current
+    if (!container) return
+    container.scrollTop = getScrollTopForValue(value)
+    isInitialized.current = true
+  }, [])
+
+  useEffect(() => {
+    if (!isInitialized.current) return
+    if (isUserScrolling.current) return
+    const container = ref.current
+    if (!container) return
+    const targetScrollTop = getScrollTopForValue(value)
+    if (Math.abs(container.scrollTop - targetScrollTop) > 2) {
+      container.scrollTop = targetScrollTop
+    }
+  }, [value, min])
+
+  const handleScroll = () => {
+    isUserScrolling.current = true
+    if (scrollTimeout.current) window.clearTimeout(scrollTimeout.current)
+    scrollTimeout.current = window.setTimeout(() => {
+      const container = ref.current
+      if (!container) return
+
+      const newValue = getValueFromScrollTop(container.scrollTop)
+      const snappedScrollTop = getScrollTopForValue(newValue)
+
+      onChange(newValue)
+
+      container.scrollTo({ top: snappedScrollTop, behavior: 'smooth' })
+
+      setTimeout(() => {
+        isUserScrolling.current = false
+      }, 150)
+    }, 100)
+  }
+
+  return (
+    <div className="relative w-20">
+      <div
+        ref={ref}
+        aria-label={ariaLabel}
+        role="listbox"
+        className="h-60 overflow-y-auto no-scrollbar"
+        onScroll={handleScroll}
+        style={{ scrollSnapType: 'y mandatory' }}
+      >
+        {items.map((item, idx) => {
+          const isSelected = item === value
+          return (
+            <button
+              key={`${ariaLabel}-${idx}`}
+              type="button"
+              className={cn(
+                'w-full h-12 flex items-center justify-center text-xl transition',
+                item === null ? 'opacity-0 pointer-events-none' : 'opacity-40',
+                isSelected && 'opacity-100 font-semibold text-white'
+              )}
+              style={{ scrollSnapAlign: 'center' }}
+              onClick={() => {
+                if (typeof item !== 'number') return
+                onChange(item)
+                const container = ref.current
+                if (container) {
+                  container.scrollTo({ top: getScrollTopForValue(item), behavior: 'smooth' })
+                }
+              }}
+            >
+              {typeof item === 'number'
+                ? `${padTo2 ? String(item).padStart(2, '0') : item}${suffix ?? ''}`
+                : ''}
+            </button>
+          )
+        })}
+      </div>
+      <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-12 rounded-lg border border-white/10 bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-neutral-950 via-neutral-950/80 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-neutral-950 via-neutral-950/80 to-transparent" />
+    </div>
+  )
+}
 
 interface OnboardingScreenProps {
   onComplete: () => void
@@ -73,7 +310,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     // Track user context on start
     trackUserContext({
       demographics: { experience: '', goal: '' } as any,
-      preferences: { daysPerWeek: 3, preferredTimes: [] } as any,
+      preferences: { daysPerWeek: 3, preferredTimes: ['morning'] } as any,
       deviceInfo: {
         platform: typeof window !== 'undefined' ? window.navigator.platform : 'unknown'
       } as any,
@@ -128,14 +365,17 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     setCurrentStep(1);
     setSelectedGoal("");
     setSelectedExperience("");
-    setSelectedTimes([]);
-    setDaysPerWeek([3]);
+    setSelectedTimes(["morning"]);
+    setDaysPerWeek(3);
+    setLongRunDay('Sat');
     setRpe(null);
     setAge(null);
     setReferenceRaceDistance(10);
-    setReferenceRaceMinutes(null);
-    setReferenceRaceSeconds(null);
-    setSkipReferenceRace(false);
+    setTimeSeeded(true);
+    const resetSeconds = getDefaultRaceTimeSeconds(10);
+    setReferenceRaceHours(Math.floor(resetSeconds / 3600));
+    setReferenceRaceMinutes(Math.floor((resetSeconds % 3600) / 60));
+    setReferenceRaceSeconds(resetSeconds % 60);
     setAverageWeeklyKm(null);
     setSkipWeeklyKm(false);
     setConsents({
@@ -154,15 +394,25 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const [selectedGoal, setSelectedGoal] = useState<string>("")
   const [selectedExperience, setSelectedExperience] = useState<string>("")
-  const [selectedTimes, setSelectedTimes] = useState<string[]>([])
-  const [daysPerWeek, setDaysPerWeek] = useState([3])
+  const [selectedTimes, setSelectedTimes] = useState<string[]>(["morning"])
+  const [daysPerWeek, setDaysPerWeek] = useState<number>(3)
+  const [longRunDay, setLongRunDay] = useState<Weekday>('Sat')
   const [rpe, setRpe] = useState<number | null>(null)
   const [age, setAge] = useState<number | null>(null)
-  // Reference race for pace zone calculation
-  const [referenceRaceDistance, setReferenceRaceDistance] = useState<number>(10) // Default 10K
-  const [referenceRaceMinutes, setReferenceRaceMinutes] = useState<number | null>(null)
-  const [referenceRaceSeconds, setReferenceRaceSeconds] = useState<number | null>(null)
-  const [skipReferenceRace, setSkipReferenceRace] = useState(false)
+  const [referenceRaceDistance, setReferenceRaceDistance] = useState<number>(10)
+  const [timeSeeded, setTimeSeeded] = useState(true)
+  const [referenceRaceHours, setReferenceRaceHours] = useState<number>(() => {
+    const initialSeconds = getDefaultRaceTimeSeconds(10)
+    return Math.floor(initialSeconds / 3600)
+  })
+  const [referenceRaceMinutes, setReferenceRaceMinutes] = useState<number>(() => {
+    const initialSeconds = getDefaultRaceTimeSeconds(10)
+    return Math.floor((initialSeconds % 3600) / 60)
+  })
+  const [referenceRaceSeconds, setReferenceRaceSeconds] = useState<number>(() => {
+    const initialSeconds = getDefaultRaceTimeSeconds(10)
+    return initialSeconds % 60
+  })
   const [averageWeeklyKm, setAverageWeeklyKm] = useState<number | null>(null)
   const [skipWeeklyKm, setSkipWeeklyKm] = useState(false)
   const [consents, setConsents] = useState({
@@ -184,18 +434,21 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   })
   const { toast } = useToast()
 
+  const defaultRaceSeconds = useMemo(
+    () => getDefaultRaceTimeSeconds(referenceRaceDistance),
+    [referenceRaceDistance]
+  )
+  const referenceRaceTimeSeconds = referenceRaceHours * 3600 + referenceRaceMinutes * 60 + referenceRaceSeconds
+
+  useEffect(() => {
+    if (!timeSeeded) return
+    setReferenceRaceHours(Math.floor(defaultRaceSeconds / 3600))
+    setReferenceRaceMinutes(Math.floor((defaultRaceSeconds % 3600) / 60))
+    setReferenceRaceSeconds(defaultRaceSeconds % 60)
+  }, [defaultRaceSeconds, timeSeeded])
+
   const totalSteps = 7
-  const onboardingSteps = [
-    { id: "welcome", title: "Welcome" },
-    { id: "goal", title: "Goal" },
-    { id: "experience", title: "Experience" },
-    { id: "age", title: "Age" },
-    { id: "race", title: "Race" },
-    { id: "schedule", title: "Schedule" },
-    { id: "review", title: "Review" },
-  ]
-  const currentStepIndex = currentStep - 1
-  const progressValue = ((currentStepIndex + 1) / totalSteps) * 100
+  const progressPercent = Math.round(((currentStep - 1) / (totalSteps - 1)) * 100)
 
   const nextStep = () => {
     if (currentStep < totalSteps) {
@@ -225,10 +478,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         case 4:
           return age !== null && age >= 10 && age <= 100
         case 5:
-          // Reference race is optional (can skip)
-          return skipReferenceRace || (referenceRaceMinutes !== null && referenceRaceMinutes > 0)
+          return referenceRaceTimeSeconds > 0
         case 6:
-          return (Array.isArray(selectedTimes) && selectedTimes.length > 0) && (Array.isArray(daysPerWeek) && (daysPerWeek[0] ?? 0) >= 2)
+          return daysPerWeek >= 2 && Boolean(longRunDay)
         default:
           return true
       }
@@ -245,9 +497,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           case 4:
             return { field: 'age', message: 'Valid age (10-100) is required' }
           case 5:
-            return { field: 'referenceRace', message: 'Enter your race time or skip this step' }
+            return { field: 'referenceRace', message: 'Enter your current race time' }
           case 6:
-            return { field: 'schedule', message: 'At least one time slot and 2+ days per week required' }
+            return { field: 'schedule', message: 'Select your schedule details to continue' }
           default:
             return { field: 'unknown', message: 'Validation failed' }
         }
@@ -273,62 +525,18 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         return "Please tell us about your running experience"
       case 4:
         return "Age helps us personalize your training"
+      case 5:
+        return "Enter your current race time to continue"
       case 6:
-        return "Select at least one time slot and training days"
+        return "Select your training days and long run day"
       default:
         return "Please complete all required fields"
     }
   }
 
   const isStepValid = canProceed()
-
-  const renderNavigation = () => {
-    const isFinalStep = currentStep === totalSteps
-    const isDisabled = !isStepValid || (isFinalStep && isGeneratingPlan)
-
-    return (
-      <div className="flex justify-between pt-4">
-        <Button
-          variant="outline"
-          onClick={prevStep}
-          disabled={currentStep === 1}
-          className="flex items-center gap-2"
-          type="button"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Previous
-        </Button>
-        <Button
-          onClick={isFinalStep ? handleComplete : nextStep}
-          disabled={isDisabled}
-          className="flex items-center gap-2"
-        >
-          {isFinalStep ? (
-            isGeneratingPlan ? (
-              <>
-                <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-                Completing...
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="h-4 w-4" />
-                Complete Setup
-              </>
-            )
-          ) : (
-            <>
-              Next
-              <ArrowRight className="h-4 w-4" />
-            </>
-          )}
-        </Button>
-      </div>
-    )
-  }
-
-  const handleTimeSlotToggle = (time: string) => {
-    setSelectedTimes((prev) => (prev.includes(time) ? prev.filter((t) => t !== time) : [...prev, time]))
-  }
+  const isFinalStep = currentStep === totalSteps
+  const isActionDisabled = !isStepValid || (isFinalStep && isGeneratingPlan)
 
   const applyAiProfile = (profile: {
     goal?: string
@@ -340,8 +548,13 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   }) => {
     if (profile.goal) setSelectedGoal(profile.goal)
     if (profile.experience) setSelectedExperience(profile.experience)
-    if (Array.isArray(profile.preferredTimes)) setSelectedTimes(profile.preferredTimes)
-    if (typeof profile.daysPerWeek === "number") setDaysPerWeek([profile.daysPerWeek])
+    if (Array.isArray(profile.preferredTimes) && profile.preferredTimes.length > 0) {
+      setSelectedTimes(profile.preferredTimes)
+    }
+    if (typeof profile.daysPerWeek === "number") {
+      const normalizedDays = clampNumber(profile.daysPerWeek, 2, 6)
+      setDaysPerWeek(normalizedDays)
+    }
     if (typeof profile.age === "number") setAge(profile.age)
     if (typeof profile.rpe === "number") setRpe(profile.rpe)
   }
@@ -369,17 +582,27 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       try {
         console.log(`📝 Attempt ${retryCount + 1}/${maxRetries}: Atomic Finish commit...`)
         
+        const availableDays = ALL_WEEKDAYS
+        const trainingDays = selectTrainingDays(availableDays, daysPerWeek, longRunDay)
+        const planPreferences = {
+          availableDays,
+          trainingDays,
+          longRunDay,
+          currentRaceTimeSeconds: referenceRaceTimeSeconds,
+        }
+
         // Prepare form data
         const formData = {
           goal: selectedGoal,
           experience: selectedExperience,
           selectedTimes,
-          daysPerWeek: daysPerWeek[0],
+          daysPerWeek,
           rpe,
           age,
           averageWeeklyKm,
           consents,
-          privacySettings
+          privacySettings,
+          planPreferences,
         }
         
         // Validate required fields
@@ -404,15 +627,15 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           rpe: (formData.rpe ?? undefined) as any,
           age: (formData.age ?? undefined) as any,
           averageWeeklyKm: (formData.averageWeeklyKm ?? undefined) as any,
-          privacySettings: formData.privacySettings
+          privacySettings: formData.privacySettings,
+          planPreferences: formData.planPreferences as any
         }, { artificialDelayMs: 300 })
         console.log('✅ Atomic commit complete:', { userId, planId })
 
         // Save reference race data for pace zone calculations
-        if (!skipReferenceRace && referenceRaceMinutes && referenceRaceMinutes > 0) {
-          const totalSeconds = (referenceRaceMinutes * 60) + (referenceRaceSeconds || 0)
+        if (referenceRaceTimeSeconds > 0) {
           try {
-            await setReferenceRace(userId, referenceRaceDistance, totalSeconds)
+            await setReferenceRace(userId, referenceRaceDistance, referenceRaceTimeSeconds)
             console.log('✅ Reference race saved for VDOT calculation')
           } catch (raceError) {
             console.warn('⚠️ Failed to save reference race:', raceError)
@@ -591,112 +814,102 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     switch (currentStep) {
       case 1:
         return (
-          <div className="space-y-6">
-            <div className="text-center">
-              <Sparkles className="h-12 w-12 text-blue-500 mx-auto mb-4" />
-              <h2 className="text-lg font-semibold mb-2">Welcome to Run-Smart!</h2>
-              <p className="text-gray-600 text-sm">Let&apos;s create your personalized running plan</p>
+          <div className="pt-2 space-y-8">
+            <div className="text-center space-y-3">
+              <div className="mx-auto h-16 w-16 rounded-3xl bg-gradient-to-br from-emerald-400/30 to-emerald-400/5 flex items-center justify-center">
+                <Sparkles className="h-8 w-8 text-emerald-400" />
+              </div>
+              <h2 className="text-3xl font-semibold tracking-tight">Create your training plan</h2>
+              <p className="text-white/60 text-sm">
+                Answer a few quick questions so we can tailor your plan.
+              </p>
             </div>
-            <Card className="bg-blue-50 border-blue-200">
-              <CardContent className="p-6 text-center">
-                <h4 className="text-base font-semibold text-blue-900 mb-2">Adaptive Training Plan</h4>
-                <p className="text-sm text-blue-700">Get a personalized training plan to get you going.</p>
-              </CardContent>
-            </Card>
+            <div className="space-y-3">
+              <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/10 via-white/[0.06] to-white/[0.02] p-6">
+                <div className="text-lg font-semibold">Adaptive training plan</div>
+                <p className="text-white/60 text-sm mt-2">
+                  Build a plan that fits your goal, schedule, and current fitness.
+                </p>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.08] via-white/[0.04] to-white/[0.02] p-6">
+                <div className="text-lg font-semibold">Schedule that fits you</div>
+                <p className="text-white/60 text-sm mt-2">
+                  We use your weekly frequency and long run day to shape the plan.
+                </p>
+              </div>
+            </div>
           </div>
         )
 
       case 2:
         return (
-          <div className="space-y-6">
-            <div className="text-center">
-              <Target className="h-12 w-12 text-blue-500 mx-auto mb-4" />
-              <h2 className="text-lg font-semibold mb-2">What&apos;s your running goal?</h2>
-              <p className="text-gray-600 text-sm">Choose the focus that fits your next milestone.</p>
+          <div className="pt-2 space-y-8">
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold leading-tight">What is your main goal?</h2>
+              <p className="text-white/60 text-sm">Choose the focus that fits your next milestone.</p>
             </div>
 
             <div className="space-y-3">
               {[
-                { id: "habit", icon: Calendar, title: "Build a Running Habit", desc: "Start with consistency", badge: "Consistency" },
-                { id: "distance", icon: Route, title: "Run Longer Distances", desc: "Train for 5K, 10K, or more", badge: "Endurance" },
-                { id: "speed", icon: Gauge, title: "Improve Speed", desc: "Beat your personal best", badge: "Speed" },
+                { id: "habit", icon: Calendar, title: "Build a running habit", desc: "Start with consistency" },
+                { id: "distance", icon: Route, title: "Run longer distances", desc: "Train for 5K, 10K, or more" },
+                { id: "speed", icon: Gauge, title: "Improve speed", desc: "Beat your personal best" },
               ].map((goal) => (
-                <Card
+                <SelectCard
                   key={goal.id}
-                  className={`cursor-pointer transition-all hover:shadow-md ${
-                    selectedGoal === goal.id ? "ring-2 ring-blue-500 bg-blue-50" : "hover:border-gray-300"
-                  }`}
+                  selected={selectedGoal === goal.id}
                   onClick={() => setSelectedGoal(goal.id)}
-                >
-                  <CardContent className="p-4 flex items-center space-x-4">
-                    <goal.icon className="h-8 w-8 text-blue-500" />
-                    <div>
-                      <h3 className="font-semibold">{goal.title}</h3>
-                      <p className="text-sm text-gray-600">{goal.desc}</p>
-                      <div className="mt-2">
-                        <Badge variant="outline" className="text-xs">
-                          {goal.badge}
-                        </Badge>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                  title={goal.title}
+                  subtitle={goal.desc}
+                  left={<goal.icon className="h-5 w-5" />}
+                />
               ))}
             </div>
-
           </div>
         )
 
       case 3:
         return (
-          <div className="space-y-6">
-            <div className="text-center">
-              <TrendingUp className="h-12 w-12 text-orange-500 mx-auto mb-4" />
-              <h2 className="text-lg font-semibold mb-2">Running experience?</h2>
-              <p className="text-gray-600 text-sm">Let us match the plan to your current rhythm.</p>
+          <div className="pt-2 space-y-8">
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold leading-tight">Running experience</h2>
+              <p className="text-white/60 text-sm">Let us match the plan to your current rhythm.</p>
             </div>
             <div className="space-y-3">
               {[
-                { id: "beginner", title: "Beginner", desc: "New to running", badge: "New" },
-                { id: "occasional", title: "Occasional", desc: "Run sometimes", badge: "Sometimes" },
-                { id: "regular", title: "Regular", desc: "Run weekly", badge: "Weekly" },
+                { id: "beginner", title: "Beginner", desc: "New to running", icon: TrendingUp },
+                { id: "occasional", title: "Occasional", desc: "Run sometimes", icon: TrendingUp },
+                { id: "regular", title: "Regular", desc: "Run weekly", icon: TrendingUp },
               ].map((exp) => (
-                <Card
+                <SelectCard
                   key={exp.id}
-                  className={`cursor-pointer transition-all hover:shadow-md ${
-                    selectedExperience === exp.id ? "ring-2 ring-blue-500 bg-blue-50" : "hover:border-gray-300"
-                  }`}
+                  selected={selectedExperience === exp.id}
                   onClick={() => setSelectedExperience(exp.id)}
-                >
-                  <CardContent className="p-4 text-center">
-                    <h3 className="font-semibold">{exp.title}</h3>
-                    <p className="text-sm text-gray-600">{exp.desc}</p>
-                    <div className="mt-2">
-                      <Badge variant="outline" className="text-xs">
-                        {exp.badge}
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
+                  title={exp.title}
+                  subtitle={exp.desc}
+                  left={<exp.icon className="h-5 w-5" />}
+                />
               ))}
             </div>
             {selectedExperience === "regular" && (
-              <div className="space-y-3 pt-4 border-t border-gray-100">
-                <h3 className="font-semibold text-center">What&apos;s your average weekly km?</h3>
-                <p className="text-xs text-gray-500 text-center">
-                  This helps us set your starting training volume
-                </p>
+              <div className="space-y-4 rounded-3xl border border-white/10 bg-white/5 p-5">
+                <div className="space-y-1">
+                  <h3 className="text-lg font-semibold">Average weekly km</h3>
+                  <p className="text-white/60 text-sm">
+                    This helps us set your starting training volume.
+                  </p>
+                </div>
                 <input
                   type="number"
                   placeholder="e.g., 30"
                   value={averageWeeklyKm !== null ? averageWeeklyKm : ""}
                   onChange={(e) => setAverageWeeklyKm(e.target.value ? parseInt(e.target.value) : null)}
-                  className="w-full p-3 border border-gray-300 rounded-md text-center text-lg"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-center text-lg text-white placeholder:text-white/40"
                   min="5"
                   max="200"
                   disabled={skipWeeklyKm}
                 />
-                <div className="flex items-center gap-2 justify-center">
+                <div className="flex items-center gap-2 text-sm text-white/60">
                   <input
                     type="checkbox"
                     id="skipWeeklyKm"
@@ -705,11 +918,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                       setSkipWeeklyKm(e.target.checked)
                       if (e.target.checked) setAverageWeeklyKm(null)
                     }}
-                    className="w-4 h-4"
+                    className="h-4 w-4"
                   />
-                  <label htmlFor="skipWeeklyKm" className="text-sm text-gray-600">
-                    I&apos;m not sure / Skip
-                  </label>
+                  <label htmlFor="skipWeeklyKm">I am not sure</label>
                 </div>
               </div>
             )}
@@ -718,11 +929,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
       case 4:
         return (
-          <div className="space-y-6">
-            <div className="text-center">
-              <User className="h-12 w-12 text-purple-500 mx-auto mb-4" />
-              <h2 className="text-lg font-semibold mb-2">How old are you?</h2>
-              <p className="text-gray-600 text-sm">This helps us personalize your plan.</p>
+          <div className="pt-2 space-y-6">
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold leading-tight">How old are you?</h2>
+              <p className="text-white/60 text-sm">This helps us personalize your plan.</p>
             </div>
             <div className="space-y-3">
               <input
@@ -730,7 +940,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 placeholder="Enter your age"
                 value={age !== null ? age : ''}
                 onChange={(e) => setAge(parseInt(e.target.value) || null)}
-                className="w-full p-3 border border-gray-300 rounded-md text-center text-lg"
+                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-center text-lg text-white placeholder:text-white/40"
                 min="10"
                 max="100"
                 aria-label="Your age"
@@ -740,214 +950,216 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         )
 
       case 5:
-        // Reference race step for pace zone calculation
-        const getReferenceRaceTimeSeconds = () => {
-          if (skipReferenceRace) return null
-          const mins = referenceRaceMinutes || 0
-          const secs = referenceRaceSeconds || 0
-          return mins * 60 + secs
-        }
-
-        const previewVDOT = () => {
-          const timeSeconds = getReferenceRaceTimeSeconds()
-          if (!timeSeconds || timeSeconds <= 0) return null
-          try {
-            const vdot = calculateVDOT(referenceRaceDistance, timeSeconds)
-            const zones = getPaceZonesFromVDOT(vdot)
-            return { vdot, zones }
-          } catch {
-            return null
-          }
-        }
-
-        const preview = !skipReferenceRace ? previewVDOT() : null
-
         return (
-          <div className="space-y-6">
-            <div className="text-center">
-              <Clock className="h-12 w-12 text-green-500 mx-auto mb-4" />
-              <h2 className="text-lg font-semibold mb-2">What&apos;s your best recent race time?</h2>
-              <p className="text-sm text-gray-600">
-                This helps us calculate your personalized training paces
-              </p>
+          <div className="pt-2 space-y-5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-2xl font-semibold tracking-tight leading-tight">
+                  What is your estimated current race time?
+                </h2>
+                <p className="text-white/60 mt-3 leading-relaxed text-sm">
+                  Choose a time reflective of your current fitness level.
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0"
+                aria-label="Help"
+              >
+                <HelpCircle className="h-5 w-5" />
+              </Button>
             </div>
 
-            {/* Distance selector */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Race Distance</label>
-              <div className="grid grid-cols-4 gap-2">
-                {[
-                  { value: 5, label: "5K" },
-                  { value: 10, label: "10K" },
-                  { value: 21.1, label: "Half" },
-                  { value: 42.2, label: "Full" },
-                ].map((dist) => (
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+              {DISTANCE_CHIPS.map((chip) => {
+                const active = referenceRaceDistance === chip.value
+                return (
                   <Button
-                    key={dist.value}
-                    variant={referenceRaceDistance === dist.value ? "default" : "outline"}
-                    className={referenceRaceDistance === dist.value ? "bg-blue-500 hover:bg-blue-600" : ""}
-                    onClick={() => setReferenceRaceDistance(dist.value)}
-                    disabled={skipReferenceRace}
+                    key={chip.value}
+                    type="button"
+                    onClick={() => {
+                      setTimeSeeded(true)
+                      setReferenceRaceDistance(chip.value)
+                    }}
+                    className={cn(
+                      'h-10 rounded-full px-4 shrink-0 text-sm font-medium border transition-all duration-200',
+                      active
+                        ? 'bg-emerald-400 text-neutral-950 border-emerald-400 shadow-lg shadow-emerald-500/25 hover:bg-emerald-300'
+                        : 'bg-white/[0.03] text-white/70 border-white/10 hover:bg-white/[0.06] hover:text-white hover:border-white/20'
+                    )}
                   >
-                    {dist.label}
+                    {chip.label}
                   </Button>
-                ))}
-              </div>
+                )
+              })}
             </div>
 
-            {/* Time input */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Race Time</label>
-              <div className="flex gap-2 items-center justify-center">
-                <input
-                  type="number"
-                  placeholder="Min"
-                  value={referenceRaceMinutes ?? ""}
-                  onChange={(e) => setReferenceRaceMinutes(e.target.value ? parseInt(e.target.value) : null)}
-                  className="w-20 p-3 border border-gray-300 rounded-md text-center"
-                  min="0"
-                  max="300"
-                  disabled={skipReferenceRace}
-                />
-                <span className="text-xl font-bold">:</span>
-                <input
-                  type="number"
-                  placeholder="Sec"
-                  value={referenceRaceSeconds ?? ""}
-                  onChange={(e) => setReferenceRaceSeconds(e.target.value ? parseInt(e.target.value) : null)}
-                  className="w-20 p-3 border border-gray-300 rounded-md text-center"
-                  min="0"
-                  max="59"
-                  disabled={skipReferenceRace}
-                />
-              </div>
-            </div>
-
-            {/* Preview calculated paces */}
-            {preview && (
-              <Card className="bg-blue-50 border-blue-200">
-                <CardContent className="p-4">
-                  <h4 className="font-semibold text-blue-800 mb-2">Your Training Paces</h4>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span className="text-gray-600">Easy:</span>{" "}
-                      <span className="font-medium">{preview.zones.easy.label}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Tempo:</span>{" "}
-                      <span className="font-medium">{preview.zones.tempo.label}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Interval:</span>{" "}
-                      <span className="font-medium">{preview.zones.interval.label}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">VDOT:</span>{" "}
-                      <span className="font-medium">{preview.vdot}</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Skip option */}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="skipRace"
-                checked={skipReferenceRace}
-                onChange={(e) => setSkipReferenceRace(e.target.checked)}
-                className="w-4 h-4"
+            <div className="flex items-center justify-center gap-3 pt-1">
+              <WheelColumn
+                value={referenceRaceHours}
+                min={0}
+                max={10}
+                suffix="h"
+                ariaLabel="Hours"
+                onChange={(value) => {
+                  setTimeSeeded(false)
+                  setReferenceRaceHours(value)
+                }}
               />
-              <label htmlFor="skipRace" className="text-sm text-gray-600">
-                I don&apos;t know / Skip this step
-              </label>
+              <div className="text-2xl -mt-1 text-white/40">:</div>
+              <WheelColumn
+                value={referenceRaceMinutes}
+                min={0}
+                max={59}
+                padTo2
+                suffix="m"
+                ariaLabel="Minutes"
+                onChange={(value) => {
+                  setTimeSeeded(false)
+                  setReferenceRaceMinutes(value)
+                }}
+              />
+              <div className="text-2xl -mt-1 text-white/40">:</div>
+              <WheelColumn
+                value={referenceRaceSeconds}
+                min={0}
+                max={59}
+                padTo2
+                suffix="s"
+                ariaLabel="Seconds"
+                onChange={(value) => {
+                  setTimeSeeded(false)
+                  setReferenceRaceSeconds(value)
+                }}
+              />
             </div>
 
+            <div className="text-center text-white/60 text-sm pt-3 leading-relaxed">
+              I can currently run a{' '}
+              <span className="text-emerald-400 font-medium">
+                {DISTANCE_CHIPS.find((chip) => chip.value === referenceRaceDistance)?.label ?? `${referenceRaceDistance}K`}
+              </span>{' '}
+              in <span className="text-white font-semibold">{formatTimeHms(referenceRaceTimeSeconds)}</span>
+            </div>
           </div>
         )
 
       case 6:
         return (
-          <div className="space-y-6">
-            <div className="text-center">
-              <Calendar className="h-12 w-12 text-indigo-500 mx-auto mb-4" />
-              <h2 className="text-lg font-semibold mb-2">When can you run?</h2>
-              <p className="text-gray-600 text-sm">Choose your preferred time windows.</p>
-            </div>
-            <div className="space-y-3">
-              {[
-                { id: "morning", icon: Sun, label: "Morning (6-9 AM)" },
-                { id: "afternoon", icon: CloudSun, label: "Afternoon (12-3 PM)" },
-                { id: "evening", icon: Moon, label: "Evening (6-9 PM)" },
-              ].map((time) => (
-                <Card
-                  key={time.id}
-                  className={`cursor-pointer transition-all hover:shadow-md ${
-                    selectedTimes.includes(time.id) ? "ring-2 ring-blue-500 bg-blue-50" : "hover:border-gray-300"
-                  }`}
-                  onClick={() => handleTimeSlotToggle(time.id)}
-                >
-                  <CardContent className="p-4 flex items-center space-x-4">
-                    <time.icon className="h-6 w-6 text-blue-500" />
-                    <span>{time.label}</span>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+          <div className="pt-2 space-y-10">
             <div className="space-y-4">
-              <h3 className="font-semibold">How many days per week?</h3>
-              <div className="space-y-2">
-                <Slider
-                  value={daysPerWeek}
-                  onValueChange={setDaysPerWeek}
-                  max={6}
-                  min={2}
-                  step={1}
-                  className="w-full"
-                />
-                <div className="text-center text-sm text-gray-600">{daysPerWeek[0]} days/week</div>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-2xl font-semibold leading-tight">How many days per week would you like to run?</h2>
+                  <p className="text-white/60 mt-3 leading-relaxed text-sm">
+                    Pick a sustainable weekly rhythm.
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0"
+                  aria-label="Help"
+                >
+                  <HelpCircle className="h-5 w-5" />
+                </Button>
+              </div>
+              <div className="space-y-4">
+                {[2, 3, 4, 5, 6].map((n) => (
+                  <SelectCard
+                    key={n}
+                    selected={daysPerWeek === n}
+                    onClick={() => setDaysPerWeek(n)}
+                    title={`${n} days`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-2xl font-semibold leading-tight">Which day do you want to do your long runs on?</h2>
+                  <p className="text-white/60 mt-3 leading-relaxed text-sm">Choose one to continue</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0"
+                  aria-label="Help"
+                >
+                  <HelpCircle className="h-5 w-5" />
+                </Button>
+              </div>
+
+              <div className="space-y-3.5">
+                {WEEKDAYS.map((day) => (
+                  <SelectCard
+                    key={day.key}
+                    selected={longRunDay === day.key}
+                    onClick={() => setLongRunDay(day.key)}
+                    title={day.label}
+                  />
+                ))}
               </div>
             </div>
           </div>
         )
 
       case 7:
-        // Format reference race for display
-        const formatReferenceRace = () => {
-          if (skipReferenceRace) return 'Not provided'
-          if (!referenceRaceMinutes) return 'Not provided'
-          const distanceLabel = referenceRaceDistance === 21.1 ? 'Half Marathon' :
-            referenceRaceDistance === 42.2 ? 'Marathon' : `${referenceRaceDistance}K`
-          const mins = referenceRaceMinutes || 0
-          const secs = referenceRaceSeconds || 0
-          return `${distanceLabel} in ${mins}:${secs.toString().padStart(2, '0')}`
-        }
+        const distanceLabel =
+          referenceRaceDistance === 21.1
+            ? 'Half Marathon'
+            : referenceRaceDistance === 42.2
+              ? 'Marathon'
+              : `${referenceRaceDistance}K`
 
         return (
-          <div className="space-y-6" role="region" aria-label="Summary and Confirmation">
-            <div className="text-center">
-              <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-4" />
-              <h2 className="text-lg font-semibold mb-2" id="summary-heading">Summary & Confirmation</h2>
-              <p className="text-gray-600 text-sm">Confirm everything looks right before we build your plan.</p>
+          <div className="pt-2 space-y-8" role="region" aria-label="Summary and confirmation">
+            <div className="text-center space-y-2">
+              <CheckCircle2 className="h-12 w-12 text-emerald-400 mx-auto" />
+              <h2 className="text-2xl font-semibold">Summary and confirmation</h2>
+              <p className="text-white/60 text-sm">Confirm everything looks right before we build your plan.</p>
             </div>
-            <Card>
-              <CardContent className="p-4">
-                <ul className="text-sm text-gray-700 space-y-2" aria-labelledby="summary-heading">
-                  <li><strong>Goal:</strong> {selectedGoal}</li>
-                  <li><strong>Experience:</strong> {selectedExperience}</li>
-                  {selectedExperience === "regular" && (
-                    <li>
-                      <strong>Weekly Volume:</strong> {averageWeeklyKm ? `${averageWeeklyKm} km/week` : 'Not provided'}
-                    </li>
-                  )}
-                  <li><strong>Age:</strong> {age !== null ? age : 'Not provided'}</li>
-                  <li><strong>Reference Race:</strong> {formatReferenceRace()}</li>
-                  <li><strong>Preferred Times:</strong> {selectedTimes.join(', ')}</li>
-                  <li><strong>Days/Week:</strong> {daysPerWeek[0]}</li>
-                </ul>
-              </CardContent>
-            </Card>
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+              <ul className="space-y-3 text-sm text-white/70">
+                <li className="flex items-center justify-between">
+                  <span className="text-white/50">Goal</span>
+                  <span className="text-white font-medium">{selectedGoal || 'Not set'}</span>
+                </li>
+                <li className="flex items-center justify-between">
+                  <span className="text-white/50">Experience</span>
+                  <span className="text-white font-medium">{selectedExperience || 'Not set'}</span>
+                </li>
+                {selectedExperience === "regular" && (
+                  <li className="flex items-center justify-between">
+                    <span className="text-white/50">Weekly volume</span>
+                    <span className="text-white font-medium">
+                      {averageWeeklyKm ? `${averageWeeklyKm} km/week` : 'Not provided'}
+                    </span>
+                  </li>
+                )}
+                <li className="flex items-center justify-between">
+                  <span className="text-white/50">Age</span>
+                  <span className="text-white font-medium">{age !== null ? age : 'Not provided'}</span>
+                </li>
+                <li className="flex items-center justify-between">
+                  <span className="text-white/50">Current race time</span>
+                  <span className="text-white font-medium">
+                    {distanceLabel} in {formatTimeHms(referenceRaceTimeSeconds)}
+                  </span>
+                </li>
+                <li className="flex items-center justify-between">
+                  <span className="text-white/50">Days per week</span>
+                  <span className="text-white font-medium">{daysPerWeek}</span>
+                </li>
+                <li className="flex items-center justify-between">
+                  <span className="text-white/50">Long run day</span>
+                  <span className="text-white font-medium">{getWeekdayLabel(longRunDay)}</span>
+                </li>
+              </ul>
+            </div>
           </div>
         )
       default:
@@ -984,59 +1196,59 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         aria-hidden="true"
         className="sr-only"
       />
-      <div className="min-h-screen bg-gray-50 p-4 flex items-center justify-center">
-        <Card className="w-full max-w-2xl">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5" />
-              Create Your Training Plan
-            </CardTitle>
-            <CardDescription>
-              Answer a few questions so we can tailor your plan.
-            </CardDescription>
-            {!isOnline && (
-              <p className="text-xs text-amber-600">Working in offline mode</p>
-            )}
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Step {currentStep} of {totalSteps}</span>
-                <span>{Math.round(progressValue)}% Complete</span>
-              </div>
-              <Progress value={progressValue} className="h-2" />
-            </div>
-
-            <div className="flex justify-between text-xs">
-              {onboardingSteps.map((step, index) => (
+      <div className="min-h-screen bg-neutral-950 text-white flex flex-col">
+        <div className="px-4 pb-3" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 1rem))' }}>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:bg-white/5 -ml-2"
+              onClick={prevStep}
+              disabled={currentStep === 1}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div className="flex-1 flex items-center justify-center">
+              <div className="h-1 w-40 bg-white/10 rounded-full overflow-hidden">
                 <div
-                  key={step.id}
-                  className={cn("text-center", index <= currentStepIndex ? "text-blue-600" : "text-gray-400")}
-                >
-                  <div
-                    className={cn(
-                      "w-8 h-8 rounded-full mx-auto mb-1 flex items-center justify-center",
-                      index <= currentStepIndex ? "bg-blue-100 text-blue-600" : "bg-gray-100"
-                    )}
-                  >
-                    {index < currentStepIndex ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
-                  </div>
-                  <div className="hidden sm:block">{step.title}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="min-h-96">{renderStep()}</div>
-
-            {!isStepValid && currentStep > 1 && (
-              <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-2 rounded">
-                <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                {getValidationMessage(currentStep)}
+                  className="h-full bg-emerald-400 transition-all duration-300 ease-out"
+                  style={{ width: `${progressPercent}%` }}
+                />
               </div>
+            </div>
+            <div className="w-9" />
+          </div>
+          {!isOnline && (
+            <p className="mt-3 text-xs text-amber-400">Working in offline mode</p>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 pb-4">
+          {renderStep()}
+
+          {!isStepValid && currentStep > 1 && (
+            <div className="mt-6 flex items-center gap-2 text-sm text-rose-200 bg-rose-500/10 border border-rose-500/20 p-3 rounded-2xl">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              {getValidationMessage(currentStep)}
+            </div>
+          )}
+        </div>
+
+        <div className="px-4 pt-3 bg-neutral-950" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom, 1.5rem))' }}>
+          <Button
+            type="button"
+            className={cn(
+              'w-full h-14 rounded-2xl font-semibold text-base shadow-xl transition-all duration-200',
+              isActionDisabled
+                ? 'bg-white/10 text-white/40 cursor-not-allowed'
+                : 'bg-white text-neutral-950 hover:bg-white/95 hover:shadow-2xl hover:scale-[1.02] active:scale-100'
             )}
-            {renderNavigation()}
-          </CardContent>
-        </Card>
+            onClick={isFinalStep ? handleComplete : nextStep}
+            disabled={isActionDisabled}
+          >
+            {isFinalStep ? (isGeneratingPlan ? 'Completing...' : 'Complete setup') : 'Continue'}
+          </Button>
+        </div>
       </div>
     </OnboardingErrorBoundary>
   )
