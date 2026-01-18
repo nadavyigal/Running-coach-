@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
 import { logger } from '@/lib/logger'
 import { trackAuthEvent } from '@/lib/analytics'
+import { linkDeviceToUser } from '@/lib/auth/migrate-device-data'
 
 type SignupFormProps = {
   onSuccess: () => void
@@ -109,6 +110,25 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
       }
 
       logger.info('[Signup] Profile created successfully')
+
+      // Get profile_id for migration
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('auth_user_id', data.user.id)
+        .single()
+
+      if (profile) {
+        // Link device data and perform initial sync
+        logger.info('[Signup] Starting device migration')
+        try {
+          await linkDeviceToUser(profile.id)
+          logger.info('[Signup] Device migration completed')
+        } catch (migrationError) {
+          logger.warn('[Signup] Device migration failed:', migrationError)
+          // Continue even if migration fails - not critical
+        }
+      }
 
       // Track signup event
       await trackAuthEvent('signup')

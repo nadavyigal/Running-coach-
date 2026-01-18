@@ -279,6 +279,8 @@ export function PlanTemplateFlow({ isOpen, onClose, userId, onCompleted }: PlanT
   const [filter, setFilter] = useState<PlanTemplateFilter>('all')
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [initialDaysPerWeek, setInitialDaysPerWeek] = useState<number | undefined>(undefined)
+  const [initialAvailableDays, setInitialAvailableDays] = useState<Weekday[] | undefined>(undefined)
+  const [initialLongRunDay, setInitialLongRunDay] = useState<Weekday | undefined>(undefined)
   const [isGenerating, setIsGenerating] = useState(false)
 
   // Goal conflict dialog state
@@ -300,6 +302,12 @@ export function PlanTemplateFlow({ isOpen, onClose, userId, onCompleted }: PlanT
     if (!isOpen) return
     dbUtils.getUserById(userId).then((user) => {
       if (user?.daysPerWeek) setInitialDaysPerWeek(user.daysPerWeek)
+      if (user?.planPreferences?.availableDays) {
+        setInitialAvailableDays(user.planPreferences.availableDays as Weekday[])
+      }
+      if (user?.planPreferences?.longRunDay) {
+        setInitialLongRunDay(user.planPreferences.longRunDay as Weekday)
+      }
     }).catch(() => {})
   }, [isOpen, userId])
 
@@ -551,6 +559,8 @@ export function PlanTemplateFlow({ isOpen, onClose, userId, onCompleted }: PlanT
             <PlanSetupWizard
               template={selectedTemplate}
               {...(typeof initialDaysPerWeek === 'number' ? { initialDaysPerWeek } : {})}
+              {...(initialAvailableDays ? { initialAvailableDays } : {})}
+              {...(initialLongRunDay ? { initialLongRunDay } : {})}
               onBackToDetail={() => setView('detail')}
               onClose={handleClose}
               onDistanceChange={(distanceKey) => {

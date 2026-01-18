@@ -405,27 +405,21 @@ export const mockGeolocation = (
 };
 
 // Performance test utilities
-const getPerformanceNow = () => {
-  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
-    const now = performance.now();
-    return Number.isFinite(now) ? now : Date.now();
-  }
-  return Date.now();
-};
-
-export const measurePerformance = (fn: () => Promise<void> | void) => {
-  const start = getPerformanceNow();
+// Use Date.now() directly for reliability in test environment
+export const measurePerformance = (fn: () => Promise<void> | void): number | Promise<number> => {
+  const start = Date.now();
   const result = fn();
 
-  if (result && typeof (result as Promise<void>).then === 'function') {
+  // Check if result is a Promise-like object
+  if (result && typeof result === 'object' && typeof (result as Promise<void>).then === 'function') {
     return (result as Promise<void>).then(() => {
-      const end = getPerformanceNow();
+      const end = Date.now();
       const duration = end - start;
       return Number.isFinite(duration) ? duration : 0;
     });
   }
 
-  const end = getPerformanceNow();
+  const end = Date.now();
   const duration = end - start;
   return Number.isFinite(duration) ? duration : 0;
 };
@@ -434,7 +428,8 @@ export const expectPerformance = async (
   fn: () => Promise<void> | void,
   maxTimeMs: number
 ) => {
-  const duration = await Promise.resolve(measurePerformance(fn));
+  const result = measurePerformance(fn);
+  const duration = typeof result === 'number' ? result : await result;
   expect(duration).toBeLessThan(maxTimeMs);
 };
 

@@ -114,8 +114,8 @@ const nextConfig = {
   poweredByHeader: false, // Remove X-Powered-By header
   reactStrictMode: true, // Enable strict mode for better error detection
 
-  // Webpack optimizations - Commented out to avoid Turbopack conflict
-  /* webpack: (config, { dev, isServer }) => {
+  // Webpack optimizations - Uncommented to force Webpack usage
+  webpack: (config, { dev, isServer }) => {
     if (!dev && !isServer) {
       // Code splitting optimization with better defaults
       config.optimization.splitChunks = {
@@ -159,7 +159,7 @@ const nextConfig = {
       // Additional minification for production
       config.optimization.minimize = true;
     }
-    
+
     // Development optimizations
     if (dev) {
       // Disable caching to fix HMR issues
@@ -170,9 +170,9 @@ const nextConfig = {
         aggregateTimeout: 300,
       }
     }
-    
+
     return config
-  }, */
+  },
 }
 
 export default nextConfig

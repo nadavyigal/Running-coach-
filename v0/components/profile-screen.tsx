@@ -65,6 +65,7 @@ import { UserDataSettings } from "@/components/user-data-settings";
 import { useAuth } from "@/lib/auth-context";
 import { AuthModal } from "@/components/auth/auth-modal";
 import { LogIn, LogOut, UserPlus } from "lucide-react";
+import { SyncStatusIndicator } from "@/components/sync-status-indicator";
 
 export function ProfileScreen() {
   // Get shared data from context
@@ -1176,6 +1177,12 @@ export function ProfileScreen() {
                       </p>
                     </div>
                   </div>
+
+                  {/* Sync Status */}
+                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <SyncStatusIndicator />
+                  </div>
+
                   <Button
                     variant="outline"
                     className="w-full"
