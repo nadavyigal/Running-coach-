@@ -7,6 +7,8 @@ import { withSecureOpenAI } from '@/lib/apiKeyManager';
 import { logger } from '@/lib/logger';
 import { rateLimiter, securityConfig } from '@/lib/security.config';
 import { securityMonitor } from '@/lib/security.monitoring';
+import { PersonalizationContextBuilder, type PersonalizationContext } from '@/lib/personalizationContext';
+import { formatPace } from '@/lib/userDataValidation';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,6 +47,7 @@ type PlanData = z.infer<typeof PlanSchema>;
 const DEFAULT_PACE_MIN_PER_KM = 6;
 
 type PlanRequest = {
+  userId?: number;
   user?: {
     goal?: 'habit' | 'distance' | 'speed';
     experience?: 'beginner' | 'intermediate' | 'advanced';
@@ -54,6 +57,7 @@ type PlanRequest = {
     averageWeeklyKm?: number;
   };
   userContext?: {
+    userId?: number;
     goal?: 'habit' | 'distance' | 'speed';
     experience?: 'beginner' | 'intermediate' | 'advanced';
     daysPerWeek?: number;
@@ -253,7 +257,8 @@ function buildPlanPrompt(
   totalWeeks: number,
   planPreferences?: PlanRequest['planPreferences'],
   planType?: string,
-  targetDistance?: string
+  targetDistance?: string,
+  advancedMetrics?: PersonalizationContext['advancedMetrics']
 ) {
   const sanitizedPlanType = planType ? sanitizeForPrompt(planType, 50) : '';
   const sanitizedTarget = targetDistance ? sanitizeForPrompt(targetDistance, 50) : '';
@@ -268,6 +273,36 @@ function buildPlanPrompt(
     : '';
 
   const { trainingDays, longRunDay } = resolveTrainingDays(user.daysPerWeek, planPreferences);
+
+  const advancedMetricsContext = advancedMetrics
+    ? `
+
+ADVANCED TRAINING METRICS:
+${advancedMetrics.vdot ? `- VDOT: ${advancedMetrics.vdot.toFixed(1)} (use Jack Daniels pace zones)` : ''}
+${advancedMetrics.vo2Max ? `- VO2 Max: ${advancedMetrics.vo2Max} ml/kg/min` : ''}
+${advancedMetrics.lactateThreshold ? `- Lactate Threshold: ${formatPace(advancedMetrics.lactateThreshold)}/km` : ''}
+${advancedMetrics.lactateThresholdHR ? `- LT Heart Rate: ${advancedMetrics.lactateThresholdHR} bpm` : ''}
+${advancedMetrics.maxHeartRate ? `- Max Heart Rate: ${advancedMetrics.maxHeartRate} bpm` : ''}
+${advancedMetrics.restingHeartRate ? `- Resting Heart Rate: ${advancedMetrics.restingHeartRate} bpm` : ''}
+
+CRITICAL INSTRUCTIONS FOR USING THESE METRICS:
+1. Tempo runs: set pace at or slightly below (5-10 sec/km slower) lactate threshold pace.
+2. Easy runs: keep 60-90 sec/km slower than LT pace for aerobic adaptation.
+3. Interval workouts: use VDOT to calculate interval pace from Jack Daniels tables.
+4. Long runs: keep 90-120 sec/km slower than LT pace.
+5. Heart rate guidance: if LT HR provided, include HR ranges in workout notes.
+6. Progressive overload: increase volume/intensity safely based on VDOT fitness level.
+
+PACE ZONE CALCULATIONS (if VDOT available):
+- E-pace: recovery runs and easy mileage
+- M-pace: marathon-specific workouts
+- T-pace: threshold/tempo runs
+- I-pace: VO2 max intervals (3-5 min efforts)
+- R-pace: short, fast intervals (200m-400m)
+
+Do not use generic paces when VDOT is available. Calculate specific paces.
+`
+    : '';
 
   return `Create a running training plan. Return JSON only with this shape:
 {
@@ -285,6 +320,7 @@ Runner profile:
 - Days per week: ${user.daysPerWeek}
 - Preferred times: ${user.preferredTimes.join(', ')}
 ${weeklyKmContext}
+${advancedMetricsContext}
 ${sanitizedPlanType ? `- Plan type: ${sanitizedPlanType}` : ''}
 ${sanitizedTarget ? `- Target distance: ${sanitizedTarget}` : ''}
 ${sanitizedVolume ? `- Training volume: ${sanitizedVolume}` : ''}
@@ -296,22 +332,8 @@ Constraints:
 - Long run day: ${longRunDay}
 - Include easy, tempo, intervals, and long runs across the plan.
 - Distances are in kilometers, durations in minutes.
-- Keep progression gradual and safe.`;
-}
-
-function extractJson(text: string) {
-  const trimmed = text.trim();
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-    return trimmed;
-  }
-
-  const start = trimmed.indexOf('{');
-  const end = trimmed.lastIndexOf('}');
-  if (start !== -1 && end !== -1 && end > start) {
-    return trimmed.slice(start, end + 1);
-  }
-
-  return '';
+- Keep progression gradual and safe.
+- ${advancedMetrics?.vdot ? 'Use VDOT-based pace zones for all workout intensities.' : 'Use conservative pace progression.'}`;
 }
 
 export async function POST(req: Request) {
@@ -362,12 +384,35 @@ export async function POST(req: Request) {
     const totalWeeks = resolveTotalWeeks(body);
     const fallbackPlan = generateFallbackPlan(user, totalWeeks, body.planPreferences);
 
+    let advancedMetrics: PersonalizationContext['advancedMetrics'] | undefined;
+    if (body.userContext?.userId || body.userId) {
+      const resolvedUserId = body.userContext?.userId ?? body.userId;
+      const parsedUserId =
+        typeof resolvedUserId === 'string' ? parseInt(resolvedUserId, 10) : resolvedUserId;
+      if (typeof parsedUserId === 'number' && Number.isFinite(parsedUserId)) {
+        try {
+          const context = await PersonalizationContextBuilder.build(parsedUserId);
+          advancedMetrics = context.advancedMetrics;
+
+          logger.info('[generate-plan] Using advanced metrics', {
+            userId: parsedUserId,
+            hasVDOT: Boolean(advancedMetrics?.vdot),
+            hasVO2Max: Boolean(advancedMetrics?.vo2Max),
+            hasLT: Boolean(advancedMetrics?.lactateThreshold),
+          });
+        } catch (error) {
+          logger.warn('[generate-plan] Failed to fetch personalization context:', error);
+        }
+      }
+    }
+
     const prompt = buildPlanPrompt(
       user,
       totalWeeks,
       body.planPreferences,
       body.planType,
-      body.targetDistance
+      body.targetDistance,
+      advancedMetrics
     );
 
     const result = await withSecureOpenAI(async () => {

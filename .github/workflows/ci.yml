@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./V0
+        working-directory: ./v0
     
     steps:
       - name: Checkout code
@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: './V0/package-lock.json'
+          cache-dependency-path: './v0/package-lock.json'
 
       - name: Install dependencies
         run: npm ci
@@ -47,7 +47,7 @@ jobs:
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
         with:
-          file: ./V0/coverage/lcov.info
+          file: ./v0/coverage/lcov.info
           flags: unittests
           name: codecov-umbrella
 
@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./V0
+        working-directory: ./v0
 
     steps:
       - name: Checkout code
@@ -71,7 +71,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: './V0/package-lock.json'
+          cache-dependency-path: './v0/package-lock.json'
 
       - name: Install dependencies
         run: npm ci
@@ -92,7 +92,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./V0
+        working-directory: ./v0
 
     steps:
       - name: Checkout code
@@ -103,7 +103,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: './V0/package-lock.json'
+          cache-dependency-path: './v0/package-lock.json'
 
       - name: Install dependencies
         run: npm ci
@@ -133,7 +133,7 @@ jobs:
     if: github.ref == 'refs/heads/develop'
     defaults:
       run:
-        working-directory: ./V0
+        working-directory: ./v0
 
     steps:
       - name: Checkout code
@@ -144,7 +144,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: './V0/package-lock.json'
+          cache-dependency-path: './v0/package-lock.json'
 
       - name: Install dependencies
         run: npm ci
@@ -170,7 +170,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     defaults:
       run:
-        working-directory: ./V0
+        working-directory: ./v0
 
     steps:
       - name: Checkout code
@@ -181,7 +181,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: './V0/package-lock.json'
+          cache-dependency-path: './v0/package-lock.json'
 
       - name: Install dependencies
         run: npm ci

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { flushSync } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -61,6 +62,7 @@ export function ChatScreen() {
     weeklyStats,
     allTimeStats,
     recentRuns: contextRecentRuns,
+    refresh: refreshContext,
   } = useData()
 
   const defaultWelcome: ChatMessage = {
@@ -82,6 +84,10 @@ export function ChatScreen() {
   const [selectedMessageForFeedback, setSelectedMessageForFeedback] = useState<ChatMessage | null>(null)
   const [showCoachingPreferences, setShowCoachingPreferences] = useState(false)
   const [showEnhancedCoach, setShowEnhancedCoach] = useState(false)
+  const [pendingUserDataUpdate, setPendingUserDataUpdate] = useState<{
+    data: Partial<UserType>;
+    message: string;
+  } | null>(null)
 
   // Sync user from context
   useEffect(() => {
@@ -191,6 +197,71 @@ export function ChatScreen() {
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+
+  const parseUserDataUpdate = (content: string) => {
+    const startTag = '<user_data_update>'
+    const endTag = '</user_data_update>'
+    const startIndex = content.indexOf(startTag)
+    const endIndex = content.indexOf(endTag)
+
+    if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {
+      return { cleanContent: content, update: null }
+    }
+
+    const jsonPayload = content.slice(startIndex + startTag.length, endIndex).trim()
+    try {
+      const parsed = JSON.parse(jsonPayload) as { data?: Partial<UserType>; message?: string }
+      const cleanContent = `${content.slice(0, startIndex)}${content.slice(endIndex + endTag.length)}`.trim()
+      return {
+        cleanContent: cleanContent || content,
+        update: parsed,
+      }
+    } catch (error) {
+      console.warn('Failed to parse user data update payload:', error)
+      return { cleanContent: content, update: null }
+    }
+  }
+
+  const handleSaveUserData = async () => {
+    if (!pendingUserDataUpdate) return
+    const activeUserId = user?.id ?? contextUser?.id
+    if (!activeUserId) return
+
+    try {
+      const response = await fetch('/api/user-data', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: activeUserId,
+          updates: pendingUserDataUpdate.data,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save user data')
+      }
+
+      const result = await response.json()
+
+      toast({
+        title: 'Saved to Profile',
+        description: `Updated: ${result.updated.join(', ')}`,
+      })
+
+      setPendingUserDataUpdate(null)
+
+      if (refreshContext) {
+        await refreshContext()
+      }
+    } catch (error) {
+      console.error('Error saving user data:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to save to profile',
+      })
+    }
   }
 
   const handleSendMessage = async (content: string) => {
@@ -422,6 +493,24 @@ export function ChatScreen() {
         }
       } finally {
         clearTimeout(streamTimeout);
+      }
+
+      const parsedUpdate = parseUserDataUpdate(aiContent)
+      if (parsedUpdate.update?.data && Object.keys(parsedUpdate.update.data).length > 0) {
+        setPendingUserDataUpdate({
+          data: parsedUpdate.update.data,
+          message: parsedUpdate.update.message ?? 'I can save this to your training profile.',
+        })
+      }
+      if (parsedUpdate.cleanContent !== aiContent) {
+        aiContent = parsedUpdate.cleanContent
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === assistantMessage.id
+              ? { ...msg, content: aiContent }
+              : msg
+          )
+        )
       }
 
       // Update final message with feedback request if needed
@@ -742,7 +831,35 @@ export function ChatScreen() {
         </div>
       </ScrollArea>
 
-
+      {pendingUserDataUpdate && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md">
+          <Card className="shadow-lg border-blue-500 border-2">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="flex-1">
+                <p className="font-medium text-sm">{pendingUserDataUpdate.message}</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  Save to your training profile?
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setPendingUserDataUpdate(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSaveUserData}
+                >
+                  Save
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Input */}
       <div className="border-t bg-card p-4">

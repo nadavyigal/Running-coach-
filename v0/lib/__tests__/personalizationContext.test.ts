@@ -50,6 +50,15 @@ describe('buildPersonalizationContext', () => {
       barriers: ['time', 'weather'],
       preferredTimes: ['morning'],
       daysPerWeek: 4,
+      calculatedVDOT: 55,
+      vo2Max: 55,
+      lactateThreshold: 270,
+      maxHeartRate: 185,
+      restingHeartRate: 50,
+      historicalRuns: [
+        { distance: 10, time: 3600, date: fiveDaysAgo },
+      ],
+      weeklyDistanceHistory: [20, 25, 30],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -149,10 +158,10 @@ describe('buildPersonalizationContext', () => {
 
     const context = await buildPersonalizationContext(1);
 
-    // With goal, experience, coachingStyle, and motivations: 10+10+10+5 = 35
-    expect(context.personalizationStrength).toBeGreaterThanOrEqual(30);
-    expect(context.personalizationStrength).toBeLessThan(70);
-    expect(context.recommendationStrategy).toBe('basic'); // 35 is still below 40 threshold for 'personalized'
+    // With goal, experience, and days per week: 10 + 10 + 5 = 25
+    expect(context.personalizationStrength).toBeGreaterThanOrEqual(20);
+    expect(context.personalizationStrength).toBeLessThan(40);
+    expect(context.recommendationStrategy).toBe('basic');
   });
 
   it('should determine recommendation strategy based on data quality', async () => {

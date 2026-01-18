@@ -34,6 +34,10 @@ import {
   AlertCircle,
   Trash2,
   Database,
+  Activity,
+  History,
+  Pencil,
+  Trophy,
 } from "lucide-react"
 import { AddShoesModal } from "@/components/add-shoes-modal"
 import { ReminderSettings } from "@/components/reminder-settings"
@@ -56,10 +60,13 @@ import { PlanTemplateFlow } from "@/components/plan-template-flow";
 import { type Goal, type Run } from "@/lib/db";
 import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import { UserDataSettings } from "@/components/user-data-settings";
 
 export function ProfileScreen() {
   // Get shared data from context
   const {
+    user,
     userId: contextUserId,
     primaryGoal: contextPrimaryGoal,
     activeGoals,
@@ -80,6 +87,7 @@ export function ProfileScreen() {
   const [showJoinCohortModal, setShowJoinCohortModal] = useState(false);
   const [showCoachingPreferences, setShowCoachingPreferences] = useState(false);
   const [showPlanTemplateFlow, setShowPlanTemplateFlow] = useState(false);
+  const [showUserDataModal, setShowUserDataModal] = useState(false);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [primaryGoal, setPrimaryGoal] = useState<Goal | null>(null);
   const [recentRuns, setRecentRuns] = useState<Run[]>([])
@@ -268,6 +276,22 @@ export function ProfileScreen() {
     const mins = Math.floor(secondsPerKm / 60)
     const secs = Math.round(secondsPerKm % 60)
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const formatDate = (date: Date) => {
+    return new Intl.DateTimeFormat('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }).format(new Date(date))
+  }
+
+  const getVDOTRating = (vdot: number): string => {
+    if (vdot >= 70) return 'Elite'
+    if (vdot >= 60) return 'Advanced'
+    if (vdot >= 50) return 'Intermediate'
+    if (vdot >= 40) return 'Novice'
+    return 'Beginner'
   }
 
   // Add useEffect to load shoes data
@@ -736,6 +760,180 @@ export function ProfileScreen() {
             </CardContent>
           </Card>
 
+          {/* Training Data */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div className="flex items-center gap-2">
+                <Database className="h-5 w-5 text-blue-600" />
+                <CardTitle>Training Data</CardTitle>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowUserDataModal(true)}
+                className="h-8 gap-2"
+              >
+                <Pencil className="h-4 w-4" />
+                Edit
+              </Button>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              <div>
+                <h4 className="text-sm font-semibold flex items-center gap-2 mb-2">
+                  <User className="h-4 w-4" />
+                  Profile
+                </h4>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Age:</span>
+                    <span className="font-medium">{user?.age ?? '--'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Experience:</span>
+                    <span className="font-medium capitalize">{user?.experience ?? '--'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Weekly Volume:</span>
+                    <span className="font-medium">
+                      {typeof user?.averageWeeklyKm === 'number' ? `${user.averageWeeklyKm} km` : '--'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Days/Week:</span>
+                    <span className="font-medium">{user?.daysPerWeek ?? '--'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {(user?.calculatedVDOT || user?.vo2Max || user?.lactateThreshold || user?.hrvBaseline || user?.maxHeartRate || user?.restingHeartRate || user?.lactateThresholdHR) && (
+                <>
+                  <Separator />
+                  <div>
+                    <h4 className="text-sm font-semibold flex items-center gap-2 mb-2">
+                      <Activity className="h-4 w-4" />
+                      Physiological Metrics
+                    </h4>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                      {user?.calculatedVDOT && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">VDOT:</span>
+                          <span className="font-medium flex items-center gap-1">
+                            {user.calculatedVDOT.toFixed(1)}
+                            <Badge variant="secondary" className="text-xs px-1 py-0">
+                              {getVDOTRating(user.calculatedVDOT)}
+                            </Badge>
+                          </span>
+                        </div>
+                      )}
+                      {user?.vo2Max && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">VO2 Max:</span>
+                          <span className="font-medium">{user.vo2Max} ml/kg/min</span>
+                        </div>
+                      )}
+                      {user?.lactateThreshold && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">LT Pace:</span>
+                          <span className="font-medium">{formatPace(user.lactateThreshold)}/km</span>
+                        </div>
+                      )}
+                      {user?.lactateThresholdHR && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">LT HR:</span>
+                          <span className="font-medium">{user.lactateThresholdHR} bpm</span>
+                        </div>
+                      )}
+                      {user?.hrvBaseline && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">HRV Baseline:</span>
+                          <span className="font-medium">{user.hrvBaseline} ms</span>
+                        </div>
+                      )}
+                      {user?.maxHeartRate && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Max HR:</span>
+                          <span className="font-medium">
+                            {user.maxHeartRate} bpm
+                            {user.maxHeartRateSource === 'calculated' && (
+                              <span className="text-xs text-gray-500 ml-1">(calc)</span>
+                            )}
+                          </span>
+                        </div>
+                      )}
+                      {user?.restingHeartRate && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Resting HR:</span>
+                          <span className="font-medium">{user.restingHeartRate} bpm</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {user?.referenceRaceDistance && user?.referenceRaceTime && (
+                <>
+                  <Separator />
+                  <div>
+                    <h4 className="text-sm font-semibold flex items-center gap-2 mb-2">
+                      <Trophy className="h-4 w-4" />
+                      Reference Race
+                    </h4>
+                    <div className="text-sm">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-gray-600">Distance & Time:</span>
+                        <span className="font-medium">
+                          {user.referenceRaceDistance}K in {formatTime(user.referenceRaceTime)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600">Pace:</span>
+                        <span className="font-medium">
+                          {formatPace(user.referenceRaceTime / user.referenceRaceDistance)}/km
+                        </span>
+                      </div>
+                      {user.referenceRaceDate && (
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-gray-600">Date:</span>
+                          <span className="text-gray-500 text-xs">
+                            {formatDate(user.referenceRaceDate)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {user?.historicalRuns && user.historicalRuns.length > 0 && (
+                <>
+                  <Separator />
+                  <div>
+                    <h4 className="text-sm font-semibold flex items-center gap-2 mb-2">
+                      <History className="h-4 w-4" />
+                      Training History
+                    </h4>
+                    <div className="text-sm text-gray-600">
+                      {user.historicalRuns.length} significant run{user.historicalRuns.length !== 1 ? 's' : ''} logged
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {!user?.vo2Max && !user?.lactateThreshold && !user?.referenceRaceDistance && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm">
+                  <p className="text-blue-900 font-medium mb-1">
+                    Add your training data
+                  </p>
+                  <p className="text-blue-700 text-xs">
+                    Metrics like VO2 max, lactate threshold, and race times help us personalize your training plan.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Quick Stats */}
           <div className="grid grid-cols-3 gap-4">
             <Card>
@@ -1065,6 +1263,15 @@ export function ProfileScreen() {
               isOpen={showJoinCohortModal}
               onClose={() => setShowJoinCohortModal(false)}
               userId={userId}
+            />
+          )}
+
+          {userId && (
+            <UserDataSettings
+              userId={userId}
+              open={showUserDataModal}
+              onClose={() => setShowUserDataModal(false)}
+              onSave={refreshContext}
             />
           )}
 

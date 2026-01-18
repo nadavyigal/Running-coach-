@@ -2,16 +2,16 @@
 
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Slider } from "@/components/ui/slider"
 import {
-  MonitorIcon as Running,
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Calendar,
-  CheckCircle,
+  CheckCircle2,
   Clock,
   CloudSun,
   Gauge,
@@ -40,6 +40,7 @@ import { useAIServiceErrorHandling } from '@/hooks/use-ai-service-error-handling
 import { onboardingManager } from "@/lib/onboardingManager"
 import OnboardingErrorBoundary from "@/components/onboarding-error-boundary"
 import { UserPrivacySettings } from "@/components/privacy-dashboard"
+import { cn } from "@/lib/utils"
 
 interface OnboardingScreenProps {
   onComplete: () => void
@@ -184,6 +185,17 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const { toast } = useToast()
 
   const totalSteps = 7
+  const onboardingSteps = [
+    { id: "welcome", title: "Welcome" },
+    { id: "goal", title: "Goal" },
+    { id: "experience", title: "Experience" },
+    { id: "age", title: "Age" },
+    { id: "race", title: "Race" },
+    { id: "schedule", title: "Schedule" },
+    { id: "review", title: "Review" },
+  ]
+  const currentStepIndex = currentStep - 1
+  const progressValue = ((currentStepIndex + 1) / totalSteps) * 100
 
   const nextStep = () => {
     if (currentStep < totalSteps) {
@@ -251,6 +263,67 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     }
 
     return canProceedResult
+  }
+
+  const getValidationMessage = (step: number): string => {
+    switch (step) {
+      case 2:
+        return "Please select your running goal to continue"
+      case 3:
+        return "Please tell us about your running experience"
+      case 4:
+        return "Age helps us personalize your training"
+      case 6:
+        return "Select at least one time slot and training days"
+      default:
+        return "Please complete all required fields"
+    }
+  }
+
+  const isStepValid = canProceed()
+
+  const renderNavigation = () => {
+    const isFinalStep = currentStep === totalSteps
+    const isDisabled = !isStepValid || (isFinalStep && isGeneratingPlan)
+
+    return (
+      <div className="flex justify-between pt-4">
+        <Button
+          variant="outline"
+          onClick={prevStep}
+          disabled={currentStep === 1}
+          className="flex items-center gap-2"
+          type="button"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Previous
+        </Button>
+        <Button
+          onClick={isFinalStep ? handleComplete : nextStep}
+          disabled={isDisabled}
+          className="flex items-center gap-2"
+        >
+          {isFinalStep ? (
+            isGeneratingPlan ? (
+              <>
+                <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                Completing...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-4 w-4" />
+                Complete Setup
+              </>
+            )
+          ) : (
+            <>
+              Next
+              <ArrowRight className="h-4 w-4" />
+            </>
+          )}
+        </Button>
+      </div>
+    )
   }
 
   const handleTimeSlotToggle = (time: string) => {
@@ -509,7 +582,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       setIsGeneratingPlan(false)
 
       // Do NOT call onComplete() on error - keep user on onboarding screen
-      // User can retry by clicking "Start My Journey" again
+      // User can retry by clicking "Complete Setup" again
     }
   }
       
@@ -521,19 +594,15 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           <div className="space-y-6">
             <div className="text-center">
               <Sparkles className="h-12 w-12 text-blue-500 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold">Welcome to Run-Smart!</h2>
-              <p className="text-gray-600">Let&apos;s create your personalized running plan</p>
+              <h2 className="text-lg font-semibold mb-2">Welcome to Run-Smart!</h2>
+              <p className="text-gray-600 text-sm">Let&apos;s create your personalized running plan</p>
             </div>
-            <Card className="bg-blue-500 text-white border-blue-600">
+            <Card className="bg-blue-50 border-blue-200">
               <CardContent className="p-6 text-center">
-                <h3 className="text-xl font-bold mb-2">🏃‍♂️ Adaptive Training Plan</h3>
-                <p>Get a personalized training plan to get you going!</p>
+                <h4 className="text-base font-semibold text-blue-900 mb-2">Adaptive Training Plan</h4>
+                <p className="text-sm text-blue-700">Get a personalized training plan to get you going.</p>
               </CardContent>
             </Card>
-            <Button onClick={nextStep} className="w-full bg-blue-500 hover:bg-blue-600">
-              Get Started
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
           </div>
         )
 
@@ -542,7 +611,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           <div className="space-y-6">
             <div className="text-center">
               <Target className="h-12 w-12 text-blue-500 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold">What&apos;s your running goal?</h2>
+              <h2 className="text-lg font-semibold mb-2">What&apos;s your running goal?</h2>
               <p className="text-gray-600 text-sm">Choose the focus that fits your next milestone.</p>
             </div>
 
@@ -575,20 +644,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               ))}
             </div>
 
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={prevStep} className="flex-1">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
-              <Button
-                onClick={nextStep}
-                disabled={!canProceed()}
-                className="flex-1 bg-blue-500 hover:bg-blue-600"
-              >
-                Continue
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </div>
           </div>
         )
 
@@ -597,7 +652,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           <div className="space-y-6">
             <div className="text-center">
               <TrendingUp className="h-12 w-12 text-orange-500 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold">Running experience?</h2>
+              <h2 className="text-lg font-semibold mb-2">Running experience?</h2>
               <p className="text-gray-600 text-sm">Let us match the plan to your current rhythm.</p>
             </div>
             <div className="space-y-3">
@@ -658,20 +713,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 </div>
               </div>
             )}
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={prevStep} className="flex-1">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
-              <Button
-                onClick={nextStep}
-                disabled={!canProceed()}
-                className="flex-1 bg-blue-500 hover:bg-blue-600"
-              >
-                Continue
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </div>
           </div>
         )
 
@@ -680,7 +721,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           <div className="space-y-6">
             <div className="text-center">
               <User className="h-12 w-12 text-purple-500 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold">How old are you?</h2>
+              <h2 className="text-lg font-semibold mb-2">How old are you?</h2>
               <p className="text-gray-600 text-sm">This helps us personalize your plan.</p>
             </div>
             <div className="space-y-3">
@@ -694,20 +735,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 max="100"
                 aria-label="Your age"
               />
-            </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={prevStep} className="flex-1">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
-              <Button
-                onClick={nextStep}
-                disabled={!canProceed()}
-                className="flex-1 bg-blue-500 hover:bg-blue-600"
-              >
-                Continue
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
             </div>
           </div>
         )
@@ -739,7 +766,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           <div className="space-y-6">
             <div className="text-center">
               <Clock className="h-12 w-12 text-green-500 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold">What&apos;s your best recent race time?</h2>
+              <h2 className="text-lg font-semibold mb-2">What&apos;s your best recent race time?</h2>
               <p className="text-sm text-gray-600">
                 This helps us calculate your personalized training paces
               </p>
@@ -837,20 +864,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               </label>
             </div>
 
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={prevStep} className="flex-1">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
-              <Button
-                onClick={nextStep}
-                disabled={!canProceed()}
-                className="flex-1 bg-blue-500 hover:bg-blue-600"
-              >
-                Continue
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </div>
           </div>
         )
 
@@ -859,7 +872,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           <div className="space-y-6">
             <div className="text-center">
               <Calendar className="h-12 w-12 text-indigo-500 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold">When can you run?</h2>
+              <h2 className="text-lg font-semibold mb-2">When can you run?</h2>
               <p className="text-gray-600 text-sm">Choose your preferred time windows.</p>
             </div>
             <div className="space-y-3">
@@ -896,16 +909,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 <div className="text-center text-sm text-gray-600">{daysPerWeek[0]} days/week</div>
               </div>
             </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={prevStep} className="flex-1">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
-              <Button onClick={nextStep} className="flex-1 bg-blue-500 hover:bg-blue-600">
-                Continue
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </div>
           </div>
         )
 
@@ -924,8 +927,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         return (
           <div className="space-y-6" role="region" aria-label="Summary and Confirmation">
             <div className="text-center">
-              <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold" id="summary-heading">Summary & Confirmation</h2>
+              <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-4" />
+              <h2 className="text-lg font-semibold mb-2" id="summary-heading">Summary & Confirmation</h2>
               <p className="text-gray-600 text-sm">Confirm everything looks right before we build your plan.</p>
             </div>
             <Card>
@@ -945,27 +948,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 </ul>
               </CardContent>
             </Card>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={prevStep} className="flex-1" disabled={isGeneratingPlan}>
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
-              <Button
-                onClick={handleComplete}
-                disabled={!canProceed() || isGeneratingPlan}
-                className="flex-1 bg-blue-500 hover:bg-blue-600"
-                aria-label="Start My Journey"
-              >
-                Start My Journey
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </div>
-            {isGeneratingPlan && (
-              <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
-                <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
-                <span>Generating your plan...</span>
-              </div>
-            )}
           </div>
         )
       default:
@@ -1002,30 +984,58 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         aria-hidden="true"
         className="sr-only"
       />
-      <div className="min-h-screen bg-gradient-to-b from-blue-600 via-blue-500 to-sky-400 p-4 flex flex-col">
-        <div className="text-center mb-8 pt-8">
-          <h1 className="text-3xl font-bold text-white flex items-center justify-center gap-2">
-            <Running className="h-8 w-8" />
-            Run-Smart
-          </h1>
-          <p className="text-white/80">Your AI Running Coach</p>
-          {!isOnline && (
-            <p className="text-orange-200 text-sm mt-2">
-              ⚡ Working in offline mode
-            </p>
-          )}
-        </div>
+      <div className="min-h-screen bg-gray-50 p-4 flex items-center justify-center">
+        <Card className="w-full max-w-2xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              Create Your Training Plan
+            </CardTitle>
+            <CardDescription>
+              Answer a few questions so we can tailor your plan.
+            </CardDescription>
+            {!isOnline && (
+              <p className="text-xs text-amber-600">Working in offline mode</p>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Step {currentStep} of {totalSteps}</span>
+                <span>{Math.round(progressValue)}% Complete</span>
+              </div>
+              <Progress value={progressValue} className="h-2" />
+            </div>
 
-        <div className="mx-auto w-full max-w-md mb-8 space-y-2" role="progressbar" aria-label="Onboarding progress">
-          <div className="flex justify-between text-sm text-white/90">
-            <span>Step {currentStep} of {totalSteps}</span>
-            <span>{Math.round((currentStep / totalSteps) * 100)}% Complete</span>
-          </div>
-          <Progress value={(currentStep / totalSteps) * 100} className="h-2 bg-white/30" />
-        </div>
+            <div className="flex justify-between text-xs">
+              {onboardingSteps.map((step, index) => (
+                <div
+                  key={step.id}
+                  className={cn("text-center", index <= currentStepIndex ? "text-blue-600" : "text-gray-400")}
+                >
+                  <div
+                    className={cn(
+                      "w-8 h-8 rounded-full mx-auto mb-1 flex items-center justify-center",
+                      index <= currentStepIndex ? "bg-blue-100 text-blue-600" : "bg-gray-100"
+                    )}
+                  >
+                    {index < currentStepIndex ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
+                  </div>
+                  <div className="hidden sm:block">{step.title}</div>
+                </div>
+              ))}
+            </div>
 
-        <Card className="flex-1 mx-auto w-full max-w-md">
-          <CardContent className="p-6">{renderStep()}</CardContent>
+            <div className="min-h-96">{renderStep()}</div>
+
+            {!isStepValid && currentStep > 1 && (
+              <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-2 rounded">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                {getValidationMessage(currentStep)}
+              </div>
+            )}
+            {renderNavigation()}
+          </CardContent>
         </Card>
       </div>
     </OnboardingErrorBoundary>
