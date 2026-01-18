@@ -105,7 +105,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-gray-600">
-                We encountered an unexpected error. This has been logged and we'll look into it.
+                We encountered an unexpected error. This has been logged and we&apos;ll look into it.
               </p>
 
               {this.state.error && (
@@ -167,14 +167,5 @@ export function withErrorBoundary<P extends object>(
         <Component {...props} />
       </ErrorBoundary>
     )
-  }
-}
-
-// Extend Window type for PostHog
-declare global {
-  interface Window {
-    posthog?: {
-      capture: (event: string, properties?: Record<string, unknown>) => void
-    }
   }
 }

@@ -125,7 +125,7 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
       <div className="space-y-4 text-center">
         <h3 className="text-xl font-semibold">Check Your Email</h3>
         <p className="text-sm text-muted-foreground">
-          We've sent a password reset link to <strong>{email}</strong>
+          We&apos;ve sent a password reset link to <strong>{email}</strong>
         </p>
         <Button
           type="button"
@@ -201,7 +201,7 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
 
       {onSwitchToSignup && (
         <div className="text-center text-sm">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <button
             type="button"
             onClick={onSwitchToSignup}
