@@ -34,7 +34,7 @@ const nextConfig = {
   // Disable critters optimization to fix dependency issue
   experimental: {
     optimizeCss: false, // Disable CSS optimization that uses critters
-    serverComponentsExternalPackages: ['sharp'], // Treat sharp as external (server-only)
+    serverComponentsExternalPackages: ['sharp', 'exifr'], // Treat sharp and exifr as external (server-only)
     optimizePackageImports: [
       '@radix-ui/react-icons',
       'date-fns',
@@ -126,6 +126,7 @@ const nextConfig = {
       config.resolve.fallback = {
         ...config.resolve.fallback,
         sharp: false,
+        exifr: false,
       };
     }
 
