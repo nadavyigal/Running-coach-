@@ -32,6 +32,7 @@ const nextConfig = {
   },
 
   // Disable critters optimization to fix dependency issue
+  // Fixed: sharp and exifr externalization for Vercel deployment
   experimental: {
     optimizeCss: false, // Disable CSS optimization that uses critters
     serverComponentsExternalPackages: ['sharp', 'exifr'], // Treat sharp and exifr as external (server-only)
