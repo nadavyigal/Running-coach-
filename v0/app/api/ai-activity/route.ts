@@ -11,6 +11,10 @@ import {
   parsePaceToSecondsPerKm,
 } from "@/lib/activityParsing"
 
+// Use Node.js runtime for sharp image processing
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 const MAX_FILE_SIZE_BYTES = 6 * 1024 * 1024
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
 

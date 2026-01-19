@@ -23,13 +23,14 @@ import type {
   UserBehaviorPattern,
   Workout,
 } from './db';
-import { 
-  nowUTC, 
-  addDaysUTC, 
+import {
+  nowUTC,
+  addDaysUTC,
   getUserTimezone,
   startOfDayUTC,
   migrateLocalDateToUTC
 } from './timezone-utils';
+import { SyncService } from './sync/sync-service';
 
 /**
  * Database Utilities - Comprehensive database operations with error handling
@@ -53,6 +54,26 @@ function validateUserId(userId: number | string | undefined | null): number {
   }
 
   return id;
+}
+
+/**
+ * Trigger incremental sync after data changes
+ * This is called after critical operations like adding/updating runs, goals, shoes
+ */
+function triggerSync(): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const syncService = SyncService.getInstance();
+    // Trigger sync asynchronously without blocking
+    setTimeout(() => {
+      syncService.syncIncrementalChanges().catch((error) => {
+        console.warn('[dbUtils] Background sync failed:', error);
+      });
+    }, 100);
+  } catch (error) {
+    console.warn('[dbUtils] Failed to trigger sync:', error);
+  }
 }
 
 // ============================================================================
@@ -386,6 +407,7 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
     if (Array.isArray(profile.barriers)) (normalizedProfileRequired as any).barriers = profile.barriers;
     if (profile.coachingStyle) (normalizedProfileRequired as any).coachingStyle = profile.coachingStyle as any;
     if (profile.privacySettings) (normalizedProfileRequired as any).privacySettings = profile.privacySettings as any;
+    if (profile.planPreferences) (normalizedProfileRequired as any).planPreferences = profile.planPreferences as any;
 
     validateUserContract(normalizedProfileRequired);
 
@@ -1114,13 +1136,17 @@ export async function migrateFromLocalStorage(): Promise<void> {
 export async function createGoal(goalData: Omit<Goal, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
   return safeDbOperation(async () => {
     if (!db) throw new Error('Database not available');
-    
+
     const id = await db.goals.add({
       ...goalData,
       createdAt: new Date(),
       updatedAt: new Date()
     });
     console.log('✅ Goal created successfully:', id);
+
+    // Trigger sync after goal creation
+    triggerSync();
+
     return id as number;
   }, 'createGoal');
 }
@@ -1131,12 +1157,15 @@ export async function createGoal(goalData: Omit<Goal, 'id' | 'createdAt' | 'upda
 export async function updateGoal(goalId: number, updates: Partial<Goal>): Promise<void> {
   return safeDbOperation(async () => {
     if (!db) throw new Error('Database not available');
-    
+
     await db.goals.update(goalId, {
       ...updates,
       updatedAt: new Date()
     });
     console.log('✅ Goal updated successfully:', goalId);
+
+    // Trigger sync after goal update
+    triggerSync();
   }, 'updateGoal');
 }
 
@@ -1839,6 +1868,10 @@ export async function recordRun(runData: Omit<Run, 'id' | 'createdAt'>): Promise
       updatedAt: new Date()
     });
     console.log('✅ Run recorded successfully:', id);
+
+    // Trigger sync for critical data
+    triggerSync();
+
     return id as number;
   }, 'recordRun');
 }
@@ -1866,6 +1899,9 @@ export async function updateRun(runId: number, updates: Partial<Run>): Promise<v
   return safeDbOperation(async () => {
     if (!db) return
     await db.runs.update(runId, { ...updates, updatedAt: new Date() })
+
+    // Trigger sync after update
+    triggerSync();
   }, 'updateRun')
 }
 

@@ -18,6 +18,9 @@ Copy and paste the contents of `migrations/002_rls_policies.sql` into the SQL Ed
 ### Migration 3: RPC Function
 Copy and paste the contents of `migrations/003_finalize_onboarding_rpc.sql` into the SQL Editor and run it.
 
+### Migration 4: User Memory Snapshots
+Copy and paste the contents of `sql/002_user_memory.sql` into the SQL Editor and run it.
+
 ## Step 3: Verify Setup
 
 After running all migrations, verify the setup:

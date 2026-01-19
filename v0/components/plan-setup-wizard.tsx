@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { addDays, format, isBefore, isSameDay, nextMonday, startOfWeek } from 'date-fns'
-import { ArrowLeft, Check, HelpCircle, X } from 'lucide-react'
+import { addDays, format, isBefore, nextMonday, startOfWeek } from 'date-fns'
+import { ArrowLeft, HelpCircle, X } from 'lucide-react'
 
 import { type PlanDistanceKey, type PlanTemplate } from '@/lib/plan-templates'
 import { cn } from '@/lib/utils'
@@ -27,7 +27,7 @@ export interface PlanTemplateWizardResult {
   difficulty: TrainingDifficultyPreference
 }
 
-const WIZARD_TOTAL_STEPS = 9
+const WIZARD_TOTAL_STEPS = 5
 
 const DISTANCE_CHIPS: Array<{ key: PlanDistanceKey; label: string }> = [
   { key: '5k', label: '5K' },
@@ -89,25 +89,9 @@ function getDefaultAvailableDays(daysPerWeek: number): Weekday[] {
   return patterns[key]
 }
 
-function getWeekdayLabel(day: Weekday) {
-  return WEEKDAYS.find((d) => d.key === day)?.label || day
-}
-
-function getWeekdayIndex(day: Weekday): number {
-  return WEEKDAYS.find((d) => d.key === day)?.weekdayIndex ?? 1
-}
-
 function getRaceWeekStart(startDate: Date, basePlanLengthWeeks: number) {
   const endDate = addDays(startDate, basePlanLengthWeeks * 7)
   return startOfWeek(endDate, { weekStartsOn: 1 })
-}
-
-function buildRaceDayOptions(raceWeekStart: Date) {
-  return WEEKDAYS.map((d) => ({
-    day: d.key,
-    label: d.label,
-    date: addDays(raceWeekStart, d.weekdayIndex === 0 ? 6 : d.weekdayIndex - 1),
-  }))
 }
 
 const WHEEL_ITEM_HEIGHT = 48
@@ -274,12 +258,23 @@ function SelectCard(props: {
 export function PlanSetupWizard(props: {
   template: PlanTemplate
   initialDaysPerWeek?: number
+  initialAvailableDays?: Weekday[]
+  initialLongRunDay?: Weekday
   onBackToDetail: () => void
   onClose: () => void
   onDistanceChange?: (distanceKey: PlanDistanceKey) => void
   onSubmit: (result: PlanTemplateWizardResult) => void | Promise<void>
 }) {
-  const { template, initialDaysPerWeek, onBackToDetail, onClose, onDistanceChange, onSubmit } = props
+  const {
+    template,
+    initialDaysPerWeek,
+    initialAvailableDays,
+    initialLongRunDay,
+    onBackToDetail,
+    onClose,
+    onDistanceChange,
+    onSubmit
+  } = props
   const [step, setStep] = useState(1)
 
   const [distanceKey, setDistanceKey] = useState<PlanDistanceKey>(template.distanceKey)
@@ -290,11 +285,22 @@ export function PlanSetupWizard(props: {
   const [minutes, setMinutes] = useState(Math.floor((defaultSeconds % 3600) / 60))
   const [seconds, setSeconds] = useState(defaultSeconds % 60)
 
-  const [daysPerWeek, setDaysPerWeek] = useState<number>(clampNumber(initialDaysPerWeek || 3, 2, 6))
-  const [availableDays, setAvailableDays] = useState<Weekday[]>(() => getDefaultAvailableDays(daysPerWeek))
-  const [longRunDay, setLongRunDay] = useState<Weekday>(() =>
-    availableDays.includes('Sat') ? 'Sat' : availableDays.at(-1) ?? 'Sun'
-  )
+  const seededDaysPerWeek = clampNumber(initialDaysPerWeek || 3, 2, 6)
+  const seededAvailableDays = (() => {
+    const validKeys = new Set(WEEKDAYS.map((d) => d.key))
+    const provided = Array.isArray(initialAvailableDays)
+      ? initialAvailableDays.filter((day) => validKeys.has(day))
+      : []
+    if (provided.length >= seededDaysPerWeek) return provided
+    return getDefaultAvailableDays(seededDaysPerWeek)
+  })()
+
+  const [daysPerWeek] = useState<number>(seededDaysPerWeek)
+  const [availableDays] = useState<Weekday[]>(() => seededAvailableDays)
+  const [longRunDay] = useState<Weekday>(() => {
+    if (initialLongRunDay && seededAvailableDays.includes(initialLongRunDay)) return initialLongRunDay
+    return seededAvailableDays.includes('Sat') ? 'Sat' : seededAvailableDays.at(-1) ?? 'Sun'
+  })
 
   const [startDate, setStartDate] = useState<Date>(() => new Date())
   const [startPreset, setStartPreset] = useState<'today' | 'tomorrow' | 'monday' | 'custom'>('today')
@@ -308,7 +314,6 @@ export function PlanSetupWizard(props: {
     () => getRaceWeekStart(startDate, basePlanLengthWeeks),
     [startDate, basePlanLengthWeeks]
   )
-  const raceOptions = useMemo(() => buildRaceDayOptions(raceWeekStart), [raceWeekStart])
   const [raceDate, setRaceDate] = useState<Date>(() => addDays(raceWeekStart, 5))
 
   const [trainingVolume, setTrainingVolume] = useState<TrainingVolumePreference>('progressive')
@@ -325,19 +330,6 @@ export function PlanSetupWizard(props: {
     setMinutes(Math.floor((defaultSeconds % 3600) / 60))
     setSeconds(defaultSeconds % 60)
   }, [defaultSeconds, timeSeeded])
-
-  useEffect(() => {
-    setAvailableDays((prev) => {
-      if (prev.length >= daysPerWeek) return prev
-      return getDefaultAvailableDays(daysPerWeek)
-    })
-  }, [daysPerWeek])
-
-  useEffect(() => {
-    if (!availableDays.includes(longRunDay)) {
-      setLongRunDay(availableDays.includes('Sat') ? 'Sat' : availableDays.at(-1) ?? 'Sun')
-    }
-  }, [availableDays, longRunDay])
 
   useEffect(() => {
     const today = new Date()
@@ -365,11 +357,8 @@ export function PlanSetupWizard(props: {
   }, [planLengthMode, customWeeks, customEndDate, startDate])
 
   useEffect(() => {
-    const inWeek = raceOptions.some((o) => isSameDay(o.date, raceDate))
-    if (!inWeek) {
-      setRaceDate(addDays(raceWeekStart, 5))
-    }
-  }, [raceOptions, raceWeekStart, raceDate])
+    setRaceDate(addDays(raceWeekStart, 5))
+  }, [raceWeekStart])
 
   const currentRaceTimeSeconds = hours * 3600 + minutes * 60 + seconds
   const progressPercent = Math.round(((step - 1) / (WIZARD_TOTAL_STEPS - 1)) * 100)
@@ -391,25 +380,17 @@ export function PlanSetupWizard(props: {
       case 1:
         return currentRaceTimeSeconds > 0
       case 2:
-        return daysPerWeek >= 2 && daysPerWeek <= 6
-      case 3:
-        return availableDays.length >= daysPerWeek
-      case 4:
-        return availableDays.includes(longRunDay)
-      case 5:
         return !isBefore(startDate, addDays(new Date(), -1))
-      case 6:
+      case 3:
         return basePlanLengthWeeks >= 4 && basePlanLengthWeeks <= 12
-      case 7:
-        return !!raceDate
-      case 8:
+      case 4:
         return true
-      case 9:
+      case 5:
         return true
       default:
         return false
     }
-  }, [step, currentRaceTimeSeconds, daysPerWeek, availableDays, longRunDay, startDate, basePlanLengthWeeks, raceDate])
+  }, [step, currentRaceTimeSeconds, startDate, basePlanLengthWeeks])
 
   const handleBack = () => {
     if (step === 1) {
@@ -421,7 +402,7 @@ export function PlanSetupWizard(props: {
 
   const handleContinue = () => {
     if (!canContinue) return
-    if (step === 9) {
+    if (step === 5) {
       void onSubmit({
         distanceKey,
         currentRaceTimeSeconds,
@@ -552,110 +533,6 @@ export function PlanSetupWizard(props: {
           <div className="pt-2 space-y-8">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
-                <h2 className="text-2xl font-semibold leading-tight">How many days per week would you like to run?</h2>
-                <p className="text-white/60 mt-4 leading-relaxed text-[15px]">
-                  This should be at most once more than you currently run per week to reduce the risk of injury
-                </p>
-              </div>
-              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0" aria-label="Help">
-                <HelpCircle className="h-5 w-5" />
-              </Button>
-            </div>
-
-            <div className="space-y-4">
-              {[2, 3, 4, 5, 6].map((n) => (
-                <SelectCard
-                  key={n}
-                  selected={daysPerWeek === n}
-                  onClick={() => setDaysPerWeek(n)}
-                  title={`${n} Days`}
-                />
-              ))}
-            </div>
-          </div>
-        ) : null}
-        {step === 3 ? (
-          <div className="pt-2 space-y-8">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <h2 className="text-2xl font-semibold leading-tight">Which days are you free to run on?</h2>
-                <p className="text-white/60 mt-4 leading-relaxed text-[15px]">
-                  Please select every day available to you, spaced throughout the week, so we can choose the most optimal days to run.
-                </p>
-                <p
-                  className={cn(
-                    'mt-4 font-medium text-sm',
-                    availableDays.length >= daysPerWeek ? 'text-white/50' : 'text-emerald-400'
-                  )}
-                >
-                  Please select at least {daysPerWeek} days to continue
-                </p>
-              </div>
-              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0" aria-label="Help">
-                <HelpCircle className="h-5 w-5" />
-              </Button>
-            </div>
-
-            <div className="space-y-3.5">
-              {WEEKDAYS.map((d) => {
-                const selected = availableDays.includes(d.key)
-                return (
-                  <SelectCard
-                    key={d.key}
-                    selected={selected}
-                    onClick={() => {
-                      setAvailableDays((prev) => {
-                        if (prev.includes(d.key)) return prev.filter((x) => x !== d.key)
-                        return [...prev, d.key]
-                      })
-                    }}
-                    title={d.label}
-                    right={
-                      selected ? (
-                        <div className="h-7 w-7 rounded-full bg-white text-neutral-950 flex items-center justify-center">
-                          <Check className="h-4 w-4" />
-                        </div>
-                      ) : (
-                        <div className="h-7 w-7 rounded-full border border-white/25" />
-                      )
-                    }
-                  />
-                )
-              })}
-            </div>
-          </div>
-        ) : null}
-        {step === 4 ? (
-          <div className="pt-2 space-y-8">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <h2 className="text-2xl font-semibold leading-tight">Which day do you want to do your long runs on?</h2>
-                <p className="text-white/60 mt-4 leading-relaxed text-[15px]">Choose one to continue</p>
-              </div>
-              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0" aria-label="Help">
-                <HelpCircle className="h-5 w-5" />
-              </Button>
-            </div>
-
-            <div className="space-y-3.5">
-              {availableDays
-                .slice()
-                .sort((a, b) => getWeekdayIndex(a) - getWeekdayIndex(b))
-                .map((d) => (
-                  <SelectCard
-                    key={d}
-                    selected={longRunDay === d}
-                    onClick={() => setLongRunDay(d)}
-                    title={getWeekdayLabel(d)}
-                  />
-                ))}
-            </div>
-          </div>
-        ) : null}
-        {step === 5 ? (
-          <div className="pt-2 space-y-8">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
                 <h2 className="text-2xl font-semibold tracking-tight leading-tight">When do you want to start your plan?</h2>
                 <p className="text-white/60 mt-4 leading-relaxed text-[15px]">Pick a start date that suits you best (you can change this later)</p>
               </div>
@@ -722,7 +599,7 @@ export function PlanSetupWizard(props: {
             </div>
           </div>
         ) : null}
-        {step === 6 ? (
+        {step === 3 ? (
           <div className="pt-2 space-y-8">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
@@ -805,34 +682,7 @@ export function PlanSetupWizard(props: {
             </div>
           </div>
         ) : null}
-        {step === 7 ? (
-          <div className="pt-2 space-y-8">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <h2 className="text-2xl font-semibold leading-tight">Which day do you want to do your {template.distanceLabel} race on?</h2>
-                <p className="text-white/60 mt-4 leading-relaxed text-[15px]">
-                  The last run of your training plan will be a {template.distanceLabel} race. Select the day that you want to go and get that personal best!
-                </p>
-              </div>
-              <Button variant="ghost" size="icon" className="text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0" aria-label="Help">
-                <HelpCircle className="h-5 w-5" />
-              </Button>
-            </div>
-
-            <div className="space-y-3.5">
-              {raceOptions.map((option) => (
-                <SelectCard
-                  key={option.day}
-                  selected={isSameDay(raceDate, option.date)}
-                  onClick={() => setRaceDate(option.date)}
-                  title={option.label}
-                  subtitle={format(option.date, 'MMM d, yyyy')}
-                />
-              ))}
-            </div>
-          </div>
-        ) : null}
-        {step === 8 ? (
+        {step === 4 ? (
           <div className="pt-2 space-y-8">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
@@ -933,7 +783,7 @@ export function PlanSetupWizard(props: {
             </div>
           </div>
         ) : null}
-        {step === 9 ? (
+        {step === 5 ? (
           <div className="pt-2 space-y-8">
             <div>
               <h2 className="text-2xl font-semibold leading-tight">Your plan is nearly ready</h2>
@@ -981,14 +831,6 @@ export function PlanSetupWizard(props: {
                 </li>
                 <li className="flex items-start gap-3 text-white/80 text-[15px]">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-2 shrink-0"></div>
-                  <span>You are available to run on <span className="text-white font-medium">{availableDays.map(getWeekdayLabel).join(', ')}</span></span>
-                </li>
-                <li className="flex items-start gap-3 text-white/80 text-[15px]">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-2 shrink-0"></div>
-                  <span>You&apos;d like your long run to be on <span className="text-white font-medium">{getWeekdayLabel(longRunDay)}</span></span>
-                </li>
-                <li className="flex items-start gap-3 text-white/80 text-[15px]">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-2 shrink-0"></div>
                   <span>Your plan starts on <span className="text-white font-medium">{format(startDate, 'EEE, MMM d, yyyy')}</span></span>
                 </li>
               </ul>
@@ -1012,7 +854,7 @@ export function PlanSetupWizard(props: {
           onClick={handleContinue}
           disabled={!canContinue}
         >
-          {step === 9 ? 'Generate my plan' : 'Continue'}
+          {step === 5 ? 'Generate my plan' : 'Continue'}
         </Button>
       </div>
     </div>

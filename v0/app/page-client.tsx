@@ -5,6 +5,9 @@
 	import dynamic from 'next/dynamic'
 	import { DATABASE } from '@/lib/constants'
 	import { logger } from '@/lib/logger';
+	import { WelcomeModal } from '@/components/auth/welcome-modal';
+	import { SyncService } from '@/lib/sync/sync-service';
+	import { useAuth } from '@/lib/auth-context';
 
 type MainScreen = 'today' | 'plan' | 'record' | 'chat' | 'profile' | 'run-report'
 
@@ -231,9 +234,12 @@ export default function RunSmartApp() {
 
   // Ref to prevent double initialization in React Strict Mode
   const initRef = useRef(false)
-  
+
   // Ref to store dynamically loaded modules
   const dbUtilsRef = useRef<any>(null)
+
+  // Get auth context for sync
+  const { user, profileId } = useAuth()
 
 
   logger.log('🚀 RunSmartApp component rendering...', { isLoading, isOnboardingComplete })
@@ -446,6 +452,23 @@ export default function RunSmartApp() {
       initRef.current = false
     };
   }, [mounted])
+
+  // Auto-sync: Start background sync for authenticated users
+  useEffect(() => {
+    if (!mounted || !user || !profileId) {
+      return
+    }
+
+    logger.log('[Sync] Starting auto-sync for authenticated user')
+    const syncService = SyncService.getInstance()
+    syncService.startAutoSync()
+
+    // Cleanup: Stop auto-sync when component unmounts or user signs out
+    return () => {
+      logger.log('[Sync] Stopping auto-sync')
+      syncService.stopAutoSync()
+    }
+  }, [mounted, user, profileId])
 
   // Persist active screen in URL/session so reloads return to the same tab (important for /profile deep links and chunk reloads)
   useEffect(() => {
@@ -693,6 +716,9 @@ export default function RunSmartApp() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50/30 to-cyan-50/30 max-w-md mx-auto relative">
       <div className="pb-20">{renderScreen()}</div>
       {isOnboardingComplete && <BottomNavigation currentScreen={currentScreen} onScreenChange={setCurrentScreen} />}
+
+      {/* Welcome Modal for existing users */}
+      <WelcomeModal />
 
       {/* Debug Panel - Access with Ctrl+Shift+D */}
       <OnboardingDebugPanel

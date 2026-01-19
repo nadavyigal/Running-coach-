@@ -82,7 +82,11 @@ async function completeOnboarding(page: Page) {
   await page.getByLabel(/Your age/i).fill('25')
   await page.getByRole('button', { name: /^continue$/i }).click()
 
-  await page.getByText(/Morning/i).click()
+  await page.getByText(/current race time/i).waitFor({ state: 'visible', timeout: 10000 })
+  await page.getByRole('button', { name: /^continue$/i }).click()
+
+  await page.getByText(/How many days per week/i).waitFor({ state: 'visible', timeout: 10000 })
+  await page.getByText(/Saturday/i).click()
   await page.getByRole('button', { name: /^continue$/i }).click()
 
   await page.getByRole('button', { name: /start my journey/i }).click()

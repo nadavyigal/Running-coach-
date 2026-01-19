@@ -7,8 +7,10 @@ import { Toaster } from '@/components/ui/toaster'
 import { ReminderInit } from '@/components/reminder-init'
 import { PostHogProvider } from '@/lib/posthog-provider'
 import { ChunkErrorBoundary } from '@/components/chunk-error-boundary'
+import { ErrorBoundary } from '@/components/error-boundary'
 import { ServiceWorkerRegister } from '@/components/service-worker-register'
 import { DataProvider } from '@/contexts/DataContext'
+import { AuthProvider } from '@/lib/auth-context'
 
 // Optimized font loading with next/font
 const inter = Inter({
@@ -112,21 +114,25 @@ export default function RootLayout({
           `}
         </Script>
         <ServiceWorkerRegister />
-        <ChunkErrorBoundary>
-          <PostHogProvider>
-            <DataProvider>
-              <ReminderInit />
-              {children}
-              <Toaster />
-            {process.env.NEXT_PUBLIC_POSTHOG_SURVEYS_ENABLED !== 'false' && (
-                <Script
-                  src="https://us-assets.i.posthog.com/static/surveys.js"
-                  strategy="lazyOnload"
-                />
-              )}
-            </DataProvider>
-          </PostHogProvider>
-        </ChunkErrorBoundary>
+        <ErrorBoundary>
+          <ChunkErrorBoundary>
+            <PostHogProvider>
+              <AuthProvider>
+                <DataProvider>
+                  <ReminderInit />
+                  {children}
+                  <Toaster />
+                {process.env.NEXT_PUBLIC_POSTHOG_SURVEYS_ENABLED !== 'false' && (
+                    <Script
+                      src="https://us-assets.i.posthog.com/static/surveys.js"
+                      strategy="lazyOnload"
+                    />
+                  )}
+                </DataProvider>
+              </AuthProvider>
+            </PostHogProvider>
+          </ChunkErrorBoundary>
+        </ErrorBoundary>
       </body>
     </html>
   )

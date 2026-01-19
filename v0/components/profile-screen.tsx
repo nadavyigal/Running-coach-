@@ -62,6 +62,10 @@ import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { UserDataSettings } from "@/components/user-data-settings";
+import { useAuth } from "@/lib/auth-context";
+import { AuthModal } from "@/components/auth/auth-modal";
+import { LogIn, LogOut, UserPlus } from "lucide-react";
+import { SyncStatusIndicator } from "@/components/sync-status-indicator";
 
 export function ProfileScreen() {
   // Get shared data from context
@@ -98,6 +102,11 @@ export function ProfileScreen() {
   const [showMergeDialog, setShowMergeDialog] = useState(false)
   const [mergeSourceGoal, setMergeSourceGoal] = useState<Goal | null>(null)
   const [isSwitchingPrimary, setIsSwitchingPrimary] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [authModalTab, setAuthModalTab] = useState<'signup' | 'login'>('signup')
+
+  // Auth context
+  const { user: authUser, loading: authLoading, signOut } = useAuth()
 
   // Sync from context
   useEffect(() => {
@@ -1141,6 +1150,105 @@ export function ProfileScreen() {
             </CardContent>
           </Card>
 
+          {/* Authentication Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Account
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {authLoading ? (
+                <div className="flex items-center justify-center p-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-gray-600" />
+                </div>
+              ) : authUser ? (
+                <>
+                  <div className="flex items-start justify-between p-4 bg-green-50 rounded-lg border border-green-200">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Shield className="h-4 w-4 text-green-600" />
+                        <span className="font-medium text-green-900">Signed In</span>
+                      </div>
+                      <p className="text-sm text-green-700">{authUser.email}</p>
+                      <p className="text-xs text-green-600 mt-2">
+                        Your data is automatically backed up to the cloud
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Sync Status */}
+                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <SyncStatusIndicator />
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={async () => {
+                      try {
+                        await signOut()
+                        toast({
+                          title: "Signed out",
+                          description: "You've been signed out successfully",
+                        })
+                      } catch (error) {
+                        toast({
+                          title: "Error",
+                          description: "Failed to sign out. Please try again.",
+                          variant: "destructive",
+                        })
+                      }
+                    }}
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Sign Out
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-yellow-900 text-sm mb-1">
+                          Not Signed In
+                        </p>
+                        <p className="text-xs text-yellow-700">
+                          Create an account to backup your runs and access them from any device
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1"
+                      onClick={() => {
+                        setAuthModalTab('signup')
+                        setShowAuthModal(true)
+                      }}
+                    >
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Sign Up
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        setAuthModalTab('login')
+                        setShowAuthModal(true)
+                      }}
+                    >
+                      <LogIn className="h-4 w-4 mr-2" />
+                      Log In
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Settings */}
           <Card>
             <CardHeader>
@@ -1362,6 +1470,13 @@ export function ProfileScreen() {
               </div>
             </DialogContent>
           </Dialog>
+
+          {/* Auth Modal */}
+          <AuthModal
+            open={showAuthModal}
+            onOpenChange={setShowAuthModal}
+            defaultTab={authModalTab}
+          />
         </>
       )}
     </div>
