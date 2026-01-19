@@ -35,7 +35,7 @@ const nextConfig = {
   // Fixed: sharp and exifr externalization for Vercel deployment
   experimental: {
     optimizeCss: false, // Disable CSS optimization that uses critters
-    serverComponentsExternalPackages: ['sharp', 'exifr'], // Treat sharp and exifr as external (server-only)
+    serverComponentsExternalPackages: ['sharp', 'exifr', 'isomorphic-dompurify'], // Treat as external (server-only)
     optimizePackageImports: [
       '@radix-ui/react-icons',
       'date-fns',
@@ -130,6 +130,7 @@ const nextConfig = {
         exifr: false,
       };
     }
+
 
     if (!dev && !isServer) {
       // Code splitting optimization with better defaults
