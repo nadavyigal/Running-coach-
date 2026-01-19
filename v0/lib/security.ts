@@ -3,7 +3,16 @@
  * Used to prevent XSS, prompt injection, and other security vulnerabilities
  */
 
-import DOMPurify from 'isomorphic-dompurify';
+// Lazy load DOMPurify to avoid build-time issues with isomorphic-dompurify
+let DOMPurifyInstance: typeof import('isomorphic-dompurify').default | null = null;
+
+async function getDOMPurify() {
+  if (!DOMPurifyInstance) {
+    const module = await import('isomorphic-dompurify');
+    DOMPurifyInstance = module.default;
+  }
+  return DOMPurifyInstance;
+}
 
 /**
  * Sanitizes user input for use in AI prompts to prevent prompt injection attacks
@@ -26,9 +35,10 @@ export function sanitizeForPrompt(input: string, maxLength: number = 500): strin
  * Sanitizes HTML content to prevent XSS attacks
  * Allows only safe HTML tags and attributes
  */
-export function sanitizeHtml(html: string): string {
+export async function sanitizeHtml(html: string): Promise<string> {
   if (!html) return '';
 
+  const DOMPurify = await getDOMPurify();
   return DOMPurify.sanitize(html, {
     ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br', 'ul', 'ol', 'li', 'code', 'pre'],
     ALLOWED_ATTR: ['href', 'target', 'rel'],
@@ -40,10 +50,11 @@ export function sanitizeHtml(html: string): string {
  * Sanitizes user chat messages for storage and display
  * Removes HTML but preserves text content
  */
-export function sanitizeChatMessage(message: string, maxLength: number = 2000): string {
+export async function sanitizeChatMessage(message: string, maxLength: number = 2000): Promise<string> {
   if (!message) return '';
 
   // First remove any HTML tags
+  const DOMPurify = await getDOMPurify();
   const textOnly = DOMPurify.sanitize(message, { ALLOWED_TAGS: [] });
 
   // Then limit length and trim
