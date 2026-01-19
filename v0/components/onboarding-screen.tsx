@@ -5,14 +5,14 @@ import { Button } from "@/components/ui/button"
 import {
   AlertCircle,
   ArrowLeft,
+  Brain,
   Calendar,
   CheckCircle2,
-  Clock,
   Gauge,
   HelpCircle,
-  Play,
   Route,
   Sparkles,
+  Trophy,
   TrendingUp,
 } from "lucide-react"
 import { dbUtils, setReferenceRace } from "@/lib/dbUtils"
@@ -818,59 +818,56 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       case 1:
         return (
           <div
-            className="flex min-h-[70vh] flex-col justify-between px-6 pb-10 text-white"
-            style={{ paddingTop: 'max(3rem, env(safe-area-inset-top, 1rem))' }}
+            className="flex min-h-[75vh] flex-col justify-between px-6 pb-10 text-white"
+            style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 1rem))' }}
           >
             <div className="space-y-10">
-              <div className="mx-auto h-1 w-16 rounded-full bg-white/20" />
-              <div className="flex flex-col items-center gap-4 text-center">
-                <div className="h-14 w-14 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center">
-                  <Sparkles className="h-7 w-7 text-emerald-300" />
+              <div className="space-y-4">
+                <div className="flex items-center justify-between text-white/70">
+                  <button
+                    type="button"
+                    onClick={prevStep}
+                    disabled
+                    className="h-9 w-9 rounded-full border border-white/15 flex items-center justify-center opacity-50"
+                    aria-label="Back"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </button>
+                  <div className="h-1 w-24 rounded-full bg-white/20" />
+                  <div className="w-9" />
                 </div>
-                <div className="space-y-1">
-                  <div className="text-base font-semibold tracking-wide">RunSmart AI</div>
-                  <div className="text-xs text-white/60">RunSmart: Your AI Running Coach</div>
-                </div>
+                <div className="text-sm text-white/70">Step {currentStep} of {totalSteps}</div>
               </div>
 
-              <div className="text-center space-y-3">
-                <h1 className="text-3xl sm:text-4xl font-semibold leading-tight">
-                  Unlock Your <span className="text-emerald-300">Personalized</span> Running Potential
+              <div className="space-y-4">
+                <h1 className="text-3xl sm:text-4xl font-semibold italic leading-tight tracking-tight">
+                  LET&apos;S CRUSH YOUR NEXT GOAL.
                 </h1>
-                <p className="text-sm text-white/70">
-                  Experience personalized training designed for real results.
-                </p>
+                <p className="text-sm text-white/70">Tell me about your running style</p>
+              </div>
+
+              <div className="flex items-center gap-4">
+                {[
+                  { label: 'AI Powered', icon: Brain },
+                  { label: 'Flexible Sched', icon: Calendar },
+                  { label: 'Goal Oriented', icon: Trophy },
+                ].map((item) => (
+                  <div key={item.label} className="flex flex-col items-center gap-2 text-xs text-white/70">
+                    <div className="h-12 w-12 rounded-full border border-emerald-400/60 text-emerald-300 flex items-center justify-center shadow-[0_0_16px_rgba(16,185,129,0.35)]">
+                      <item.icon className="h-5 w-5" />
+                    </div>
+                    <span>{item.label}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="rounded-3xl border border-white/30 bg-white/85 p-5 text-neutral-900 shadow-xl backdrop-blur-md">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-semibold text-orange-500">Tailored to YOU</div>
-                    <p className="mt-2 text-sm text-neutral-700">
-                      Build a plan that fits your goals, schedule, and current progress.
-                    </p>
-                  </div>
-                  <div className="h-10 w-10 rounded-2xl bg-orange-100 text-orange-500 flex items-center justify-center">
-                    <Sparkles className="h-5 w-5" />
-                  </div>
-                </div>
+            <div className="flex flex-col items-center gap-3 text-center">
+              <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-emerald-500/40 to-emerald-500/10 flex items-center justify-center">
+                <Sparkles className="h-8 w-8 text-emerald-300" />
               </div>
-
-              <div className="rounded-3xl border border-white/30 bg-white/85 p-5 text-neutral-900 shadow-xl backdrop-blur-md">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-semibold text-orange-500">Run On YOUR Time</div>
-                    <p className="mt-2 text-sm text-neutral-700">
-                      Sync training with your week. Set frequency and long run day to shape the plan.
-                    </p>
-                  </div>
-                  <div className="h-10 w-10 rounded-2xl bg-orange-100 text-orange-500 flex items-center justify-center">
-                    <Clock className="h-5 w-5" />
-                  </div>
-                </div>
-              </div>
+              <div className="text-2xl font-semibold">RunSmart</div>
+              <div className="text-xs text-white/60">Your AI Running Coach</div>
             </div>
           </div>
         )
@@ -1233,7 +1230,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       <div className="relative min-h-screen bg-neutral-950 text-white flex flex-col">
         {isIntroStep && (
           <div className="absolute inset-0 z-0">
-            <div className="absolute inset-0 bg-[url('/placeholder.jpg')] bg-cover bg-center" />
+            <div className="absolute inset-0 bg-[url('/onboarding-hero.jpg')] bg-cover bg-center" />
             <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/30 via-neutral-950/55 to-neutral-950" />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.18),_transparent_45%)]" />
           </div>
@@ -1281,39 +1278,25 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         <div
           className={cn(
             "px-4 pt-3 relative z-10",
-            isIntroStep ? "bg-gradient-to-t from-neutral-950/90 via-neutral-950/60 to-transparent" : "bg-neutral-950"
+            isIntroStep ? "bg-gradient-to-t from-neutral-950/95 via-neutral-950/70 to-transparent" : "bg-neutral-950"
           )}
           style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom, 1.5rem))' }}
         >
-          {isIntroStep && (
-            <div className="text-center text-xs uppercase tracking-widest text-white/70 mb-3">
-              {currentStep} of {totalSteps} steps
-            </div>
-          )}
           <Button
             type="button"
             className={cn(
               "w-full h-14 font-semibold text-base shadow-xl transition-all duration-200",
-              isIntroStep ? "rounded-full shadow-[0_12px_30px_rgba(15,23,42,0.45)]" : "rounded-2xl",
+              isIntroStep ? "rounded-2xl shadow-[0_12px_30px_rgba(15,23,42,0.45)]" : "rounded-2xl",
               isActionDisabled
                 ? "bg-white/10 text-white/40 cursor-not-allowed"
                 : isIntroStep
-                  ? "bg-gradient-to-r from-orange-400 to-orange-500 text-neutral-900 hover:from-orange-300 hover:to-orange-400 hover:shadow-2xl"
+                  ? "bg-gradient-to-r from-sky-500 to-blue-600 text-white hover:from-sky-400 hover:to-blue-500 hover:shadow-2xl"
                   : "bg-white text-neutral-950 hover:bg-white/95 hover:shadow-2xl hover:scale-[1.02] active:scale-100"
             )}
             onClick={isFinalStep ? handleComplete : nextStep}
             disabled={isActionDisabled}
           >
-            {isIntroStep ? (
-              <span className="flex items-center justify-center gap-3">
-                <span>Let's Get Started</span>
-                <span className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center">
-                  <Play className="h-4 w-4 text-white" />
-                </span>
-              </span>
-            ) : (
-              isFinalStep ? (isGeneratingPlan ? "Completing..." : "Complete setup") : "Continue"
-            )}
+            {isFinalStep ? (isGeneratingPlan ? "Completing..." : "Complete setup") : "Continue"}
           </Button>
         </div>
       </div>
