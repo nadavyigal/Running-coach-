@@ -1221,7 +1221,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               className="absolute inset-0 bg-cover bg-center"
               style={{ backgroundImage: "url('/images/runsmart-onboarding-bg.jpg')", backgroundPosition: '50% 25%' }}
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/30 to-neutral-950/90" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/18 to-neutral-950/75" />
           </div>
         )}
 
@@ -1253,7 +1253,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           </div>
         )}
 
-        <div className={cn("flex-1 overflow-y-auto relative z-10", isIntroStep ? "px-0 pb-28" : "px-4 pb-4")}>
+        <div className={cn("flex-1 overflow-y-auto relative z-10", isIntroStep ? "px-0 pb-36" : "px-4 pb-4")}>
           {renderStep()}
 
           {!isStepValid && currentStep > 1 && (
