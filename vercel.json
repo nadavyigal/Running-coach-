@@ -1,14 +1,7 @@
 {
-  "buildCommand": "cd v0 && npm install && npm run build",
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cd v0 && npm run build",
   "devCommand": "cd v0 && npm run dev",
   "installCommand": "cd v0 && npm install",
-  "outputDirectory": "v0/.next",
-  "framework": null,
-  "git": {
-    "deploymentEnabled": true
-  },
-  "github": {
-    "autoAlias": true,
-    "silent": false
-  }
+  "outputDirectory": "v0/.next"
 }
