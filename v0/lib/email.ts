@@ -1,7 +1,18 @@
 import { Resend } from 'resend';
 
-// Initialize Resend with API key from environment variables
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy-initialize Resend to avoid build-time errors when API key is not available
+let resendInstance: Resend | null = null;
+
+function getResend(): Resend {
+  if (!resendInstance) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      throw new Error('RESEND_API_KEY environment variable is not set');
+    }
+    resendInstance = new Resend(apiKey);
+  }
+  return resendInstance;
+}
 
 // Configuration
 const DEFAULT_FROM_EMAIL = 'Run-Smart <noreply@runsmart-ai.com>';
@@ -22,6 +33,7 @@ export interface EmailOptions {
  */
 export async function sendEmail({ to, subject, html, text }: EmailOptions) {
   try {
+    const resend = getResend();
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: Array.isArray(to) ? to : [to],
