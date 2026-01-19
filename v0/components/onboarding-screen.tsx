@@ -818,8 +818,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       case 1:
         return (
           <div
-            className="flex min-h-[75vh] flex-col justify-between px-6 pb-10 text-white"
-            style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 1rem))' }}
+            className="flex min-h-[80vh] flex-col justify-between px-6 pb-10 text-white"
+            style={{ paddingTop: 'max(2rem, env(safe-area-inset-top, 2rem))' }}
           >
             <div className="space-y-10">
               <div className="space-y-4">
@@ -1230,9 +1230,11 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       <div className="relative min-h-screen bg-neutral-950 text-white flex flex-col">
         {isIntroStep && (
           <div className="absolute inset-0 z-0">
-            <div className="absolute inset-0 bg-[url('/onboarding-hero.jpg')] bg-cover bg-center" />
-            <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/30 via-neutral-950/55 to-neutral-950" />
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.18),_transparent_45%)]" />
+            <div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: "url('/images/runsmart-onboarding-bg.jpg')" }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/40 to-neutral-950/95" />
           </div>
         )}
 
