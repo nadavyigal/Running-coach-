@@ -818,28 +818,15 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       case 1:
         return (
           <div
-            className="flex min-h-[80vh] flex-col justify-between px-6 pb-10 text-white"
+            className="flex min-h-[80vh] flex-col justify-between px-6 pb-8 text-white"
             style={{ paddingTop: 'max(2rem, env(safe-area-inset-top, 2rem))' }}
           >
-            <div className="space-y-10">
+            <div className="space-y-9">
               <div className="space-y-4">
-                <div className="flex items-center justify-between text-white/70">
-                  <button
-                    type="button"
-                    onClick={prevStep}
-                    disabled
-                    className="h-9 w-9 rounded-full border border-white/15 flex items-center justify-center opacity-50"
-                    aria-label="Back"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                  </button>
-                  <div className="h-1 w-24 rounded-full bg-white/20" />
-                  <div className="w-9" />
-                </div>
-                <div className="text-sm text-white/70">Step {currentStep} of {totalSteps}</div>
+                <div className="text-xs text-white/70">Step 1 of 4</div>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <h1 className="text-3xl sm:text-4xl font-semibold italic leading-tight tracking-tight">
                   LET&apos;S CRUSH YOUR NEXT GOAL.
                 </h1>
@@ -852,8 +839,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                   { label: 'Flexible Sched', icon: Calendar },
                   { label: 'Goal Oriented', icon: Trophy },
                 ].map((item) => (
-                  <div key={item.label} className="flex flex-col items-center gap-2 text-xs text-white/70">
-                    <div className="h-12 w-12 rounded-full border border-emerald-400/60 text-emerald-300 flex items-center justify-center shadow-[0_0_16px_rgba(16,185,129,0.35)]">
+                  <div key={item.label} className="flex flex-col items-center gap-2 text-[11px] text-white/70">
+                    <div className="h-12 w-12 rounded-full border border-emerald-400 text-emerald-300 flex items-center justify-center shadow-[0_0_20px_rgba(34,197,94,0.55)] bg-black/20">
                       <item.icon className="h-5 w-5" />
                     </div>
                     <span>{item.label}</span>
@@ -863,8 +850,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             </div>
 
             <div className="flex flex-col items-center gap-3 text-center">
-              <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-emerald-500/40 to-emerald-500/10 flex items-center justify-center">
-                <Sparkles className="h-8 w-8 text-emerald-300" />
+              <div className="h-14 w-14 rounded-3xl bg-gradient-to-br from-emerald-500/40 to-emerald-500/10 flex items-center justify-center">
+                <Sparkles className="h-7 w-7 text-emerald-300" />
               </div>
               <div className="text-2xl font-semibold">RunSmart</div>
               <div className="text-xs text-white/60">Your AI Running Coach</div>
@@ -1232,9 +1219,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           <div className="absolute inset-0 z-0">
             <div
               className="absolute inset-0 bg-cover bg-center"
-              style={{ backgroundImage: "url('/images/runsmart-onboarding-bg.jpg')" }}
+              style={{ backgroundImage: "url('/images/runsmart-onboarding-bg.jpg')", backgroundPosition: '50% 25%' }}
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/40 to-neutral-950/95" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/30 to-neutral-950/90" />
           </div>
         )}
 
@@ -1292,7 +1279,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               isActionDisabled
                 ? "bg-white/10 text-white/40 cursor-not-allowed"
                 : isIntroStep
-                  ? "bg-gradient-to-r from-sky-500 to-blue-600 text-white hover:from-sky-400 hover:to-blue-500 hover:shadow-2xl"
+                  ? "bg-gradient-to-r from-sky-400 to-blue-500 text-neutral-950 hover:from-sky-300 hover:to-blue-400 hover:shadow-2xl"
                   : "bg-white text-neutral-950 hover:bg-white/95 hover:shadow-2xl hover:scale-[1.02] active:scale-100"
             )}
             onClick={isFinalStep ? handleComplete : nextStep}
