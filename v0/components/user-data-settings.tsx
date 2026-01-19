@@ -1,28 +1,15 @@
-﻿'use client';
+'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/components/ui/use-toast';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  User as UserIcon,
-  Trophy,
-  Activity,
-  History,
-  Save,
-  RotateCcw,
-  Calculator,
-  AlertCircle,
-} from 'lucide-react';
+import { AlertCircle, Calculator, RotateCcw, Save, X } from 'lucide-react';
 import { dbUtils } from '@/lib/dbUtils';
-import { type User } from '@/lib/db';
+import { type PlanSetupPreferences, type User } from '@/lib/db';
 import {
   validateUserData,
   calculateMaxHR,
@@ -32,12 +19,168 @@ import {
   METRIC_DESCRIPTIONS,
 } from '@/lib/userDataValidation';
 import { calculateVDOT } from '@/lib/pace-zones';
+import { cn } from '@/lib/utils';
 
 interface UserDataSettingsProps {
   userId: number;
   open: boolean;
   onClose: () => void;
   onSave?: () => void;
+}
+
+type Weekday = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
+
+const WEEKDAYS: Array<{ key: Weekday; label: string }> = [
+  { key: 'Mon', label: 'Monday' },
+  { key: 'Tue', label: 'Tuesday' },
+  { key: 'Wed', label: 'Wednesday' },
+  { key: 'Thu', label: 'Thursday' },
+  { key: 'Fri', label: 'Friday' },
+  { key: 'Sat', label: 'Saturday' },
+  { key: 'Sun', label: 'Sunday' },
+];
+
+const EXPERIENCE_OPTIONS: Array<{
+  value: User['experience'];
+  title: string;
+  description: string;
+}> = [
+  { value: 'beginner', title: 'Beginner', description: 'New to running or returning after time off' },
+  { value: 'intermediate', title: 'Intermediate', description: 'Run regularly with steady weekly volume' },
+  { value: 'advanced', title: 'Advanced', description: 'Experienced runner with specific goals' },
+];
+
+const RACE_DISTANCE_OPTIONS = [
+  { value: 5, label: '5K' },
+  { value: 10, label: '10K' },
+  { value: 21.1, label: 'Half Marathon' },
+  { value: 42.2, label: 'Marathon' },
+];
+
+const TRAINING_DAY_OPTIONS = [2, 3, 4, 5, 6];
+
+const STEPS = [
+  {
+    id: 'profile',
+    label: 'Profile',
+    title: 'Profile basics',
+    description: 'Set your baseline so plans stay realistic.',
+  },
+  {
+    id: 'race',
+    label: 'Race',
+    title: 'Recent race result',
+    description: 'Use a recent effort to calculate training paces.',
+  },
+  {
+    id: 'metrics',
+    label: 'Metrics',
+    title: 'Physiological metrics',
+    description: 'Optional inputs for more precise zones.',
+  },
+  {
+    id: 'history',
+    label: 'History',
+    title: 'Training history',
+    description: 'Add meaningful runs for better context.',
+  },
+];
+
+const DEFAULT_LONG_RUN_DAY: Weekday = 'Sat';
+const WEEKDAY_SET = new Set(WEEKDAYS.map((day) => day.key));
+
+const isWeekday = (value?: string): value is Weekday =>
+  Boolean(value && WEEKDAY_SET.has(value as Weekday));
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function selectTrainingDays(availableDays: Weekday[], daysPerWeek: number, longRunDay: Weekday): Weekday[] {
+  const dayToIndex: Record<Weekday, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 };
+  const availableSet = new Set(availableDays);
+  const desired = clampNumber(daysPerWeek, 2, 6);
+  const chosen = new Set<Weekday>();
+
+  if (availableSet.has(longRunDay)) chosen.add(longRunDay);
+
+  const candidates = availableDays
+    .slice()
+    .sort((a, b) => dayToIndex[a] - dayToIndex[b]);
+
+  const circularDistance = (a: number, b: number) => {
+    const diff = Math.abs(a - b);
+    return Math.min(diff, 7 - diff);
+  };
+
+  while (chosen.size < desired) {
+    let best: Weekday | null = null;
+    let bestScore = -1;
+
+    for (const candidate of candidates) {
+      if (chosen.has(candidate)) continue;
+      const candidateIndex = dayToIndex[candidate];
+      const distances = Array.from(chosen).map((d) => circularDistance(candidateIndex, dayToIndex[d]));
+      const minDistance = distances.length ? Math.min(...distances) : 7;
+      if (minDistance > bestScore) {
+        bestScore = minDistance;
+        best = candidate;
+      }
+    }
+
+    if (!best) break;
+    chosen.add(best);
+  }
+
+  return Array.from(chosen);
+}
+
+function normalizePlanPreferences(planPreferences: PlanSetupPreferences, daysPerWeek: number): PlanSetupPreferences {
+  const rawAvailableDays = planPreferences.availableDays ?? WEEKDAYS.map((day) => day.key);
+  const availableDays = rawAvailableDays.filter(isWeekday);
+  const resolvedAvailableDays = availableDays.length ? availableDays : WEEKDAYS.map((day) => day.key);
+  const longRunDay = isWeekday(planPreferences.longRunDay) ? planPreferences.longRunDay : DEFAULT_LONG_RUN_DAY;
+  const desiredDays = clampNumber(daysPerWeek || 3, 2, 6);
+  const existingTrainingDays = (planPreferences.trainingDays ?? []).filter(isWeekday);
+  const trainingDays =
+    existingTrainingDays.length === desiredDays && existingTrainingDays.includes(longRunDay)
+      ? existingTrainingDays
+      : selectTrainingDays(resolvedAvailableDays, desiredDays, longRunDay);
+
+  return {
+    ...planPreferences,
+    availableDays: resolvedAvailableDays,
+    trainingDays,
+    longRunDay,
+  };
+}
+
+function SelectCard(props: {
+  selected: boolean;
+  onClick: () => void;
+  title: string;
+  subtitle?: string;
+  right?: ReactNode;
+}) {
+  const { selected, onClick, title, subtitle, right } = props;
+  return (
+    <button type="button" onClick={onClick} className="w-full text-left">
+      <div
+        className={cn(
+          'relative overflow-hidden border rounded-3xl px-6 py-5 flex items-center justify-between shadow-lg transition-all duration-200 bg-gradient-to-br',
+          selected
+            ? 'border-emerald-400/60 ring-2 ring-inset ring-emerald-400/30 from-emerald-500/[0.18] via-emerald-500/[0.08] to-emerald-500/[0.02] text-white'
+            : 'border-white/[0.15] hover:border-white/30 from-white/[0.08] via-white/[0.05] to-white/[0.02] text-white hover:from-white/[0.12]'
+        )}
+      >
+        <div className="flex-1">
+          <div className="text-lg font-medium">{title}</div>
+          {subtitle && <div className="text-sm text-white/60 mt-1.5 leading-relaxed">{subtitle}</div>}
+        </div>
+        {right && <div className="ml-4">{right}</div>}
+      </div>
+    </button>
+  );
 }
 
 export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSettingsProps) {
@@ -47,7 +190,7 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState('profile');
+  const [activeStep, setActiveStep] = useState('profile');
   const [ltPaceInput, setLtPaceInput] = useState('');
 
   useEffect(() => {
@@ -72,8 +215,17 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
     try {
       const user = await dbUtils.getUser(userId);
       if (user) {
-        setUserData(user);
-        setOriginalData(user);
+        const hydratedUser: Partial<User> = {
+          ...user,
+          planPreferences: {
+            ...user.planPreferences,
+            longRunDay: isWeekday(user.planPreferences?.longRunDay)
+              ? user.planPreferences?.longRunDay
+              : DEFAULT_LONG_RUN_DAY,
+          },
+        };
+        setUserData(hydratedUser);
+        setOriginalData(hydratedUser);
       }
     } catch (error) {
       console.error('Error fetching user data:', error);
@@ -101,12 +253,24 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
 
     setSaving(true);
     try {
-      const updates = { ...userData };
+      const updates: Partial<User> = { ...userData };
 
       if (updates.referenceRaceDistance && updates.referenceRaceTime) {
         updates.calculatedVDOT = calculateVDOT(
           updates.referenceRaceDistance,
           updates.referenceRaceTime
+        );
+      }
+
+      if (updates.planPreferences) {
+        const daysPerWeek = typeof updates.daysPerWeek === 'number'
+          ? updates.daysPerWeek
+          : typeof originalData.daysPerWeek === 'number'
+            ? originalData.daysPerWeek
+            : 3;
+        updates.planPreferences = normalizePlanPreferences(
+          updates.planPreferences,
+          daysPerWeek
         );
       }
 
@@ -158,6 +322,19 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
     }
   };
 
+  const updatePlanPreference = <K extends keyof PlanSetupPreferences>(
+    field: K,
+    value: PlanSetupPreferences[K]
+  ) => {
+    setUserData((prev) => ({
+      ...prev,
+      planPreferences: {
+        ...prev.planPreferences,
+        [field]: value,
+      },
+    }));
+  };
+
   const handleCalculateMaxHR = () => {
     if (userData.age) {
       const calculated = calculateMaxHR(userData.age);
@@ -184,9 +361,9 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
   if (loading) {
     return (
       <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-center p-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <DialogContent className="max-w-3xl w-full h-[60vh] p-0">
+          <div className="flex items-center justify-center h-full bg-neutral-950 text-white">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400" />
           </div>
         </DialogContent>
       </Dialog>
@@ -197,47 +374,43 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
   const raceHours = Math.floor(raceTime / 3600);
   const raceMinutes = Math.floor((raceTime % 3600) / 60);
   const raceSeconds = raceTime % 60;
+  const selectedLongRunDay = isWeekday(userData.planPreferences?.longRunDay)
+    ? userData.planPreferences?.longRunDay
+    : DEFAULT_LONG_RUN_DAY;
 
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Training Data</DialogTitle>
-          <p className="text-sm text-gray-600">
-            Add your physiological metrics and training history to get personalized plans
-          </p>
-        </DialogHeader>
+  const activeStepIndex = STEPS.findIndex((step) => step.id === activeStep);
+  const resolvedStepIndex = activeStepIndex >= 0 ? activeStepIndex : 0;
+  const progressPercent = Math.round(((resolvedStepIndex + 1) / STEPS.length) * 100);
+  const isLastStep = resolvedStepIndex === STEPS.length - 1;
+  const inputClassName =
+    'bg-white/[0.04] border-white/10 text-white placeholder:text-white/40 focus-visible:ring-emerald-400/30 focus-visible:ring-offset-0';
 
-        {hasChanges && (
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>You have unsaved changes</AlertDescription>
-          </Alert>
-        )}
+  const goNext = () => {
+    const nextIndex = Math.min(resolvedStepIndex + 1, STEPS.length - 1);
+    setActiveStep(STEPS[nextIndex].id);
+  };
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="profile" className="gap-2">
-              <UserIcon className="h-4 w-4" />
-              Profile
-            </TabsTrigger>
-            <TabsTrigger value="race" className="gap-2">
-              <Trophy className="h-4 w-4" />
-              Race
-            </TabsTrigger>
-            <TabsTrigger value="metrics" className="gap-2">
-              <Activity className="h-4 w-4" />
-              Metrics
-            </TabsTrigger>
-            <TabsTrigger value="history" className="gap-2">
-              <History className="h-4 w-4" />
-              History
-            </TabsTrigger>
-          </TabsList>
+  const goBack = () => {
+    const prevIndex = Math.max(resolvedStepIndex - 1, 0);
+    setActiveStep(STEPS[prevIndex].id);
+  };
 
-          <TabsContent value="profile" className="space-y-6 mt-6">
-            <div className="space-y-2">
-              <Label htmlFor="age">Age *</Label>
+  const renderStepContent = () => {
+    switch (activeStep) {
+      case 'profile':
+        return (
+          <div className="space-y-10">
+            <div className="space-y-3">
+              <h2 className="text-2xl font-semibold leading-tight">Profile basics</h2>
+              <p className="text-white/60 text-sm">
+                Set the baseline we use for pacing and weekly structure.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <Label htmlFor="age" className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                Age *
+              </Label>
               <Input
                 id="age"
                 type="number"
@@ -246,32 +419,32 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
                 value={userData.age ?? ''}
                 onChange={(e) => updateField('age', parseInt(e.target.value, 10) || undefined)}
                 placeholder="Enter your age"
-                className={errors.age ? 'border-red-500' : ''}
+                className={cn(inputClassName, errors.age && 'border-red-500')}
               />
-              {errors.age && (
-                <p className="text-sm text-red-600">{errors.age}</p>
-              )}
+              {errors.age && <p className="text-xs text-red-400">{errors.age}</p>}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="experience">Running Experience *</Label>
-              <Select
-                value={userData.experience}
-                onValueChange={(value) => updateField('experience', value as User['experience'])}
-              >
-                <SelectTrigger id="experience">
-                  <SelectValue placeholder="Select your experience level" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="beginner">Beginner</SelectItem>
-                  <SelectItem value="intermediate">Intermediate</SelectItem>
-                  <SelectItem value="advanced">Advanced</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="space-y-4">
+              <div className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                Running experience *
+              </div>
+              <div className="space-y-3">
+                {EXPERIENCE_OPTIONS.map((option) => (
+                  <SelectCard
+                    key={option.value}
+                    selected={userData.experience === option.value}
+                    onClick={() => updateField('experience', option.value)}
+                    title={option.title}
+                    subtitle={option.description}
+                  />
+                ))}
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="weeklyKm">Average Weekly Distance (km)</Label>
+            <div className="space-y-3">
+              <Label htmlFor="weeklyKm" className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                Average weekly distance (km)
+              </Label>
               <Input
                 id="weeklyKm"
                 type="number"
@@ -287,60 +460,93 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
                   );
                 }}
                 placeholder="e.g., 30"
+                className={inputClassName}
               />
-              <p className="text-xs text-gray-500">
-                Your typical weekly running volume before starting this plan
+              <p className="text-xs text-white/50">
+                Your typical weekly volume before starting this plan.
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="daysPerWeek">Training Days Per Week *</Label>
-              <Select
-                value={userData.daysPerWeek ? userData.daysPerWeek.toString() : undefined}
-                onValueChange={(value) => updateField('daysPerWeek', parseInt(value, 10))}
-              >
-                <SelectTrigger id="daysPerWeek">
-                  <SelectValue placeholder="Select training days" />
-                </SelectTrigger>
-                <SelectContent>
-                  {[2, 3, 4, 5, 6].map((days) => (
-                    <SelectItem key={days} value={days.toString()}>
-                      {days} days per week
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="race" className="space-y-6 mt-6">
-            <p className="text-sm text-gray-600">
-              Enter a recent race result to help us calculate your training paces
-            </p>
-
-            <div className="space-y-2">
-              <Label htmlFor="raceDistance">Race Distance</Label>
-              <Select
-                value={userData.referenceRaceDistance ? userData.referenceRaceDistance.toString() : undefined}
-                onValueChange={(value) => updateField('referenceRaceDistance', parseFloat(value))}
-              >
-                <SelectTrigger id="raceDistance">
-                  <SelectValue placeholder="Select race distance" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5">5K</SelectItem>
-                  <SelectItem value="10">10K</SelectItem>
-                  <SelectItem value="21.1">Half Marathon</SelectItem>
-                  <SelectItem value="42.2">Marathon</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="space-y-4">
+              <div className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                Training days per week *
+              </div>
+              <div className="space-y-3">
+                {TRAINING_DAY_OPTIONS.map((days) => (
+                  <SelectCard
+                    key={days}
+                    selected={userData.daysPerWeek === days}
+                    onClick={() => updateField('daysPerWeek', days)}
+                    title={`${days} days`}
+                  />
+                ))}
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="raceTime">Race Time</Label>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <Label htmlFor="raceHours" className="text-xs text-gray-500">
+            <div className="space-y-4">
+              <div className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                Long run day
+              </div>
+              <div className="space-y-3">
+                {WEEKDAYS.map((day) => (
+                  <SelectCard
+                    key={day.key}
+                    selected={selectedLongRunDay === day.key}
+                    onClick={() => updatePlanPreference('longRunDay', day.key)}
+                    title={day.label}
+                  />
+                ))}
+              </div>
+              <p className="text-xs text-white/50">
+                We use this to anchor your longest run of the week.
+              </p>
+            </div>
+          </div>
+        );
+
+      case 'race':
+        return (
+          <div className="space-y-10">
+            <div className="space-y-3">
+              <h2 className="text-2xl font-semibold leading-tight">Recent race result</h2>
+              <p className="text-white/60 text-sm">
+                Use a recent result so we can set accurate training paces.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                Race distance
+              </div>
+              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                {RACE_DISTANCE_OPTIONS.map((option) => {
+                  const active = userData.referenceRaceDistance === option.value;
+                  return (
+                    <Button
+                      key={option.value}
+                      type="button"
+                      onClick={() => updateField('referenceRaceDistance', option.value)}
+                      className={cn(
+                        'h-10 rounded-full px-4 shrink-0 text-sm font-medium border transition-all duration-200',
+                        active
+                          ? 'bg-emerald-400 text-neutral-950 border-emerald-400 shadow-lg shadow-emerald-500/25 hover:bg-emerald-300'
+                          : 'bg-white/[0.03] text-white/70 border-white/10 hover:bg-white/[0.06] hover:text-white hover:border-white/20'
+                      )}
+                    >
+                      {option.label}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 space-y-4">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                Race time
+              </Label>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="raceHours" className="text-xs text-white/50">
                     Hours
                   </Label>
                   <Input
@@ -354,10 +560,11 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
                       const hours = parseInt(e.target.value, 10) || 0;
                       updateField('referenceRaceTime', hours * 3600 + raceMinutes * 60 + raceSeconds);
                     }}
+                    className={inputClassName}
                   />
                 </div>
-                <div className="flex-1">
-                  <Label htmlFor="raceMinutes" className="text-xs text-gray-500">
+                <div className="space-y-2">
+                  <Label htmlFor="raceMinutes" className="text-xs text-white/50">
                     Minutes
                   </Label>
                   <Input
@@ -371,10 +578,11 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
                       const minutes = parseInt(e.target.value, 10) || 0;
                       updateField('referenceRaceTime', raceHours * 3600 + minutes * 60 + raceSeconds);
                     }}
+                    className={inputClassName}
                   />
                 </div>
-                <div className="flex-1">
-                  <Label htmlFor="raceSeconds" className="text-xs text-gray-500">
+                <div className="space-y-2">
+                  <Label htmlFor="raceSeconds" className="text-xs text-white/50">
                     Seconds
                   </Label>
                   <Input
@@ -388,224 +596,233 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
                       const seconds = parseInt(e.target.value, 10) || 0;
                       updateField('referenceRaceTime', raceHours * 3600 + raceMinutes * 60 + seconds);
                     }}
+                    className={inputClassName}
                   />
                 </div>
               </div>
             </div>
 
             {userData.referenceRaceDistance && userData.referenceRaceTime && (
-              <Card className="bg-blue-50 border-blue-200">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-blue-900">Calculated VDOT</p>
-                      <p className="text-xs text-blue-700">
-                        Based on your race performance
-                      </p>
-                    </div>
-                    <div className="text-2xl font-bold text-blue-600">
-                      {calculateVDOT(userData.referenceRaceDistance, userData.referenceRaceTime).toFixed(1)}
-                    </div>
+              <div className="rounded-3xl border border-emerald-400/30 bg-emerald-500/10 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-emerald-100">Calculated VDOT</p>
+                    <p className="text-xs text-emerald-200/70">Based on your race performance</p>
                   </div>
-                </CardContent>
-              </Card>
+                  <div className="text-2xl font-bold text-emerald-200">
+                    {calculateVDOT(userData.referenceRaceDistance, userData.referenceRaceTime).toFixed(1)}
+                  </div>
+                </div>
+              </div>
             )}
-          </TabsContent>
+          </div>
+        );
 
-          <TabsContent value="metrics" className="space-y-6 mt-6">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="vo2Max">VO2 Max (ml/kg/min)</Label>
-                {userData.calculatedVDOT && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleEstimateVO2Max}
-                    className="h-7 text-xs gap-1"
-                  >
-                    <Calculator className="h-3 w-3" />
-                    Estimate from VDOT
-                  </Button>
-                )}
+      case 'metrics':
+        return (
+          <div className="space-y-10">
+            <div className="space-y-3">
+              <h2 className="text-2xl font-semibold leading-tight">Physiological metrics</h2>
+              <p className="text-white/60 text-sm">
+                Optional data points that refine zones, pacing, and recovery guidance.
+              </p>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 space-y-6">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="vo2Max" className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                    VO2 Max (ml/kg/min)
+                  </Label>
+                  {userData.calculatedVDOT && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleEstimateVO2Max}
+                      className="h-7 text-xs gap-1 text-emerald-200 hover:text-emerald-100 hover:bg-white/10"
+                    >
+                      <Calculator className="h-3 w-3" />
+                      Estimate from VDOT
+                    </Button>
+                  )}
+                </div>
+                <Input
+                  id="vo2Max"
+                  type="number"
+                  min={20}
+                  max={85}
+                  value={userData.vo2Max ?? ''}
+                  onChange={(e) => updateField('vo2Max', parseFloat(e.target.value) || undefined)}
+                  placeholder="e.g., 55"
+                  className={cn(inputClassName, errors.vo2Max && 'border-red-500')}
+                />
+                {errors.vo2Max && <p className="text-xs text-red-400">{errors.vo2Max}</p>}
+                <p className="text-xs text-white/50">{METRIC_DESCRIPTIONS.vo2Max.description}</p>
               </div>
-              <Input
-                id="vo2Max"
-                type="number"
-                min={20}
-                max={85}
-                value={userData.vo2Max ?? ''}
-                onChange={(e) => updateField('vo2Max', parseFloat(e.target.value) || undefined)}
-                placeholder="e.g., 55"
-                className={errors.vo2Max ? 'border-red-500' : ''}
-              />
-              {errors.vo2Max && (
-                <p className="text-sm text-red-600">{errors.vo2Max}</p>
-              )}
-              <p className="text-xs text-gray-500">
-                {METRIC_DESCRIPTIONS.vo2Max.description}
-              </p>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="ltPace">Lactate Threshold Pace (min/km)</Label>
-              <Input
-                id="ltPace"
-                type="text"
-                placeholder="e.g., 4:30"
-                value={ltPaceInput}
-                onChange={(e) => {
-                  const nextValue = e.target.value;
-                  setLtPaceInput(nextValue);
-                  const parsed = parsePace(nextValue);
-                  if (parsed !== null) {
-                    updateField('lactateThreshold', parsed);
-                  } else if (!nextValue) {
-                    updateField('lactateThreshold', undefined);
-                  }
-                }}
-                className={errors.lactateThreshold ? 'border-red-500' : ''}
-              />
-              {errors.lactateThreshold && (
-                <p className="text-sm text-red-600">{errors.lactateThreshold}</p>
-              )}
-              <p className="text-xs text-gray-500">
-                {METRIC_DESCRIPTIONS.lactateThreshold.description}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="ltHR">LT Heart Rate (bpm)</Label>
-              <Input
-                id="ltHR"
-                type="number"
-                min={100}
-                max={220}
-                value={userData.lactateThresholdHR ?? ''}
-                onChange={(e) => updateField('lactateThresholdHR', parseInt(e.target.value, 10) || undefined)}
-                placeholder="e.g., 165"
-                className={errors.lactateThresholdHR ? 'border-red-500' : ''}
-              />
-              {errors.lactateThresholdHR && (
-                <p className="text-sm text-red-600">{errors.lactateThresholdHR}</p>
-              )}
-            </div>
-
-            <Separator />
-
-            <div className="space-y-2">
-              <Label htmlFor="hrv">HRV Baseline (ms)</Label>
-              <Input
-                id="hrv"
-                type="number"
-                min={10}
-                max={200}
-                value={userData.hrvBaseline ?? ''}
-                onChange={(e) => updateField('hrvBaseline', parseInt(e.target.value, 10) || undefined)}
-                placeholder="e.g., 65"
-                className={errors.hrvBaseline ? 'border-red-500' : ''}
-              />
-              {errors.hrvBaseline && (
-                <p className="text-sm text-red-600">{errors.hrvBaseline}</p>
-              )}
-              <p className="text-xs text-gray-500">
-                {METRIC_DESCRIPTIONS.hrvBaseline.description}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="maxHR">Max Heart Rate (bpm)</Label>
-                {userData.age && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCalculateMaxHR}
-                    className="h-7 text-xs gap-1"
-                  >
-                    <Calculator className="h-3 w-3" />
-                    Calculate from age
-                  </Button>
-                )}
+              <div className="space-y-2">
+                <Label htmlFor="ltPace" className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                  Lactate threshold pace (min/km)
+                </Label>
+                <Input
+                  id="ltPace"
+                  type="text"
+                  placeholder="e.g., 4:30"
+                  value={ltPaceInput}
+                  onChange={(e) => {
+                    const nextValue = e.target.value;
+                    setLtPaceInput(nextValue);
+                    const parsed = parsePace(nextValue);
+                    if (parsed !== null) {
+                      updateField('lactateThreshold', parsed);
+                    } else if (!nextValue) {
+                      updateField('lactateThreshold', undefined);
+                    }
+                  }}
+                  className={cn(inputClassName, errors.lactateThreshold && 'border-red-500')}
+                />
+                {errors.lactateThreshold && <p className="text-xs text-red-400">{errors.lactateThreshold}</p>}
+                <p className="text-xs text-white/50">{METRIC_DESCRIPTIONS.lactateThreshold.description}</p>
               </div>
-              <Input
-                id="maxHR"
-                type="number"
-                min={120}
-                max={220}
-                value={userData.maxHeartRate ?? ''}
-                onChange={(e) => {
-                  updateField('maxHeartRate', parseInt(e.target.value, 10) || undefined);
-                  updateField('maxHeartRateSource', 'user_provided');
-                }}
-                placeholder="e.g., 185"
-                className={errors.maxHeartRate ? 'border-red-500' : ''}
-              />
-              {errors.maxHeartRate && (
-                <p className="text-sm text-red-600">{errors.maxHeartRate}</p>
-              )}
-              <p className="text-xs text-gray-500">
-                {METRIC_DESCRIPTIONS.maxHeartRate.description}
-              </p>
+
+              <div className="space-y-2">
+                <Label htmlFor="ltHR" className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                  LT heart rate (bpm)
+                </Label>
+                <Input
+                  id="ltHR"
+                  type="number"
+                  min={100}
+                  max={220}
+                  value={userData.lactateThresholdHR ?? ''}
+                  onChange={(e) => updateField('lactateThresholdHR', parseInt(e.target.value, 10) || undefined)}
+                  placeholder="e.g., 165"
+                  className={cn(inputClassName, errors.lactateThresholdHR && 'border-red-500')}
+                />
+                {errors.lactateThresholdHR && <p className="text-xs text-red-400">{errors.lactateThresholdHR}</p>}
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="restingHR">Resting Heart Rate (bpm)</Label>
-              <Input
-                id="restingHR"
-                type="number"
-                min={30}
-                max={100}
-                value={userData.restingHeartRate ?? ''}
-                onChange={(e) => updateField('restingHeartRate', parseInt(e.target.value, 10) || undefined)}
-                placeholder="e.g., 50"
-                className={errors.restingHeartRate ? 'border-red-500' : ''}
-              />
-              {errors.restingHeartRate && (
-                <p className="text-sm text-red-600">{errors.restingHeartRate}</p>
-              )}
-              <p className="text-xs text-gray-500">
-                {METRIC_DESCRIPTIONS.restingHeartRate.description}
+            <Separator className="bg-white/10" />
+
+            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="hrv" className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                  HRV baseline (ms)
+                </Label>
+                <Input
+                  id="hrv"
+                  type="number"
+                  min={10}
+                  max={200}
+                  value={userData.hrvBaseline ?? ''}
+                  onChange={(e) => updateField('hrvBaseline', parseInt(e.target.value, 10) || undefined)}
+                  placeholder="e.g., 65"
+                  className={cn(inputClassName, errors.hrvBaseline && 'border-red-500')}
+                />
+                {errors.hrvBaseline && <p className="text-xs text-red-400">{errors.hrvBaseline}</p>}
+                <p className="text-xs text-white/50">{METRIC_DESCRIPTIONS.hrvBaseline.description}</p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="maxHR" className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                    Max heart rate (bpm)
+                  </Label>
+                  {userData.age && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCalculateMaxHR}
+                      className="h-7 text-xs gap-1 text-emerald-200 hover:text-emerald-100 hover:bg-white/10"
+                    >
+                      <Calculator className="h-3 w-3" />
+                      Calculate from age
+                    </Button>
+                  )}
+                </div>
+                <Input
+                  id="maxHR"
+                  type="number"
+                  min={120}
+                  max={220}
+                  value={userData.maxHeartRate ?? ''}
+                  onChange={(e) => {
+                    updateField('maxHeartRate', parseInt(e.target.value, 10) || undefined);
+                    updateField('maxHeartRateSource', 'user_provided');
+                  }}
+                  placeholder="e.g., 185"
+                  className={cn(inputClassName, errors.maxHeartRate && 'border-red-500')}
+                />
+                {errors.maxHeartRate && <p className="text-xs text-red-400">{errors.maxHeartRate}</p>}
+                <p className="text-xs text-white/50">{METRIC_DESCRIPTIONS.maxHeartRate.description}</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="restingHR" className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                  Resting heart rate (bpm)
+                </Label>
+                <Input
+                  id="restingHR"
+                  type="number"
+                  min={30}
+                  max={100}
+                  value={userData.restingHeartRate ?? ''}
+                  onChange={(e) => updateField('restingHeartRate', parseInt(e.target.value, 10) || undefined)}
+                  placeholder="e.g., 50"
+                  className={cn(inputClassName, errors.restingHeartRate && 'border-red-500')}
+                />
+                {errors.restingHeartRate && <p className="text-xs text-red-400">{errors.restingHeartRate}</p>}
+                <p className="text-xs text-white/50">{METRIC_DESCRIPTIONS.restingHeartRate.description}</p>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'history':
+        return (
+          <div className="space-y-8">
+            <div className="space-y-3">
+              <h2 className="text-2xl font-semibold leading-tight">Training history</h2>
+              <p className="text-white/60 text-sm">
+                Add significant past runs to help us understand your training history.
               </p>
             </div>
-          </TabsContent>
-
-          <TabsContent value="history" className="space-y-6 mt-6">
-            <p className="text-sm text-gray-600">
-              Add significant past runs to help us understand your training history
-            </p>
 
             {userData.historicalRuns && userData.historicalRuns.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {userData.historicalRuns.map((run, index) => (
-                  <Card key={`${run.distance}-${run.time}-${index}`}>
-                    <CardContent className="p-4 flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">
-                          {run.distance}km in {formatTime(run.time)}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          {formatDate(run.date)} {run.type ? `- ${run.type}` : ''}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const filtered = userData.historicalRuns?.filter((_, i) => i !== index);
-                          updateField('historicalRuns', filtered);
-                        }}
-                      >
-                        Remove
-                      </Button>
-                    </CardContent>
-                  </Card>
+                  <div
+                    key={`${run.distance}-${run.time}-${index}`}
+                    className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 flex items-center justify-between"
+                  >
+                    <div>
+                      <p className="font-medium text-white">
+                        {run.distance}km in {formatTime(run.time)}
+                      </p>
+                      <p className="text-sm text-white/60">
+                        {formatDate(run.date)} {run.type ? `- ${run.type}` : ''}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-white/60 hover:text-white hover:bg-white/10"
+                      onClick={() => {
+                        const filtered = userData.historicalRuns?.filter((_, i) => i !== index);
+                        updateField('historicalRuns', filtered);
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 ))}
               </div>
             )}
 
             <Button
               variant="outline"
-              className="w-full"
+              className="w-full border-white/20 text-white/70 hover:bg-white/5 hover:text-white"
               onClick={() => {
                 toast({
                   title: 'Coming soon',
@@ -615,36 +832,131 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
             >
               Add Historical Run
             </Button>
-          </TabsContent>
-        </Tabs>
+          </div>
+        );
 
-        <div className="flex gap-3 pt-4 border-t">
-          <Button
-            variant="outline"
-            onClick={handleReset}
-            disabled={!hasChanges || saving}
-            className="flex-1"
-          >
-            <RotateCcw className="h-4 w-4 mr-2" />
-            Reset
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={!hasChanges || saving}
-            className="flex-1"
-          >
-            {saving ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                Save Changes
-              </>
-            )}
-          </Button>
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl w-full h-[90vh] p-0">
+        <div className="flex flex-col h-full bg-neutral-950 text-white">
+          <DialogHeader className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
+            <div>
+              <DialogTitle className="text-lg">Training Data</DialogTitle>
+              <p className="text-xs text-white/60">
+                Update your profile to match onboarding and goal settings.
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="text-white/60 hover:text-white hover:bg-white/10"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </DialogHeader>
+
+          <div className="px-6 py-4 border-b border-white/10 space-y-3">
+            <div className="flex items-center justify-between text-xs text-white/60">
+              <span>{STEPS[resolvedStepIndex].title}</span>
+              <span>
+                {resolvedStepIndex + 1} of {STEPS.length}
+              </span>
+            </div>
+            <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-emerald-400 transition-all duration-300 ease-out"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+              {STEPS.map((step) => {
+                const active = step.id === activeStep;
+                return (
+                  <Button
+                    key={step.id}
+                    type="button"
+                    onClick={() => setActiveStep(step.id)}
+                    className={cn(
+                      'h-9 rounded-full px-4 shrink-0 text-sm font-medium border transition-all duration-200',
+                      active
+                        ? 'bg-emerald-400 text-neutral-950 border-emerald-400 shadow-lg shadow-emerald-500/25 hover:bg-emerald-300'
+                        : 'bg-white/[0.03] text-white/70 border-white/10 hover:bg-white/[0.06] hover:text-white hover:border-white/20'
+                    )}
+                  >
+                    {step.label}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+
+          {hasChanges && (
+            <div className="px-6 pt-4">
+              <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-amber-100 text-sm flex items-center gap-2">
+                <AlertCircle className="h-4 w-4" />
+                You have unsaved changes
+              </div>
+            </div>
+          )}
+
+          <div className="flex-1 overflow-y-auto px-6 py-6">
+            {renderStepContent()}
+          </div>
+
+          <div className="px-6 py-4 border-t border-white/10 flex items-center gap-3">
+            <Button
+              variant="ghost"
+              onClick={handleReset}
+              disabled={!hasChanges || saving}
+              className="text-white/60 hover:text-white hover:bg-white/10"
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Reset
+            </Button>
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={goBack}
+                disabled={resolvedStepIndex === 0 || saving}
+                className="border-white/20 text-white hover:bg-white/5"
+              >
+                Back
+              </Button>
+              {isLastStep ? (
+                <Button
+                  onClick={handleSave}
+                  disabled={!hasChanges || saving}
+                  className="bg-white text-neutral-950 hover:bg-white/90"
+                >
+                  {saving ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-neutral-950 mr-2" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Changes
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  onClick={goNext}
+                  disabled={saving}
+                  className="bg-white text-neutral-950 hover:bg-white/90"
+                >
+                  Next
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
