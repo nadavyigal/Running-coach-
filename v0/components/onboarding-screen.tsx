@@ -818,7 +818,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       case 1:
         return (
           <div
-            className="flex min-h-[80vh] flex-col justify-between px-6 pb-8 text-white"
+            className="flex min-h-[70vh] flex-col gap-12 px-6 pb-12 text-white"
             style={{ paddingTop: 'max(2rem, env(safe-area-inset-top, 2rem))' }}
           >
             <div className="space-y-9">
@@ -849,13 +849,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               </div>
             </div>
 
-            <div className="flex flex-col items-center gap-3 text-center">
-              <div className="h-14 w-14 rounded-3xl bg-gradient-to-br from-emerald-500/40 to-emerald-500/10 flex items-center justify-center">
-                <Sparkles className="h-7 w-7 text-emerald-300" />
-              </div>
-              <div className="text-2xl font-semibold">RunSmart</div>
-              <div className="text-xs text-white/60">Your AI Running Coach</div>
-            </div>
           </div>
         )
 
@@ -1218,10 +1211,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         {isIntroStep && (
           <div className="absolute inset-0 z-0">
             <div
-              className="absolute inset-0 bg-cover bg-center"
+              className="absolute inset-0 bg-cover bg-center brightness-110"
               style={{ backgroundImage: "url('/images/runsmart-onboarding-bg.jpg')", backgroundPosition: '50% 25%' }}
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/18 to-neutral-950/75" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/10 to-neutral-950/50" />
           </div>
         )}
 
@@ -1253,7 +1246,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           </div>
         )}
 
-        <div className={cn("flex-1 overflow-y-auto relative z-10", isIntroStep ? "px-0 pb-36" : "px-4 pb-4")}>
+        <div className={cn("flex-1 overflow-y-auto relative z-10", isIntroStep ? "px-0 pb-44" : "px-4 pb-4")}>
           {renderStep()}
 
           {!isStepValid && currentStep > 1 && (
@@ -1271,6 +1264,15 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           )}
           style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom, 1.5rem))' }}
         >
+          {isIntroStep && (
+            <div className="pt-4 pb-6 flex flex-col items-center gap-2 text-center">
+              <div className="h-14 w-14 rounded-3xl bg-gradient-to-br from-emerald-500/40 to-emerald-500/10 flex items-center justify-center">
+                <Sparkles className="h-7 w-7 text-emerald-300" />
+              </div>
+              <div className="text-2xl font-semibold">RunSmart</div>
+              <div className="text-xs text-white/60">Your AI Running Coach</div>
+            </div>
+          )}
           <Button
             type="button"
             className={cn(

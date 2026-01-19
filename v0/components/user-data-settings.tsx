@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -59,6 +59,10 @@ const RACE_DISTANCE_OPTIONS = [
 
 const TRAINING_DAY_OPTIONS = [2, 3, 4, 5, 6];
 
+const WHEEL_ITEM_HEIGHT = 48;
+const WHEEL_VISIBLE_ITEMS = 5;
+const WHEEL_CENTER_OFFSET = Math.floor(WHEEL_VISIBLE_ITEMS / 2);
+
 const STEPS = [
   {
     id: 'profile',
@@ -94,6 +98,23 @@ const isWeekday = (value?: string): value is Weekday =>
 
 function clampNumber(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function formatTimeHms(totalSeconds: number) {
+  const seconds = clampNumber(Math.round(totalSeconds), 0, 99 * 3600);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  return `${minutes}:${String(secs).padStart(2, '0')}`;
+}
+
+function getDefaultRaceTimeSeconds(distanceKm: number) {
+  if (distanceKm === 5) return 30 * 60;
+  if (distanceKm === 10) return 58 * 60;
+  if (distanceKm === 21.1) return 2 * 60 * 60;
+  if (distanceKm === 42.2) return 4 * 60 * 60 + 30 * 60;
+  return 60 * 60;
 }
 
 function selectTrainingDays(availableDays: Weekday[], daysPerWeek: number, longRunDay: Weekday): Weekday[] {
@@ -153,6 +174,123 @@ function normalizePlanPreferences(planPreferences: PlanSetupPreferences, daysPer
     trainingDays,
     longRunDay,
   };
+}
+
+function WheelColumn(props: {
+  value: number;
+  min: number;
+  max: number;
+  padTo2?: boolean;
+  suffix?: string;
+  ariaLabel: string;
+  onChange: (value: number) => void;
+}) {
+  const { value, min, max, padTo2, suffix, ariaLabel, onChange } = props;
+  const ref = useRef<HTMLDivElement | null>(null);
+  const scrollTimeout = useRef<number | null>(null);
+  const isUserScrolling = useRef(false);
+  const isInitialized = useRef(false);
+
+  const items = useMemo(() => {
+    const values = Array.from({ length: max - min + 1 }, (_, idx) => min + idx);
+    return [
+      ...Array.from({ length: WHEEL_CENTER_OFFSET }).map(() => null),
+      ...values,
+      ...Array.from({ length: WHEEL_CENTER_OFFSET }).map(() => null),
+    ];
+  }, [min, max]);
+
+  const getScrollTopForValue = (val: number) => {
+    const valueIndex = val - min;
+    return valueIndex * WHEEL_ITEM_HEIGHT;
+  };
+
+  const getValueFromScrollTop = (scrollTop: number) => {
+    const valueIndex = Math.round(scrollTop / WHEEL_ITEM_HEIGHT);
+    return Math.min(max, Math.max(min, min + valueIndex));
+  };
+
+  useEffect(() => {
+    if (isInitialized.current) return;
+    const container = ref.current;
+    if (!container) return;
+    container.scrollTop = getScrollTopForValue(value);
+    isInitialized.current = true;
+  }, [value]);
+
+  useEffect(() => {
+    if (!isInitialized.current) return;
+    if (isUserScrolling.current) return;
+    const container = ref.current;
+    if (!container) return;
+    const targetScrollTop = getScrollTopForValue(value);
+    if (Math.abs(container.scrollTop - targetScrollTop) > 2) {
+      container.scrollTop = targetScrollTop;
+    }
+  }, [value, min]);
+
+  const handleScroll = () => {
+    isUserScrolling.current = true;
+    if (scrollTimeout.current) window.clearTimeout(scrollTimeout.current);
+    scrollTimeout.current = window.setTimeout(() => {
+      const container = ref.current;
+      if (!container) return;
+
+      const newValue = getValueFromScrollTop(container.scrollTop);
+      const snappedScrollTop = getScrollTopForValue(newValue);
+
+      onChange(newValue);
+      container.scrollTo({ top: snappedScrollTop, behavior: 'smooth' });
+
+      setTimeout(() => {
+        isUserScrolling.current = false;
+      }, 150);
+    }, 100);
+  };
+
+  return (
+    <div className="relative w-20">
+      <div
+        ref={ref}
+        aria-label={ariaLabel}
+        role="listbox"
+        className="h-60 overflow-y-auto no-scrollbar"
+        onScroll={handleScroll}
+        style={{ scrollSnapType: 'y mandatory' }}
+      >
+        {items.map((item, idx) => {
+          const isSelected = item === value;
+          return (
+            <button
+              key={`${ariaLabel}-${idx}`}
+              type="button"
+              className={cn(
+                'w-full h-12 flex items-center justify-center text-xl transition',
+                item === null ? 'opacity-0 pointer-events-none' : 'opacity-40',
+                isSelected && 'opacity-100 font-semibold text-white'
+              )}
+              style={{ scrollSnapAlign: 'center' }}
+              onClick={() => {
+                if (typeof item !== 'number') return;
+                onChange(item);
+                const container = ref.current;
+                if (container) {
+                  container.scrollTo({ top: getScrollTopForValue(item), behavior: 'smooth' });
+                }
+              }}
+            >
+              {typeof item === 'number'
+                ? `${padTo2 ? String(item).padStart(2, '0') : item}${suffix ?? ''}`
+                : ''}
+            </button>
+          );
+        })}
+      </div>
+      <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-12 rounded-lg border border-white/10 bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-neutral-950 via-neutral-950/80 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-neutral-950 via-neutral-950/80 to-transparent" />
+    </div>
+  );
 }
 
 function SelectCard(props: {
@@ -361,7 +499,10 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
   if (loading) {
     return (
       <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="max-w-3xl w-full h-[60vh] p-0">
+        <DialogContent
+          hideClose
+          className="left-0 top-0 translate-x-0 translate-y-0 h-[100dvh] w-screen max-w-none p-0 border-none bg-transparent shadow-none rounded-none sm:rounded-none gap-0"
+        >
           <div className="flex items-center justify-center h-full bg-neutral-950 text-white">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400" />
           </div>
@@ -370,10 +511,18 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
     );
   }
 
-  const raceTime = userData.referenceRaceTime ?? 0;
-  const raceHours = Math.floor(raceTime / 3600);
-  const raceMinutes = Math.floor((raceTime % 3600) / 60);
-  const raceSeconds = raceTime % 60;
+  const displayRaceDistance = typeof userData.referenceRaceDistance === 'number'
+    ? userData.referenceRaceDistance
+    : RACE_DISTANCE_OPTIONS[0].value;
+  const raceTimeSeconds = typeof userData.referenceRaceTime === 'number'
+    ? userData.referenceRaceTime
+    : getDefaultRaceTimeSeconds(displayRaceDistance);
+  const raceHours = Math.floor(raceTimeSeconds / 3600);
+  const raceMinutes = Math.floor((raceTimeSeconds % 3600) / 60);
+  const raceSeconds = raceTimeSeconds % 60;
+  const raceDistanceLabel =
+    RACE_DISTANCE_OPTIONS.find((option) => option.value === displayRaceDistance)?.label ??
+    `${displayRaceDistance}K`;
   const selectedLongRunDay = isWeekday(userData.planPreferences?.longRunDay)
     ? userData.planPreferences?.longRunDay
     : DEFAULT_LONG_RUN_DAY;
@@ -520,12 +669,17 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
               </div>
               <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
                 {RACE_DISTANCE_OPTIONS.map((option) => {
-                  const active = userData.referenceRaceDistance === option.value;
+                  const active = displayRaceDistance === option.value;
                   return (
                     <Button
                       key={option.value}
                       type="button"
-                      onClick={() => updateField('referenceRaceDistance', option.value)}
+                      onClick={() => {
+                        updateField('referenceRaceDistance', option.value);
+                        if (userData.referenceRaceTime === undefined) {
+                          updateField('referenceRaceTime', getDefaultRaceTimeSeconds(option.value));
+                        }
+                      }}
                       className={cn(
                         'h-10 rounded-full px-4 shrink-0 text-sm font-medium border transition-all duration-200',
                         active
@@ -540,65 +694,50 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
               </div>
             </div>
 
-            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 space-y-4">
+            <div className="space-y-4">
               <Label className="text-xs font-semibold uppercase tracking-wider text-white/60">
                 Race time
               </Label>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="raceHours" className="text-xs text-white/50">
-                    Hours
-                  </Label>
-                  <Input
-                    id="raceHours"
-                    type="number"
-                    min={0}
-                    max={10}
-                    value={raceHours}
-                    placeholder="0"
-                    onChange={(e) => {
-                      const hours = parseInt(e.target.value, 10) || 0;
-                      updateField('referenceRaceTime', hours * 3600 + raceMinutes * 60 + raceSeconds);
-                    }}
-                    className={inputClassName}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="raceMinutes" className="text-xs text-white/50">
-                    Minutes
-                  </Label>
-                  <Input
-                    id="raceMinutes"
-                    type="number"
-                    min={0}
-                    max={59}
-                    value={raceMinutes}
-                    placeholder="00"
-                    onChange={(e) => {
-                      const minutes = parseInt(e.target.value, 10) || 0;
-                      updateField('referenceRaceTime', raceHours * 3600 + minutes * 60 + raceSeconds);
-                    }}
-                    className={inputClassName}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="raceSeconds" className="text-xs text-white/50">
-                    Seconds
-                  </Label>
-                  <Input
-                    id="raceSeconds"
-                    type="number"
-                    min={0}
-                    max={59}
-                    value={raceSeconds}
-                    placeholder="00"
-                    onChange={(e) => {
-                      const seconds = parseInt(e.target.value, 10) || 0;
-                      updateField('referenceRaceTime', raceHours * 3600 + raceMinutes * 60 + seconds);
-                    }}
-                    className={inputClassName}
-                  />
-                </div>
+              <div className="flex items-center justify-center gap-3 pt-1">
+                <WheelColumn
+                  value={raceHours}
+                  min={0}
+                  max={10}
+                  suffix="h"
+                  ariaLabel="Hours"
+                  onChange={(value) => {
+                    updateField('referenceRaceTime', value * 3600 + raceMinutes * 60 + raceSeconds);
+                  }}
+                />
+                <div className="text-2xl -mt-1 text-white/40">:</div>
+                <WheelColumn
+                  value={raceMinutes}
+                  min={0}
+                  max={59}
+                  padTo2
+                  suffix="m"
+                  ariaLabel="Minutes"
+                  onChange={(value) => {
+                    updateField('referenceRaceTime', raceHours * 3600 + value * 60 + raceSeconds);
+                  }}
+                />
+                <div className="text-2xl -mt-1 text-white/40">:</div>
+                <WheelColumn
+                  value={raceSeconds}
+                  min={0}
+                  max={59}
+                  padTo2
+                  suffix="s"
+                  ariaLabel="Seconds"
+                  onChange={(value) => {
+                    updateField('referenceRaceTime', raceHours * 3600 + raceMinutes * 60 + value);
+                  }}
+                />
+              </div>
+              <div className="text-center text-white/60 text-sm pt-3 leading-relaxed">
+                I can currently run a{' '}
+                <span className="text-emerald-400 font-medium">{raceDistanceLabel}</span> in{' '}
+                <span className="text-white font-semibold">{formatTimeHms(raceTimeSeconds)}</span>
               </div>
             </div>
 
@@ -842,7 +981,10 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl w-full h-[90vh] p-0">
+      <DialogContent
+        hideClose
+        className="left-0 top-0 translate-x-0 translate-y-0 h-[100dvh] w-screen max-w-none p-0 border-none bg-transparent shadow-none rounded-none sm:rounded-none gap-0"
+      >
         <div className="flex flex-col h-full bg-neutral-950 text-white">
           <DialogHeader className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
             <div>
