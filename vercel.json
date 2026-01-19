@@ -1,0 +1,14 @@
+{
+  "buildCommand": "cd v0 && npm install && npm run build",
+  "devCommand": "cd v0 && npm run dev",
+  "installCommand": "cd v0 && npm install",
+  "outputDirectory": "v0/.next",
+  "framework": null,
+  "git": {
+    "deploymentEnabled": true
+  },
+  "github": {
+    "autoAlias": true,
+    "silent": false
+  }
+}

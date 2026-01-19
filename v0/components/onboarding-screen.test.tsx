@@ -135,14 +135,14 @@ describe('OnboardingScreen', () => {
 
   it('shows onboarding intro', () => {
     render(<OnboardingScreen onComplete={mockOnComplete} />);
-    expect(screen.getByText(/Create your training plan/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Unlock Your Personalized Running Potential/i })).toBeInTheDocument();
   });
 
   it('renders and navigates through all steps', async () => {
     render(<OnboardingScreen onComplete={mockOnComplete} />);
     // Step 1: Welcome
-    expect(screen.getByText(/Create your training plan/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+    expect(screen.getByRole('heading', { name: /Unlock Your Personalized Running Potential/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Let's Get Started/i }));
 
     // Step 2: Goal selection
     expect(screen.getByText(/What is your main goal/i)).toBeInTheDocument();
@@ -174,14 +174,14 @@ describe('OnboardingScreen', () => {
 
   it('validates required fields before proceeding', async () => {
     render(<OnboardingScreen onComplete={mockOnComplete} />);
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Let's Get Started/i }));
     // Try to continue without selecting a goal
     expect(screen.getByRole('button', { name: /Continue/i })).toBeDisabled();
   });
 
   it('shows the finish button on the summary step', async () => {
     render(<OnboardingScreen onComplete={mockOnComplete} />);
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Let's Get Started/i }));
     fireEvent.click(screen.getByText(/Build a running habit/i));
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
     fireEvent.click(screen.getByText(/Beginner/i));
