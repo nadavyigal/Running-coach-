@@ -11,6 +11,8 @@ import { AddActivityModal } from "@/components/add-activity-modal"
 import { RunMap } from "@/components/maps/RunMap"
 import { type Run, type Workout, type User, type Route } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
+import { trackAnalyticsEvent } from "@/lib/analytics"
+import { ENABLE_AUTO_PAUSE } from "@/lib/featureFlags"
 import { recordRunWithSideEffects } from "@/lib/run-recording"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
@@ -33,9 +35,16 @@ interface RunMetrics {
   calories: number // estimated
 }
 
+const AUTO_PAUSE_SPEED_MPS = 0.5
+const AUTO_RESUME_SPEED_MPS = 1.0
+const AUTO_PAUSE_MIN_DURATION_MS = 5000
+
 export function RecordScreen() {
   const [isRunning, setIsRunning] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
+  const [autoPauseActive, setAutoPauseActive] = useState(false)
+  const [autoPauseStartTime, setAutoPauseStartTime] = useState<number | null>(null)
+  const [autoPauseCount, setAutoPauseCount] = useState(0)
   const [gpsPermission, setGpsPermission] = useState<'prompt' | 'granted' | 'denied' | 'unsupported'>('prompt')
   const [gpsAccuracy, setGpsAccuracy] = useState<number>(0)
   const [isInitializingGps, setIsInitializingGps] = useState(false)
@@ -57,6 +66,7 @@ export function RecordScreen() {
     (process.env.NEXT_PUBLIC_GPS_DEBUG_OVERLAY === 'true' ||
       (typeof window !== 'undefined' &&
         new URLSearchParams(window.location.search).has('gpsDebug')))
+  const autoPauseEnabled = ENABLE_AUTO_PAUSE
    
   // GPS and tracking state
   const [gpsPath, setGpsPath] = useState<GPSCoordinate[]>([])
@@ -77,6 +87,9 @@ export function RecordScreen() {
   const elapsedRunMsRef = useRef<number>(0)
   const isRunningRef = useRef(false)
   const isPausedRef = useRef(false)
+  const autoPauseActiveRef = useRef(false)
+  const autoPauseStartTimeRef = useRef<number | null>(null)
+  const autoPauseCountRef = useRef(0)
 
   const [lastGpsSpeedMps, setLastGpsSpeedMps] = useState<number | null>(null)
   const [gpsAcceptedCount, setGpsAcceptedCount] = useState(0)
@@ -118,6 +131,36 @@ export function RecordScreen() {
   const round = (value: number, precision: number) => {
     const factor = Math.pow(10, precision)
     return Math.round(value * factor) / factor
+  }
+
+  // Keep refs in sync for GPS callbacks fired outside React render timing.
+  const setAutoPauseActiveState = (next: boolean) => {
+    autoPauseActiveRef.current = next
+    setAutoPauseActive(next)
+  }
+
+  const setAutoPauseStartTimeState = (next: number | null) => {
+    autoPauseStartTimeRef.current = next
+    setAutoPauseStartTime(next)
+  }
+
+  const incrementAutoPauseCount = () => {
+    setAutoPauseCount((prev) => {
+      const next = prev + 1
+      autoPauseCountRef.current = next
+      return next
+    })
+  }
+
+  const clearAutoPauseState = () => {
+    setAutoPauseActiveState(false)
+    setAutoPauseStartTimeState(null)
+  }
+
+  const resetAutoPauseState = () => {
+    clearAutoPauseState()
+    autoPauseCountRef.current = 0
+    setAutoPauseCount(0)
   }
   
   // Metrics state
@@ -277,6 +320,7 @@ export function RecordScreen() {
     setCurrentGPSAccuracy(null)
     setGpsAccuracyHistory([])
     resetGpsDebugStats()
+    resetAutoPauseState()
     setMetrics({
       distance: 0,
       duration: 0,
@@ -394,8 +438,89 @@ export function RecordScreen() {
     // Reduced jitter threshold: now 0.5m minimum (was 0.8-2m), and reduced multiplier from 0.025 to 0.015
     const minDistanceMeters = Math.max(0.5, Math.min(1.5, accuracyValue * 0.015))
 
+    let isAutoPauseActive = autoPauseEnabled ? autoPauseActiveRef.current : false
+    if (autoPauseEnabled) {
+      if (isAutoPauseActive) {
+        if (
+          segmentSpeedMps > AUTO_RESUME_SPEED_MPS &&
+          segmentSpeedMps <= MAX_REASONABLE_SPEED_MPS
+        ) {
+          clearAutoPauseState()
+          isAutoPauseActive = false
+          void trackAnalyticsEvent('auto_pause_resumed', {
+            pause_count: autoPauseCountRef.current,
+          })
+        }
+      } else {
+        if (segmentSpeedMps < AUTO_PAUSE_SPEED_MPS) {
+          const lowSpeedStart =
+            autoPauseStartTimeRef.current ?? normalizedPoint.timestamp
+          if (autoPauseStartTimeRef.current === null) {
+            setAutoPauseStartTimeState(lowSpeedStart)
+          }
+          const lowSpeedDurationMs = normalizedPoint.timestamp - lowSpeedStart
+          if (lowSpeedDurationMs >= AUTO_PAUSE_MIN_DURATION_MS) {
+            setAutoPauseActiveState(true)
+            setAutoPauseStartTimeState(normalizedPoint.timestamp)
+            incrementAutoPauseCount()
+            isAutoPauseActive = true
+            void trackAnalyticsEvent('auto_pause_triggered', {
+              duration_seconds: Math.round(lowSpeedDurationMs / 1000),
+              gps_accuracy: accuracyValue,
+            })
+          }
+        } else if (autoPauseStartTimeRef.current !== null) {
+          setAutoPauseStartTimeState(null)
+        }
+      }
+    }
+
     if (segmentSpeedMps > MAX_REASONABLE_SPEED_MPS) {
       trackRejection('speed', { segmentSpeedMps, maxSpeedMps: MAX_REASONABLE_SPEED_MPS })
+      return
+    }
+
+    if (autoPauseEnabled && isAutoPauseActive) {
+      const previousTotalDistance = totalDistanceKmRef.current
+      lastRecordedPointRef.current = normalizedPoint
+
+      setGpsPath((previousPath) => {
+        const nextPath = [...previousPath, normalizedPoint]
+        gpsPathRef.current = nextPath
+        return nextPath
+      })
+
+      setLastSegmentStats({
+        distanceMeters: segmentDistanceMeters,
+        timeDeltaMs,
+        speedMps: segmentSpeedMps,
+      })
+
+      setMetrics((previousMetrics) => ({
+        ...previousMetrics,
+        distance: totalDistanceKmRef.current,
+        currentPace: 0,
+        currentSpeed: 0,
+      }))
+
+      trackAcceptance({
+        segmentDistanceMeters: round(segmentDistanceMeters, 1),
+        segmentSpeedMps: round(segmentSpeedMps, 2),
+        timeDeltaMs,
+        previousDistanceKm: round(previousTotalDistance, 3),
+        newDistanceKm: round(totalDistanceKmRef.current, 3),
+        segmentAdded: 0,
+        autoPaused: true,
+      })
+
+      logRunStats({
+        event: 'auto_pause_active',
+        distanceKm: totalDistanceKmRef.current,
+        segmentKm: segmentDistanceKm,
+        durationSeconds: metrics.duration,
+        currentPaceSecondsPerKm: 0,
+        pathLength: gpsPathRef.current.length,
+      })
       return
     }
 
@@ -658,6 +783,10 @@ export function RecordScreen() {
       })
     }
 
+    if (autoPauseEnabled) {
+      clearAutoPauseState()
+    }
+
     stopTracking()
     setIsInitializingGps(false)
     // NOTE: DO NOT reset lastRecordedPointRef here - we need to preserve it for distance continuity
@@ -864,6 +993,10 @@ export function RecordScreen() {
   }
 
   const mapPath = !isRunning && debugPathOverride ? debugPathOverride : gpsPath
+  const autoPauseDurationSeconds =
+    autoPauseActive && autoPauseStartTime
+      ? Math.max(0, Math.floor((Date.now() - autoPauseStartTime) / 1000))
+      : 0
   const avgPaceSecondsPerKm =
     metrics.distance >= MIN_DISTANCE_FOR_PACE_KM ? metrics.duration / metrics.distance : 0
   const timeSinceLastGpsUpdateSec = lastGpsUpdateAt
@@ -941,7 +1074,12 @@ export function RecordScreen() {
                 </p>
               </div>
             </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
+                {autoPauseEnabled && autoPauseActive && isRunning && !isPaused && (
+                  <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-700">
+                    Auto-Paused
+                  </span>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -1029,6 +1167,24 @@ export function RecordScreen() {
         </CardContent>
       </Card>
 
+      {autoPauseEnabled && autoPauseActive && isRunning && !isPaused && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-2">
+              <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-orange-600" />
+              <div>
+                <p className="font-medium text-orange-900">Auto-Paused</p>
+                <p className="text-sm text-orange-800">
+                  {autoPauseDurationSeconds > 0
+                    ? `Paused for ${formatTime(autoPauseDurationSeconds)}. Resume running to continue.`
+                    : 'Slow speed detected. Resume running to continue.'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Main Controls */}
       <Card>
         <CardContent className="p-6">
@@ -1059,6 +1215,14 @@ export function RecordScreen() {
                 </p>
                 <p className="text-sm text-gray-600">Speed (km/h)</p>
               </div>
+              {autoPauseEnabled && isRunning && (
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-orange-600">
+                    {autoPauseCount}
+                  </p>
+                  <p className="text-sm text-gray-600">Auto Pauses</p>
+                </div>
+              )}
             </div>
 
             {/* Control Buttons */}
