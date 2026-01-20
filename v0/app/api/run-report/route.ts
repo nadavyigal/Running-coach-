@@ -5,6 +5,8 @@ import { z } from 'zod'
 
 import { withSecureOpenAI } from '@/lib/apiKeyManager'
 import { logError } from '@/lib/backendMonitoring'
+import { calculateGPSQualityScore, getGPSQualityLevel, type GPSAccuracyData } from '@/lib/gps-monitoring'
+import { ENABLE_AUTO_PAUSE } from '@/lib/featureFlags'
 import { logger } from '@/lib/logger'
 import { withApiSecurity, type ApiRequest } from '@/lib/security.middleware'
 
@@ -44,6 +46,7 @@ const RunReportRequestSchema = z
         notes: z.string().optional(),
         heartRateBpm: z.coerce.number().min(0).optional(),
         calories: z.coerce.number().min(0).optional(),
+        gpsAccuracyData: z.string().optional(),
       })
       .passthrough(),
     gps: z
@@ -101,6 +104,7 @@ type NormalizedRunReportInput = {
   notes?: string
   heartRateBpm?: number
   calories?: number
+  gpsAccuracyData?: string
   gps: {
     points: number
     startAccuracy?: number
@@ -245,6 +249,7 @@ function normalizeInput(input: z.infer<typeof RunReportRequestSchema>): Normaliz
     notes: input.run.notes,
     heartRateBpm: input.run.heartRateBpm,
     calories: input.run.calories,
+    gpsAccuracyData: input.run.gpsAccuracyData,
     gps: {
       points: gpsPoints,
       startAccuracy: input.gps?.startAccuracy,
@@ -257,7 +262,30 @@ function normalizeInput(input: z.infer<typeof RunReportRequestSchema>): Normaliz
   }
 }
 
-function buildSkillInput(input: NormalizedRunReportInput) {
+function parseGpsAccuracyData(raw?: string): GPSAccuracyData[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (item): item is GPSAccuracyData =>
+        item && typeof item === 'object' && Number.isFinite(item.accuracyRadius)
+    )
+  } catch {
+    return []
+  }
+}
+
+function getAverageAccuracy(accuracyData: GPSAccuracyData[]): number | null {
+  if (accuracyData.length === 0) return null
+  const total = accuracyData.reduce((sum, item) => sum + item.accuracyRadius, 0)
+  return total / accuracyData.length
+}
+
+function buildSkillInput(
+  input: NormalizedRunReportInput,
+  gpsQuality?: { score: number; level: string; averageAccuracy: number }
+) {
   const durationMinutes = input.durationSeconds > 0 ? Math.round((input.durationSeconds / 60) * 10) / 10 : 0
   const avgPaceFormatted =
     input.avgPaceSecondsPerKm > 0 ? formatPace(input.avgPaceSecondsPerKm) : undefined
@@ -276,6 +304,7 @@ function buildSkillInput(input: NormalizedRunReportInput) {
         : {}),
       ...(typeof input.calories === 'number' && input.calories > 0 ? { calories: input.calories } : {}),
     },
+    ...(gpsQuality ? { gpsQuality } : {}),
     derivedMetrics: input.derivedMetrics,
     upcomingWorkouts: input.upcomingWorkouts,
     ...(input.userFeedback ? { userFeedback: input.userFeedback } : {}),
@@ -433,7 +462,24 @@ const handler = async (req: ApiRequest) => {
         }
   )
 
-  const skillInput = buildSkillInput(normalized)
+  const gpsQualityEnabled = ENABLE_AUTO_PAUSE
+  const accuracyData = gpsQualityEnabled ? parseGpsAccuracyData(normalized.gpsAccuracyData) : []
+  const averageAccuracyFromData = getAverageAccuracy(accuracyData)
+  const gpsQuality =
+    gpsQualityEnabled && accuracyData.length > 0
+      ? (() => {
+          const score = calculateGPSQualityScore(accuracyData)
+          return {
+            score,
+            level: getGPSQualityLevel(score),
+            averageAccuracy:
+              averageAccuracyFromData ??
+              (typeof normalized.gps.averageAccuracy === 'number' ? normalized.gps.averageAccuracy : 0),
+          }
+        })()
+      : undefined
+
+  const skillInput = buildSkillInput(normalized, gpsQuality)
   const fallbackInsight = buildFallbackInsight(normalized)
 
   logger.info('ai_skill_invoked', {
@@ -472,6 +518,7 @@ const handler = async (req: ApiRequest) => {
   }
 
   const report = normalizeInsight(aiResult.data ?? fallbackInsight, fallbackInsight)
+  const reportWithGpsQuality = gpsQuality ? { ...report, gpsQuality } : report
   const source = aiResult.success ? ('ai' as const) : ('fallback' as const)
 
   logger.info('ai_insight_created', {
@@ -482,7 +529,7 @@ const handler = async (req: ApiRequest) => {
     source,
   })
 
-  return NextResponse.json({ report, source })
+  return NextResponse.json({ report: reportWithGpsQuality, source })
 }
 
 export const POST = withApiSecurity(handler)

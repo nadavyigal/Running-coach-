@@ -13,6 +13,13 @@ import type { Run } from '@/lib/db'
 import type { LatLng } from '@/lib/mapConfig'
 import { parseGpsPath } from '@/lib/routeUtils'
 import { trackAnalyticsEvent } from '@/lib/analytics'
+import { ENABLE_AUTO_PAUSE } from '@/lib/featureFlags'
+
+type GPSQuality = {
+  score: number
+  level: 'Excellent' | 'Good' | 'Fair' | 'Poor'
+  averageAccuracy: number
+}
 
 type CoachNotes = {
   shortSummary: string
@@ -32,6 +39,7 @@ type RunInsight = {
   runId: number
   summary: string[]
   effort: 'easy' | 'moderate' | 'hard'
+  gpsQuality?: GPSQuality
   metrics?: {
     paceStability: string
     cadenceNote?: string
@@ -63,6 +71,19 @@ function formatPace(secondsPerKm: number): string {
   const mins = Math.floor(secondsPerKm / 60)
   const secs = Math.round(secondsPerKm % 60)
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+}
+
+function getGpsQualityStyles(level: GPSQuality['level']) {
+  switch (level) {
+    case 'Excellent':
+      return { bar: 'bg-green-500', badge: 'bg-green-100 text-green-700' }
+    case 'Good':
+      return { bar: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700' }
+    case 'Fair':
+      return { bar: 'bg-yellow-500', badge: 'bg-yellow-100 text-yellow-700' }
+    default:
+      return { bar: 'bg-red-500', badge: 'bg-red-100 text-red-700' }
+  }
 }
 
 function isCoachNotes(value: unknown): value is CoachNotes {
@@ -133,6 +154,22 @@ function safeParseCoachNotes(raw: string | undefined): CoachNotes | null {
   }
 }
 
+function extractGpsQuality(raw: string | undefined): GPSQuality | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as { gpsQuality?: GPSQuality }
+    if (!parsed?.gpsQuality || typeof parsed.gpsQuality !== 'object') return null
+    const { score, level, averageAccuracy } = parsed.gpsQuality
+    if (!Number.isFinite(score) || !Number.isFinite(averageAccuracy) || typeof level !== 'string') {
+      return null
+    }
+    if (!['Excellent', 'Good', 'Fair', 'Poor'].includes(level)) return null
+    return { score, level: level as GPSQuality['level'], averageAccuracy }
+  } catch {
+    return null
+  }
+}
+
 export function RunReportScreen({ runId, onBack }: { runId: number | null; onBack: () => void }) {
   const { toast } = useToast()
 
@@ -140,14 +177,20 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   const [isLoading, setIsLoading] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
 
+  const gpsQualityEnabled = ENABLE_AUTO_PAUSE
   const path: LatLng[] = useMemo(() => parseGpsPath(run?.gpsPath), [run?.gpsPath])
 
   const coachNotes = useMemo(() => safeParseCoachNotes(run?.runReport), [run?.runReport])
+  const gpsQuality = useMemo(
+    () => (gpsQualityEnabled ? extractGpsQuality(run?.runReport) : null),
+    [gpsQualityEnabled, run?.runReport]
+  )
 
   const avgPace = useMemo(() => {
     if (!run) return 0
     return run.distance >= MIN_DISTANCE_FOR_PACE_KM ? run.duration / run.distance : 0
   }, [run])
+  const gpsQualityStyles = gpsQuality ? getGpsQualityStyles(gpsQuality.level) : null
 
   const loadRun = useCallback(async () => {
     if (!runId) {
@@ -192,6 +235,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
             notes: run.notes,
             heartRateBpm: run.heartRate,
             calories: run.calories,
+            gpsAccuracyData: run.gpsAccuracyData,
           },
           gps: {
             points: path.length,
@@ -223,6 +267,13 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
           source: data.source,
         })
       }
+      if (gpsQualityEnabled && isRunInsight(data.report) && data.report.gpsQuality) {
+        void trackAnalyticsEvent('gps_quality_score', {
+          score: data.report.gpsQuality.score,
+          confidence_level: data.report.gpsQuality.level,
+          run_id: data.report.runId,
+        })
+      }
 
       toast({
         title: 'Coach Notes Ready',
@@ -240,7 +291,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
     } finally {
       setIsGenerating(false)
     }
-  }, [loadRun, path.length, run, runId, toast])
+  }, [gpsQualityEnabled, loadRun, path.length, run, runId, toast])
 
   useEffect(() => {
     loadRun()
@@ -332,6 +383,33 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
           </div>
         </CardContent>
       </Card>
+
+      {gpsQualityEnabled && gpsQuality && gpsQualityStyles && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium">GPS Quality</h3>
+              <span
+                className={`rounded-full px-2 py-1 text-xs font-semibold ${gpsQualityStyles.badge}`}
+              >
+                {gpsQuality.level}
+              </span>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm text-gray-700">
+                <span>{gpsQuality.score}%</span>
+                <span>{gpsQuality.averageAccuracy.toFixed(1)}m avg accuracy</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-gray-100">
+                <div
+                  className={`h-2 rounded-full ${gpsQualityStyles.bar}`}
+                  style={{ width: `${gpsQuality.score}%` }}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="p-4">
