@@ -6,7 +6,9 @@ const IS_WINDOWS = process.platform === 'win32';
 const PROD_COMMAND = IS_WINDOWS
   ? `set PORT=${PORT}&& npm run start`
   : `PORT=${PORT} npm run start`;
-const DEV_COMMAND = `npm run dev -- --webpack -p ${PORT}`;
+const DEV_COMMAND = IS_WINDOWS
+  ? `set PORT=${PORT}&& npm run dev`
+  : `PORT=${PORT} npm run dev`;
 
 export default defineConfig({
   testDir: './e2e',
@@ -46,7 +48,7 @@ export default defineConfig({
   webServer: {
     command: USE_PROD ? PROD_COMMAND : DEV_COMMAND,
     port: PORT,
-    reuseExistingServer: false,
+    reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
   },
 }); 

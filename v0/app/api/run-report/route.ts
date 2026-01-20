@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { withSecureOpenAI } from '@/lib/apiKeyManager'
 import { logError } from '@/lib/backendMonitoring'
 import { calculateGPSQualityScore, getGPSQualityLevel, type GPSAccuracyData } from '@/lib/gps-monitoring'
-import { ENABLE_AUTO_PAUSE } from '@/lib/featureFlags'
+import { ENABLE_AUTO_PAUSE, ENABLE_PACE_CHART } from '@/lib/featureFlags'
 import { logger } from '@/lib/logger'
 import { withApiSecurity, type ApiRequest } from '@/lib/security.middleware'
 
@@ -58,6 +58,17 @@ const RunReportRequestSchema = z
       })
       .passthrough()
       .optional(),
+    paceData: z
+      .array(
+        z
+          .object({
+            distanceKm: z.coerce.number().min(0),
+            paceMinPerKm: z.coerce.number().min(0),
+            timestamp: z.union([z.coerce.number(), z.string(), z.date()]).optional(),
+          })
+          .passthrough()
+      )
+      .optional(),
     derivedMetrics: DerivedMetricsSchema.optional(),
     upcomingWorkouts: z.array(WorkoutSchema).optional(),
     userFeedback: z
@@ -84,6 +95,9 @@ const InsightSchema = z.object({
     cadenceNote: z.string().optional(),
     hrNote: z.string().optional(),
   }),
+  pacingAnalysis: z.string().min(1).optional(),
+  paceConsistency: z.enum(['consistent', 'fading', 'negative-split', 'erratic']).optional(),
+  paceVariability: z.coerce.number().min(0).optional(),
   recovery: z.object({
     priority: z.array(z.string().min(1)).min(1),
     optional: z.array(z.string().min(1)).optional(),
@@ -111,6 +125,10 @@ type NormalizedRunReportInput = {
     endAccuracy?: number
     averageAccuracy?: number
   }
+  paceData: Array<{
+    distanceKm: number
+    paceMinPerKm: number
+  }>
   derivedMetrics: {
     paceStability: string
     cadenceNote?: string
@@ -125,6 +143,8 @@ type NormalizedRunReportInput = {
 
 const RUN_REPORT_MODEL = process.env.RUN_REPORT_MODEL || 'gpt-4o-mini'
 const MIN_DISTANCE_FOR_PACE_KM = 0.05
+const PACE_VARIABILITY_ERRATIC_MIN = 0.5
+const PACE_SPLIT_THRESHOLD_MIN = 0.15
 
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60)
@@ -217,6 +237,143 @@ function buildDerivedMetrics(input: {
   }
 }
 
+type PaceSegment = {
+  startKm: number
+  endKm: number
+  paceMinPerKm: number
+}
+
+type PaceStats = {
+  avgPaceMinPerKm: number
+  minPaceMinPerKm: number
+  maxPaceMinPerKm: number
+  variabilityMinPerKm: number
+  firstKmPaceMinPerKm?: number
+  lastKmPaceMinPerKm?: number
+  totalDistanceKm: number
+}
+
+function normalizePaceData(
+  paceData?: Array<{ distanceKm?: number; paceMinPerKm?: number }>
+): Array<{ distanceKm: number; paceMinPerKm: number }> {
+  if (!paceData || paceData.length === 0) return []
+  const normalized: Array<{ distanceKm: number; paceMinPerKm: number }> = []
+  for (const entry of paceData) {
+    const distanceKm = typeof entry.distanceKm === 'number' ? entry.distanceKm : NaN
+    const paceMinPerKm = typeof entry.paceMinPerKm === 'number' ? entry.paceMinPerKm : NaN
+    if (!Number.isFinite(distanceKm) || !Number.isFinite(paceMinPerKm)) continue
+    if (distanceKm <= 0 || paceMinPerKm <= 0) continue
+    normalized.push({ distanceKm, paceMinPerKm })
+  }
+  return normalized
+}
+
+function buildPaceSegments(
+  paceData: Array<{ distanceKm: number; paceMinPerKm: number }>
+): PaceSegment[] {
+  if (paceData.length === 0) return []
+  const segments: PaceSegment[] = []
+  let previousDistance = 0
+  for (const entry of paceData) {
+    if (entry.distanceKm <= previousDistance) continue
+    segments.push({
+      startKm: previousDistance,
+      endKm: entry.distanceKm,
+      paceMinPerKm: entry.paceMinPerKm,
+    })
+    previousDistance = entry.distanceKm
+  }
+  return segments
+}
+
+function averagePaceForRange(segments: PaceSegment[], startKm: number, endKm: number): number | null {
+  if (segments.length === 0 || endKm <= startKm) return null
+  let weightedTotal = 0
+  let totalDistance = 0
+  for (const segment of segments) {
+    const overlapStart = Math.max(segment.startKm, startKm)
+    const overlapEnd = Math.min(segment.endKm, endKm)
+    if (overlapEnd <= overlapStart) continue
+    const overlapDistance = overlapEnd - overlapStart
+    weightedTotal += overlapDistance * segment.paceMinPerKm
+    totalDistance += overlapDistance
+  }
+  return totalDistance > 0 ? weightedTotal / totalDistance : null
+}
+
+function calculatePaceStats(
+  paceData: Array<{ distanceKm: number; paceMinPerKm: number }>
+): PaceStats | null {
+  if (paceData.length === 0) return null
+  const segments = buildPaceSegments(paceData)
+  if (segments.length === 0) return null
+
+  const totalDistanceKm = segments[segments.length - 1].endKm
+  if (!Number.isFinite(totalDistanceKm) || totalDistanceKm <= 0) return null
+
+  let weightedSum = 0
+  let weightedVariance = 0
+  let distanceSum = 0
+  let minPace = Number.POSITIVE_INFINITY
+  let maxPace = 0
+
+  for (const segment of segments) {
+    const distance = segment.endKm - segment.startKm
+    if (!Number.isFinite(distance) || distance <= 0) continue
+    distanceSum += distance
+    weightedSum += distance * segment.paceMinPerKm
+    minPace = Math.min(minPace, segment.paceMinPerKm)
+    maxPace = Math.max(maxPace, segment.paceMinPerKm)
+  }
+
+  if (distanceSum <= 0) return null
+  const avgPaceMinPerKm = weightedSum / distanceSum
+
+  for (const segment of segments) {
+    const distance = segment.endKm - segment.startKm
+    if (!Number.isFinite(distance) || distance <= 0) continue
+    const diff = segment.paceMinPerKm - avgPaceMinPerKm
+    weightedVariance += distance * diff * diff
+  }
+
+  const variabilityMinPerKm = Math.sqrt(weightedVariance / distanceSum)
+  const firstKmPaceMinPerKm =
+    totalDistanceKm >= 1 ? averagePaceForRange(segments, 0, 1) ?? undefined : undefined
+  const lastKmPaceMinPerKm =
+    totalDistanceKm >= 1
+      ? averagePaceForRange(segments, Math.max(0, totalDistanceKm - 1), totalDistanceKm) ??
+        undefined
+      : undefined
+
+  if (!Number.isFinite(minPace) || !Number.isFinite(maxPace)) return null
+
+  return {
+    avgPaceMinPerKm,
+    minPaceMinPerKm: minPace,
+    maxPaceMinPerKm: maxPace,
+    variabilityMinPerKm,
+    firstKmPaceMinPerKm,
+    lastKmPaceMinPerKm,
+    totalDistanceKm,
+  }
+}
+
+function classifyPaceConsistency(stats: PaceStats): RunInsight['paceConsistency'] {
+  if (stats.variabilityMinPerKm >= PACE_VARIABILITY_ERRATIC_MIN) return 'erratic'
+
+  if (
+    typeof stats.firstKmPaceMinPerKm === 'number' &&
+    typeof stats.lastKmPaceMinPerKm === 'number'
+  ) {
+    const splitDiff = stats.lastKmPaceMinPerKm - stats.firstKmPaceMinPerKm
+    if (splitDiff >= PACE_SPLIT_THRESHOLD_MIN) return 'fading'
+    if (splitDiff <= -PACE_SPLIT_THRESHOLD_MIN) return 'negative-split'
+    return 'consistent'
+  }
+
+  return stats.variabilityMinPerKm <= PACE_SPLIT_THRESHOLD_MIN ? 'consistent' : 'erratic'
+}
+
 function normalizeInput(input: z.infer<typeof RunReportRequestSchema>): NormalizedRunReportInput {
   const runType = normalizeRunType(input.run.type)
   const distanceKm = Number.isFinite(input.run.distanceKm) ? Math.max(0, input.run.distanceKm) : 0
@@ -231,6 +388,7 @@ function normalizeInput(input: z.infer<typeof RunReportRequestSchema>): Normaliz
         : 0
 
   const gpsPoints = input.gps?.points ?? 0
+  const paceData = normalizePaceData(input.paceData)
   const derivedMetrics = buildDerivedMetrics({
     distanceKm,
     gpsPoints,
@@ -256,6 +414,7 @@ function normalizeInput(input: z.infer<typeof RunReportRequestSchema>): Normaliz
       endAccuracy: input.gps?.endAccuracy,
       averageAccuracy: input.gps?.averageAccuracy,
     },
+    paceData,
     derivedMetrics,
     upcomingWorkouts: input.upcomingWorkouts ?? [],
     userFeedback: input.userFeedback,
@@ -284,11 +443,31 @@ function getAverageAccuracy(accuracyData: GPSAccuracyData[]): number | null {
 
 function buildSkillInput(
   input: NormalizedRunReportInput,
-  gpsQuality?: { score: number; level: string; averageAccuracy: number }
+  gpsQuality?: { score: number; level: string; averageAccuracy: number },
+  paceStats?: PaceStats | null
 ) {
   const durationMinutes = input.durationSeconds > 0 ? Math.round((input.durationSeconds / 60) * 10) / 10 : 0
   const avgPaceFormatted =
     input.avgPaceSecondsPerKm > 0 ? formatPace(input.avgPaceSecondsPerKm) : undefined
+
+  const pacingPayload =
+    paceStats && input.paceData.length > 0
+      ? {
+          paceData: input.paceData,
+          paceStats: {
+            averagePace: formatPace(paceStats.avgPaceMinPerKm * 60),
+            minPace: formatPace(paceStats.minPaceMinPerKm * 60),
+            maxPace: formatPace(paceStats.maxPaceMinPerKm * 60),
+            variabilitySeconds: Math.round(paceStats.variabilityMinPerKm * 60),
+            ...(typeof paceStats.firstKmPaceMinPerKm === 'number'
+              ? { firstKmPace: formatPace(paceStats.firstKmPaceMinPerKm * 60) }
+              : {}),
+            ...(typeof paceStats.lastKmPaceMinPerKm === 'number'
+              ? { lastKmPace: formatPace(paceStats.lastKmPaceMinPerKm * 60) }
+              : {}),
+          },
+        }
+      : undefined
 
   return {
     run: {
@@ -305,6 +484,7 @@ function buildSkillInput(
       ...(typeof input.calories === 'number' && input.calories > 0 ? { calories: input.calories } : {}),
     },
     ...(gpsQuality ? { gpsQuality } : {}),
+            ...(pacingPayload ? { pacing: pacingPayload } : {}),
     derivedMetrics: input.derivedMetrics,
     upcomingWorkouts: input.upcomingWorkouts,
     ...(input.userFeedback ? { userFeedback: input.userFeedback } : {}),
@@ -430,6 +610,11 @@ function normalizeInsight(insight: RunInsight, fallback: RunInsight): RunInsight
     summary: summary.length ? summary : fallback.summary,
     effort,
     metrics,
+    ...(typeof insight.pacingAnalysis === 'string' ? { pacingAnalysis: insight.pacingAnalysis } : {}),
+    ...(insight.paceConsistency ? { paceConsistency: insight.paceConsistency } : {}),
+    ...(typeof insight.paceVariability === 'number'
+      ? { paceVariability: insight.paceVariability }
+      : {}),
     recovery,
     ...(nextSessionNudge ? { nextSessionNudge } : {}),
     ...(safetyFlags?.length ? { safetyFlags } : {}),
@@ -463,6 +648,7 @@ const handler = async (req: ApiRequest) => {
   )
 
   const gpsQualityEnabled = ENABLE_AUTO_PAUSE
+  const paceChartEnabled = ENABLE_PACE_CHART
   const accuracyData = gpsQualityEnabled ? parseGpsAccuracyData(normalized.gpsAccuracyData) : []
   const averageAccuracyFromData = getAverageAccuracy(accuracyData)
   const gpsQuality =
@@ -479,7 +665,12 @@ const handler = async (req: ApiRequest) => {
         })()
       : undefined
 
-  const skillInput = buildSkillInput(normalized, gpsQuality)
+  const paceStats =
+    paceChartEnabled && normalized.paceData.length > 0
+      ? calculatePaceStats(normalized.paceData)
+      : null
+  const paceConsistency = paceStats ? classifyPaceConsistency(paceStats) : undefined
+  const skillInput = buildSkillInput(normalized, gpsQuality, paceStats)
   const fallbackInsight = buildFallbackInsight(normalized)
 
   logger.info('ai_skill_invoked', {
@@ -504,7 +695,17 @@ const handler = async (req: ApiRequest) => {
             skillInput,
             null,
             2
-          )}\nReturn JSON that matches the provided schema.`,
+          )}\n${
+            paceStats
+              ? `\nPacing Analysis:\n- Was the pace consistent, fading (positive split), or negative split?\n- Average pace: ${formatPace(
+                  paceStats.avgPaceMinPerKm * 60
+                )}, pace range: ${formatPace(paceStats.minPaceMinPerKm * 60)}-${formatPace(
+                  paceStats.maxPaceMinPerKm * 60
+                )}\n- Pace variability: ${Math.round(
+                  paceStats.variabilityMinPerKm * 60
+                )}s (low = consistent, high = erratic)\n- Provide 1-2 sentence pacing assessment\n- If pacing was poor, suggest a specific improvement\n- Include pacingAnalysis (1-2 sentences), paceConsistency, and paceVariability (seconds per km as number)\n- Current paceConsistency suggestion: ${paceConsistency ?? 'unknown'}`
+              : '\nPacing Analysis: Pace data unavailable; omit pacingAnalysis, paceConsistency, paceVariability.'
+          }\nReturn JSON that matches the provided schema.`,
         },
       ],
     })
