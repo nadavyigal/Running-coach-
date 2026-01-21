@@ -670,3 +670,5 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
     </div>
   )
 }
+
+export default RunReportScreen
