@@ -1,6 +1,17 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { findMatchingWorkout, confirmWorkoutCompletion } from './run-recording'
 import { db, type Run, type Workout } from './db'
+
+// Mock the feature flags
+vi.mock('./featureFlags', () => ({
+  ENABLE_WEEKLY_RECAP: true,
+  ENABLE_AUTO_PAUSE: true,
+  ENABLE_GPS_QUALITY_SCORE: true,
+  ENABLE_PACE_CHART: true,
+  ENABLE_ENHANCED_SHARING: true,
+  ENABLE_COMPLETION_LOOP: true,
+  ENABLE_VIBRATION_COACH: true,
+}))
 
 describe('run-recording - Workout Completion Loop', () => {
   let userId: number

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { HabitAnalyticsService, type WeeklyRecap } from './habitAnalytics'
 import { db, type User, type Run, type Workout } from './db'
-import { subDays, startOfWeek, endOfWeek } from 'date-fns'
+import { subDays, startOfWeek, endOfWeek, addDays } from 'date-fns'
 
 // Mock the feature flags
 vi.mock('./featureFlags', () => ({
@@ -35,10 +35,16 @@ describe('HabitAnalytics - Weekly Recap', () => {
   })
 
   it('generates weekly recap with totals correctly', async () => {
-    const weekStart = startOfWeek(new Date())
-    const weekEnd = endOfWeek(weekStart)
+    // Start of week is Monday (habitAnalytics normalizes to Monday)
+    const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
 
-    // Add runs for current week
+    // Add runs within the week with proper timing
+    const mondayDate = addDays(weekStart, 0) // Monday
+    mondayDate.setHours(12, 0, 0, 0)
+
+    const wednesdayDate = addDays(weekStart, 2) // Wednesday
+    wednesdayDate.setHours(12, 0, 0, 0)
+
     await db.runs.add({
       userId,
       type: 'easy',
@@ -46,7 +52,7 @@ describe('HabitAnalytics - Weekly Recap', () => {
       duration: 1650, // 5:30 min/km pace
       pace: 330,
       calories: 300,
-      completedAt: new Date(weekStart.getTime() + 1 * 24 * 60 * 60 * 1000), // Monday
+      completedAt: mondayDate,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
@@ -58,7 +64,7 @@ describe('HabitAnalytics - Weekly Recap', () => {
       duration: 990, // 5:30 min/km pace
       pace: 330,
       calories: 180,
-      completedAt: new Date(weekStart.getTime() + 3 * 24 * 60 * 60 * 1000), // Wednesday
+      completedAt: wednesdayDate,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
@@ -72,10 +78,13 @@ describe('HabitAnalytics - Weekly Recap', () => {
   })
 
   it('calculates week-over-week comparison correctly', async () => {
-    const currentWeekStart = startOfWeek(new Date())
+    const currentWeekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
     const previousWeekStart = subDays(currentWeekStart, 7)
 
-    // Add runs for previous week (lower volume)
+    // Add run for previous week
+    const prevMonday = addDays(previousWeekStart, 0)
+    prevMonday.setHours(12, 0, 0, 0)
+
     await db.runs.add({
       userId,
       type: 'easy',
@@ -83,12 +92,18 @@ describe('HabitAnalytics - Weekly Recap', () => {
       duration: 990,
       pace: 330,
       calories: 180,
-      completedAt: previousWeekStart,
+      completedAt: prevMonday,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
 
     // Add runs for current week (higher volume)
+    const currentMonday = addDays(currentWeekStart, 0)
+    currentMonday.setHours(12, 0, 0, 0)
+
+    const currentWednesday = addDays(currentWeekStart, 2)
+    currentWednesday.setHours(12, 0, 0, 0)
+
     await db.runs.add({
       userId,
       type: 'easy',
@@ -96,7 +111,7 @@ describe('HabitAnalytics - Weekly Recap', () => {
       duration: 1650,
       pace: 330,
       calories: 300,
-      completedAt: currentWeekStart,
+      completedAt: currentMonday,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
@@ -108,7 +123,7 @@ describe('HabitAnalytics - Weekly Recap', () => {
       duration: 1650,
       pace: 330,
       calories: 300,
-      completedAt: new Date(currentWeekStart.getTime() + 2 * 24 * 60 * 60 * 1000),
+      completedAt: currentWednesday,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
@@ -121,7 +136,7 @@ describe('HabitAnalytics - Weekly Recap', () => {
   })
 
   it('handles zero runs gracefully', async () => {
-    const weekStart = startOfWeek(new Date())
+    const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
 
     const recap = await service.generateWeeklyRecap(userId, weekStart)
 
@@ -132,7 +147,8 @@ describe('HabitAnalytics - Weekly Recap', () => {
   })
 
   it('calculates consistency score correctly', async () => {
-    const weekStart = startOfWeek(new Date())
+    const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
+
     const planId = await db.plans.add({
       userId,
       goal: 'habit',
@@ -144,23 +160,30 @@ describe('HabitAnalytics - Weekly Recap', () => {
       updatedAt: new Date(),
     })
 
-    // Create 4 planned workouts for the week
+    // Create 4 planned workouts for the week (non-rest days only count)
+    const daysOffset = [0, 1, 3, 4] // Mon, Tue, Thu, Fri
     for (let i = 0; i < 4; i++) {
+      const workoutDate = addDays(weekStart, daysOffset[i])
+      workoutDate.setHours(10, 0, 0, 0)
+
       await db.workouts.add({
         planId,
         type: 'easy',
         distance: 5,
         duration: 30,
         pace: 330,
-        scheduledDate: new Date(weekStart.getTime() + i * 24 * 60 * 60 * 1000),
-        completed: i < 3, // Complete 3 out of 4
+        scheduledDate: workoutDate,
+        completed: false, // Mark as not completed initially
         createdAt: new Date(),
         updatedAt: new Date(),
       })
     }
 
-    // Add 3 completed runs
+    // Add 3 completed runs to match 3 of the workouts
     for (let i = 0; i < 3; i++) {
+      const runDate = addDays(weekStart, daysOffset[i])
+      runDate.setHours(12, 0, 0, 0)
+
       await db.runs.add({
         userId,
         type: 'easy',
@@ -168,7 +191,7 @@ describe('HabitAnalytics - Weekly Recap', () => {
         duration: 1650,
         pace: 330,
         calories: 300,
-        completedAt: new Date(weekStart.getTime() + i * 24 * 60 * 60 * 1000),
+        completedAt: runDate,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -176,12 +199,14 @@ describe('HabitAnalytics - Weekly Recap', () => {
 
     const recap = await service.generateWeeklyRecap(userId, weekStart)
 
-    // Consistency: 3 completed out of 4 planned = 75%
+    // Consistency: 3 runs completed out of 4 planned = 75%
     expect(recap.consistencyScore).toBe(75)
   })
 
   it('caches weekly recap for performance', async () => {
-    const weekStart = startOfWeek(new Date())
+    const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
+    const monday = addDays(weekStart, 0)
+    monday.setHours(12, 0, 0, 0)
 
     await db.runs.add({
       userId,
@@ -190,7 +215,7 @@ describe('HabitAnalytics - Weekly Recap', () => {
       duration: 1650,
       pace: 330,
       calories: 300,
-      completedAt: weekStart,
+      completedAt: monday,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
@@ -206,9 +231,22 @@ describe('HabitAnalytics - Weekly Recap', () => {
   })
 
   it('generates daily run totals array correctly', async () => {
-    const weekStart = startOfWeek(new Date())
+    // Week starts on Monday (index 0 in the normalized week)
+    const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
 
-    // Add runs on specific days: Monday (1), Tuesday (0), Wednesday (2), Thursday (1), Friday-Sunday (0)
+    // Add runs: Monday (index 0), Wednesday (index 2 - 2 runs), Thursday (index 3)
+    const monday = addDays(weekStart, 0)
+    monday.setHours(12, 0, 0, 0)
+
+    const wednesday = addDays(weekStart, 2)
+    wednesday.setHours(12, 0, 0, 0)
+
+    const wednesday2 = addDays(weekStart, 2)
+    wednesday2.setHours(14, 0, 0, 0) // 2nd run on Wednesday
+
+    const thursday = addDays(weekStart, 3)
+    thursday.setHours(12, 0, 0, 0)
+
     await db.runs.add({
       userId,
       type: 'easy',
@@ -216,7 +254,7 @@ describe('HabitAnalytics - Weekly Recap', () => {
       duration: 1650,
       pace: 330,
       calories: 300,
-      completedAt: new Date(weekStart.getTime() + 1 * 24 * 60 * 60 * 1000), // Monday
+      completedAt: monday,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
@@ -228,7 +266,7 @@ describe('HabitAnalytics - Weekly Recap', () => {
       duration: 990,
       pace: 330,
       calories: 180,
-      completedAt: new Date(weekStart.getTime() + 3 * 24 * 60 * 60 * 1000), // Wednesday
+      completedAt: wednesday,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
@@ -240,7 +278,7 @@ describe('HabitAnalytics - Weekly Recap', () => {
       duration: 990,
       pace: 330,
       calories: 180,
-      completedAt: new Date(weekStart.getTime() + 3 * 24 * 60 * 60 * 1000 + 1000 * 60 * 60), // Wednesday (2nd run)
+      completedAt: wednesday2,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
@@ -252,20 +290,21 @@ describe('HabitAnalytics - Weekly Recap', () => {
       duration: 1650,
       pace: 330,
       calories: 300,
-      completedAt: new Date(weekStart.getTime() + 4 * 24 * 60 * 60 * 1000), // Thursday
+      completedAt: thursday,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
 
     const recap = await service.generateWeeklyRecap(userId, weekStart)
 
+    // dailyRunTotals array is [Mon, Tue, Wed, Thu, Fri, Sat, Sun] when week starts on Monday
     expect(recap.dailyRunTotals).toHaveLength(7)
-    expect(recap.dailyRunTotals[0]).toBe(0) // Sunday
-    expect(recap.dailyRunTotals[1]).toBe(1) // Monday
-    expect(recap.dailyRunTotals[2]).toBe(0) // Tuesday
-    expect(recap.dailyRunTotals[3]).toBe(2) // Wednesday
-    expect(recap.dailyRunTotals[4]).toBe(1) // Thursday
-    expect(recap.dailyRunTotals[5]).toBe(0) // Friday
-    expect(recap.dailyRunTotals[6]).toBe(0) // Saturday
+    expect(recap.dailyRunTotals[0]).toBe(1) // Monday
+    expect(recap.dailyRunTotals[1]).toBe(0) // Tuesday
+    expect(recap.dailyRunTotals[2]).toBe(2) // Wednesday
+    expect(recap.dailyRunTotals[3]).toBe(1) // Thursday
+    expect(recap.dailyRunTotals[4]).toBe(0) // Friday
+    expect(recap.dailyRunTotals[5]).toBe(0) // Saturday
+    expect(recap.dailyRunTotals[6]).toBe(0) // Sunday
   })
 })
