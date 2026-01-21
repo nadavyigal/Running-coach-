@@ -30,12 +30,20 @@ vi.mock('date-fns', () => {
   };
 });
 
+vi.mock('@/lib/featureFlags', () => ({
+  ENABLE_WEEKLY_RECAP: true
+}));
+
 describe('HabitAnalyticsService', () => {
   let service: HabitAnalyticsService;
   let testUser: User;
   let testDate: Date;
 
   beforeEach(async () => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.clear();
+    }
+
     // Reset database
     if (db) {
       await db.delete();
@@ -261,6 +269,158 @@ describe('HabitAnalyticsService', () => {
 
       expect(analytics.riskLevel).toBe('high');
       expect(analytics.suggestions.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('generateWeeklyRecap', () => {
+    it('should generate a recap with 5 runs', async () => {
+      if (!db) return;
+
+      const weekStart = new Date(2025, 0, 6);
+      const planId = await db.plans.add({
+        userId: 1,
+        title: 'Weekly Plan',
+        startDate: new Date(2025, 0, 1),
+        endDate: new Date(2025, 0, 31),
+        totalWeeks: 4,
+        isActive: true,
+        planType: 'basic',
+        createdAt: new Date(2025, 0, 1),
+        updatedAt: new Date(2025, 0, 1)
+      });
+
+      const workouts: Omit<Workout, 'id'>[] = Array.from({ length: 5 }, (_, index) => ({
+        planId: planId as number,
+        week: 1,
+        day: 'Mon',
+        type: 'easy',
+        distance: 5,
+        completed: index < 4,
+        scheduledDate: new Date(2025, 0, 6 + index),
+        createdAt: new Date(2025, 0, 1),
+        updatedAt: new Date(2025, 0, 6 + index)
+      }));
+
+      for (const workout of workouts) {
+        await db.workouts.add(workout);
+      }
+
+      const runs: Omit<Run, 'id'>[] = [
+        {
+          userId: 1,
+          type: 'easy',
+          distance: 5,
+          duration: 1500,
+          pace: 300,
+          completedAt: new Date(2025, 0, 6, 7),
+          createdAt: new Date(2025, 0, 6)
+        },
+        {
+          userId: 1,
+          type: 'easy',
+          distance: 4,
+          duration: 1200,
+          pace: 300,
+          completedAt: new Date(2025, 0, 7, 7),
+          createdAt: new Date(2025, 0, 7)
+        },
+        {
+          userId: 1,
+          type: 'tempo',
+          distance: 6,
+          duration: 1800,
+          pace: 300,
+          completedAt: new Date(2025, 0, 8, 7),
+          createdAt: new Date(2025, 0, 8)
+        },
+        {
+          userId: 1,
+          type: 'easy',
+          distance: 3,
+          duration: 900,
+          pace: 300,
+          completedAt: new Date(2025, 0, 9, 7),
+          createdAt: new Date(2025, 0, 9)
+        },
+        {
+          userId: 1,
+          type: 'long',
+          distance: 7,
+          duration: 2100,
+          pace: 300,
+          completedAt: new Date(2025, 0, 11, 7),
+          createdAt: new Date(2025, 0, 11)
+        }
+      ];
+
+      for (const run of runs) {
+        await db.runs.add(run);
+      }
+
+      const recap = await service.generateWeeklyRecap(1, weekStart);
+
+      expect(recap.totalRuns).toBe(5);
+      expect(recap.totalDistance).toBe(25);
+      expect(recap.totalDuration).toBe(7500);
+      expect(recap.averagePace).toBe('5:00/km');
+      expect(recap.consistencyScore).toBe(100);
+      expect(recap.topAchievement.length).toBeGreaterThan(0);
+      expect(recap.nextWeekGoal).toContain('27.5 km');
+    });
+
+    it('should handle a recap with zero runs', async () => {
+      const weekStart = new Date(2025, 0, 13);
+
+      const recap = await service.generateWeeklyRecap(1, weekStart);
+
+      expect(recap.totalRuns).toBe(0);
+      expect(recap.totalDistance).toBe(0);
+      expect(recap.totalDuration).toBe(0);
+      expect(recap.averagePace).toBe('0:00/km');
+      expect(recap.topAchievement).toContain('No runs');
+    });
+
+    it('should calculate week-over-week changes', async () => {
+      if (!db) return;
+
+      const weekStart = new Date(2025, 0, 20);
+      await db.runs.add({
+        userId: 1,
+        type: 'easy',
+        distance: 5,
+        duration: 1500,
+        pace: 300,
+        completedAt: new Date(2025, 0, 14, 7),
+        createdAt: new Date(2025, 0, 14)
+      });
+
+      await db.runs.bulkAdd([
+        {
+          userId: 1,
+          type: 'easy',
+          distance: 5,
+          duration: 1500,
+          pace: 300,
+          completedAt: new Date(2025, 0, 20, 7),
+          createdAt: new Date(2025, 0, 20)
+        },
+        {
+          userId: 1,
+          type: 'easy',
+          distance: 5,
+          duration: 1500,
+          pace: 300,
+          completedAt: new Date(2025, 0, 22, 7),
+          createdAt: new Date(2025, 0, 22)
+        }
+      ]);
+
+      const recap = await service.generateWeeklyRecap(1, weekStart);
+
+      expect(recap.weekOverWeekChange.distance).toBe(100);
+      expect(recap.weekOverWeekChange.runs).toBe(100);
+      expect(recap.weekStartDate.getTime()).toBe(weekStart.getTime());
+      expect(recap.weekEndDate.getTime()).toBe(new Date(2025, 0, 26, 23, 59, 59, 999).getTime());
     });
   });
 

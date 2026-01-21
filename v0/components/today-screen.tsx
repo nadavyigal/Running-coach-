@@ -36,9 +36,13 @@ import { generateStructuredWorkout, type StructuredWorkout } from "@/lib/workout
 import { getDefaultPaceZones } from "@/lib/pace-zones"
 import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine"
 import { useToast } from "@/hooks/use-toast"
+import { markRecapNotificationShown, shouldShowWeeklyRecapNotification } from "@/lib/weekly-recap-scheduler"
+import { trackAnalyticsEvent } from "@/lib/analytics"
 import { CommunityStatsWidget } from "@/components/community-stats-widget"
 import { GoalRecommendations } from "@/components/goal-recommendations"
 import { HabitAnalyticsWidget } from "@/components/habit-analytics-widget"
+import { WeeklyRecapNotificationBanner } from "@/components/weekly-recap-notification-banner"
+import { WeeklyRecapWidget } from "@/components/weekly-recap-widget"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,6 +53,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { ENABLE_WEEKLY_RECAP } from "@/lib/featureFlags"
 
 export function TodayScreen() {
   // Get shared data from context
@@ -84,6 +89,8 @@ export function TodayScreen() {
   const [workoutToDelete, setWorkoutToDelete] = useState<number | null>(null)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(new Date())
   const { toast } = useToast()
+  const [showWeeklyRecapNotification, setShowWeeklyRecapNotification] = useState(false)
+  const [recapOpenSignal, setRecapOpenSignal] = useState(0)
 
   const tips = [
     "Focus on your breathing rhythm today. Try the 3:2 pattern - inhale for 3 steps, exhale for 2 steps.",
@@ -142,6 +149,17 @@ export function TodayScreen() {
 
     initializeLocalData()
   }, [userId])
+
+  useEffect(() => {
+    if (!ENABLE_WEEKLY_RECAP || !userId) return;
+    if (shouldShowWeeklyRecapNotification()) {
+      setShowWeeklyRecapNotification(true);
+      markRecapNotificationShown();
+      void trackAnalyticsEvent("weekly_recap_notification_shown", {
+        notification_type: "monday_morning",
+      });
+    }
+  }, [userId]);
 
   // Load structured workout with pace zones when todaysWorkout changes
   useEffect(() => {
@@ -442,8 +460,21 @@ export function TodayScreen() {
     })
   }
 
+  const handleViewRecapFromNotification = () => {
+    setRecapOpenSignal((prev) => prev + 1)
+    setShowWeeklyRecapNotification(false)
+  }
+
   return (
     <div className="pb-24 space-y-4">
+      {showWeeklyRecapNotification && (
+        <div className="px-4 animate-in fade-in-0 slide-in-from-top-4 duration-300">
+          <WeeklyRecapNotificationBanner
+            onViewRecap={handleViewRecapFromNotification}
+            onDismiss={() => setShowWeeklyRecapNotification(false)}
+          />
+        </div>
+      )}
       {primaryGoal && (
         <div className="px-4">
           <Card className="border">
@@ -729,6 +760,12 @@ export function TodayScreen() {
           </Card>
         )}
       </div>
+
+      {ENABLE_WEEKLY_RECAP && userId && (
+        <div className="px-4 mt-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-450">
+      <WeeklyRecapWidget userId={userId} openRecapSignal={recapOpenSignal} />
+        </div>
+      )}
 
       {/* Add Run & Activity - Side by Side */}
       <div className="px-4 grid grid-cols-2 gap-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-400">

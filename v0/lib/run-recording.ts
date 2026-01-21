@@ -1,6 +1,9 @@
 import type { Goal, Run, Workout } from "@/lib/db"
 
 import { dbUtils } from "@/lib/dbUtils"
+import { trackAnalyticsEvent } from "@/lib/analytics"
+import { ENABLE_COMPLETION_LOOP } from "@/lib/featureFlags"
+import { endOfDayUTC, startOfDayUTC } from "@/lib/timezone-utils"
 
 export type RunImportMeta = {
   requestId?: string
@@ -35,9 +38,14 @@ export type RecordRunWithSideEffectsInput = {
   autoMatchWorkout?: boolean
 }
 
+export type AdaptationReason = 'performance_below_target' | 'distance_not_met' | 'consecutive_misses'
+
 export type RecordRunWithSideEffectsResult = {
   runId: number
   workoutId?: number
+  matchedWorkout?: Workout
+  adaptationTriggered?: boolean
+  adaptationReason?: AdaptationReason
 }
 
 const estimateCalories = (distanceKm: number) => Math.round(distanceKm * 60)
@@ -64,6 +72,8 @@ const normalizeDate = (value: unknown) => {
   }
   return null
 }
+
+const WORKOUT_DISTANCE_TOLERANCE = 0.2
 
 const isSameDayLocal = (a: Date, b: Date) => a.toDateString() === b.toDateString()
 
@@ -161,6 +171,226 @@ const mapWorkoutToRunType = (workoutType: Workout["type"]): Run["type"] => {
 }
 
 export const workoutTypeToRunType = mapWorkoutToRunType
+
+const computeDistanceVariancePct = (runDistance: number, plannedDistance: number): number | null => {
+  if (!Number.isFinite(runDistance) || !Number.isFinite(plannedDistance) || plannedDistance === 0) {
+    return null
+  }
+  return (Math.abs(runDistance - plannedDistance) / plannedDistance) * 100
+}
+
+export async function findMatchingWorkout(run: Run): Promise<Workout | null> {
+  const completedAt = normalizeDate(run.completedAt ?? run.createdAt)
+  if (!completedAt) return null
+
+  if (!Number.isFinite(run.distance) || run.distance <= 0) {
+    return null
+  }
+
+  const rangeStart = startOfDayUTC(completedAt)
+  const rangeEnd = endOfDayUTC(completedAt)
+
+  const workouts = await dbUtils.getWorkoutsForDateRange(run.userId, rangeStart, rangeEnd, { limit: 100 })
+  if (workouts.length === 0) return null
+
+  const matches = workouts.filter((workout) => {
+    if (workout.completed) return false
+    if (typeof workout.id !== "number") return false
+    if (!Number.isFinite(workout.distance) || workout.distance <= 0) return false
+    const workoutRunType = mapWorkoutToRunType(workout.type)
+    if (workoutRunType !== run.type) return false
+    return Math.abs(run.distance - workout.distance) / workout.distance <= WORKOUT_DISTANCE_TOLERANCE
+  })
+
+  if (matches.length === 0) return null
+
+  const sortedMatches = matches.slice().sort((a, b) => {
+    const aVariance = Math.abs(run.distance - a.distance)
+    const bVariance = Math.abs(run.distance - b.distance)
+    return aVariance - bVariance
+  })
+
+  return sortedMatches.at(0) ?? null
+}
+
+export async function confirmWorkoutCompletion(run: Run): Promise<Workout | null> {
+  if (!ENABLE_COMPLETION_LOOP) return null
+
+  const matchedWorkout = await findMatchingWorkout(run)
+  const variancePct =
+    matchedWorkout && Number.isFinite(run.distance)
+      ? computeDistanceVariancePct(run.distance, matchedWorkout.distance)
+      : null
+
+  try {
+    await trackAnalyticsEvent("workout_completion_confirmed", {
+      workout_id: matchedWorkout?.id ?? null,
+      matched_plan_workout: Boolean(matchedWorkout),
+      distance_variance_pct: variancePct,
+    })
+  } catch (error) {
+    console.warn("Failed to track workout completion analytics", error)
+  }
+
+  if (!matchedWorkout?.id) {
+    return matchedWorkout ?? null
+  }
+
+  const completionTimestamp = new Date()
+  await dbUtils.updateWorkout(matchedWorkout.id, {
+    completed: true,
+    completedAt: completionTimestamp,
+    actualDistanceKm: run.distance,
+    actualDurationMinutes: run.duration / 60,
+    actualPace: run.pace,
+  })
+  await dbUtils.markWorkoutCompleted(matchedWorkout.id)
+
+  return {
+    ...matchedWorkout,
+    completed: true,
+    completedAt: completionTimestamp,
+    actualDistanceKm: run.distance,
+    actualDurationMinutes: run.duration / 60,
+    actualPace: run.pace,
+  }
+}
+
+const PACE_THRESHOLD_SECONDS = 30
+const DISTANCE_DEFICIT_RATIO = 0.2
+const MISSED_WORKOUT_STREAK_THRESHOLD = 2
+const MISSED_WORKOUT_WINDOW_DAYS = 14
+
+const normalizePlannedPace = (workout: Workout): number | null => {
+  if (typeof workout.pace === "number" && Number.isFinite(workout.pace) && workout.pace > 0) {
+    return workout.pace
+  }
+  if (
+    typeof workout.duration === "number" &&
+    Number.isFinite(workout.duration) &&
+    workout.duration > 0 &&
+    typeof workout.distance === "number" &&
+    Number.isFinite(workout.distance) &&
+    workout.distance > 0
+  ) {
+    return (workout.duration * 60) / workout.distance
+  }
+  return null
+}
+
+const normalizeActualPace = (run: Run): number | null => {
+  if (typeof run.pace === "number" && Number.isFinite(run.pace) && run.pace > 0) {
+    return run.pace
+  }
+  if (
+    typeof run.duration === "number" &&
+    Number.isFinite(run.duration) &&
+    run.duration > 0 &&
+    typeof run.distance === "number" &&
+    Number.isFinite(run.distance) &&
+    run.distance > 0
+  ) {
+    return run.duration / run.distance
+  }
+  return null
+}
+
+const shouldConsiderWorkoutForStreak = (workout: Workout, referenceDate: Date) => {
+  if (workout.type === "rest") return false
+  const scheduled = normalizeDate(workout.scheduledDate)
+  if (!scheduled) return false
+  return scheduled.getTime() < referenceDate.getTime()
+}
+
+const getMissedWorkoutStreak = async (userId: number, workout: Workout): Promise<number> => {
+  if (!userId || !workout.planId || !workout.scheduledDate) return 0
+  const referenceDate = new Date(workout.scheduledDate)
+  const windowStart = new Date(referenceDate)
+  windowStart.setDate(windowStart.getDate() - MISSED_WORKOUT_WINDOW_DAYS)
+  const workouts = await dbUtils.getWorkoutsForDateRange(userId, windowStart, referenceDate, { limit: 200 })
+  const relevant = workouts
+    .filter((candidate) => candidate.planId === workout.planId && shouldConsiderWorkoutForStreak(candidate, referenceDate))
+    .sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime())
+
+  let streak = 0
+  for (const candidate of relevant) {
+    if (candidate.completed) break
+    streak += 1
+    if (streak >= MISSED_WORKOUT_STREAK_THRESHOLD) break
+  }
+
+  return streak
+}
+
+export async function determineAdaptationReason(run: Run, workout: Workout): Promise<AdaptationReason | null> {
+  const plannedPace = normalizePlannedPace(workout)
+  const actualPace = normalizeActualPace(run)
+  if (plannedPace !== null && actualPace !== null && actualPace - plannedPace > PACE_THRESHOLD_SECONDS) {
+    return "performance_below_target"
+  }
+
+  const plannedDistance = workout.distance
+  const actualDistance = run.distance
+  if (
+    Number.isFinite(plannedDistance) &&
+    plannedDistance > 0 &&
+    Number.isFinite(actualDistance) &&
+    actualDistance < plannedDistance * (1 - DISTANCE_DEFICIT_RATIO)
+  ) {
+    return "distance_not_met"
+  }
+
+  const missedStreak = await getMissedWorkoutStreak(run.userId, workout)
+  if (missedStreak >= MISSED_WORKOUT_STREAK_THRESHOLD) {
+    return "consecutive_misses"
+  }
+
+  return null
+}
+
+const serializeRunForAdaptation = (run: Run) => ({
+  ...run,
+  completedAt: run.completedAt instanceof Date ? run.completedAt.toISOString() : run.completedAt,
+  createdAt: run.createdAt instanceof Date ? run.createdAt.toISOString() : run.createdAt,
+  updatedAt: run.updatedAt instanceof Date ? run.updatedAt.toISOString() : run.updatedAt,
+})
+
+const triggerPlanAdaptation = async (
+  userId: number,
+  planId: number,
+  run: Run,
+  adaptationReason: AdaptationReason
+) => {
+  if (!userId || !planId) return
+  try {
+    const response = await fetch("/api/plan/adapt", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        planId,
+        userId,
+        adaptationReason,
+        recentRun: serializeRunForAdaptation(run),
+      }),
+    })
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => null)
+      console.warn("Plan adaptation request failed", response.status, errorBody)
+      return
+    }
+
+    void trackAnalyticsEvent("plan_adapted", {
+      adaptation_reason: adaptationReason,
+      plan_id: planId,
+      trigger: "workout_completion",
+    })
+  } catch (error) {
+    console.warn("Failed to trigger plan adaptation", error)
+  }
+}
 
 const resolveRunDate = (run: Run) => normalizeDate(run.completedAt ?? run.createdAt)
 
@@ -376,6 +606,25 @@ export async function recordRunWithSideEffects(
     await dbUtils.markWorkoutCompleted(resolvedWorkoutId)
   }
 
+  const runRecord: Run = {
+    ...runData,
+    id: runId,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }
+
+  const matchedWorkout = await confirmWorkoutCompletion(runRecord)
+  const linkedWorkoutId =
+    matchedWorkout?.id ?? (typeof resolvedWorkoutId === "number" ? resolvedWorkoutId : undefined)
+  let adaptationReason: AdaptationReason | null = null
+  if (ENABLE_COMPLETION_LOOP && matchedWorkout) {
+    adaptationReason = await determineAdaptationReason(runRecord, matchedWorkout)
+    if (adaptationReason) {
+      void triggerPlanAdaptation(runRecord.userId, matchedWorkout.planId, runRecord, adaptationReason)
+    }
+  }
+  const adaptationTriggered = Boolean(adaptationReason)
+
   try {
     await updateGoalsFromRuns({
       userId: input.userId,
@@ -393,7 +642,7 @@ export async function recordRunWithSideEffects(
         detail: {
           userId: input.userId,
           runId,
-          ...(typeof resolvedWorkoutId === "number" ? { workoutId: resolvedWorkoutId } : {}),
+          ...(typeof linkedWorkoutId === "number" ? { workoutId: linkedWorkoutId } : {}),
         },
       })
     )
@@ -401,7 +650,14 @@ export async function recordRunWithSideEffects(
     // Ignore environments without window/custom events
   }
 
-  return { runId, ...(typeof resolvedWorkoutId === "number" ? { workoutId: resolvedWorkoutId } : {}) }
+  return {
+    runId,
+    ...(typeof linkedWorkoutId === "number" ? { workoutId: linkedWorkoutId } : {}),
+    ...(matchedWorkout ? { matchedWorkout } : {}),
+    ...(adaptationTriggered && adaptationReason
+      ? { adaptationTriggered, adaptationReason }
+      : {}),
+  }
 }
 
 export async function syncUserRunData(userId: number): Promise<{
