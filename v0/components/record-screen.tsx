@@ -317,7 +317,6 @@ export function RecordScreen() {
  	  // GPS monitoring state
  	  const [currentGPSAccuracy, setCurrentGPSAccuracy] = useState<GPSAccuracyData | null>(null)
  	  const [gpsAccuracyHistory, setGpsAccuracyHistory] = useState<GPSAccuracyData[]>([])
- 	  const [showGPSDetails, setShowGPSDetails] = useState(false)
 
  	  // GPS warm-up countdown state
  	  const [isGpsWarmingUp, setIsGpsWarmingUp] = useState(false)
@@ -1233,11 +1232,11 @@ export function RecordScreen() {
     const gpsService = gpsMonitoringRef.current
 
     if (!quality.canStart || quality.signalStrength < GPS_MIN_SIGNAL_STRENGTH_TO_START) {
-      // GPS quality is poor, show warning and option to proceed or wait
+      // GPS quality is poor - show toast with option to proceed or wait
+      // The GPS accuracy indicator will automatically show detailed info
       toast({
-        title: "GPS Signal Weak",
-        description: `Signal strength: ${quality.signalStrength}%. Consider waiting for better signal or move to an open area.`,
-        variant: "destructive",
+        title: "GPS Signal Quality",
+        description: `Signal: ${quality.signalStrength}%. You can start anyway or wait for better signal.`,
         action: (
           <ToastAction altText="Start Anyway" onClick={() => proceedWithRun()}>
             Start Anyway
@@ -1245,8 +1244,8 @@ export function RecordScreen() {
         )
       })
 
-      // Stop GPS tracking since we're not starting yet
-      stopTracking()
+      // Keep GPS tracking active so user can monitor signal improvement
+      // The GPSAccuracyIndicator component will display all details automatically
     } else {
       // GPS quality is good, proceed with run
       proceedWithRun()
@@ -1559,31 +1558,6 @@ export function RecordScreen() {
     }
   }
 
-  const getGpsStatusColor = () => {
-    switch (gpsPermission) {
-      case 'granted': {
-        if (gpsAccuracy <= 0) return 'text-gray-400'
-        return gpsAccuracy < 10 ? 'text-green-500' : 'text-yellow-500'
-      }
-      case 'denied': return 'text-red-500'
-      case 'unsupported': return 'text-gray-500'
-      default: return 'text-gray-400'
-    }
-  }
-
-  const getGpsStatusText = () => {
-    if (gpsPermission === 'granted') return isGpsTracking ? 'GPS Tracking' : 'GPS Ready'
-    if (gpsPermission === 'denied') return 'GPS Denied - Allow in browser settings'
-    if (gpsPermission === 'unsupported') {
-      const isSecure = typeof window !== 'undefined' && 
-        (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
-      if (!isSecure) {
-        return 'GPS requires HTTPS'
-      }
-      return 'GPS Unsupported'
-    }
-    return 'GPS Pending - Starts when you start a run'
-  }
 
   const handleRouteSelected = (route: Route) => {
     setSelectedRoute(route)
@@ -1771,123 +1745,119 @@ export function RecordScreen() {
         </Card>
       )}
 
-      {/* GPS Status */}
-      <Card className={gpsPermission === 'denied' ? 'border-red-200 bg-red-50' : gpsPermission === 'granted' ? 'border-green-200 bg-green-50' : ''}>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
+      {/* GPS Status - Using New GPS Monitoring System */}
+      {!isRunning && !isGpsTracking && !isInitializingGps && !isGpsWarmingUp && gpsPermission !== 'denied' && gpsPermission !== 'unsupported' && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              {isInitializingGps ? (
-                <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
-              ) : (
-                <Satellite className={`h-5 w-5 ${getGpsStatusColor()}`} />
-              )}
+              <Satellite className="h-5 w-5 text-blue-500" />
               <div>
-                <p className="font-medium">{isInitializingGps ? 'Initializing GPS...' : getGpsStatusText()}</p>
-                <p className="text-sm text-gray-600">
-                  {isInitializingGps 
-                    ? 'Please allow location access when prompted'
-                    : gpsAccuracy > 0 
-                      ? `Accuracy: ${gpsAccuracy.toFixed(1)}m` 
-                      : isGpsTracking
-                        ? 'Accuracy: Waiting for signal'
-                        : 'Accuracy: Start a run to begin tracking'
-                  }
+                <p className="font-medium text-blue-900">GPS Ready</p>
+                <p className="text-sm text-blue-700">
+                  GPS will activate when you start your run
                 </p>
               </div>
             </div>
-              <div className="flex items-center gap-2">
-                {autoPauseEnabled && autoPauseActive && isRunning && !isPaused && (
-                  <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-700">
-                    Auto-Paused
-                  </span>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowGPSDetails(!showGPSDetails)}
-                >
-                 {showGPSDetails ? 'Hide' : 'Details'}
-               </Button>
-             </div>
-          </div>
+          </CardContent>
+        </Card>
+      )}
 
-          {isRunning && gpsAccuracy > GPS_MAX_ACCEPTABLE_ACCURACY_METERS && (
-            <div className="mt-3 p-3 bg-yellow-100 rounded-lg">
-              <div className="flex items-start gap-2">
-                <Info className="h-5 w-5 text-yellow-700 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="font-medium text-yellow-900">Low GPS accuracy</p>
-                  <p className="text-sm text-yellow-800 mt-1">
-                    Current accuracy (±{Math.round(gpsAccuracy)}m) is worse than the recording threshold (±{GPS_MAX_ACCEPTABLE_ACCURACY_METERS}m),
-                    so points may be ignored and distance can undercount. Enable precise location and move to open sky.
-                  </p>
-                </div>
+      {/* GPS Initializing State */}
+      {isInitializingGps && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
+              <div>
+                <p className="font-medium text-blue-900">Initializing GPS...</p>
+                <p className="text-sm text-blue-700">
+                  Please allow location access when prompted
+                </p>
               </div>
             </div>
-          )}
+          </CardContent>
+        </Card>
+      )}
 
-          {/* GPS Permission Denied Warning */}
-          {gpsPermission === 'denied' && (
-            <div className="mt-3 p-3 bg-red-100 rounded-lg">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="font-medium text-red-800">Location Access Denied</p>
-                  <p className="text-sm text-red-700 mt-1">
-                    To record your run with GPS tracking, please:
-                  </p>
-                    <ol className="text-sm text-red-700 mt-2 list-decimal list-inside space-y-1">
-                      <li>Open your browser settings</li>
-                      <li>Find location/privacy settings</li>
-                      <li>Allow location access for this site</li>
-                      <li>Return here and tap &quot;Start Run&quot; again</li>
-                    </ol>
+      {/* GPS Tracking Active - Show Full GPS Monitoring */}
+      {(isGpsTracking || isRunning) && !isInitializingGps && gpsPermission !== 'denied' && gpsPermission !== 'unsupported' && (
+        <>
+          {currentGPSAccuracy ? (
+            <GPSAccuracyIndicator
+              accuracy={currentGPSAccuracy}
+              showTroubleshooting={true}
+            />
+          ) : (
+            <Card className="border-yellow-200 bg-yellow-50">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2">
+                  <Satellite className="h-5 w-5 text-yellow-600 animate-pulse" />
+                  <div>
+                    <p className="font-medium text-yellow-900">Acquiring GPS Signal...</p>
+                    <p className="text-sm text-yellow-700">
+                      Waiting for first GPS fix. This may take up to 30 seconds.
+                    </p>
                   </div>
                 </div>
-              </div>
+              </CardContent>
+            </Card>
           )}
 
-          {/* GPS Unsupported Warning */}
-          {gpsPermission === 'unsupported' && (
-            <div className="mt-3 p-3 bg-gray-100 rounded-lg">
-              <div className="flex items-start gap-2">
-                <Info className="h-5 w-5 text-gray-600 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="font-medium text-gray-800">GPS Unavailable</p>
-                  <p className="text-sm text-gray-700 mt-1">
-                    GPS is not available on this device or browser. You can still use the &quot;Add Manual Run&quot; option below.
-                  </p>
-                </div>
+          {/* Mobile GPS Warning */}
+          {isRunning && (
+            <Card className="border-gray-200 bg-gray-50 mt-4">
+              <CardContent className="p-3">
+                <p className="text-xs text-gray-600 flex items-center gap-1">
+                  <Info className="h-3 w-3" />
+                  Keep screen on for best GPS accuracy. Mobile browsers don't support background GPS tracking.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* GPS Permission Denied Warning */}
+      {gpsPermission === 'denied' && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-red-800">Location Access Denied</p>
+                <p className="text-sm text-red-700 mt-1">
+                  To record your run with GPS tracking, please:
+                </p>
+                <ol className="text-sm text-red-700 mt-2 list-decimal list-inside space-y-1">
+                  <li>Open your browser settings</li>
+                  <li>Find location/privacy settings</li>
+                  <li>Allow location access for this site</li>
+                  <li>Return here and tap &quot;Start Run&quot; again</li>
+                </ol>
               </div>
             </div>
-          )}
+          </CardContent>
+        </Card>
+      )}
 
-          {isRunning && gpsPermission === 'granted' && (
-            <p className="mt-3 text-xs text-gray-600">
-              Note: Mobile browsers do not reliably support background GPS tracking. Keep the screen on for best
-              accuracy.
-            </p>
-          )}
-
-          {/* GPS Details */}
-          {showGPSDetails && (
-            <div className="mt-4 pt-4 border-t">
-              {currentGPSAccuracy ? (
-                <GPSAccuracyIndicator 
-                  accuracy={currentGPSAccuracy}
-                  showTroubleshooting={true}
-                />
-              ) : (
-                <div className="text-center py-4 text-gray-500">
-                  <Satellite className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">GPS accuracy data will appear here once tracking starts</p>
-                </div>
-              )}
+      {/* GPS Unsupported Warning */}
+      {gpsPermission === 'unsupported' && (
+        <Card className="border-gray-200 bg-gray-50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-2">
+              <Info className="h-5 w-5 text-gray-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-gray-800">GPS Unavailable</p>
+                <p className="text-sm text-gray-700 mt-1">
+                  GPS is not available on this device or browser. You can still use the &quot;Add Manual Run&quot; option below.
+                </p>
+              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
+      {/* Auto-Pause Indicator */}
       {autoPauseEnabled && autoPauseActive && isRunning && !isPaused && (
         <Card className="border-orange-200 bg-orange-50">
           <CardContent className="p-4">
@@ -2000,19 +1970,35 @@ export function RecordScreen() {
             {/* Control Buttons */}
             <div className="flex justify-center gap-4">
               {!isRunning ? (
-                <Button
-                  onClick={startRun}
-                  size="lg"
-                  className="bg-green-600 hover:bg-green-700"
-                  disabled={gpsPermission === 'denied' || gpsPermission === 'unsupported' || isInitializingGps}
-                >
-                  {isInitializingGps ? (
-                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                  ) : (
-                    <Play className="h-5 w-5 mr-2" />
+                <>
+                  <Button
+                    onClick={startRun}
+                    size="lg"
+                    className="bg-green-600 hover:bg-green-700"
+                    disabled={gpsPermission === 'denied' || gpsPermission === 'unsupported' || isInitializingGps || isGpsWarmingUp}
+                  >
+                    {isInitializingGps || isGpsWarmingUp ? (
+                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                    ) : (
+                      <Play className="h-5 w-5 mr-2" />
+                    )}
+                    {isInitializingGps ? 'Initializing GPS...' :
+                     isGpsWarmingUp ? 'Warming Up GPS...' :
+                     'Start Run'}
+                  </Button>
+                  {/* Show "Start Anyway" button if GPS is tracking but run hasn't started (post-warmup with poor signal) */}
+                  {!isInitializingGps && !isGpsWarmingUp && isGpsTracking && gpsAccuracy > 0 && (
+                    <Button
+                      onClick={proceedWithRun}
+                      size="lg"
+                      variant="outline"
+                      className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                    >
+                      <AlertTriangle className="h-5 w-5 mr-2" />
+                      Start Anyway
+                    </Button>
                   )}
-                  {isInitializingGps ? 'Initializing GPS...' : 'Start Run'}
-                </Button>
+                </>
               ) : (
                 <>
                   {isPaused ? (
