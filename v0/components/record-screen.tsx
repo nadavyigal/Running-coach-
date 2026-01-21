@@ -3,15 +3,27 @@
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Progress } from "@/components/ui/progress"
+import { Switch } from "@/components/ui/switch"
 import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertTriangle, Info, Loader2, Sparkles } from "lucide-react"
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RouteSelectionWizard } from "@/components/route-selection-wizard"
 import { ManualRunModal } from "@/components/manual-run-modal"
 import { AddActivityModal } from "@/components/add-activity-modal"
 import { RunMap } from "@/components/maps/RunMap"
+import { WorkoutCompletionModal } from "@/components/workout-completion-modal"
 import { type Run, type Workout, type User, type Route } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
+import { trackAnalyticsEvent } from "@/lib/analytics"
+import { ENABLE_AUTO_PAUSE, ENABLE_VIBRATION_COACH } from "@/lib/featureFlags"
 import { recordRunWithSideEffects } from "@/lib/run-recording"
+import {
+  isVibrationEnabled,
+  isVibrationSupported,
+  setVibrationEnabled as persistVibrationEnabled,
+  vibrateSingle,
+} from "@/lib/vibration-coach"
+import { ToastAction } from "@/components/ui/toast"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
@@ -33,9 +45,263 @@ interface RunMetrics {
   calories: number // estimated
 }
 
+type IntervalPhaseType = 'warmup' | 'interval' | 'recovery' | 'cooldown'
+
+interface IntervalPhase {
+  type: IntervalPhaseType
+  duration?: number // seconds
+  distance?: number // km
+}
+
+const AUTO_PAUSE_SPEED_MPS = 0.5
+const AUTO_RESUME_SPEED_MPS = 1.0
+const AUTO_PAUSE_MIN_DURATION_MS = 5000
+
+const INTERVAL_UNIT_PATTERN =
+  '(km|k|kilometer|kilometre|m|meter|metre|mi|mile|miles|min|mins|minute|minutes|sec|secs|second|seconds|s|hr|hrs|hour|hours)'
+
+const isTimeUnit = (unit: string) =>
+  /^(s|sec|secs|second|seconds|min|mins|minute|minutes|hr|hrs|hour|hours)$/i.test(unit)
+
+const isDistanceUnit = (unit: string) =>
+  /^(km|k|kilometer|kilometre|m|meter|metre|mi|mile|miles)$/i.test(unit)
+
+const parseDurationSeconds = (value: number, unit: string) => {
+  if (!isTimeUnit(unit)) {
+    return null
+  }
+
+  const normalized = unit.toLowerCase()
+  if (normalized.startsWith('s')) {
+    return Math.round(value)
+  }
+  if (normalized.startsWith('h')) {
+    return Math.round(value * 3600)
+  }
+  return Math.round(value * 60)
+}
+
+const parseDistanceKm = (value: number, unit: string) => {
+  if (!isDistanceUnit(unit)) {
+    return null
+  }
+
+  const normalized = unit.toLowerCase()
+  if (normalized === 'm' || normalized.startsWith('met')) {
+    return value / 1000
+  }
+  if (normalized === 'mi' || normalized.startsWith('mile')) {
+    return value * 1.60934
+  }
+  return value
+}
+
+const parseIntervalMeasurement = (value: number, unit: string) => {
+  const durationSeconds = parseDurationSeconds(value, unit)
+  if (durationSeconds !== null) {
+    return { durationSeconds }
+  }
+
+  const distanceKm = parseDistanceKm(value, unit)
+  if (distanceKm !== null) {
+    return { distanceKm }
+  }
+
+  return null
+}
+
+const parseIntervalPhases = (notes?: string): IntervalPhase[] => {
+  if (!notes) {
+    return []
+  }
+
+  const normalizedNotes = notes.replace(/\s+/g, ' ').trim()
+  if (!normalizedNotes) {
+    return []
+  }
+
+  const segments = normalizedNotes
+    .split(/[,;]+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+
+  const extractPhase = (segment: string, type: IntervalPhaseType): IntervalPhase | null => {
+    const match = segment.match(new RegExp(`(\\d+(?:\\.\\d+)?)\\s*${INTERVAL_UNIT_PATTERN}`, 'i'))
+    if (!match) {
+      return null
+    }
+
+    const value = Number.parseFloat(match[1])
+    const unit = match[2]
+    const measurement = parseIntervalMeasurement(value, unit)
+    if (!measurement) {
+      return null
+    }
+
+    return {
+      type,
+      ...(measurement.durationSeconds !== undefined
+        ? { duration: measurement.durationSeconds }
+        : {}),
+      ...(measurement.distanceKm !== undefined ? { distance: measurement.distanceKm } : {}),
+    }
+  }
+
+  let warmupPhase: IntervalPhase | null = null
+  let cooldownPhase: IntervalPhase | null = null
+
+  segments.forEach((segment) => {
+    const lower = segment.toLowerCase()
+    if (!warmupPhase && (lower.includes('warmup') || lower.includes('warm up'))) {
+      warmupPhase = extractPhase(segment, 'warmup')
+    }
+    if (!cooldownPhase && (lower.includes('cooldown') || lower.includes('cool down'))) {
+      cooldownPhase = extractPhase(segment, 'cooldown')
+    }
+  })
+
+  const repeatMatch = normalizedNotes.match(
+    new RegExp(`(\\d+)\\s*x\\s*(\\d+(?:\\.\\d+)?)\\s*${INTERVAL_UNIT_PATTERN}`, 'i')
+  )
+
+  let repeatCount = 0
+  let intervalPhase: IntervalPhase | null = null
+
+  if (repeatMatch) {
+    repeatCount = Number.parseInt(repeatMatch[1], 10)
+    const value = Number.parseFloat(repeatMatch[2])
+    const unit = repeatMatch[3]
+    const measurement = parseIntervalMeasurement(value, unit)
+    if (measurement?.durationSeconds !== undefined) {
+      intervalPhase = { type: 'interval', duration: measurement.durationSeconds }
+    }
+    if (measurement?.distanceKm !== undefined) {
+      intervalPhase = { type: 'interval', distance: measurement.distanceKm }
+    }
+  }
+
+  if (!intervalPhase) {
+    const hasIntervalKeyword = /\b(interval|tempo|fartlek|repeat|repeats)\b/i.test(normalizedNotes)
+    if (hasIntervalKeyword) {
+      const singleMatch = normalizedNotes.match(
+        new RegExp(`(\\d+(?:\\.\\d+)?)\\s*${INTERVAL_UNIT_PATTERN}`, 'i')
+      )
+      if (singleMatch) {
+        repeatCount = 1
+        const measurement = parseIntervalMeasurement(
+          Number.parseFloat(singleMatch[1]),
+          singleMatch[2]
+        )
+        if (measurement?.durationSeconds !== undefined) {
+          intervalPhase = { type: 'interval', duration: measurement.durationSeconds }
+        }
+        if (measurement?.distanceKm !== undefined) {
+          intervalPhase = { type: 'interval', distance: measurement.distanceKm }
+        }
+      }
+    }
+  }
+
+  if (!intervalPhase) {
+    return []
+  }
+
+  if (repeatCount < 1) {
+    repeatCount = 1
+  }
+
+  const recoveryMatch = normalizedNotes.match(
+    /(\d+(?:\.\d+)?)\s*(min|mins|minute|minutes|sec|secs|second|seconds|s)\s*(recovery|rest)\b/i
+  )
+  let recoveryPhase: IntervalPhase | null = null
+  if (recoveryMatch) {
+    const recoverySeconds = parseDurationSeconds(
+      Number.parseFloat(recoveryMatch[1]),
+      recoveryMatch[2]
+    )
+    if (recoverySeconds !== null) {
+      recoveryPhase = { type: 'recovery', duration: recoverySeconds }
+    }
+  }
+
+  const phases: IntervalPhase[] = []
+  if (warmupPhase) {
+    phases.push(warmupPhase)
+  }
+
+  for (let i = 0; i < repeatCount; i += 1) {
+    phases.push({ ...intervalPhase })
+    if (recoveryPhase && i < repeatCount - 1) {
+      phases.push({ ...recoveryPhase })
+    }
+  }
+
+  if (cooldownPhase) {
+    phases.push(cooldownPhase)
+  }
+
+  return phases
+}
+
+const formatIntervalLabel = (notes?: string, workoutType?: Workout['type']) => {
+  if (notes) {
+    const intensityMatch = notes.match(/@\s*([a-zA-Z-]+)/)
+    if (intensityMatch) {
+      const label = intensityMatch[1].replace(/-/g, ' ')
+      return `${label.charAt(0).toUpperCase()}${label.slice(1)} Run`
+    }
+
+    if (/\btempo\b/i.test(notes)) {
+      return 'Tempo Run'
+    }
+
+    if (/\binterval\b/i.test(notes)) {
+      return 'Intervals'
+    }
+  }
+
+  const labelMap: Record<Workout['type'], string> = {
+    easy: 'Easy Run',
+    tempo: 'Tempo Run',
+    intervals: 'Intervals',
+    long: 'Long Run',
+    'time-trial': 'Time Trial',
+    hill: 'Hill Repeats',
+    'race-pace': 'Race Pace',
+    recovery: 'Recovery Run',
+    fartlek: 'Fartlek',
+    rest: 'Rest Day',
+  }
+
+  return workoutType ? labelMap[workoutType] : 'Workout'
+}
+
+const formatPhaseType = (phaseType: IntervalPhaseType) => {
+  switch (phaseType) {
+    case 'warmup':
+      return 'Warmup'
+    case 'interval':
+      return 'Interval'
+    case 'recovery':
+      return 'Recovery'
+    case 'cooldown':
+      return 'Cooldown'
+    default:
+      return 'Phase'
+  }
+}
+
+type CompletionModalData = {
+  completedWorkout: Workout
+  nextWorkout?: Workout
+}
+
 export function RecordScreen() {
   const [isRunning, setIsRunning] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
+  const [autoPauseActive, setAutoPauseActive] = useState(false)
+  const [autoPauseStartTime, setAutoPauseStartTime] = useState<number | null>(null)
+  const [autoPauseCount, setAutoPauseCount] = useState(0)
   const [gpsPermission, setGpsPermission] = useState<'prompt' | 'granted' | 'denied' | 'unsupported'>('prompt')
   const [gpsAccuracy, setGpsAccuracy] = useState<number>(0)
   const [isInitializingGps, setIsInitializingGps] = useState(false)
@@ -43,6 +309,7 @@ export function RecordScreen() {
   const [showRouteWizard, setShowRouteWizard] = useState(false)
   const [showManualModal, setShowManualModal] = useState(false)
   const [showAddActivityModal, setShowAddActivityModal] = useState(false)
+  const [completionModalData, setCompletionModalData] = useState<CompletionModalData | null>(null)
   const [currentWorkout, setCurrentWorkout] = useState<Workout | null>(null)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
 	  const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
@@ -57,6 +324,7 @@ export function RecordScreen() {
     (process.env.NEXT_PUBLIC_GPS_DEBUG_OVERLAY === 'true' ||
       (typeof window !== 'undefined' &&
         new URLSearchParams(window.location.search).has('gpsDebug')))
+  const autoPauseEnabled = ENABLE_AUTO_PAUSE
    
   // GPS and tracking state
   const [gpsPath, setGpsPath] = useState<GPSCoordinate[]>([])
@@ -77,6 +345,9 @@ export function RecordScreen() {
   const elapsedRunMsRef = useRef<number>(0)
   const isRunningRef = useRef(false)
   const isPausedRef = useRef(false)
+  const autoPauseActiveRef = useRef(false)
+  const autoPauseStartTimeRef = useRef<number | null>(null)
+  const autoPauseCountRef = useRef(0)
 
   const [lastGpsSpeedMps, setLastGpsSpeedMps] = useState<number | null>(null)
   const [gpsAcceptedCount, setGpsAcceptedCount] = useState(0)
@@ -105,6 +376,15 @@ export function RecordScreen() {
     isPausedRef.current = isPaused
   }, [isRunning, isPaused])
 
+  useEffect(() => {
+    if (!ENABLE_VIBRATION_COACH) {
+      return
+    }
+
+    setVibrationSupported(isVibrationSupported())
+    setVibrationEnabledState(isVibrationEnabled())
+  }, [])
+
   const logGps = (payload: Record<string, unknown>) => {
     if (!gpsDebugEnabled) return
     console.log('[GPS]', payload)
@@ -119,6 +399,51 @@ export function RecordScreen() {
     const factor = Math.pow(10, precision)
     return Math.round(value * factor) / factor
   }
+
+  // Keep refs in sync for GPS callbacks fired outside React render timing.
+  const setAutoPauseActiveState = (next: boolean) => {
+    autoPauseActiveRef.current = next
+    setAutoPauseActive(next)
+  }
+
+  const setAutoPauseStartTimeState = (next: number | null) => {
+    autoPauseStartTimeRef.current = next
+    setAutoPauseStartTime(next)
+  }
+
+  const incrementAutoPauseCount = () => {
+    setAutoPauseCount((prev) => {
+      const next = prev + 1
+      autoPauseCountRef.current = next
+      return next
+    })
+  }
+
+  const clearAutoPauseState = () => {
+    setAutoPauseActiveState(false)
+    setAutoPauseStartTimeState(null)
+  }
+
+  const resetAutoPauseState = () => {
+    clearAutoPauseState()
+    autoPauseCountRef.current = 0
+    setAutoPauseCount(0)
+  }
+
+  const resetIntervalTimerState = (
+    phases: IntervalPhase[] = intervalPhases,
+    baseElapsedSeconds = 0,
+    baseDistanceKm = 0
+  ) => {
+    phaseStartElapsedRef.current = baseElapsedSeconds
+    phaseStartDistanceRef.current = baseDistanceKm
+    intervalCompletedRef.current = false
+    setCurrentPhaseIndex(0)
+    setPhaseElapsedSeconds(0)
+    setPhaseProgress(0)
+    setPhaseRemainingDistance(null)
+    setNextPhaseInSeconds(phases[0]?.duration ?? null)
+  }
   
   // Metrics state
   const [metrics, setMetrics] = useState<RunMetrics>({
@@ -129,6 +454,18 @@ export function RecordScreen() {
     currentSpeed: 0,
     calories: 0
   })
+
+  const [intervalPhases, setIntervalPhases] = useState<IntervalPhase[]>([])
+  const [currentPhaseIndex, setCurrentPhaseIndex] = useState(0)
+  const [phaseElapsedSeconds, setPhaseElapsedSeconds] = useState(0)
+  const [nextPhaseInSeconds, setNextPhaseInSeconds] = useState<number | null>(null)
+  const [phaseProgress, setPhaseProgress] = useState(0)
+  const [phaseRemainingDistance, setPhaseRemainingDistance] = useState<number | null>(null)
+  const phaseStartElapsedRef = useRef(0)
+  const phaseStartDistanceRef = useRef(0)
+  const intervalCompletedRef = useRef(false)
+  const [vibrationEnabled, setVibrationEnabledState] = useState(true)
+  const [vibrationSupported, setVibrationSupported] = useState(false)
 
   const { toast } = useToast()
   const router = useRouter()
@@ -178,6 +515,20 @@ export function RecordScreen() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!ENABLE_VIBRATION_COACH) {
+      setIntervalPhases([])
+      resetIntervalTimerState([])
+      return
+    }
+
+    const phases = parseIntervalPhases(currentWorkout?.notes)
+    setIntervalPhases(phases)
+    const baseElapsedSeconds = isRunning ? metrics.duration : 0
+    const baseDistanceKm = isRunning ? metrics.distance : 0
+    resetIntervalTimerState(phases, baseElapsedSeconds, baseDistanceKm)
+  }, [currentWorkout?.notes])
+
   // Timer effect for duration tracking
   useEffect(() => {
     let interval: NodeJS.Timeout
@@ -198,6 +549,115 @@ export function RecordScreen() {
     }
     return () => clearInterval(interval)
   }, [isRunning, isPaused])
+
+  useEffect(() => {
+    if (!intervalPhases.length) {
+      return
+    }
+
+    const phase = intervalPhases[currentPhaseIndex]
+    if (!phase) {
+      return
+    }
+
+    const totalElapsedSeconds = metrics.duration
+    const totalDistanceKm = metrics.distance
+    let elapsedSeconds = 0
+    let remainingSeconds: number | null = null
+    let remainingDistance: number | null = null
+    let progressValue = 0
+
+    if (phase.duration) {
+      elapsedSeconds = Math.max(0, totalElapsedSeconds - phaseStartElapsedRef.current)
+      remainingSeconds = Math.max(phase.duration - elapsedSeconds, 0)
+      progressValue = phase.duration > 0 ? elapsedSeconds / phase.duration : 0
+    } else if (phase.distance) {
+      const distanceElapsed = Math.max(0, totalDistanceKm - phaseStartDistanceRef.current)
+      remainingDistance = Math.max(phase.distance - distanceElapsed, 0)
+      progressValue = phase.distance > 0 ? distanceElapsed / phase.distance : 0
+
+      const paceSecondsPerKm =
+        metrics.currentPace > 0 ? metrics.currentPace : metrics.pace > 0 ? metrics.pace : null
+      if (paceSecondsPerKm) {
+        elapsedSeconds = Math.round(distanceElapsed * paceSecondsPerKm)
+        remainingSeconds = Math.round(remainingDistance * paceSecondsPerKm)
+      }
+    }
+
+    setPhaseElapsedSeconds(Math.max(0, Math.floor(elapsedSeconds)))
+    setNextPhaseInSeconds(remainingSeconds)
+    setPhaseRemainingDistance(remainingDistance)
+    setPhaseProgress(Math.min(100, Math.max(0, Math.round(progressValue * 100))))
+  }, [
+    currentPhaseIndex,
+    intervalPhases,
+    metrics.currentPace,
+    metrics.distance,
+    metrics.duration,
+    metrics.pace,
+  ])
+
+  useEffect(() => {
+    if (!ENABLE_VIBRATION_COACH) {
+      return
+    }
+
+    if (!intervalPhases.length || !isRunning || isPaused || intervalCompletedRef.current) {
+      return
+    }
+
+    const phase = intervalPhases[currentPhaseIndex]
+    if (!phase) {
+      return
+    }
+
+    let isComplete = false
+    if (phase.duration) {
+      isComplete = metrics.duration - phaseStartElapsedRef.current >= phase.duration
+    } else if (phase.distance) {
+      isComplete = metrics.distance - phaseStartDistanceRef.current >= phase.distance
+    }
+
+    if (!isComplete) {
+      return
+    }
+
+    if (vibrationEnabled && vibrationSupported) {
+      vibrateSingle()
+      void trackAnalyticsEvent('vibration_cue_triggered', {
+        cue_type: 'interval_end',
+        phase_type: phase.type,
+      })
+    }
+
+    const nextIndex = currentPhaseIndex + 1
+    if (nextIndex < intervalPhases.length) {
+      setCurrentPhaseIndex(nextIndex)
+      phaseStartElapsedRef.current = metrics.duration
+      phaseStartDistanceRef.current = metrics.distance
+      setPhaseElapsedSeconds(0)
+      setPhaseProgress(0)
+      setPhaseRemainingDistance(null)
+      setNextPhaseInSeconds(intervalPhases[nextIndex].duration ?? null)
+      if (vibrationEnabled && vibrationSupported) {
+        void trackAnalyticsEvent('vibration_cue_triggered', {
+          cue_type: 'interval_start',
+          phase_type: intervalPhases[nextIndex].type,
+        })
+      }
+    } else {
+      intervalCompletedRef.current = true
+    }
+  }, [
+    currentPhaseIndex,
+    intervalPhases,
+    isPaused,
+    isRunning,
+    metrics.distance,
+    metrics.duration,
+    vibrationEnabled,
+    vibrationSupported,
+  ])
 
   const loadCurrentUser = async () => {
     try {
@@ -277,6 +737,8 @@ export function RecordScreen() {
     setCurrentGPSAccuracy(null)
     setGpsAccuracyHistory([])
     resetGpsDebugStats()
+    resetAutoPauseState()
+    resetIntervalTimerState()
     setMetrics({
       distance: 0,
       duration: 0,
@@ -394,8 +856,89 @@ export function RecordScreen() {
     // Reduced jitter threshold: now 0.5m minimum (was 0.8-2m), and reduced multiplier from 0.025 to 0.015
     const minDistanceMeters = Math.max(0.5, Math.min(1.5, accuracyValue * 0.015))
 
+    let isAutoPauseActive = autoPauseEnabled ? autoPauseActiveRef.current : false
+    if (autoPauseEnabled) {
+      if (isAutoPauseActive) {
+        if (
+          segmentSpeedMps > AUTO_RESUME_SPEED_MPS &&
+          segmentSpeedMps <= MAX_REASONABLE_SPEED_MPS
+        ) {
+          clearAutoPauseState()
+          isAutoPauseActive = false
+          void trackAnalyticsEvent('auto_pause_resumed', {
+            pause_count: autoPauseCountRef.current,
+          })
+        }
+      } else {
+        if (segmentSpeedMps < AUTO_PAUSE_SPEED_MPS) {
+          const lowSpeedStart =
+            autoPauseStartTimeRef.current ?? normalizedPoint.timestamp
+          if (autoPauseStartTimeRef.current === null) {
+            setAutoPauseStartTimeState(lowSpeedStart)
+          }
+          const lowSpeedDurationMs = normalizedPoint.timestamp - lowSpeedStart
+          if (lowSpeedDurationMs >= AUTO_PAUSE_MIN_DURATION_MS) {
+            setAutoPauseActiveState(true)
+            setAutoPauseStartTimeState(normalizedPoint.timestamp)
+            incrementAutoPauseCount()
+            isAutoPauseActive = true
+            void trackAnalyticsEvent('auto_pause_triggered', {
+              duration_seconds: Math.round(lowSpeedDurationMs / 1000),
+              gps_accuracy: accuracyValue,
+            })
+          }
+        } else if (autoPauseStartTimeRef.current !== null) {
+          setAutoPauseStartTimeState(null)
+        }
+      }
+    }
+
     if (segmentSpeedMps > MAX_REASONABLE_SPEED_MPS) {
       trackRejection('speed', { segmentSpeedMps, maxSpeedMps: MAX_REASONABLE_SPEED_MPS })
+      return
+    }
+
+    if (autoPauseEnabled && isAutoPauseActive) {
+      const previousTotalDistance = totalDistanceKmRef.current
+      lastRecordedPointRef.current = normalizedPoint
+
+      setGpsPath((previousPath) => {
+        const nextPath = [...previousPath, normalizedPoint]
+        gpsPathRef.current = nextPath
+        return nextPath
+      })
+
+      setLastSegmentStats({
+        distanceMeters: segmentDistanceMeters,
+        timeDeltaMs,
+        speedMps: segmentSpeedMps,
+      })
+
+      setMetrics((previousMetrics) => ({
+        ...previousMetrics,
+        distance: totalDistanceKmRef.current,
+        currentPace: 0,
+        currentSpeed: 0,
+      }))
+
+      trackAcceptance({
+        segmentDistanceMeters: round(segmentDistanceMeters, 1),
+        segmentSpeedMps: round(segmentSpeedMps, 2),
+        timeDeltaMs,
+        previousDistanceKm: round(previousTotalDistance, 3),
+        newDistanceKm: round(totalDistanceKmRef.current, 3),
+        segmentAdded: 0,
+        autoPaused: true,
+      })
+
+      logRunStats({
+        event: 'auto_pause_active',
+        distanceKm: totalDistanceKmRef.current,
+        segmentKm: segmentDistanceKm,
+        durationSeconds: metrics.duration,
+        currentPaceSecondsPerKm: 0,
+        pathLength: gpsPathRef.current.length,
+      })
       return
     }
 
@@ -592,6 +1135,11 @@ export function RecordScreen() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
+  const handleVibrationToggle = (enabled: boolean) => {
+    setVibrationEnabledState(enabled)
+    persistVibrationEnabled(enabled)
+  }
+
  	  const startRun = async () => {
     const user = await resolveCurrentUser()
     if (!user?.id) {
@@ -656,6 +1204,10 @@ export function RecordScreen() {
           calories: estimateCalories(duration, previousMetrics.distance),
         }
       })
+    }
+
+    if (autoPauseEnabled) {
+      clearAutoPauseState()
     }
 
     stopTracking()
@@ -789,12 +1341,12 @@ export function RecordScreen() {
 	      const gpsAccuracyData =
 	        gpsAccuracyHistory.length > 0 ? JSON.stringify(gpsAccuracyHistory) : undefined
 
-	      const { runId } = await recordRunWithSideEffects({
-	        userId: user.id,
-	        distanceKm: distance,
-	        durationSeconds: duration,
-	        completedAt: new Date(),
-	        autoMatchWorkout: true,
+      const { runId, matchedWorkout, adaptationTriggered } = await recordRunWithSideEffects({
+        userId: user.id,
+        distanceKm: distance,
+        durationSeconds: duration,
+        completedAt: new Date(),
+        autoMatchWorkout: true,
 	        ...(currentWorkout?.type ? { type: resolveRunType(currentWorkout.type) } : {}),
 	        ...(typeof currentWorkout?.id === 'number' ? { workoutId: currentWorkout.id } : {}),
 	        ...(selectedRoute ? { notes: `Route: ${selectedRoute.name}`, route: selectedRoute.name } : {}),
@@ -803,12 +1355,55 @@ export function RecordScreen() {
 	        ...(typeof startAccuracy === 'number' ? { startAccuracy } : {}),
 	        ...(typeof endAccuracy === 'number' ? { endAccuracy } : {}),
 	        ...(typeof averageAccuracy === 'number' ? { averageAccuracy } : {}),
-	      })
+      })
+
+      if (matchedWorkout) {
+        const modalPayload: CompletionModalData = {
+          completedWorkout: matchedWorkout,
+        }
+        if (matchedWorkout.planId) {
+          let referenceDate =
+            matchedWorkout.scheduledDate instanceof Date
+              ? matchedWorkout.scheduledDate
+              : matchedWorkout.scheduledDate
+              ? new Date(matchedWorkout.scheduledDate)
+              : new Date()
+          if (Number.isNaN(referenceDate.getTime())) {
+            referenceDate = new Date()
+          }
+          try {
+            const nextWorkout = await dbUtils.getNextWorkoutForPlan(
+              matchedWorkout.planId,
+              referenceDate
+            )
+            if (nextWorkout) {
+              modalPayload.nextWorkout = nextWorkout
+            }
+          } catch (error) {
+            console.warn("Failed to load next workout for completion modal", error)
+          }
+        }
+        setCompletionModalData(modalPayload)
+      }
 
       toast({
         title: "Run Saved",
         description: `${distance.toFixed(2)}km in ${formatTime(duration)}`,
       })
+      if (adaptationTriggered) {
+        toast({
+          title: "Plan updated based on your recent performance",
+          action: (
+            <ToastAction
+              onClick={() => {
+                router.push("/plan")
+              }}
+            >
+              View Changes
+            </ToastAction>
+          ),
+        })
+      }
 
       try {
         window.dispatchEvent(new CustomEvent("navigate-to-run-report", { detail: { runId } }))
@@ -864,6 +1459,10 @@ export function RecordScreen() {
   }
 
   const mapPath = !isRunning && debugPathOverride ? debugPathOverride : gpsPath
+  const autoPauseDurationSeconds =
+    autoPauseActive && autoPauseStartTime
+      ? Math.max(0, Math.floor((Date.now() - autoPauseStartTime) / 1000))
+      : 0
   const avgPaceSecondsPerKm =
     metrics.distance >= MIN_DISTANCE_FOR_PACE_KM ? metrics.duration / metrics.distance : 0
   const timeSinceLastGpsUpdateSec = lastGpsUpdateAt
@@ -874,6 +1473,35 @@ export function RecordScreen() {
       .map(([reason, count]) => `${reason}:${count}`)
       .join(', ') || '--'
   const avgPaceFormatted = avgPaceSecondsPerKm > 0 ? formatPace(avgPaceSecondsPerKm) : '--:--'
+  const intervalCoachEnabled = ENABLE_VIBRATION_COACH
+  const intervalTimerVisible = intervalCoachEnabled && intervalPhases.length > 0
+  const currentPhase = intervalPhases[currentPhaseIndex]
+  const intervalTotal = intervalPhases.filter((phase) => phase.type === 'interval').length
+  const intervalIndex = currentPhase
+    ? intervalPhases
+        .slice(0, currentPhaseIndex + 1)
+        .filter((phase) => phase.type === 'interval').length
+    : 0
+  const intervalLabel = formatIntervalLabel(currentWorkout?.notes, currentWorkout?.type)
+  const intervalHeaderText = currentPhase
+    ? currentPhase.type === 'interval' && intervalTotal > 0
+      ? `Interval ${intervalIndex} of ${intervalTotal} - ${intervalLabel}`
+      : `${formatPhaseType(currentPhase.type)} - ${intervalLabel}`
+    : 'Interval Timer'
+  const phaseStatusText = currentPhase
+    ? `Phase ${currentPhaseIndex + 1} of ${intervalPhases.length}`
+    : ''
+  const nextPhase = currentPhaseIndex + 1 < intervalPhases.length
+    ? intervalPhases[currentPhaseIndex + 1]
+    : null
+  const nextPhaseLabel = nextPhase ? formatPhaseType(nextPhase.type) : 'Complete'
+  const nextPhaseCountdown = currentPhase
+    ? nextPhaseInSeconds !== null
+      ? `Next: ${nextPhaseLabel} in ${formatTime(nextPhaseInSeconds)}`
+      : phaseRemainingDistance !== null
+        ? `Next: ${nextPhaseLabel} in ${phaseRemainingDistance.toFixed(2)} km`
+        : `Next: ${nextPhaseLabel}`
+    : ''
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 space-y-4">
@@ -941,7 +1569,12 @@ export function RecordScreen() {
                 </p>
               </div>
             </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
+                {autoPauseEnabled && autoPauseActive && isRunning && !isPaused && (
+                  <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-700">
+                    Auto-Paused
+                  </span>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -1029,6 +1662,75 @@ export function RecordScreen() {
         </CardContent>
       </Card>
 
+      {autoPauseEnabled && autoPauseActive && isRunning && !isPaused && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-2">
+              <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-orange-600" />
+              <div>
+                <p className="font-medium text-orange-900">Auto-Paused</p>
+                <p className="text-sm text-orange-800">
+                  {autoPauseDurationSeconds > 0
+                    ? `Paused for ${formatTime(autoPauseDurationSeconds)}. Resume running to continue.`
+                    : 'Slow speed detected. Resume running to continue.'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {intervalTimerVisible && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-blue-700">Interval Timer</p>
+                <p className="text-base font-semibold text-blue-900">{intervalHeaderText}</p>
+                {phaseStatusText && (
+                  <p className="text-xs text-blue-700">{phaseStatusText}</p>
+                )}
+              </div>
+              <span className="text-sm font-semibold text-blue-800">{phaseProgress}%</span>
+            </div>
+            <Progress value={phaseProgress} className="h-2" />
+            {nextPhaseCountdown && (
+              <div className="flex items-center justify-between text-sm text-blue-800">
+                <span>Elapsed: {formatTime(phaseElapsedSeconds)}</span>
+                <span>{nextPhaseCountdown}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {intervalCoachEnabled && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div>
+              <p className="font-medium text-gray-900">Run Settings</p>
+              <p className="text-sm text-gray-600">Customize cues for this run.</p>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-900">Vibration Cues</p>
+                <p className="text-xs text-gray-600">
+                  {vibrationSupported
+                    ? 'Enable haptic cues for interval changes.'
+                    : 'Vibration is not supported on this device.'}
+                </p>
+              </div>
+              <Switch
+                checked={vibrationEnabled}
+                onCheckedChange={handleVibrationToggle}
+                disabled={!vibrationSupported}
+                aria-label="Toggle vibration cues"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Main Controls */}
       <Card>
         <CardContent className="p-6">
@@ -1059,6 +1761,14 @@ export function RecordScreen() {
                 </p>
                 <p className="text-sm text-gray-600">Speed (km/h)</p>
               </div>
+              {autoPauseEnabled && isRunning && (
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-orange-600">
+                    {autoPauseCount}
+                  </p>
+                  <p className="text-sm text-gray-600">Auto Pauses</p>
+                </div>
+              )}
             </div>
 
             {/* Control Buttons */}
@@ -1348,6 +2058,15 @@ export function RecordScreen() {
           }}
           initialStep="upload"
           {...(currentWorkout?.id ? { workoutId: currentWorkout.id } : {})}
+        />
+      )}
+      {completionModalData && (
+        <WorkoutCompletionModal
+          isOpen={Boolean(completionModalData)}
+          onClose={() => setCompletionModalData(null)}
+          onViewPlan={() => router.push('/plan')}
+          completedWorkout={completionModalData.completedWorkout}
+          nextWorkout={completionModalData.nextWorkout}
         />
       )}
     </div>

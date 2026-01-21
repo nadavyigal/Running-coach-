@@ -16,9 +16,44 @@ const ManualAdaptationRequestSchema = z.object({
   confidence: z.number().min(0).max(100).optional(),
 });
 
+const AutoAdaptationRequestSchema = z.object({
+  planId: z.number(),
+  userId: z.number(),
+  adaptationReason: z.enum(['performance_below_target', 'distance_not_met', 'consecutive_misses']),
+  recentRun: z.any().optional(),
+});
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const autoParse = AutoAdaptationRequestSchema.safeParse(body);
+    if (autoParse.success) {
+      const { userId, planId, adaptationReason } = autoParse.data;
+
+      const plan = await dbUtils.getPlan(planId);
+      if (!plan) {
+        return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+      }
+
+      if (plan.userId !== userId) {
+        return NextResponse.json(
+          { error: 'User does not own requested plan' },
+          { status: 403 }
+        );
+      }
+
+      const adaptedPlan = await planAdaptationEngine.adaptExistingPlan(
+        planId,
+        adaptationReason
+      );
+
+      return NextResponse.json({
+        success: true,
+        message: 'Plan adapted successfully',
+        plan: adaptedPlan,
+      });
+    }
+
     const { userId, reason, adaptationType, confidence } = ManualAdaptationRequestSchema.parse(body);
 
     // Verify user exists

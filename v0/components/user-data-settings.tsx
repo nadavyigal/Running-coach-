@@ -1,13 +1,12 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/components/ui/use-toast';
-import { AlertCircle, Calculator, RotateCcw, Save, X } from 'lucide-react';
+import { AlertCircle, Calculator, RotateCcw, Save, ArrowLeft } from 'lucide-react';
 import { dbUtils } from '@/lib/dbUtils';
 import { type PlanSetupPreferences, type User } from '@/lib/db';
 import {
@@ -23,8 +22,7 @@ import { cn } from '@/lib/utils';
 
 interface UserDataSettingsProps {
   userId: number;
-  open: boolean;
-  onClose: () => void;
+  onBack: () => void;
   onSave?: () => void;
 }
 
@@ -321,7 +319,7 @@ function SelectCard(props: {
   );
 }
 
-export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSettingsProps) {
+export function UserDataSettings({ userId, onBack, onSave }: UserDataSettingsProps) {
   const [userData, setUserData] = useState<Partial<User>>({});
   const [originalData, setOriginalData] = useState<Partial<User>>({});
   const [loading, setLoading] = useState(true);
@@ -332,10 +330,10 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
   const [ltPaceInput, setLtPaceInput] = useState('');
 
   useEffect(() => {
-    if (open && userId) {
+    if (userId) {
       fetchUserData();
     }
-  }, [open, userId]);
+  }, [userId]);
 
   useEffect(() => {
     if (originalData && Object.keys(originalData).length > 0) {
@@ -428,7 +426,7 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
       }
 
       setTimeout(() => {
-        onClose();
+        onBack();
       }, 1000);
     } catch (error) {
       console.error('Error saving user data:', error);
@@ -498,16 +496,9 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
 
   if (loading) {
     return (
-      <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent
-          hideClose
-          className="left-0 top-0 translate-x-0 translate-y-0 h-[100dvh] w-screen max-w-none p-0 border-none bg-transparent shadow-none rounded-none sm:rounded-none gap-0"
-        >
-          <div className="flex items-center justify-center h-full bg-neutral-950 text-white">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400" />
-          </div>
-        </DialogContent>
-      </Dialog>
+      <div className="relative min-h-screen bg-neutral-950 text-white flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400" />
+      </div>
     );
   }
 
@@ -980,128 +971,135 @@ export function UserDataSettings({ userId, open, onClose, onSave }: UserDataSett
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent
-        hideClose
-        className="left-0 top-0 translate-x-0 translate-y-0 h-[100dvh] w-screen max-w-none p-0 border-none bg-transparent shadow-none rounded-none sm:rounded-none gap-0"
+    <div className="relative min-h-screen bg-neutral-950 text-white flex flex-col">
+      {/* Header */}
+      <div className="px-4 pb-3 relative z-10" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 1rem))' }}>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onBack}
+            className="text-white/70 hover:bg-white/5 -ml-2"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex-1 flex flex-col items-center justify-center -ml-9">
+            <div className="text-sm font-semibold">Training Data</div>
+            <div className="text-xs text-white/50">Step {resolvedStepIndex + 1} of {STEPS.length}</div>
+          </div>
+          <div className="w-9" />
+        </div>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="px-4 py-3">
+        <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-emerald-400 transition-all duration-300 ease-out"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Step Navigation Pills */}
+      <div className="px-4 pb-3">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+          {STEPS.map((step) => {
+            const active = step.id === activeStep;
+            return (
+              <Button
+                key={step.id}
+                type="button"
+                onClick={() => setActiveStep(step.id)}
+                className={cn(
+                  'h-9 rounded-full px-4 shrink-0 text-sm font-medium border transition-all duration-200',
+                  active
+                    ? 'bg-emerald-400 text-neutral-950 border-emerald-400 shadow-lg shadow-emerald-500/25 hover:bg-emerald-300'
+                    : 'bg-white/[0.03] text-white/70 border-white/10 hover:bg-white/[0.06] hover:text-white hover:border-white/20'
+                )}
+              >
+                {step.label}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Unsaved Changes Alert */}
+      {hasChanges && (
+        <div className="px-4 pb-3">
+          <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-amber-100 text-sm flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>You have unsaved changes</span>
+          </div>
+        </div>
+      )}
+
+      {/* Scrollable Content Area */}
+      <div className="flex-1 overflow-y-auto px-4 pb-4">
+        <div className="pb-6">
+          {renderStepContent()}
+        </div>
+      </div>
+
+      {/* Footer with Actions */}
+      <div
+        className="px-4 pt-3 border-t border-white/[0.08] bg-neutral-950"
+        style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 1rem))' }}
       >
-        <div className="flex flex-col h-full bg-neutral-950 text-white">
-          <DialogHeader className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
-            <div>
-              <DialogTitle className="text-lg">Training Data</DialogTitle>
-              <p className="text-xs text-white/60">
-                Update your profile to match onboarding and goal settings.
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="text-white/60 hover:text-white hover:bg-white/10"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </DialogHeader>
-
-          <div className="px-6 py-4 border-b border-white/10 space-y-3">
-            <div className="flex items-center justify-between text-xs text-white/60">
-              <span>{STEPS[resolvedStepIndex].title}</span>
-              <span>
-                {resolvedStepIndex + 1} of {STEPS.length}
-              </span>
-            </div>
-            <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-emerald-400 transition-all duration-300 ease-out"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-              {STEPS.map((step) => {
-                const active = step.id === activeStep;
-                return (
-                  <Button
-                    key={step.id}
-                    type="button"
-                    onClick={() => setActiveStep(step.id)}
-                    className={cn(
-                      'h-9 rounded-full px-4 shrink-0 text-sm font-medium border transition-all duration-200',
-                      active
-                        ? 'bg-emerald-400 text-neutral-950 border-emerald-400 shadow-lg shadow-emerald-500/25 hover:bg-emerald-300'
-                        : 'bg-white/[0.03] text-white/70 border-white/10 hover:bg-white/[0.06] hover:text-white hover:border-white/20'
-                    )}
-                  >
-                    {step.label}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
-
-          {hasChanges && (
-            <div className="px-6 pt-4">
-              <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-amber-100 text-sm flex items-center gap-2">
-                <AlertCircle className="h-4 w-4" />
-                You have unsaved changes
-              </div>
-            </div>
-          )}
-
-          <div className="flex-1 overflow-y-auto px-6 py-6">
-            {renderStepContent()}
-          </div>
-
-          <div className="px-6 py-4 border-t border-white/10 flex items-center gap-3">
-            <Button
-              variant="ghost"
-              onClick={handleReset}
-              disabled={!hasChanges || saving}
-              className="text-white/60 hover:text-white hover:bg-white/10"
-            >
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Reset
-            </Button>
-            <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-3 pb-2">
+          <Button
+            variant="ghost"
+            onClick={handleReset}
+            disabled={!hasChanges || saving}
+            className="text-white/60 hover:text-white hover:bg-white/10"
+            size="sm"
+          >
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Reset
+          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            {resolvedStepIndex > 0 && (
               <Button
                 variant="outline"
                 onClick={goBack}
-                disabled={resolvedStepIndex === 0 || saving}
-                className="border-white/20 text-white hover:bg-white/5"
+                disabled={saving}
+                className="border-white/20 text-white hover:bg-white/5 h-11 px-6"
               >
                 Back
               </Button>
-              {isLastStep ? (
-                <Button
-                  onClick={handleSave}
-                  disabled={!hasChanges || saving}
-                  className="bg-white text-neutral-950 hover:bg-white/90"
-                >
-                  {saving ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-neutral-950 mr-2" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4 mr-2" />
-                      Save Changes
-                    </>
-                  )}
-                </Button>
-              ) : (
-                <Button
-                  onClick={goNext}
-                  disabled={saving}
-                  className="bg-white text-neutral-950 hover:bg-white/90"
-                >
-                  Next
-                </Button>
-              )}
-            </div>
+            )}
+            {isLastStep ? (
+              <Button
+                onClick={handleSave}
+                disabled={!hasChanges || saving}
+                className="bg-white text-neutral-950 hover:bg-white/90 h-11 px-6 font-semibold"
+              >
+                {saving ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-neutral-950 mr-2" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    Save Changes
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button
+                onClick={goNext}
+                disabled={saving}
+                className="bg-white text-neutral-950 hover:bg-white/90 hover:scale-[1.02] active:scale-100 h-11 px-6 font-semibold transition-all duration-200"
+              >
+                Continue
+              </Button>
+            )}
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
 

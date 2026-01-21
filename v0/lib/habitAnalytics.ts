@@ -1,5 +1,7 @@
-import { db, type User, type Run, type Workout, type Goal } from './db';
 import { subDays, startOfWeek, endOfWeek, differenceInDays } from 'date-fns';
+import { ENABLE_WEEKLY_RECAP } from '@/lib/featureFlags';
+import { db, type User, type Run, type Workout, type Goal } from './db';
+import { calculateConsistency, calculatePace, formatPace } from './workout-utils';
 
 export interface HabitAnalytics {
   // Core habit metrics
@@ -62,6 +64,90 @@ export interface HabitRisk {
   recommendations: string[];
   priority: number;
 }
+
+export interface WeeklyRecap {
+  weekStartDate: Date;
+  weekEndDate: Date;
+  totalDistance: number;
+  totalRuns: number;
+  totalDuration: number;
+  averagePace: string;
+  weekOverWeekChange: { distance: number; runs: number }; // % change
+  streakStatus: 'continued' | 'broken' | 'started';
+  currentStreak: number;
+  topAchievement: string;
+  consistencyScore: number; // 0-100
+  nextWeekGoal: string;
+  dailyRunTotals: number[];
+}
+
+const WEEKLY_RECAP_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+interface WeeklyRecapCacheEntry {
+  cachedAt: number;
+  recap: WeeklyRecap;
+}
+
+const canAccessStorage = () =>
+  typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+
+const buildWeeklyRecapCacheKey = (userId: number, weekStartDate: Date) =>
+  `weeklyRecap_${userId}_${weekStartDate.toISOString()}`;
+
+const reviveWeeklyRecapDates = (recap: WeeklyRecap): WeeklyRecap => ({
+  ...recap,
+  weekStartDate: new Date(recap.weekStartDate),
+  weekEndDate: new Date(recap.weekEndDate)
+});
+
+export const getCachedWeeklyRecap = (
+  userId: number,
+  weekStartDate: Date
+): WeeklyRecap | null => {
+  if (!canAccessStorage()) {
+    return null;
+  }
+
+  try {
+    const cacheKey = buildWeeklyRecapCacheKey(userId, weekStartDate);
+    const raw = window.localStorage.getItem(cacheKey);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as WeeklyRecapCacheEntry;
+    if (!parsed || typeof parsed.cachedAt !== 'number' || !parsed.recap) {
+      return null;
+    }
+
+    if (Date.now() - parsed.cachedAt > WEEKLY_RECAP_CACHE_TTL_MS) {
+      window.localStorage.removeItem(cacheKey);
+      return null;
+    }
+
+    return reviveWeeklyRecapDates(parsed.recap);
+  } catch {
+    return null;
+  }
+};
+
+const setCachedWeeklyRecap = (
+  userId: number,
+  weekStartDate: Date,
+  recap: WeeklyRecap
+): void => {
+  if (!canAccessStorage()) {
+    return;
+  }
+
+  try {
+    const cacheKey = buildWeeklyRecapCacheKey(userId, weekStartDate);
+    const payload: WeeklyRecapCacheEntry = {
+      cachedAt: Date.now(),
+      recap
+    };
+    window.localStorage.setItem(cacheKey, JSON.stringify(payload));
+  } catch {
+  }
+};
 
 export class HabitAnalyticsService {
   private getDatabase() {
@@ -146,6 +232,83 @@ export class HabitAnalyticsService {
       console.error('[HabitAnalytics] Error calculating analytics:', error);
       throw error;
     }
+  }
+
+  async generateWeeklyRecap(userId: number, weekStartDate: Date): Promise<WeeklyRecap> {
+    if (!ENABLE_WEEKLY_RECAP) {
+      throw new Error('Weekly recap feature is disabled');
+    }
+
+    const normalizedWeekStart = this.normalizeWeekStart(weekStartDate);
+    const cached = getCachedWeeklyRecap(userId, normalizedWeekStart);
+    if (cached) {
+      return cached;
+    }
+
+    const database = this.getDatabase();
+    if (!database) {
+      throw new Error('Database not available');
+    }
+
+    const user = await database.users.get(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    const weekEndDate = this.getWeekEnd(normalizedWeekStart);
+
+    const currentWeekRuns = await database.runs
+      .where('[userId+completedAt]')
+      .between([userId, normalizedWeekStart], [userId, weekEndDate], true, true)
+      .toArray();
+
+    const currentStats = this.summarizeRuns(currentWeekRuns);
+    const averagePaceSeconds = calculatePace(currentStats.totalDistance, currentStats.totalDuration);
+    const averagePace = formatPace(averagePaceSeconds);
+
+    const previousWeekStart = subDays(normalizedWeekStart, 7);
+    const previousWeekEnd = subDays(weekEndDate, 7);
+    const previousWeekRuns = await database.runs
+      .where('[userId+completedAt]')
+      .between([userId, previousWeekStart], [userId, previousWeekEnd], true, true)
+      .toArray();
+    const previousStats = this.summarizeRuns(previousWeekRuns);
+
+    const workouts = await this.getUserWorkouts(userId);
+    const weekWorkouts = workouts.filter(workout =>
+      workout.scheduledDate >= normalizedWeekStart &&
+      workout.scheduledDate <= weekEndDate &&
+      workout.type !== 'rest'
+    );
+    const consistencyScore = calculateConsistency(currentStats.totalRuns, weekWorkouts.length);
+
+    const dailyRunTotals = this.getDailyRunTotals(currentWeekRuns, normalizedWeekStart);
+
+    const recap: WeeklyRecap = {
+      weekStartDate: normalizedWeekStart,
+      weekEndDate,
+      totalDistance: currentStats.totalDistance,
+      totalRuns: currentStats.totalRuns,
+      totalDuration: currentStats.totalDuration,
+      averagePace,
+      weekOverWeekChange: {
+        distance: this.calculatePercentChange(
+          currentStats.totalDistance,
+          previousStats.totalDistance
+        ),
+        runs: this.calculatePercentChange(currentStats.totalRuns, previousStats.totalRuns)
+      },
+      streakStatus: this.getWeeklyStreakStatus(user, currentStats.totalRuns, previousStats.totalRuns),
+      currentStreak: user.currentStreak ?? 0,
+      topAchievement: this.getTopAchievement(currentStats, averagePaceSeconds),
+      consistencyScore,
+      nextWeekGoal: this.getNextWeekGoal(currentStats.totalDistance, consistencyScore),
+      dailyRunTotals
+    };
+
+    setCachedWeeklyRecap(userId, normalizedWeekStart, recap);
+
+    return recap;
   }
 
   private async getUserRuns(userId: number): Promise<Run[]> {
@@ -506,6 +669,149 @@ export class HabitAnalyticsService {
     const mean = numbers.reduce((sum, num) => sum + num, 0) / numbers.length;
     const squaredDiffs = numbers.map(num => Math.pow(num - mean, 2));
     return Math.sqrt(squaredDiffs.reduce((sum, diff) => sum + diff, 0) / numbers.length);
+  }
+
+  private normalizeWeekStart(weekStartDate: Date): Date {
+    const normalized = new Date(weekStartDate);
+    normalized.setHours(0, 0, 0, 0);
+    const dayOfWeek = normalized.getDay();
+    const offset = (dayOfWeek + 6) % 7;
+    if (offset !== 0) {
+      normalized.setDate(normalized.getDate() - offset);
+    }
+    return normalized;
+  }
+
+  private getWeekEnd(weekStartDate: Date): Date {
+    const weekEnd = new Date(weekStartDate);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+    return weekEnd;
+  }
+
+  private summarizeRuns(runs: Run[]): {
+    totalDistance: number;
+    totalDuration: number;
+    totalRuns: number;
+    longestRun: number;
+    fastestPace: number;
+  } {
+    let totalDistance = 0;
+    let totalDuration = 0;
+    let longestRun = 0;
+    let fastestPace = Number.POSITIVE_INFINITY;
+
+    for (const run of runs) {
+      totalDistance += run.distance;
+      totalDuration += run.duration;
+      if (run.distance > longestRun) {
+        longestRun = run.distance;
+      }
+
+      const pace = run.pace ?? (run.distance > 0 ? run.duration / run.distance : 0);
+      if (pace > 0 && pace < fastestPace) {
+        fastestPace = pace;
+      }
+    }
+
+    return {
+      totalDistance,
+      totalDuration,
+      totalRuns: runs.length,
+      longestRun,
+      fastestPace
+    };
+  }
+
+  private getDailyRunTotals(runs: Run[], weekStartDate: Date): number[] {
+    const totals = Array(7).fill(0);
+    const weekStartUtc = Date.UTC(weekStartDate.getFullYear(), weekStartDate.getMonth(), weekStartDate.getDate());
+
+    for (const run of runs) {
+      const completedAt = run.completedAt;
+      if (!completedAt) continue;
+
+      const runDayUtc = Date.UTC(completedAt.getFullYear(), completedAt.getMonth(), completedAt.getDate());
+      const dayIndex = Math.floor((runDayUtc - weekStartUtc) / (1000 * 60 * 60 * 24));
+      if (dayIndex >= 0 && dayIndex < 7) {
+        totals[dayIndex] += 1;
+      }
+    }
+
+    return totals;
+  }
+
+  private calculatePercentChange(current: number, previous: number): number {
+    if (previous <= 0) return 0;
+    return Math.round(((current - previous) / previous) * 100) || 0;
+  }
+
+  private formatDistance(distance: number): string {
+    if (!Number.isFinite(distance) || distance <= 0) {
+      return '0';
+    }
+
+    return distance % 1 === 0 ? `${distance}` : distance.toFixed(1);
+  }
+
+  private getTopAchievement(
+    stats: {
+      totalRuns: number;
+      longestRun: number;
+      fastestPace: number;
+    },
+    averagePaceSeconds: number
+  ): string {
+    if (stats.totalRuns === 0) {
+      return 'No runs logged this week';
+    }
+
+    const hasFastPace = Number.isFinite(stats.fastestPace);
+    const paceImprovement =
+      hasFastPace && averagePaceSeconds > 0
+        ? (averagePaceSeconds - stats.fastestPace) / averagePaceSeconds
+        : 0;
+
+    if (hasFastPace && paceImprovement >= 0.1) {
+      return `Best pace of ${formatPace(stats.fastestPace)}`;
+    }
+
+    if (stats.longestRun > 0) {
+      return `Longest run of ${this.formatDistance(stats.longestRun)} km`;
+    }
+
+    return 'Completed your runs this week';
+  }
+
+  private getNextWeekGoal(totalDistance: number, consistencyScore: number): string {
+    if (totalDistance <= 0) {
+      return 'Aim for 1-2 easy runs next week';
+    }
+
+    if (consistencyScore >= 80) {
+      const targetDistance = totalDistance * 1.1;
+      return `Aim for ${this.formatDistance(targetDistance)} km next week`;
+    }
+
+    return `Maintain around ${this.formatDistance(totalDistance)} km next week`;
+  }
+
+  private getWeeklyStreakStatus(
+    user: User,
+    currentWeekRuns: number,
+    previousWeekRuns: number
+  ): WeeklyRecap['streakStatus'] {
+    const currentStreak = user.currentStreak ?? 0;
+
+    if (currentStreak === 0) {
+      return currentWeekRuns > 0 ? 'started' : 'broken';
+    }
+
+    if (previousWeekRuns === 0 && currentWeekRuns > 0) {
+      return 'started';
+    }
+
+    return 'continued';
   }
 
   // Public method to get habit risk assessment

@@ -5,14 +5,28 @@ import { ArrowLeft, Loader2, Sparkles } from 'lucide-react'
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PaceChart } from '@/components/pace-chart'
 import { RunMap } from '@/components/maps/RunMap'
 import { MapErrorBoundary } from '@/components/maps/MapErrorBoundary'
 import { useToast } from '@/hooks/use-toast'
 import { dbUtils } from '@/lib/dbUtils'
 import type { Run } from '@/lib/db'
 import type { LatLng } from '@/lib/mapConfig'
+import {
+  calculateSegmentPaces,
+  downsamplePaceData,
+  smoothPaceData,
+  type GPSPoint as PaceGPSPoint,
+} from '@/lib/pace-calculations'
 import { parseGpsPath } from '@/lib/routeUtils'
 import { trackAnalyticsEvent } from '@/lib/analytics'
+import { ENABLE_AUTO_PAUSE, ENABLE_PACE_CHART } from '@/lib/featureFlags'
+
+type GPSQuality = {
+  score: number
+  level: 'Excellent' | 'Good' | 'Fair' | 'Poor'
+  averageAccuracy: number
+}
 
 type CoachNotes = {
   shortSummary: string
@@ -32,11 +46,15 @@ type RunInsight = {
   runId: number
   summary: string[]
   effort: 'easy' | 'moderate' | 'hard'
+  gpsQuality?: GPSQuality
   metrics?: {
     paceStability: string
     cadenceNote?: string
     hrNote?: string
   }
+  pacingAnalysis?: string
+  paceConsistency?: 'consistent' | 'fading' | 'negative-split' | 'erratic'
+  paceVariability?: number
   recovery?: {
     priority: string[]
     optional?: string[]
@@ -63,6 +81,43 @@ function formatPace(secondsPerKm: number): string {
   const mins = Math.floor(secondsPerKm / 60)
   const secs = Math.round(secondsPerKm % 60)
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+}
+
+function formatVariance(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '--:--'
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.round(seconds % 60)
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+function getGpsQualityStyles(level: GPSQuality['level']) {
+  switch (level) {
+    case 'Excellent':
+      return { bar: 'bg-green-500', badge: 'bg-green-100 text-green-700' }
+    case 'Good':
+      return { bar: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700' }
+    case 'Fair':
+      return { bar: 'bg-yellow-500', badge: 'bg-yellow-100 text-yellow-700' }
+    default:
+      return { bar: 'bg-red-500', badge: 'bg-red-100 text-red-700' }
+  }
+}
+
+function getPaceConsistencyStyles(
+  consistency: RunInsight['paceConsistency']
+): { badge: string; label: string } | null {
+  switch (consistency) {
+    case 'consistent':
+      return { badge: 'bg-emerald-100 text-emerald-700', label: 'Consistent' }
+    case 'negative-split':
+      return { badge: 'bg-blue-100 text-blue-700', label: 'Negative split' }
+    case 'fading':
+      return { badge: 'bg-amber-100 text-amber-700', label: 'Fading' }
+    case 'erratic':
+      return { badge: 'bg-red-100 text-red-700', label: 'Erratic' }
+    default:
+      return null
+  }
 }
 
 function isCoachNotes(value: unknown): value is CoachNotes {
@@ -133,6 +188,83 @@ function safeParseCoachNotes(raw: string | undefined): CoachNotes | null {
   }
 }
 
+function extractGpsQuality(raw: string | undefined): GPSQuality | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as { gpsQuality?: GPSQuality }
+    if (!parsed?.gpsQuality || typeof parsed.gpsQuality !== 'object') return null
+    const { score, level, averageAccuracy } = parsed.gpsQuality
+    if (!Number.isFinite(score) || !Number.isFinite(averageAccuracy) || typeof level !== 'string') {
+      return null
+    }
+    if (!['Excellent', 'Good', 'Fair', 'Poor'].includes(level)) return null
+    return { score, level: level as GPSQuality['level'], averageAccuracy }
+  } catch {
+    return null
+  }
+}
+
+function extractPacingInsight(raw: string | undefined) {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (!isRunInsight(parsed)) return null
+    return {
+      pacingAnalysis:
+        typeof parsed.pacingAnalysis === 'string' ? parsed.pacingAnalysis : undefined,
+      paceConsistency: parsed.paceConsistency as RunInsight['paceConsistency'] | undefined,
+      paceVariability:
+        typeof parsed.paceVariability === 'number' ? parsed.paceVariability : undefined,
+    }
+  } catch {
+    return null
+  }
+}
+
+function parsePaceGpsPath(gpsPath: string | undefined): PaceGPSPoint[] {
+  if (!gpsPath) return []
+  try {
+    const parsed = JSON.parse(gpsPath)
+    if (!Array.isArray(parsed)) return []
+
+    const normalized: PaceGPSPoint[] = []
+
+    for (const point of parsed) {
+      if (!point || typeof point !== 'object') continue
+      const record = point as Record<string, unknown>
+      const lat =
+        typeof record.lat === 'number'
+          ? record.lat
+          : typeof record.latitude === 'number'
+            ? record.latitude
+            : null
+      const lng =
+        typeof record.lng === 'number'
+          ? record.lng
+          : typeof record.longitude === 'number'
+            ? record.longitude
+            : null
+      const timestamp =
+        typeof record.timestamp === 'number' && Number.isFinite(record.timestamp)
+          ? record.timestamp
+          : null
+
+      if (lat === null || lng === null || timestamp === null) continue
+
+      normalized.push({
+        lat,
+        lng,
+        timestamp,
+        ...(typeof record.accuracy === 'number' ? { accuracy: record.accuracy } : {}),
+      })
+    }
+
+    return normalized
+  } catch {
+    return []
+  }
+}
+
 export function RunReportScreen({ runId, onBack }: { runId: number | null; onBack: () => void }) {
   const { toast } = useToast()
 
@@ -140,14 +272,46 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   const [isLoading, setIsLoading] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
 
+  const gpsQualityEnabled = ENABLE_AUTO_PAUSE
+  const paceChartEnabled = ENABLE_PACE_CHART
   const path: LatLng[] = useMemo(() => parseGpsPath(run?.gpsPath), [run?.gpsPath])
+  const pacePath = useMemo(() => parsePaceGpsPath(run?.gpsPath), [run?.gpsPath])
+  const paceData = useMemo(() => {
+    if (!paceChartEnabled || pacePath.length < 2) return []
+    const raw = calculateSegmentPaces(pacePath)
+    if (raw.length === 0) return []
+    const smoothed = smoothPaceData(raw, 3)
+    return downsamplePaceData(smoothed, 200)
+  }, [paceChartEnabled, pacePath])
+  const paceDataPayload = useMemo(
+    () =>
+      paceData.map((entry) => ({
+        distanceKm: entry.distanceKm,
+        paceMinPerKm: entry.paceMinPerKm,
+        timestamp: entry.timestamp.getTime(),
+      })),
+    [paceData]
+  )
 
   const coachNotes = useMemo(() => safeParseCoachNotes(run?.runReport), [run?.runReport])
+  const gpsQuality = useMemo(
+    () => (gpsQualityEnabled ? extractGpsQuality(run?.runReport) : null),
+    [gpsQualityEnabled, run?.runReport]
+  )
+  const pacingInsight = useMemo(
+    () => (paceChartEnabled ? extractPacingInsight(run?.runReport) : null),
+    [paceChartEnabled, run?.runReport]
+  )
+  const paceConsistencyBadge = useMemo(
+    () => getPaceConsistencyStyles(pacingInsight?.paceConsistency),
+    [pacingInsight?.paceConsistency]
+  )
 
   const avgPace = useMemo(() => {
     if (!run) return 0
     return run.distance >= MIN_DISTANCE_FOR_PACE_KM ? run.duration / run.distance : 0
   }, [run])
+  const gpsQualityStyles = gpsQuality ? getGpsQualityStyles(gpsQuality.level) : null
 
   const loadRun = useCallback(async () => {
     if (!runId) {
@@ -192,6 +356,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
             notes: run.notes,
             heartRateBpm: run.heartRate,
             calories: run.calories,
+            gpsAccuracyData: run.gpsAccuracyData,
           },
           gps: {
             points: path.length,
@@ -199,6 +364,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
             endAccuracy: run.endAccuracy,
             averageAccuracy: run.averageAccuracy,
           },
+          ...(paceChartEnabled && paceDataPayload.length ? { paceData: paceDataPayload } : {}),
         }),
       })
 
@@ -223,6 +389,13 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
           source: data.source,
         })
       }
+      if (gpsQualityEnabled && isRunInsight(data.report) && data.report.gpsQuality) {
+        void trackAnalyticsEvent('gps_quality_score', {
+          score: data.report.gpsQuality.score,
+          confidence_level: data.report.gpsQuality.level,
+          run_id: data.report.runId,
+        })
+      }
 
       toast({
         title: 'Coach Notes Ready',
@@ -240,7 +413,16 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
     } finally {
       setIsGenerating(false)
     }
-  }, [loadRun, path.length, run, runId, toast])
+  }, [
+    gpsQualityEnabled,
+    loadRun,
+    paceChartEnabled,
+    paceDataPayload,
+    path.length,
+    run,
+    runId,
+    toast,
+  ])
 
   useEffect(() => {
     loadRun()
@@ -333,6 +515,33 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         </CardContent>
       </Card>
 
+      {gpsQualityEnabled && gpsQuality && gpsQualityStyles && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium">GPS Quality</h3>
+              <span
+                className={`rounded-full px-2 py-1 text-xs font-semibold ${gpsQualityStyles.badge}`}
+              >
+                {gpsQuality.level}
+              </span>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm text-gray-700">
+                <span>{gpsQuality.score}%</span>
+                <span>{gpsQuality.averageAccuracy.toFixed(1)}m avg accuracy</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-gray-100">
+                <div
+                  className={`h-2 rounded-full ${gpsQualityStyles.bar}`}
+                  style={{ width: `${gpsQuality.score}%` }}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="p-4">
           <h3 className="font-medium mb-3">Route</h3>
@@ -350,6 +559,46 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
           </div>
         </CardContent>
       </Card>
+
+      {paceChartEnabled && (
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="font-medium mb-3">Pace</h3>
+            <PaceChart gpsPath={pacePath} />
+          </CardContent>
+        </Card>
+      )}
+
+      {paceChartEnabled && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium">Pacing Analysis</h3>
+              {paceConsistencyBadge ? (
+                <span className={`rounded-full px-2 py-1 text-xs font-semibold ${paceConsistencyBadge.badge}`}>
+                  {paceConsistencyBadge.label}
+                </span>
+              ) : null}
+            </div>
+
+            {pacingInsight?.pacingAnalysis ? (
+              <p className="text-sm text-gray-700">{pacingInsight.pacingAnalysis}</p>
+            ) : (
+              <p className="text-sm text-gray-600">Pacing analysis unavailable.</p>
+            )}
+
+            {typeof pacingInsight?.paceVariability === 'number' && (
+              <div
+                className={`text-sm ${
+                  pacingInsight.paceVariability > 30 ? 'text-red-600' : 'text-gray-600'
+                }`}
+              >
+                Variability: {formatVariance(pacingInsight.paceVariability)}/km
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="p-4 space-y-3">

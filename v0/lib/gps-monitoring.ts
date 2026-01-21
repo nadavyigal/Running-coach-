@@ -30,6 +30,66 @@ export interface GPSTroubleshootingGuide {
   priority: 'high' | 'medium' | 'low';
 }
 
+const GPS_QUALITY_AVG_MIN_METERS = 5;
+const GPS_QUALITY_AVG_MAX_METERS = 100;
+const GPS_QUALITY_STD_MIN_METERS = 3;
+const GPS_QUALITY_STD_MAX_METERS = 50;
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value));
+
+const scoreLowerIsBetter = (value: number, min: number, max: number) => {
+  if (!Number.isFinite(value)) return 0;
+  const clamped = clamp(value, min, max);
+  const normalized = 1 - (clamped - min) / (max - min);
+  return Math.round(normalized * 100);
+};
+
+export const calculateGPSQualityScore = (accuracyData: GPSAccuracyData[]): number => {
+  if (!Array.isArray(accuracyData) || accuracyData.length === 0) return 0;
+
+  const accuracies = accuracyData
+    .map((item) => item?.accuracyRadius)
+    .filter((value): value is number => Number.isFinite(value) && value > 0);
+
+  if (accuracies.length === 0) return 0;
+
+  const average =
+    accuracies.reduce((sum, value) => sum + value, 0) / accuracies.length;
+  const variance =
+    accuracies.reduce((sum, value) => sum + Math.pow(value - average, 2), 0) /
+    accuracies.length;
+  const stdDev = Math.sqrt(variance);
+
+  const averageScore = scoreLowerIsBetter(
+    average,
+    GPS_QUALITY_AVG_MIN_METERS,
+    GPS_QUALITY_AVG_MAX_METERS
+  );
+  const varianceScore = scoreLowerIsBetter(
+    stdDev,
+    GPS_QUALITY_STD_MIN_METERS,
+    GPS_QUALITY_STD_MAX_METERS
+  );
+  const underThresholdRatio =
+    accuracies.filter((value) => value < 20).length / accuracies.length;
+  const underThresholdScore = Math.round(underThresholdRatio * 100);
+
+  const weightedScore =
+    averageScore * 0.4 + varianceScore * 0.3 + underThresholdScore * 0.3;
+  return clamp(Math.round(weightedScore), 0, 100);
+};
+
+export const getGPSQualityLevel = (
+  score: number
+): 'Excellent' | 'Good' | 'Fair' | 'Poor' => {
+  if (!Number.isFinite(score)) return 'Poor';
+  if (score >= 90) return 'Excellent';
+  if (score >= 75) return 'Good';
+  if (score >= 60) return 'Fair';
+  return 'Poor';
+};
+
 export class GPSMonitoringService {
   private config: GPSMonitoringConfig;
   private accuracyHistory: GPSAccuracyData[] = [];

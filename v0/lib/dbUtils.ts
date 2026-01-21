@@ -1779,7 +1779,7 @@ export async function getWorkoutsForDateRange(
 export async function getTodaysWorkout(userId: number): Promise<Workout | null> {
   return safeDbOperation(async () => {
     if (!db) return null;
-    
+
     const today = startOfDayUTC(nowUTC());
     const tomorrow = addDaysUTC(1, today);
     
@@ -1808,6 +1808,49 @@ export async function getTodaysWorkout(userId: number): Promise<Workout | null> 
     
     return todaysWorkout || null;
   }, 'getTodaysWorkout', null);
+}
+
+export async function getNextWorkoutForPlan(
+  planId: number,
+  referenceDate?: Date
+): Promise<Workout | null> {
+  return safeDbOperation(
+    async () => {
+      if (!db) return null;
+      if (!planId || Number.isNaN(planId)) return null;
+
+      const refDate =
+        referenceDate instanceof Date
+          ? referenceDate
+          : referenceDate
+          ? new Date(referenceDate)
+          : new Date();
+      if (Number.isNaN(refDate.getTime())) {
+        refDate.setTime(Date.now());
+      }
+
+      const workouts = await db.workouts.where('planId').equals(planId).toArray();
+      const upcoming = workouts
+        .map((workout) => {
+          if (!workout.scheduledDate) return null;
+          const scheduled =
+            workout.scheduledDate instanceof Date
+              ? workout.scheduledDate
+              : typeof workout.scheduledDate === 'string' || typeof workout.scheduledDate === 'number'
+              ? new Date(workout.scheduledDate)
+              : null;
+          if (!scheduled || Number.isNaN(scheduled.getTime())) return null;
+          return { ...workout, scheduledDate: scheduled };
+        })
+        .filter((workout): workout is Workout => workout !== null)
+        .filter((workout) => !workout.completed && workout.scheduledDate > refDate)
+        .sort((a, b) => a.scheduledDate.getTime() - b.scheduledDate.getTime());
+
+      return upcoming[0] ?? null;
+    },
+    'getNextWorkoutForPlan',
+    null
+  );
 }
 
 /**
@@ -1840,6 +1883,7 @@ export async function markWorkoutCompleted(workoutId: number): Promise<void> {
     
     await db.workouts.update(workoutId, {
       completed: true,
+      completedAt: new Date(),
       updatedAt: new Date()
     });
 
@@ -4382,6 +4426,7 @@ export const dbUtils = {
   getPlanWorkouts,
   getWorkoutsForDateRange,
   getTodaysWorkout,
+  getNextWorkoutForPlan,
   markWorkoutCompleted,
   getWorkoutsByPlan,
   deleteWorkout,

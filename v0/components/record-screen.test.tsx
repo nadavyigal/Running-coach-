@@ -114,6 +114,8 @@ describe('RecordScreen GPS lifecycle', () => {
       updatedAt: new Date(),
     })
 
+    ;(dbUtils.getNextWorkoutForPlan as any).mockResolvedValue(null)
+
     ;(recordRunWithSideEffects as any).mockResolvedValue({ runId: 1, workoutId: 1 })
   })
 

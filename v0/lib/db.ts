@@ -818,12 +818,16 @@ export interface Workout {
   day: string; // 'Mon', 'Tue', etc.
   type: 'easy' | 'tempo' | 'intervals' | 'long' | 'time-trial' | 'hill' | 'rest' | 'race-pace' | 'recovery' | 'fartlek';
   distance: number; // in km
+  actualDistanceKm?: number;
   duration?: number; // in minutes
   pace?: number; // target pace in seconds per km
+  actualDurationMinutes?: number;
+  actualPace?: number;
   intensity?: 'easy' | 'moderate' | 'threshold' | 'vo2max' | 'anaerobic';
   trainingPhase?: 'base' | 'build' | 'peak' | 'taper';
   workoutStructure?: any; // JSON structure for complex workouts
   notes?: string;
+  completedAt?: Date;
   completed: boolean;
   scheduledDate: Date;
   createdAt: Date;
