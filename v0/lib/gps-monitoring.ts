@@ -174,13 +174,19 @@ export class GPSMonitoringService {
    */
   public calculateAccuracyMetrics(position: GeolocationPosition): GPSAccuracyData {
     const accuracy = position.coords.accuracy || 999;
-    
-    // Calculate signal strength based on accuracy (inverted and normalized)
-    const signalStrength = Math.max(0, Math.min(100, 100 - (accuracy / 50) * 100));
-    
+
+    // Calculate signal strength based on accuracy using non-linear scale optimized for running
+    // This provides a more realistic representation of GPS quality for athletic tracking
+    const signalStrength = accuracy <= 10 ? 100 :
+                          accuracy <= 20 ? 90 :
+                          accuracy <= 30 ? 75 :
+                          accuracy <= 50 ? 60 :
+                          accuracy <= 80 ? 40 :
+                          accuracy <= 120 ? 20 : 0;
+
     // Estimate satellite count based on accuracy and timing
     const satellitesVisible = this.estimateSatelliteCount(accuracy);
-    
+
     // Determine location quality
     const locationQuality = this.determineLocationQuality(accuracy);
     
@@ -220,10 +226,62 @@ export class GPSMonitoringService {
   }
 
   private determineLocationQuality(accuracy: number): 'excellent' | 'good' | 'fair' | 'poor' {
-    if (accuracy <= 5) return 'excellent';
-    if (accuracy <= 10) return 'good';
-    if (accuracy <= 20) return 'fair';
-    return 'poor';
+    // Updated to align with the new signal strength calculation
+    // This provides better quality assessment for running applications
+    if (accuracy <= 10) return 'excellent';  // <10m = 100% signal
+    if (accuracy <= 30) return 'good';       // 10-30m = 75-90% signal
+    if (accuracy <= 80) return 'fair';       // 30-80m = 40-60% signal
+    return 'poor';                           // >80m = <40% signal
+  }
+
+  /**
+   * Assess GPS quality and provide recommendation for starting a run
+   */
+  public assessGPSQuality(accuracy: number): {
+    quality: 'excellent' | 'good' | 'acceptable' | 'fair' | 'poor' | 'unusable';
+    recommendation: string;
+    canStart: boolean;
+  } {
+    if (accuracy <= 10) {
+      return {
+        quality: 'excellent',
+        recommendation: 'Perfect GPS signal! Ready to start.',
+        canStart: true
+      };
+    }
+    if (accuracy <= 20) {
+      return {
+        quality: 'good',
+        recommendation: 'Great GPS signal. Ready to start.',
+        canStart: true
+      };
+    }
+    if (accuracy <= 30) {
+      return {
+        quality: 'acceptable',
+        recommendation: 'Good enough for tracking. You can start.',
+        canStart: true
+      };
+    }
+    if (accuracy <= 50) {
+      return {
+        quality: 'fair',
+        recommendation: 'GPS is fair. Consider waiting a few seconds.',
+        canStart: true
+      };
+    }
+    if (accuracy <= 80) {
+      return {
+        quality: 'poor',
+        recommendation: 'Poor GPS. Wait for better signal or move to open area.',
+        canStart: false
+      };
+    }
+    return {
+      quality: 'unusable',
+      recommendation: 'GPS signal too weak. Move to open area away from buildings.',
+      canStart: false
+    };
   }
 
   private addToHistory(accuracyData: GPSAccuracyData): void {

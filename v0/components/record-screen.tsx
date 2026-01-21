@@ -319,6 +319,20 @@ export function RecordScreen() {
  	  const [gpsAccuracyHistory, setGpsAccuracyHistory] = useState<GPSAccuracyData[]>([])
  	  const [showGPSDetails, setShowGPSDetails] = useState(false)
 
+ 	  // GPS warm-up countdown state
+ 	  const [isGpsWarmingUp, setIsGpsWarmingUp] = useState(false)
+ 	  const [gpsWarmupCountdown, setGpsWarmupCountdown] = useState(10)
+ 	  const [gpsWarmupQuality, setGpsWarmupQuality] = useState<{
+ 	    bestAccuracy: number | null;
+ 	    currentAccuracy: number | null;
+ 	    signalStrength: number;
+ 	    canStart: boolean;
+ 	  }>({ bestAccuracy: null, currentAccuracy: null, signalStrength: 0, canStart: false })
+ 	  const gpsWarmupTimerRef = useRef<NodeJS.Timeout | null>(null)
+ 	  const gpsWarmupPointsRef = useRef<GPSCoordinate[]>([])
+ 	  const GPS_WARMUP_DURATION_SECONDS = 10
+ 	  const GPS_MIN_SIGNAL_STRENGTH_TO_START = 60
+
   const gpsDebugEnabled =
     process.env.NODE_ENV !== 'production' &&
     (process.env.NEXT_PUBLIC_GPS_DEBUG_OVERLAY === 'true' ||
@@ -850,11 +864,15 @@ export function RecordScreen() {
     const timeDeltaSeconds = timeDeltaMs / 1000
     const segmentSpeedMps = segmentDistanceMeters / timeDeltaSeconds
 
-    // Basic GPS filtering:
+    // Adaptive GPS filtering based on GPS quality:
     // - Jump rejection: ignore implausible speed spikes ("teleports").
-    // - Jitter rejection: ignore very small deltas likely caused by GPS noise.
-    // Reduced jitter threshold: now 0.5m minimum (was 0.8-2m), and reduced multiplier from 0.025 to 0.015
-    const minDistanceMeters = Math.max(0.5, Math.min(1.5, accuracyValue * 0.015))
+    // - Jitter rejection: scale threshold based on GPS accuracy to reduce rejection in poor conditions
+    // Better GPS (<=20m accuracy) uses stricter filtering (0.5m minimum)
+    // Poor GPS (>80m accuracy) uses relaxed filtering (3.0m minimum)
+    const minDistanceMeters = accuracyValue <= 20 ? 0.5 :   // Good GPS: strict jitter filter
+                              accuracyValue <= 40 ? 1.0 :   // Fair GPS: moderate jitter filter
+                              accuracyValue <= 80 ? 2.0 :   // Poor GPS: relaxed jitter filter
+                              3.0;                          // Very poor GPS: very relaxed jitter filter
 
     let isAutoPauseActive = autoPauseEnabled ? autoPauseActiveRef.current : false
     if (autoPauseEnabled) {
@@ -1019,6 +1037,29 @@ export function RecordScreen() {
       speed: typeof point.speed === 'number' ? point.speed : null,
     })
 
+    // If we're in GPS warmup mode, collect points and update quality assessment
+    if (isGpsWarmingUp) {
+      gpsWarmupPointsRef.current.push(point)
+
+      const currentAccuracy = point.accuracy ?? 999
+      const assessment = gpsService.assessGPSQuality(currentAccuracy)
+
+      setGpsWarmupQuality(prev => {
+        const bestAccuracy = prev.bestAccuracy === null ? currentAccuracy :
+                            Math.min(prev.bestAccuracy, currentAccuracy)
+
+        return {
+          bestAccuracy,
+          currentAccuracy,
+          signalStrength: accuracyData.signalStrength,
+          canStart: assessment.canStart
+        }
+      })
+
+      // Don't record points during warmup
+      return
+    }
+
     if (isRunningRef.current && !isPausedRef.current) {
       recordPointForActiveRun(point)
     }
@@ -1140,6 +1181,132 @@ export function RecordScreen() {
     persistVibrationEnabled(enabled)
   }
 
+  const startGpsWarmup = async () => {
+    setIsGpsWarmingUp(true)
+    setGpsWarmupCountdown(GPS_WARMUP_DURATION_SECONDS)
+    gpsWarmupPointsRef.current = []
+    setGpsWarmupQuality({
+      bestAccuracy: null,
+      currentAccuracy: null,
+      signalStrength: 0,
+      canStart: false
+    })
+
+    // Start GPS tracking in background to collect warmup data
+    setIsInitializingGps(true)
+    const trackingStarted = await startTracking(gpsTrackingOptions)
+    setIsInitializingGps(false)
+
+    if (!trackingStarted) {
+      setIsGpsWarmingUp(false)
+      toast({
+        title: "GPS Error",
+        description: "Unable to start GPS tracking. Please check permissions.",
+        variant: "destructive"
+      })
+      return false
+    }
+
+    // Start countdown timer
+    let countdown = GPS_WARMUP_DURATION_SECONDS
+    gpsWarmupTimerRef.current = setInterval(() => {
+      countdown--
+      setGpsWarmupCountdown(countdown)
+
+      if (countdown <= 0) {
+        if (gpsWarmupTimerRef.current) {
+          clearInterval(gpsWarmupTimerRef.current)
+          gpsWarmupTimerRef.current = null
+        }
+        finishGpsWarmup()
+      }
+    }, 1000)
+
+    return true
+  }
+
+  const finishGpsWarmup = () => {
+    setIsGpsWarmingUp(false)
+
+    // Evaluate GPS quality after warmup
+    const quality = gpsWarmupQuality
+    const gpsService = gpsMonitoringRef.current
+
+    if (!quality.canStart || quality.signalStrength < GPS_MIN_SIGNAL_STRENGTH_TO_START) {
+      // GPS quality is poor, show warning and option to proceed or wait
+      toast({
+        title: "GPS Signal Weak",
+        description: `Signal strength: ${quality.signalStrength}%. Consider waiting for better signal or move to an open area.`,
+        variant: "destructive",
+        action: (
+          <ToastAction altText="Start Anyway" onClick={() => proceedWithRun()}>
+            Start Anyway
+          </ToastAction>
+        )
+      })
+
+      // Stop GPS tracking since we're not starting yet
+      stopTracking()
+    } else {
+      // GPS quality is good, proceed with run
+      proceedWithRun()
+    }
+  }
+
+  const cancelGpsWarmup = () => {
+    if (gpsWarmupTimerRef.current) {
+      clearInterval(gpsWarmupTimerRef.current)
+      gpsWarmupTimerRef.current = null
+    }
+    setIsGpsWarmingUp(false)
+    stopTracking()
+    gpsWarmupPointsRef.current = []
+    toast({
+      title: "Warmup Cancelled",
+      description: "GPS warmup cancelled. Tap Start Run when ready."
+    })
+  }
+
+  const proceedWithRun = () => {
+    // Find best point from warmup to use as baseline
+    if (gpsWarmupPointsRef.current.length > 0) {
+      const bestPoint = gpsWarmupPointsRef.current.reduce((best, current) => {
+        const currentAcc = current.accuracy ?? 999
+        const bestAcc = best.accuracy ?? 999
+        return currentAcc < bestAcc ? current : best
+      })
+
+      // Use best point as first recorded point
+      lastRecordedPointRef.current = bestPoint
+      setGpsPath([bestPoint])
+      gpsPathRef.current = [bestPoint]
+
+      logRunStats({
+        event: 'warmup_baseline_established',
+        accuracy: bestPoint.accuracy,
+        warmupPointsCollected: gpsWarmupPointsRef.current.length
+      })
+    }
+
+    // Clear warmup data
+    gpsWarmupPointsRef.current = []
+
+    // Actual run start
+    startTimeRef.current = Date.now()
+    elapsedRunMsRef.current = 0
+    setIsRunning(true)
+    setIsPaused(false)
+    isRunningRef.current = true
+    isPausedRef.current = false
+
+    toast({
+      title: "Run Started",
+      description: "GPS tracking active. Your run is being recorded."
+    })
+
+    logRunStats({ event: 'start', startedAt: Date.now() })
+  }
+
  	  const startRun = async () => {
     const user = await resolveCurrentUser()
     if (!user?.id) {
@@ -1152,39 +1319,11 @@ export function RecordScreen() {
       return
     }
 
-    startTimeRef.current = Date.now()
-    elapsedRunMsRef.current = 0
+    // Reset tracking state before warmup
     resetRunTrackingState()
 
-    setIsRunning(true)
-    setIsPaused(false)
-    isRunningRef.current = true
-    isPausedRef.current = false
-    setIsInitializingGps(true)
-    let trackingStarted = false
-    try {
-      trackingStarted = await startTracking(gpsTrackingOptions)
-    } finally {
-      setIsInitializingGps(false)
-    }
-    if (!trackingStarted) {
-      setIsRunning(false)
-      isRunningRef.current = false
-      startTimeRef.current = 0
-      toast({
-        title: "GPS Error",
-        description: "Unable to start GPS tracking. Please try again.",
-        variant: "destructive"
-      })
-      return
-    }
-
-    toast({
-      title: "Run Started",
-      description: "GPS tracking active. Your run is being recorded.",
-    })
-
-    logRunStats({ event: 'start', startedAt: Date.now() })
+    // Start GPS warm-up countdown
+    await startGpsWarmup()
   }
 
   const pauseRun = () => {
@@ -1505,6 +1644,93 @@ export function RecordScreen() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 space-y-4">
+      {/* GPS Warmup Countdown Overlay */}
+      {isGpsWarmingUp && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full">
+            <CardContent className="p-8 text-center space-y-6">
+              <div className="flex justify-center">
+                <Satellite className="h-16 w-16 text-blue-500 animate-pulse" />
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold mb-2">Acquiring GPS Signal</h2>
+                <p className="text-gray-600">
+                  Warming up GPS for accurate tracking...
+                </p>
+              </div>
+
+              {/* Countdown Timer */}
+              <div className="text-8xl font-bold text-blue-600">
+                {gpsWarmupCountdown}
+              </div>
+
+              {/* GPS Quality Indicators */}
+              <div className="space-y-3 text-left">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-700">Signal Strength:</span>
+                  <div className="flex items-center gap-2">
+                    <Progress
+                      value={gpsWarmupQuality.signalStrength}
+                      className="w-32 h-2"
+                    />
+                    <span className={`text-sm font-bold ${
+                      gpsWarmupQuality.signalStrength >= 75 ? 'text-green-600' :
+                      gpsWarmupQuality.signalStrength >= 50 ? 'text-yellow-600' :
+                      'text-red-600'
+                    }`}>
+                      {gpsWarmupQuality.signalStrength}%
+                    </span>
+                  </div>
+                </div>
+
+                {gpsWarmupQuality.currentAccuracy !== null && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">Current Accuracy:</span>
+                    <span className={`text-sm font-bold ${
+                      gpsWarmupQuality.currentAccuracy <= 20 ? 'text-green-600' :
+                      gpsWarmupQuality.currentAccuracy <= 50 ? 'text-yellow-600' :
+                      'text-red-600'
+                    }`}>
+                      ±{Math.round(gpsWarmupQuality.currentAccuracy)}m
+                    </span>
+                  </div>
+                )}
+
+                {gpsWarmupQuality.bestAccuracy !== null && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">Best Accuracy:</span>
+                    <span className="text-sm font-bold text-green-600">
+                      ±{Math.round(gpsWarmupQuality.bestAccuracy)}m
+                    </span>
+                  </div>
+                )}
+
+                {gpsWarmupQuality.canStart && (
+                  <div className="flex items-center justify-center gap-2 text-green-600 bg-green-50 p-2 rounded">
+                    <Sparkles className="h-4 w-4" />
+                    <span className="text-sm font-medium">Ready to start!</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Cancel Button */}
+              <Button
+                variant="outline"
+                onClick={cancelGpsWarmup}
+                className="w-full"
+              >
+                Cancel
+              </Button>
+
+              <p className="text-xs text-gray-500">
+                For best results, wait for signal strength above 75%
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="sm" onClick={() => router.push('/')} aria-label="Back to Today Screen">
