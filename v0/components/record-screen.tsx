@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
-import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertTriangle, Info, Loader2, Sparkles } from "lucide-react"
+import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertTriangle, Info, Loader2, Sparkles, CheckCircle } from "lucide-react"
 import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RouteSelectionWizard } from "@/components/route-selection-wizard"
 import { ManualRunModal } from "@/components/manual-run-modal"
@@ -1318,10 +1318,48 @@ export function RecordScreen() {
       return
     }
 
-    // Reset tracking state before warmup
+    // Check if GPS is already tracking with good signal quality
+    // If yes, skip warmup and start immediately to avoid losing GPS lock
+    const hasActiveGPS = isGpsTracking && currentGPSAccuracy !== null
+    const hasGoodSignal = currentGPSAccuracy && currentGPSAccuracy.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START
+
+    if (hasActiveGPS && hasGoodSignal) {
+      // GPS already has good lock - don't destroy it!
+      // Just reset run metrics but keep GPS tracking active
+      toast({
+        title: "GPS Ready",
+        description: `Starting run with ${currentGPSAccuracy.signalStrength}% signal strength...`,
+      })
+
+      // Reset only run-specific state (not GPS tracking!)
+      gpsPathRef.current = []
+      setGpsPath([])
+      totalDistanceKmRef.current = 0
+      lastRecordedPointRef.current = null
+      setCurrentGPSAccuracy(null) // Will be updated by next GPS point
+      setGpsAccuracyHistory([])
+      resetGpsDebugStats()
+      resetAutoPauseState()
+      resetIntervalTimerState()
+      setMetrics({
+        distance: 0,
+        duration: 0,
+        pace: 0,
+        currentPace: 0,
+        currentSpeed: 0,
+        calories: 0
+      })
+
+      // Start run immediately without warmup
+      proceedWithRun()
+      return
+    }
+
+    // GPS not active or signal is poor - need to start/restart tracking with warmup
+    // Reset ALL tracking state (will stop GPS if running)
     resetRunTrackingState()
 
-    // Start GPS warm-up countdown
+    // Start GPS warm-up countdown (will start GPS tracking fresh)
     await startGpsWarmup()
   }
 
@@ -1749,14 +1787,42 @@ export function RecordScreen() {
       {!isRunning && !isGpsTracking && !isInitializingGps && !isGpsWarmingUp && gpsPermission !== 'denied' && gpsPermission !== 'unsupported' && (
         <Card className="border-blue-200 bg-blue-50">
           <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Satellite className="h-5 w-5 text-blue-500" />
-              <div>
-                <p className="font-medium text-blue-900">GPS Ready</p>
-                <p className="text-sm text-blue-700">
-                  GPS will activate when you start your run
-                </p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Satellite className="h-5 w-5 text-blue-500" />
+                <div>
+                  <p className="font-medium text-blue-900">GPS Ready</p>
+                  <p className="text-sm text-blue-700">
+                    GPS will activate when you start your run
+                  </p>
+                </div>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  // Start GPS warmup without starting the run
+                  setIsInitializingGps(true)
+                  const trackingStarted = await startTracking(gpsTrackingOptions)
+                  setIsInitializingGps(false)
+                  if (!trackingStarted) {
+                    toast({
+                      title: "GPS Error",
+                      description: "Unable to start GPS. Please check permissions.",
+                      variant: "destructive"
+                    })
+                  } else {
+                    toast({
+                      title: "GPS Activated",
+                      description: "GPS is now warming up. Wait for good signal before starting.",
+                    })
+                  }
+                }}
+                className="text-blue-700 border-blue-300 hover:bg-blue-100"
+              >
+                <Satellite className="h-4 w-4 mr-1" />
+                Warm Up GPS
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -1979,11 +2045,15 @@ export function RecordScreen() {
                   >
                     {isInitializingGps || isGpsWarmingUp ? (
                       <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                    ) : isGpsTracking && currentGPSAccuracy && currentGPSAccuracy.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START ? (
+                      <CheckCircle className="h-5 w-5 mr-2" />
                     ) : (
                       <Play className="h-5 w-5 mr-2" />
                     )}
                     {isInitializingGps ? 'Initializing GPS...' :
                      isGpsWarmingUp ? 'Warming Up GPS...' :
+                     isGpsTracking && currentGPSAccuracy && currentGPSAccuracy.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START ?
+                       `Start Run (${currentGPSAccuracy.signalStrength}% GPS)` :
                      'Start Run'}
                   </Button>
                   {/* Show "Start Anyway" button if GPS is tracking but run hasn't started (post-warmup with poor signal) */}
