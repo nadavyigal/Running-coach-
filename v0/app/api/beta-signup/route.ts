@@ -65,11 +65,13 @@ async function betaSignupHandler(req: ApiRequest) {
         : 'unknown'
 
   try {
+    // IMPORTANT: Beta signups automatically create full user accounts
     const result = await createBetaSignup({
       email: normalizedEmail,
       experienceLevel,
       goals: goalsString,
       hearAboutUs: hearAboutUsValue,
+      createUserAccount: true, // Create full auth user + profile
     })
 
     let emailSent = false
@@ -83,7 +85,14 @@ async function betaSignupHandler(req: ApiRequest) {
     }
 
     return NextResponse.json(
-      { success: true, created: result.created, storage: result.storage, emailSent },
+      { 
+        success: true, 
+        created: result.created, 
+        storage: result.storage, 
+        emailSent,
+        userId: result.userId,
+        profileId: result.profileId,
+      },
       { headers: { 'Cache-Control': 'no-store' } }
     )
   } catch (error) {

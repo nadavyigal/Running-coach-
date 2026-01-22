@@ -75,6 +75,9 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
     const supabase = createClient()
 
     try {
+      // APPLICATION SIGNUP: Creates auth user + profile ONLY (not beta_signups)
+      // Beta signups are handled separately via /api/beta-signup
+      
       // Sign up user
       const { data, error: signupError } = await supabase.auth.signUp({
         email: email.trim(),
@@ -92,14 +95,16 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
 
       logger.info('[Signup] User created successfully:', data.user.id)
 
-      // Create profile for the user
+      // Create profile for the user (is_beta_user will be FALSE by default)
       const { error: profileError } = await supabase.from('profiles').insert({
         auth_user_id: data.user.id,
+        email: email.trim().toLowerCase(),
         goal: 'habit', // Default goal, will be updated during onboarding
         experience: 'beginner', // Default experience
         preferred_times: [],
         days_per_week: 3, // Default
         onboarding_complete: false,
+        is_beta_user: false, // Regular app signup, not beta
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
