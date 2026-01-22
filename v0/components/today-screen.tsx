@@ -692,27 +692,27 @@ export function TodayScreen() {
 
               {/* Workout Breakdown - Garmin Style */}
               {showWorkoutBreakdown && (
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 space-y-3 animate-in fade-in-0 slide-in-from-top-4 duration-300">
-                  <h4 className="font-semibold text-sm uppercase tracking-wide">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3 animate-in fade-in-0 slide-in-from-top-4 duration-300">
+                  <h4 className="font-semibold text-sm uppercase tracking-wide text-gray-700">
                     Workout Phases
                   </h4>
                   {structuredWorkout ? (
-                    <WorkoutPhasesDisplay workout={structuredWorkout} darkMode />
+                    <WorkoutPhasesDisplay workout={structuredWorkout} />
                   ) : (
                     <div className="space-y-2">
                       <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-white/60" />
-                        <span className="text-sm">Warm-up: 5-10 min easy pace</span>
+                        <div className="w-2 h-2 rounded-full bg-gray-400" />
+                        <span className="text-sm text-gray-600">Warm-up: 5-10 min easy pace</span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-white" />
-                        <span className="text-sm font-semibold">
+                        <div className="w-2 h-2 rounded-full bg-gray-800" />
+                        <span className="text-sm font-semibold text-gray-900">
                           Main: {todaysWorkout.distance}km at target pace
                         </span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-white/60" />
-                        <span className="text-sm">Cool-down: 5 min walk</span>
+                        <div className="w-2 h-2 rounded-full bg-gray-400" />
+                        <span className="text-sm text-gray-600">Cool-down: 5 min walk</span>
                       </div>
                     </div>
                   )}
