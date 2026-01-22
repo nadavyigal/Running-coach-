@@ -1364,7 +1364,7 @@ export function ProfileScreen() {
           )}
 
           {showUserDataModal && userId && (
-            <div className="fixed inset-0 z-50 overflow-auto">
+            <div className="fixed inset-0 z-[60] overflow-auto">
               <UserDataSettings
                 userId={userId}
                 onBack={() => setShowUserDataModal(false)}
