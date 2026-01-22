@@ -1,4 +1,4 @@
-﻿# Supabase Authentication Configuration Guide
+# Supabase Authentication Configuration Guide
 
 ## Complete URL Configuration for Run-Smart
 
@@ -77,7 +77,7 @@ Your `.env.local` file should contain:
 ```env
 # Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=https://dxqglotcyirxzyqaxqln.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_REDACTED
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4cWdsb3RjeWlyeHp5cWF4cWxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY0ODg5ODIsImV4cCI6MjA4MjA2NDk4Mn0.f9DIumy2ZHDhc_mBaq18hzwIvojSz0Zb7IyIjeXBWRQ
 SUPABASE_SERVICE_ROLE_KEY=sb_secret_REDACTED
 
 # Site Configuration
