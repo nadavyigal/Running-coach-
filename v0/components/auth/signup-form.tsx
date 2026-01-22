@@ -77,17 +77,24 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
     try {
       // APPLICATION SIGNUP: Creates auth user + profile ONLY (not beta_signups)
       // Beta signups are handled separately via /api/beta-signup
-      
+
+      // Log the redirect URL for debugging
+      const redirectUrl = `${window.location.origin}/auth/callback`
+      logger.info('[Signup] Attempting signup with redirect:', redirectUrl)
+
       // Sign up user
       const { data, error: signupError } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: redirectUrl,
         },
       })
 
-      if (signupError) throw signupError
+      if (signupError) {
+        logger.error('[Signup] Auth error:', signupError)
+        throw signupError
+      }
 
       if (!data.user) {
         throw new Error('Signup failed: No user returned')
@@ -149,8 +156,17 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
       logger.error('[Signup] Error:', err)
 
       if (err instanceof Error) {
-        if (err.message.includes('already registered')) {
+        const message = err.message.toLowerCase()
+
+        if (message.includes('already registered')) {
           setError('This email is already registered. Please log in instead.')
+        } else if (message.includes('load failed') || message.includes('failed to fetch') || message.includes('network')) {
+          // Network error - likely CORS or connectivity issue
+          setError('Unable to connect to the server. Please check your internet connection and try again. If the problem persists, the service may be temporarily unavailable.')
+          logger.error('[Signup] Network error - possible CORS issue or server unreachable')
+        } else if (message.includes('invalid api key') || message.includes('anon key')) {
+          setError('Server configuration error. Please contact support.')
+          logger.error('[Signup] Invalid API key - check Supabase configuration')
         } else {
           setError(err.message)
         }
