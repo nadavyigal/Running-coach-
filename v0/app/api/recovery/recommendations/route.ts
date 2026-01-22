@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { RecoveryEngine } from '../../../../lib/recoveryEngine';
 import { PersonalizationContextBuilder } from '../../../../lib/personalizationContext';
 import { SubscriptionGate, ProFeature } from '../../../../lib/subscriptionGates';
-import { dbUtils } from '../../../../lib/dbUtils';
 import { logger } from '@/lib/logger';
 
 // Force dynamic rendering for this route
@@ -40,28 +39,6 @@ export async function GET(request: NextRequest) {
         },
         { status: 403 }
       );
-    }
-
-    // Check if onboarding is complete
-    const user = await dbUtils.getUser(userId);
-    if (!user || !user.onboardingComplete) {
-      return NextResponse.json({
-        success: true,
-        data: {
-          recommendations: ['Complete onboarding to unlock personalized recovery recommendations'],
-          recoveryScore: 50,
-          confidence: 0,
-          isOnboarding: true,
-          breakdown: {
-            sleepScore: 50,
-            hrvScore: 50,
-            restingHRScore: 50,
-            subjectiveWellnessScore: 50,
-            trainingLoadImpact: 0,
-            stressLevel: 50,
-          },
-        },
-      });
     }
 
     // Get current recovery score

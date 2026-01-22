@@ -53,7 +53,6 @@ import { JoinCohortModal } from "@/components/join-cohort-modal";
 import { CommunityStatsWidget } from "@/components/community-stats-widget";
 import { CoachingInsightsWidget } from "@/components/coaching-insights-widget";
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
-import { GoalProgressDashboard } from "@/components/goal-progress-dashboard";
 import { PerformanceAnalyticsDashboard } from "@/components/performance-analytics-dashboard";
 import { Brain, Target, GitMerge, Star } from "lucide-react";
 import { PlanTemplateFlow } from "@/components/plan-template-flow";
@@ -1043,16 +1042,6 @@ export function ProfileScreen() {
             </Card>
           ) : null}
 
-          {/* Goal Progress */}
-          {userId && (
-            <div data-section="goal-progress">
-              <GoalProgressDashboard
-                userId={userId}
-                className="hover:shadow-lg transition-all duration-300"
-              />
-            </div>
-          )}
-
           {/* Community Stats Widget */}
           {userId && <CommunityStatsWidget userId={userId} />}
 
@@ -1374,13 +1363,14 @@ export function ProfileScreen() {
             />
           )}
 
-          {userId && (
-            <UserDataSettings
-              userId={userId}
-              open={showUserDataModal}
-              onClose={() => setShowUserDataModal(false)}
-              onSave={refreshContext}
-            />
+          {showUserDataModal && userId && (
+            <div className="fixed inset-0 z-50 bg-background">
+              <UserDataSettings
+                userId={userId}
+                onBack={() => setShowUserDataModal(false)}
+                onSave={refreshContext}
+              />
+            </div>
           )}
 
           {/* Coaching Preferences Modal */}

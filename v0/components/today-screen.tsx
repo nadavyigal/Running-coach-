@@ -31,7 +31,7 @@ import ModalErrorBoundary from "@/components/modal-error-boundary"
 import { type Workout, type Route, type Goal, resetDatabaseInstance } from "@/lib/db"
 import { dbUtils, getUserPaceZones } from "@/lib/dbUtils"
 import { useData, useGoalProgress } from "@/contexts/DataContext"
-import { WorkoutPhasesCompact } from "@/components/workout-phases-display"
+import { WorkoutPhasesDisplay } from "@/components/workout-phases-display"
 import { generateStructuredWorkout, type StructuredWorkout } from "@/lib/workout-steps"
 import { getDefaultPaceZones } from "@/lib/pace-zones"
 import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine"
@@ -697,7 +697,7 @@ export function TodayScreen() {
                     Workout Phases
                   </h4>
                   {structuredWorkout ? (
-                    <WorkoutPhasesCompact workout={structuredWorkout} darkMode />
+                    <WorkoutPhasesDisplay workout={structuredWorkout} darkMode />
                   ) : (
                     <div className="space-y-2">
                       <div className="flex items-center gap-3">

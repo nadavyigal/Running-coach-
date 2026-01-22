@@ -831,75 +831,73 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         return (
           <div
             className={cn(
-              "flex min-h-[calc(100vh-200px)] flex-col relative px-6",
+              "flex min-h-[calc(100vh-200px)] flex-col relative px-8",
               manrope.className
             )}
-            style={{ paddingTop: 'max(2.5rem, env(safe-area-inset-top, 2.5rem))' }}
+            style={{ paddingTop: 'max(3rem, env(safe-area-inset-top, 3rem))' }}
           >
-            <div className="flex items-center gap-3 text-white/80">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-white/70 hover:text-white hover:bg-white/10 -ml-2"
-                onClick={prevStep}
-                disabled={currentStep === 1}
-                aria-label="Go back"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-              <div className="flex-1 flex items-center justify-center">
-                <div className="h-1 w-28 bg-white/15 rounded-full overflow-hidden">
-                  <div className="h-full w-[25%] bg-emerald-400/80" />
-                </div>
-              </div>
-              <div className="w-9" />
-            </div>
-
-            <div className="mt-3 text-white/75 text-sm font-medium">
+            {/* Step indicator - simple text */}
+            <div className="text-gray-400 text-sm uppercase tracking-wider font-medium">
               Step 1 of 4
             </div>
 
-            {/* Main content */}
-            <div className="flex flex-col items-start space-y-7 pb-4 mt-8">
-              {/* Headline */}
-              <div className="space-y-4 max-w-[18rem]">
-                <h1
-                  className={cn(
-                    "text-[42px] leading-[1.05] uppercase italic text-white tracking-[0.03em]",
-                    bebas.className
-                  )}
-                >
-                  LET'S CRUSH YOUR NEXT GOAL.
-                </h1>
-                <p className="text-white/80 text-lg font-medium tracking-wide">
-                  Tell me about your running style
-                </p>
-              </div>
+            {/* Main headline section */}
+            <div className="mt-12 space-y-4">
+              <h1
+                className={cn(
+                  "text-[52px] leading-[1.0] uppercase italic text-white font-black tracking-tight",
+                  bebas.className
+                )}
+                style={{
+                  textShadow: '0 2px 20px rgba(0,0,0,0.5)',
+                  letterSpacing: '-0.02em'
+                }}
+              >
+                LET'S CRUSH YOUR<br />NEXT GOAL.
+              </h1>
+              <p className="text-gray-300 text-lg font-medium">
+                Tell me about your running style
+              </p>
+            </div>
 
-              {/* Feature icons - positioned below headline */}
-              <div className="flex items-center justify-center gap-7 pt-2 w-full">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-16 h-16 rounded-full border-2 border-emerald-400/80 bg-emerald-400/10 shadow-[0_0_18px_rgba(16,185,129,0.35)] flex items-center justify-center">
-                    <Brain className="w-7 h-7 text-emerald-400" />
-                  </div>
-                  <span className="text-white text-xs font-medium">AI Powered</span>
+            {/* Feature icons with neon glow */}
+            <div className="flex items-start justify-start gap-6 mt-10">
+              <div className="flex flex-col items-center gap-2">
+                <div
+                  className="w-14 h-14 rounded-full border-2 border-emerald-400 flex items-center justify-center bg-transparent"
+                  style={{
+                    filter: 'drop-shadow(0 0 8px rgba(34, 197, 94, 0.6))',
+                  }}
+                >
+                  <Brain className="w-7 h-7 text-emerald-400" />
                 </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-16 h-16 rounded-full border-2 border-emerald-400/80 bg-emerald-400/10 shadow-[0_0_18px_rgba(16,185,129,0.35)] flex items-center justify-center">
-                    <Calendar className="w-7 h-7 text-emerald-400" />
-                  </div>
-                  <span className="text-white text-xs font-medium">Flexible Sched</span>
+                <span className="text-[10px] text-center text-gray-300 uppercase font-bold tracking-wide">AI Powered</span>
+              </div>
+              <div className="flex flex-col items-center gap-2">
+                <div
+                  className="w-14 h-14 rounded-full border-2 border-emerald-400 flex items-center justify-center bg-transparent"
+                  style={{
+                    filter: 'drop-shadow(0 0 8px rgba(34, 197, 94, 0.6))',
+                  }}
+                >
+                  <Calendar className="w-7 h-7 text-emerald-400" />
                 </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-16 h-16 rounded-full border-2 border-emerald-400/80 bg-emerald-400/10 shadow-[0_0_18px_rgba(16,185,129,0.35)] flex items-center justify-center">
-                    <Trophy className="w-7 h-7 text-emerald-400" />
-                  </div>
-                  <span className="text-white text-xs font-medium">Goal Oriented</span>
+                <span className="text-[10px] text-center text-gray-300 uppercase font-bold tracking-wide">Flexible Sched</span>
+              </div>
+              <div className="flex flex-col items-center gap-2">
+                <div
+                  className="w-14 h-14 rounded-full border-2 border-emerald-400 flex items-center justify-center bg-transparent"
+                  style={{
+                    filter: 'drop-shadow(0 0 8px rgba(34, 197, 94, 0.6))',
+                  }}
+                >
+                  <Trophy className="w-7 h-7 text-emerald-400" />
                 </div>
+                <span className="text-[10px] text-center text-gray-300 uppercase font-bold tracking-wide">Goal Oriented</span>
               </div>
             </div>
 
-            {/* Empty spacer to push content down */}
+            {/* Spacer to push branding to bottom */}
             <div className="flex-1" />
           </div>
         )
@@ -1262,17 +1260,22 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       <div className="relative min-h-screen bg-neutral-950 text-white flex flex-col">
         {isIntroStep && (
           <div className="absolute inset-0 z-0">
-            <div
-              className="absolute inset-0 bg-cover bg-no-repeat"
+            {/* Background image */}
+            <img
+              src="/images/runsmart-intro-bg.jpg"
+              alt=""
+              className="w-full h-full object-cover opacity-60"
               style={{
-                backgroundImage: "url('/images/runsmart-intro-bg.jpg')",
-                backgroundPosition: 'right 60%',
-                backgroundSize: 'cover',
-                backgroundRepeat: 'no-repeat'
+                objectPosition: 'center 40%'
               }}
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/25 to-black/70" />
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_72%,rgba(16,185,129,0.18),transparent_55%)]" />
+            {/* Gradient overlay - dark at bottom, lighter at top */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background: 'linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.8) 100%)'
+              }}
+            />
           </div>
         )}
 
@@ -1318,21 +1321,21 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
         {/* Branding with logo - positioned at bottom for intro step */}
         {isIntroStep && (
-          <div className={cn("relative z-10 flex flex-col items-center space-y-2 pb-5 px-6", manrope.className)}>
-            {/* RunSmart logo icon (transparent background) */}
-            <div className="relative w-20 h-20 drop-shadow-[0_10px_18px_rgba(16,185,129,0.35)]">
+          <div className={cn("relative z-10 flex flex-col items-center space-y-3 pb-8 px-6", manrope.className)}>
+            {/* RunSmart logo icon */}
+            <div className="relative w-16 h-16">
               <img
-                src="/images/runsmart-logo-2.png"
+                src="/images/runsmart-logo-1.png"
                 alt="RunSmart Logo"
                 className="w-full h-full object-contain"
               />
             </div>
 
             {/* RunSmart text */}
-            <h2 className={cn("text-white text-3xl font-semibold italic tracking-wide", bebas.className)}>
+            <h2 className={cn("text-white text-3xl font-bold italic tracking-tight", bebas.className)}>
               RunSmart
             </h2>
-            <p className="text-white/70 text-xs font-medium tracking-wide">
+            <p className="text-gray-400 text-sm">
               Your AI Running Coach
             </p>
           </div>
@@ -1340,17 +1343,17 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
         <div
           className={cn(
-            "px-4 pt-3 relative z-10",
+            "px-8 pt-3 relative z-10",
             isIntroStep ? "bg-transparent" : "bg-neutral-950"
           )}
-          style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom, 1.5rem))' }}
+          style={{ paddingBottom: 'max(2.5rem, env(safe-area-inset-bottom, 2.5rem))' }}
         >
           <Button
             type="button"
             className={cn(
-              "w-full h-[58px] font-bold text-[17px] rounded-2xl transition-all duration-200",
+              "w-full h-[58px] font-bold text-xl rounded-2xl transition-all duration-200 shadow-lg",
               isIntroStep
-                ? "bg-[#0EA5E9] text-neutral-950 hover:bg-[#0EA5E9]/90 hover:shadow-2xl hover:scale-[1.02] active:scale-100"
+                ? "bg-blue-500 text-white hover:bg-blue-600 active:scale-[0.98]"
                 : "bg-white text-neutral-950 hover:bg-white/95 hover:shadow-2xl hover:scale-[1.02] active:scale-100"
             )}
             onClick={isFinalStep ? handleComplete : nextStep}
