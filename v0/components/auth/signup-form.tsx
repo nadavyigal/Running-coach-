@@ -72,73 +72,58 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
     }
 
     setLoading(true)
-    const supabase = createClient()
 
     try {
-      // APPLICATION SIGNUP: Creates auth user + profile ONLY (not beta_signups)
-      // Beta signups are handled separately via /api/beta-signup
+      // Use server-side API to bypass CORS issues
+      logger.info('[Signup] Attempting signup via API route')
 
-      // Log the redirect URL for debugging
-      const redirectUrl = `${window.location.origin}/auth/callback`
-      logger.info('[Signup] Attempting signup with redirect:', redirectUrl)
-
-      // Sign up user
-      const { data, error: signupError } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          emailRedirectTo: redirectUrl,
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+        }),
       })
 
-      if (signupError) {
-        logger.error('[Signup] Auth error:', signupError)
-        throw signupError
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Signup failed')
       }
 
-      if (!data.user) {
-        throw new Error('Signup failed: No user returned')
+      logger.info('[Signup] User created successfully:', data.user?.id)
+
+      // If we got a session back, set it in the client
+      if (data.session) {
+        const supabase = createClient()
+        await supabase.auth.setSession({
+          access_token: data.session.accessToken,
+          refresh_token: data.session.refreshToken,
+        })
       }
 
-      logger.info('[Signup] User created successfully:', data.user.id)
+      // Get profile for migration if user is already confirmed
+      if (data.user && data.session) {
+        const supabase = createClient()
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('auth_user_id', data.user.id)
+          .single()
 
-      // Create profile for the user (is_beta_user will be FALSE by default)
-      const { error: profileError } = await supabase.from('profiles').insert({
-        auth_user_id: data.user.id,
-        email: email.trim().toLowerCase(),
-        goal: 'habit', // Default goal, will be updated during onboarding
-        experience: 'beginner', // Default experience
-        preferred_times: [],
-        days_per_week: 3, // Default
-        onboarding_complete: false,
-        is_beta_user: false, // Regular app signup, not beta
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-
-      if (profileError) {
-        logger.error('[Signup] Error creating profile:', profileError)
-        throw new Error('Failed to create user profile')
-      }
-
-      logger.info('[Signup] Profile created successfully')
-
-      // Get profile_id for migration
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('auth_user_id', data.user.id)
-        .single()
-
-      if (profile) {
-        // Link device data and perform initial sync
-        logger.info('[Signup] Starting device migration')
-        try {
-          await linkDeviceToUser(profile.id)
-          logger.info('[Signup] Device migration completed')
-        } catch (migrationError) {
-          logger.warn('[Signup] Device migration failed:', migrationError)
-          // Continue even if migration fails - not critical
+        if (profile) {
+          // Link device data and perform initial sync
+          logger.info('[Signup] Starting device migration')
+          try {
+            await linkDeviceToUser(profile.id)
+            logger.info('[Signup] Device migration completed')
+          } catch (migrationError) {
+            logger.warn('[Signup] Device migration failed:', migrationError)
+            // Continue even if migration fails - not critical
+          }
         }
       }
 
@@ -161,9 +146,8 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
         if (message.includes('already registered')) {
           setError('This email is already registered. Please log in instead.')
         } else if (message.includes('load failed') || message.includes('failed to fetch') || message.includes('network')) {
-          // Network error - likely CORS or connectivity issue
-          setError('Unable to connect to the server. Please check your internet connection and try again. If the problem persists, the service may be temporarily unavailable.')
-          logger.error('[Signup] Network error - possible CORS issue or server unreachable')
+          setError('Unable to connect to the server. Please check your internet connection and try again.')
+          logger.error('[Signup] Network error')
         } else if (message.includes('invalid api key') || message.includes('anon key')) {
           setError('Server configuration error. Please contact support.')
           logger.error('[Signup] Invalid API key - check Supabase configuration')

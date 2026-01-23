@@ -33,34 +33,44 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
     }
 
     setLoading(true)
-    const supabase = createClient()
 
     try {
-      const { data, error: loginError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
+      // Use server-side API to bypass CORS issues
+      logger.info('[Login] Attempting login via API route')
+
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+        }),
       })
 
-      if (loginError) throw loginError
+      const data = await response.json()
 
-      if (!data.user) {
-        throw new Error('Login failed: No user returned')
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed')
       }
 
-      logger.info('[Login] User logged in successfully:', data.user.id)
+      logger.info('[Login] User logged in successfully:', data.user?.id)
 
-      // Get profile_id for migration
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('auth_user_id', data.user.id)
-        .single()
+      // Set the session in the client
+      if (data.session) {
+        const supabase = createClient()
+        await supabase.auth.setSession({
+          access_token: data.session.accessToken,
+          refresh_token: data.session.refreshToken,
+        })
+      }
 
-      if (profile) {
-        // Link device data and perform initial sync (if not already done)
+      // Handle device migration if profile exists
+      if (data.profile?.id) {
         logger.info('[Login] Starting device migration')
         try {
-          await linkDeviceToUser(profile.id)
+          await linkDeviceToUser(data.profile.id)
           logger.info('[Login] Device migration completed')
         } catch (migrationError) {
           logger.warn('[Login] Device migration failed:', migrationError)
@@ -77,10 +87,14 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
       logger.error('[Login] Error:', err)
 
       if (err instanceof Error) {
-        if (err.message.includes('Invalid login credentials')) {
+        const message = err.message.toLowerCase()
+
+        if (message.includes('invalid') || message.includes('credentials')) {
           setError('Invalid email or password')
-        } else if (err.message.includes('Email not confirmed')) {
+        } else if (message.includes('email not confirmed') || message.includes('confirm')) {
           setError('Please verify your email address before logging in')
+        } else if (message.includes('load failed') || message.includes('failed to fetch') || message.includes('network')) {
+          setError('Unable to connect to the server. Please check your internet connection.')
         } else {
           setError(err.message)
         }
@@ -101,6 +115,8 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
     setLoading(true)
     setError(null)
 
+    // For password reset, we still use the client-side Supabase call
+    // because it doesn't require the same CORS handling
     const supabase = createClient()
 
     try {
