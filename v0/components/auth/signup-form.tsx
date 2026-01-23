@@ -170,7 +170,7 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
         </div>
         <h3 className="text-xl font-semibold">Account Created!</h3>
         <p className="text-sm text-muted-foreground">
-          Check your email to verify your account, then you can start using RunSmart AI.
+          Your account is ready. Redirecting you to get started with RunSmart AI...
         </p>
       </div>
     )

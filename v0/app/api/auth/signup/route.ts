@@ -2,22 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 // Create admin client for server-side auth operations
+// This REQUIRES the service role key to use admin functions
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!url) {
     throw new Error('NEXT_PUBLIC_SUPABASE_URL is not configured')
   }
 
-  // Prefer service role key, fall back to anon key
-  const key = serviceKey || anonKey
-  if (!key) {
-    throw new Error('No Supabase key configured')
+  if (!serviceKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required for signup')
   }
 
-  return createClient(url, key, {
+  return createClient(url, serviceKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -55,28 +53,25 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin()
+    const normalizedEmail = email.trim().toLowerCase()
 
-    // Get the origin for redirect URL
-    const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'https://runsmart-ai.com'
-    const redirectUrl = `${origin}/auth/callback`
+    console.log('[API Signup] Attempting signup for:', normalizedEmail.substring(0, 3) + '***')
 
-    console.log('[API Signup] Attempting signup for:', email.substring(0, 3) + '***')
-    console.log('[API Signup] Redirect URL:', redirectUrl)
-
-    // Create the user
-    const { data: authData, error: signupError } = await supabase.auth.signUp({
-      email: email.trim().toLowerCase(),
+    // Use admin API to create user with auto-confirmation
+    // This bypasses the email confirmation requirement since SMTP is not configured
+    const { data: authData, error: signupError } = await supabase.auth.admin.createUser({
+      email: normalizedEmail,
       password,
-      options: {
-        emailRedirectTo: redirectUrl,
-      },
+      email_confirm: true, // Auto-confirm the email
     })
 
     if (signupError) {
       console.error('[API Signup] Auth error:', signupError)
 
       // Handle specific errors
-      if (signupError.message.includes('already registered')) {
+      if (signupError.message.includes('already been registered') ||
+          signupError.message.includes('already registered') ||
+          signupError.message.includes('User already registered')) {
         return NextResponse.json(
           { error: 'This email is already registered. Please log in instead.' },
           { status: 409 }
@@ -96,12 +91,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('[API Signup] User created:', authData.user.id)
+    console.log('[API Signup] User created and confirmed:', authData.user.id)
 
     // Create profile for the user
     const { error: profileError } = await supabase.from('profiles').insert({
       auth_user_id: authData.user.id,
-      email: email.trim().toLowerCase(),
+      email: normalizedEmail,
       goal: 'habit',
       experience: 'beginner',
       preferred_times: [],
@@ -112,24 +107,37 @@ export async function POST(request: NextRequest) {
 
     if (profileError) {
       console.error('[API Signup] Profile error:', profileError)
-      // Don't fail the signup if profile creation fails - user can still confirm email
+      // Don't fail the signup if profile creation fails
       // The profile can be created later during onboarding
     } else {
       console.log('[API Signup] Profile created successfully')
     }
 
+    // Sign in the user to get a session (admin.createUser doesn't return a session)
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    })
+
+    if (signInError) {
+      console.error('[API Signup] Sign-in error after creation:', signInError)
+      // User was created but we couldn't sign them in - they can still log in manually
+    } else {
+      console.log('[API Signup] User signed in successfully')
+    }
+
     return NextResponse.json({
       success: true,
-      message: 'Account created! Please check your email to confirm.',
+      message: 'Account created successfully!',
       user: {
         id: authData.user.id,
         email: authData.user.email,
         emailConfirmedAt: authData.user.email_confirmed_at,
       },
-      session: authData.session ? {
-        accessToken: authData.session.access_token,
-        refreshToken: authData.session.refresh_token,
-        expiresAt: authData.session.expires_at,
+      session: signInData?.session ? {
+        accessToken: signInData.session.access_token,
+        refreshToken: signInData.session.refresh_token,
+        expiresAt: signInData.session.expires_at,
       } : null,
     })
 
