@@ -3,32 +3,62 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  // Protect /admin routes
-  if (request.nextUrl.pathname.startsWith('/admin')) {
-    // Use placeholder values during build if env vars are not set
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key'
+  // Create response that we'll modify with updated cookies
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
 
-    const supabase = createServerClient(
-      url,
-      anonKey,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value
-          },
-          set() {
-            // Middleware can't set cookies directly
-          },
-          remove() {
-            // Middleware can't remove cookies directly
-          },
+  // Use placeholder values during build if env vars are not set
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key'
+
+  // Skip session refresh for static assets and API routes (except auth-related)
+  const pathname = request.nextUrl.pathname
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/static') ||
+    pathname.includes('.') ||
+    (pathname.startsWith('/api') && !pathname.startsWith('/api/auth'))
+  ) {
+    return response
+  }
+
+  const supabase = createServerClient(
+    url,
+    anonKey,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
         },
-      }
-    )
+        setAll(cookiesToSet) {
+          // Set cookies on the request (for server components to read)
+          cookiesToSet.forEach(({ name, value }) => {
+            request.cookies.set(name, value)
+          })
+          // Create new response with updated cookies
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          // Set cookies on the response (to send back to browser)
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options)
+          })
+        },
+      },
+    }
+  )
 
-    const { data: { user } } = await supabase.auth.getUser()
+  // Refresh the session - this will update cookies if needed
+  // Using getUser() instead of getSession() for security (validates with Supabase server)
+  const { data: { user } } = await supabase.auth.getUser()
 
+  // Protect /admin routes
+  if (pathname.startsWith('/admin')) {
     // Admin email whitelist
     const adminEmails = process.env.ADMIN_EMAILS?.split(',') || [
       'nadav@example.com',
@@ -41,9 +71,12 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return NextResponse.next()
+  return response
 }
 
 export const config = {
-  matcher: '/admin/:path*',
+  matcher: [
+    // Match all routes except static files
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 }
