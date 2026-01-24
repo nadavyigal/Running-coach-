@@ -60,10 +60,27 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
       // Set the session in the client
       if (data.session) {
         const supabase = createClient()
-        await supabase.auth.setSession({
+        const { error: sessionError } = await supabase.auth.setSession({
           access_token: data.session.accessToken,
           refresh_token: data.session.refreshToken,
         })
+
+        if (sessionError) {
+          logger.error('[Login] Failed to set session:', sessionError)
+          throw new Error('Failed to establish session. Please try again.')
+        }
+
+        // Verify the session was set correctly
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        if (userError || !user) {
+          logger.error('[Login] Session verification failed:', userError)
+          throw new Error('Session verification failed. Please try again.')
+        }
+
+        logger.info('[Login] Session verified for user:', user.id)
+      } else {
+        logger.error('[Login] No session returned from API')
+        throw new Error('No session returned. Please try again.')
       }
 
       // Handle device migration if profile exists
@@ -81,8 +98,9 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
       // Track login event
       await trackAuthEvent('login')
 
-      // Call onSuccess to close modal/redirect
-      onSuccess()
+      // Force page reload to ensure middleware picks up the session cookies
+      // This is more reliable than relying on client-side state updates
+      window.location.href = '/'
     } catch (err) {
       logger.error('[Login] Error:', err)
 

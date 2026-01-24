@@ -99,15 +99,26 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
       // If we got a session back, set it in the client
       if (data.session) {
         const supabase = createClient()
-        await supabase.auth.setSession({
+        const { error: sessionError } = await supabase.auth.setSession({
           access_token: data.session.accessToken,
           refresh_token: data.session.refreshToken,
         })
-      }
 
-      // Get profile for migration if user is already confirmed
-      if (data.user && data.session) {
-        const supabase = createClient()
+        if (sessionError) {
+          logger.error('[Signup] Failed to set session:', sessionError)
+          throw new Error('Failed to establish session. Please try logging in.')
+        }
+
+        // Verify the session was set correctly
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        if (userError || !user) {
+          logger.error('[Signup] Session verification failed:', userError)
+          throw new Error('Session verification failed. Please try logging in.')
+        }
+
+        logger.info('[Signup] Session verified for user:', user.id)
+
+        // Get profile for migration
         const { data: profile } = await supabase
           .from('profiles')
           .select('id')
@@ -125,6 +136,8 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
             // Continue even if migration fails - not critical
           }
         }
+      } else {
+        logger.warn('[Signup] No session returned - user may need to log in')
       }
 
       // Track signup event
@@ -133,9 +146,9 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
       // Show success message
       setSuccess(true)
 
-      // Wait 2 seconds before calling onSuccess
+      // Wait 2 seconds then redirect to ensure session is properly established
       setTimeout(() => {
-        onSuccess()
+        window.location.href = '/'
       }, 2000)
     } catch (err) {
       logger.error('[Signup] Error:', err)
