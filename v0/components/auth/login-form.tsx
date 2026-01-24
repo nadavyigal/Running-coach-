@@ -6,22 +6,23 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { AlertCircle, Loader2 } from 'lucide-react'
+import { AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
 import { logger } from '@/lib/logger'
 import { trackAuthEvent } from '@/lib/analytics'
 import { linkDeviceToUser } from '@/lib/auth/migrate-device-data'
 
 type LoginFormProps = {
-  onSuccess: () => void
+  onSuccess?: () => void
   onSwitchToSignup?: () => void
 }
 
-export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
+export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [resetSent, setResetSent] = useState(false)
+  const [success, setSuccess] = useState(false)
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault()
@@ -35,7 +36,7 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
     setLoading(true)
 
     try {
-      // Use server-side API to bypass CORS issues
+      // Use server-side API which sets cookies directly
       logger.info('[Login] Attempting login via API route')
 
       const response = await fetch('/api/auth/login', {
@@ -47,6 +48,7 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
           email: email.trim().toLowerCase(),
           password,
         }),
+        credentials: 'include', // Important: include cookies in the request/response
       })
 
       const data = await response.json()
@@ -56,32 +58,6 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
       }
 
       logger.info('[Login] User logged in successfully:', data.user?.id)
-
-      // Set the session in the client
-      if (data.session) {
-        const supabase = createClient()
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token: data.session.accessToken,
-          refresh_token: data.session.refreshToken,
-        })
-
-        if (sessionError) {
-          logger.error('[Login] Failed to set session:', sessionError)
-          throw new Error('Failed to establish session. Please try again.')
-        }
-
-        // Verify the session was set correctly
-        const { data: { user }, error: userError } = await supabase.auth.getUser()
-        if (userError || !user) {
-          logger.error('[Login] Session verification failed:', userError)
-          throw new Error('Session verification failed. Please try again.')
-        }
-
-        logger.info('[Login] Session verified for user:', user.id)
-      } else {
-        logger.error('[Login] No session returned from API')
-        throw new Error('No session returned. Please try again.')
-      }
 
       // Handle device migration if profile exists
       if (data.profile?.id) {
@@ -98,9 +74,14 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
       // Track login event
       await trackAuthEvent('login')
 
+      // Show success message
+      setSuccess(true)
+
       // Force page reload to ensure middleware picks up the session cookies
-      // This is more reliable than relying on client-side state updates
-      window.location.href = '/'
+      // Cookies are already set by the API response
+      setTimeout(() => {
+        window.location.href = '/'
+      }, 1500)
     } catch (err) {
       logger.error('[Login] Error:', err)
 
@@ -152,6 +133,20 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (success) {
+    return (
+      <div className="space-y-4 text-center">
+        <div className="flex justify-center">
+          <CheckCircle2 className="h-16 w-16 text-green-500" />
+        </div>
+        <h3 className="text-xl font-semibold">Welcome Back!</h3>
+        <p className="text-sm text-muted-foreground">
+          Login successful. Redirecting you to RunSmart AI...
+        </p>
+      </div>
+    )
   }
 
   if (resetSent) {

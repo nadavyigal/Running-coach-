@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, FormEvent } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,14 +8,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
 import { logger } from '@/lib/logger'
 import { trackAuthEvent } from '@/lib/analytics'
-import { linkDeviceToUser } from '@/lib/auth/migrate-device-data'
 
 type SignupFormProps = {
-  onSuccess: () => void
+  onSuccess?: () => void
   onSwitchToLogin?: () => void
 }
 
-export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
+export function SignupForm({ onSwitchToLogin }: SignupFormProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -74,7 +72,7 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
     setLoading(true)
 
     try {
-      // Use server-side API to bypass CORS issues
+      // Use server-side API which sets cookies directly
       logger.info('[Signup] Attempting signup via API route')
 
       const response = await fetch('/api/auth/signup', {
@@ -86,6 +84,7 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
           email: email.trim().toLowerCase(),
           password,
         }),
+        credentials: 'include', // Important: include cookies in the request/response
       })
 
       const data = await response.json()
@@ -96,57 +95,14 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
 
       logger.info('[Signup] User created successfully:', data.user?.id)
 
-      // If we got a session back, set it in the client
-      if (data.session) {
-        const supabase = createClient()
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token: data.session.accessToken,
-          refresh_token: data.session.refreshToken,
-        })
-
-        if (sessionError) {
-          logger.error('[Signup] Failed to set session:', sessionError)
-          throw new Error('Failed to establish session. Please try logging in.')
-        }
-
-        // Verify the session was set correctly
-        const { data: { user }, error: userError } = await supabase.auth.getUser()
-        if (userError || !user) {
-          logger.error('[Signup] Session verification failed:', userError)
-          throw new Error('Session verification failed. Please try logging in.')
-        }
-
-        logger.info('[Signup] Session verified for user:', user.id)
-
-        // Get profile for migration
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('auth_user_id', data.user.id)
-          .single()
-
-        if (profile) {
-          // Link device data and perform initial sync
-          logger.info('[Signup] Starting device migration')
-          try {
-            await linkDeviceToUser(profile.id)
-            logger.info('[Signup] Device migration completed')
-          } catch (migrationError) {
-            logger.warn('[Signup] Device migration failed:', migrationError)
-            // Continue even if migration fails - not critical
-          }
-        }
-      } else {
-        logger.warn('[Signup] No session returned - user may need to log in')
-      }
-
       // Track signup event
       await trackAuthEvent('signup')
 
       // Show success message
       setSuccess(true)
 
-      // Wait 2 seconds then redirect to ensure session is properly established
+      // Force page reload to ensure middleware picks up the session cookies
+      // Cookies are already set by the API response
       setTimeout(() => {
         window.location.href = '/'
       }, 2000)
