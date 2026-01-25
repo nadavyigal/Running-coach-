@@ -24,6 +24,7 @@ import { getUserExperience, getCurrentUser, getUserPaceZones } from "@/lib/dbUti
 import { WorkoutPhasesDisplay } from "@/components/workout-phases-display"
 import { generateStructuredWorkout, type StructuredWorkout } from "@/lib/workout-steps"
 import { getDefaultPaceZones } from "@/lib/pace-zones"
+import { GarminManualExportModal } from "@/components/garmin-manual-export-modal"
 
 interface DateWorkoutModalProps {
   isOpen: boolean
@@ -42,6 +43,7 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
   const [showWorkoutBreakdown, setShowWorkoutBreakdown] = useState(false)
   const [breakdown, setBreakdown] = useState<any>(null)
   const [structuredWorkout, setStructuredWorkout] = useState<StructuredWorkout | null>(null)
+  const [showGarminManualExport, setShowGarminManualExport] = useState(false)
 
   // Fetch workout breakdown and structured workout based on user experience
   useEffect(() => {
@@ -101,6 +103,9 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
           alert("Workout removed from your plan!")
           onClose()
         }
+        break
+      case "link":
+        setShowGarminManualExport(true)
         break
       default:
         alert(`${action} functionality coming soon!`)
@@ -243,6 +248,11 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
           </div>
         </div>
       </DialogContent>
+      <GarminManualExportModal
+        open={showGarminManualExport}
+        onOpenChange={setShowGarminManualExport}
+        workout={structuredWorkout}
+      />
     </Dialog>
   )
 }
