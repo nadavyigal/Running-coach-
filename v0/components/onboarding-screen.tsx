@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Brain,
   Calendar,
+  CalendarDays,
   CheckCircle2,
   Gauge,
   HelpCircle,
@@ -14,6 +15,7 @@ import {
   Trophy,
   TrendingUp,
 } from "lucide-react"
+import Image from "next/image"
 import { Bebas_Neue, Manrope } from "next/font/google"
 import { dbUtils, setReferenceRace } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
@@ -829,75 +831,48 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     switch (currentStep) {
       case 1:
         return (
-          <div
-            className={cn(
-              "flex min-h-[calc(100vh-200px)] flex-col relative px-8",
-              manrope.className
-            )}
-            style={{ paddingTop: 'max(3rem, env(safe-area-inset-top, 3rem))' }}
-          >
-            {/* Step indicator - simple text */}
-            <div className="text-gray-400 text-sm uppercase tracking-wider font-medium">
-              Step 1 of 4
-            </div>
-
-            {/* Main headline section */}
-            <div className="mt-12 space-y-4">
-              <h1
-                className={cn(
-                  "text-[52px] leading-[1.0] uppercase italic text-white font-black tracking-tight",
-                  bebas.className
-                )}
-                style={{
-                  textShadow: '0 2px 20px rgba(0,0,0,0.5)',
-                  letterSpacing: '-0.02em'
-                }}
+          <div className="flex min-h-[calc(100vh-200px)] flex-col relative px-6 pt-6">
+            {/* Header - Back Button Only */}
+            <header>
+              <button
+                className="flex h-10 w-10 items-center justify-center rounded-full text-white/80 transition-colors hover:text-white"
+                aria-label="Go back"
+                disabled
               >
-                LET'S CRUSH YOUR<br />NEXT GOAL.
+                <ArrowLeft className="h-5 w-5" strokeWidth={2.5} />
+              </button>
+            </header>
+
+            {/* Headline Section */}
+            <div className="mt-28">
+              <h1 className="text-[2.5rem] font-black italic leading-[1] tracking-tight text-white drop-shadow-lg">
+                {"LET'S CRUSH YOUR"}
+                <br />
+                {"NEXT GOAL."}
               </h1>
-              <p className="text-gray-300 text-lg font-medium">
+
+              <p className="mt-5 text-base text-white/70">
                 Tell me about your running style
               </p>
-            </div>
 
-            {/* Feature icons with neon glow */}
-            <div className="flex items-start justify-start gap-6 mt-10">
-              <div className="flex flex-col items-center gap-2">
-                <div
-                  className="w-14 h-14 rounded-full border-2 border-emerald-400 flex items-center justify-center bg-transparent"
-                  style={{
-                    filter: 'drop-shadow(0 0 8px rgba(34, 197, 94, 0.6))',
-                  }}
-                >
-                  <Brain className="w-7 h-7 text-emerald-400" />
-                </div>
-                <span className="text-[10px] text-center text-gray-300 uppercase font-bold tracking-wide">AI Powered</span>
-              </div>
-              <div className="flex flex-col items-center gap-2">
-                <div
-                  className="w-14 h-14 rounded-full border-2 border-emerald-400 flex items-center justify-center bg-transparent"
-                  style={{
-                    filter: 'drop-shadow(0 0 8px rgba(34, 197, 94, 0.6))',
-                  }}
-                >
-                  <Calendar className="w-7 h-7 text-emerald-400" />
-                </div>
-                <span className="text-[10px] text-center text-gray-300 uppercase font-bold tracking-wide">Flexible Sched</span>
-              </div>
-              <div className="flex flex-col items-center gap-2">
-                <div
-                  className="w-14 h-14 rounded-full border-2 border-emerald-400 flex items-center justify-center bg-transparent"
-                  style={{
-                    filter: 'drop-shadow(0 0 8px rgba(34, 197, 94, 0.6))',
-                  }}
-                >
-                  <Trophy className="w-7 h-7 text-emerald-400" />
-                </div>
-                <span className="text-[10px] text-center text-gray-300 uppercase font-bold tracking-wide">Goal Oriented</span>
+              {/* Feature Icons */}
+              <div className="mt-10 flex items-start gap-4">
+                <FeatureIcon
+                  icon={<Brain className="h-7 w-7" strokeWidth={1.5} />}
+                  label="AI Powered"
+                />
+                <FeatureIcon
+                  icon={<CalendarDays className="h-7 w-7" strokeWidth={1.5} />}
+                  label="Flexible Sched"
+                />
+                <FeatureIcon
+                  icon={<Trophy className="h-7 w-7" strokeWidth={1.5} />}
+                  label="Goal Oriented"
+                />
               </div>
             </div>
 
-            {/* Spacer to push branding to bottom */}
+            {/* Spacer */}
             <div className="flex-1" />
           </div>
         )
@@ -1257,24 +1232,16 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         aria-hidden="true"
         className="sr-only"
       />
-      <div className="relative min-h-screen bg-neutral-950 text-white flex flex-col">
+      <div className="relative min-h-screen bg-[#1a1a1a] text-white flex flex-col">
         {isIntroStep && (
-          <div className="absolute inset-0 z-0">
-            {/* Background image */}
-            <img
-              src="/images/runsmart-intro-bg.jpg"
-              alt=""
-              className="w-full h-full object-cover opacity-60"
-              style={{
-                objectPosition: 'center 40%'
-              }}
-            />
-            {/* Gradient overlay - dark at bottom, lighter at top */}
-            <div
-              className="absolute inset-0"
-              style={{
-                background: 'linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.8) 100%)'
-              }}
+          <div className="absolute inset-0">
+            {/* Full-screen Background Image */}
+            <Image
+              src="/images/runsmart-intro-bg-v2.jpg"
+              alt="Runner silhouette at sunset with RunSmart products"
+              fill
+              className="object-cover"
+              priority
             />
           </div>
         )}
@@ -1321,40 +1288,30 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
         {/* Branding with logo - positioned at bottom for intro step */}
         {isIntroStep && (
-          <div className={cn("relative z-10 flex flex-col items-center space-y-3 pb-8 px-6", manrope.className)}>
-            {/* RunSmart logo icon */}
-            <div className="relative w-16 h-16">
-              <img
-                src="/images/runsmart-logo-1.png"
-                alt="RunSmart Logo"
-                className="w-full h-full object-contain"
-              />
+          <div className="relative z-10 flex flex-col items-center pb-6 px-6">
+            {/* Logo with glow - SVG version */}
+            <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#1a3a2a] shadow-[0_0_30px_rgba(74,222,128,0.2)]">
+              <RunSmartLogo className="h-10 w-10" />
             </div>
-
-            {/* RunSmart text */}
-            <h2 className={cn("text-white text-3xl font-bold italic tracking-tight", bebas.className)}>
-              RunSmart
-            </h2>
-            <p className="text-gray-400 text-sm">
-              Your AI Running Coach
-            </p>
+            <h2 className="text-xl font-bold italic text-white">RunSmart</h2>
+            <p className="mt-1 text-sm text-white/60">Your AI Running Coach</p>
           </div>
         )}
 
         <div
           className={cn(
-            "px-8 pt-3 relative z-10",
-            isIntroStep ? "bg-transparent" : "bg-neutral-950"
+            "px-6 pt-3 relative z-10",
+            isIntroStep ? "bg-transparent" : "bg-neutral-950 px-8"
           )}
-          style={{ paddingBottom: 'max(2.5rem, env(safe-area-inset-bottom, 2.5rem))' }}
+          style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom, 2rem))' }}
         >
           <Button
             type="button"
             className={cn(
-              "w-full h-[58px] font-bold text-xl rounded-2xl transition-all duration-200 shadow-lg",
+              "w-full font-semibold rounded-2xl transition-all duration-200 shadow-lg",
               isIntroStep
-                ? "bg-blue-500 text-white hover:bg-blue-600 active:scale-[0.98]"
-                : "bg-white text-neutral-950 hover:bg-white/95 hover:shadow-2xl hover:scale-[1.02] active:scale-100"
+                ? "h-14 text-base bg-[#38bdf8] text-[#0a0a0a] hover:bg-[#4cc5f9] active:scale-[0.98]"
+                : "h-[58px] text-xl font-bold bg-white text-neutral-950 hover:bg-white/95 hover:shadow-2xl hover:scale-[1.02] active:scale-100"
             )}
             onClick={isFinalStep ? handleComplete : nextStep}
             disabled={isActionDisabled}
@@ -1364,5 +1321,52 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         </div>
       </div>
     </OnboardingErrorBoundary>
+  )
+}
+
+function RunSmartLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 48 48"
+      fill="none"
+      className={className}
+    >
+      {/* Main 4-point star */}
+      <path
+        d="M24 4L27 20L43 24L27 28L24 44L21 28L5 24L21 20L24 4Z"
+        stroke="#4ade80"
+        strokeWidth="2.5"
+        fill="none"
+        style={{ filter: 'drop-shadow(0 0 6px rgba(74, 222, 128, 0.6))' }}
+      />
+      {/* Small sparkle top right */}
+      <path
+        d="M36 10L37 14L41 15L37 16L36 20L35 16L31 15L35 14L36 10Z"
+        fill="#4ade80"
+        style={{ filter: 'drop-shadow(0 0 4px rgba(74, 222, 128, 0.8))' }}
+      />
+      {/* Small sparkle bottom left */}
+      <path
+        d="M12 30L13 33L16 34L13 35L12 38L11 35L8 34L11 33L12 30Z"
+        fill="#4ade80"
+        style={{ filter: 'drop-shadow(0 0 4px rgba(74, 222, 128, 0.8))' }}
+      />
+    </svg>
+  )
+}
+
+function FeatureIcon({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <div
+        className="flex h-[60px] w-[60px] items-center justify-center rounded-full border-2 border-[#4ade80] bg-[#4ade80]/10 text-[#4ade80]"
+        style={{
+          boxShadow: '0 0 20px rgba(74, 222, 128, 0.3), inset 0 0 15px rgba(74, 222, 128, 0.1)',
+        }}
+      >
+        {icon}
+      </div>
+      <span className="text-[11px] font-medium text-white/80">{label}</span>
+    </div>
   )
 }
