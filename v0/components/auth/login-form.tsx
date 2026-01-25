@@ -59,6 +59,21 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
 
       logger.info('[Login] User logged in successfully:', data.user?.id)
 
+      // Set the session on the client if we received tokens
+      if (data.session) {
+        const supabase = createClient()
+        try {
+          await supabase.auth.setSession({
+            access_token: data.session.accessToken,
+            refresh_token: data.session.refreshToken,
+          })
+          logger.info('[Login] Client session set successfully')
+        } catch (sessionErr) {
+          logger.warn('[Login] Failed to set client session:', sessionErr)
+          // Continue anyway - cookies are set, page reload will work
+        }
+      }
+
       // Handle device migration if profile exists
       if (data.profile?.id) {
         logger.info('[Login] Starting device migration')
@@ -78,7 +93,6 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
       setSuccess(true)
 
       // Force page reload to ensure middleware picks up the session cookies
-      // Cookies are already set by the API response
       setTimeout(() => {
         window.location.href = '/'
       }, 1500)
@@ -88,12 +102,16 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
       if (err instanceof Error) {
         const message = err.message.toLowerCase()
 
-        if (message.includes('invalid') || message.includes('credentials')) {
+        // Be specific about credential errors - don't catch other "invalid" errors
+        if (message.includes('invalid login credentials') || message === 'invalid email or password') {
           setError('Invalid email or password')
-        } else if (message.includes('email not confirmed') || message.includes('confirm')) {
+        } else if (message.includes('email not confirmed') || message.includes('confirm your email')) {
           setError('Please verify your email address before logging in')
         } else if (message.includes('load failed') || message.includes('failed to fetch') || message.includes('network')) {
           setError('Unable to connect to the server. Please check your internet connection.')
+        } else if (message.includes('api key') || message.includes('configuration')) {
+          setError('Server configuration error. Please try again later.')
+          logger.error('[Login] Configuration error:', err.message)
         } else {
           setError(err.message)
         }

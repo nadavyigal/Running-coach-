@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
 
 // Cookie options for auth tokens
 const cookieOptions = {
@@ -9,6 +8,30 @@ const cookieOptions = {
   httpOnly: true,
   sameSite: 'lax' as const,
   maxAge: 60 * 60 * 24 * 7, // 7 days
+}
+
+// Create Supabase client for auth operations
+function getSupabaseClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!url) {
+    throw new Error('NEXT_PUBLIC_SUPABASE_URL is not configured')
+  }
+
+  // Prefer service role key for server-side operations, fall back to anon key
+  const key = serviceKey || anonKey
+  if (!key) {
+    throw new Error('No Supabase key configured')
+  }
+
+  return createClient(url, key, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
 }
 
 export async function POST(request: NextRequest) {
@@ -24,28 +47,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-    if (!url || !anonKey) {
-      throw new Error('Supabase configuration missing')
-    }
-
-    // Track cookies that need to be set on the response
-    const cookiesToSet: { name: string; value: string; options: typeof cookieOptions }[] = []
-
-    const supabase = createServerClient(url, anonKey, {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookies) {
-          cookies.forEach(({ name, value, options }) => {
-            cookiesToSet.push({ name, value, options: { ...cookieOptions, ...options } })
-          })
-        },
-      },
-    })
+    const supabase = getSupabaseClient()
 
     console.log('[API Login] Attempting login for:', email.substring(0, 3) + '***')
 
@@ -86,7 +88,6 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[API Login] User logged in:', data.user.id)
-    console.log('[API Login] Setting', cookiesToSet.length, 'auth cookies')
 
     // Get the user's profile
     const { data: profile } = await supabase
@@ -95,7 +96,7 @@ export async function POST(request: NextRequest) {
       .eq('auth_user_id', data.user.id)
       .single()
 
-    // Create the response with cookies
+    // Create the response
     const response = NextResponse.json({
       success: true,
       user: {
@@ -103,16 +104,31 @@ export async function POST(request: NextRequest) {
         email: data.user.email,
         emailConfirmedAt: data.user.email_confirmed_at,
       },
+      session: {
+        accessToken: data.session.access_token,
+        refreshToken: data.session.refresh_token,
+        expiresAt: data.session.expires_at,
+      },
       profile: profile ? {
         id: profile.id,
         onboardingComplete: profile.onboarding_complete,
       } : null,
     })
 
-    // Set the auth cookies on the response
-    cookiesToSet.forEach(({ name, value, options }) => {
-      response.cookies.set(name, value, options)
-    })
+    // Set auth cookies manually for session persistence
+    // These cookies follow the Supabase naming convention
+    const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL?.match(/https:\/\/([^.]+)/)?.[1] || 'supabase'
+
+    response.cookies.set(`sb-${projectRef}-auth-token`, JSON.stringify({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      expires_at: data.session.expires_at,
+      expires_in: data.session.expires_in,
+      token_type: data.session.token_type,
+      user: data.user,
+    }), cookieOptions)
+
+    console.log('[API Login] Auth cookie set for project:', projectRef)
 
     return response
 

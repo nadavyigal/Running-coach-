@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createServerClient } from '@supabase/ssr'
 
 // Cookie options for auth tokens
 const cookieOptions = {
@@ -124,27 +123,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Sign in the user to get a session (admin.createUser doesn't return a session)
-    // Use createServerClient to properly set cookies
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-    // Track cookies that need to be set on the response
-    const cookiesToSet: { name: string; value: string; options: typeof cookieOptions }[] = []
-
-    const supabaseSession = createServerClient(url, anonKey, {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookies) {
-          cookies.forEach(({ name, value, options }) => {
-            cookiesToSet.push({ name, value, options: { ...cookieOptions, ...options } })
-          })
-        },
-      },
-    })
-
-    const { data: signInData, error: signInError } = await supabaseSession.auth.signInWithPassword({
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
       email: normalizedEmail,
       password,
     })
@@ -154,10 +133,9 @@ export async function POST(request: NextRequest) {
       // User was created but we couldn't sign them in - they can still log in manually
     } else {
       console.log('[API Signup] User signed in successfully')
-      console.log('[API Signup] Setting', cookiesToSet.length, 'auth cookies')
     }
 
-    // Create the response with cookies
+    // Create the response
     const response = NextResponse.json({
       success: true,
       message: 'Account created successfully!',
@@ -166,12 +144,28 @@ export async function POST(request: NextRequest) {
         email: authData.user.email,
         emailConfirmedAt: authData.user.email_confirmed_at,
       },
+      session: signInData?.session ? {
+        accessToken: signInData.session.access_token,
+        refreshToken: signInData.session.refresh_token,
+        expiresAt: signInData.session.expires_at,
+      } : null,
     })
 
-    // Set the auth cookies on the response
-    cookiesToSet.forEach(({ name, value, options }) => {
-      response.cookies.set(name, value, options)
-    })
+    // Set auth cookies manually for session persistence if sign-in succeeded
+    if (signInData?.session) {
+      const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL?.match(/https:\/\/([^.]+)/)?.[1] || 'supabase'
+
+      response.cookies.set(`sb-${projectRef}-auth-token`, JSON.stringify({
+        access_token: signInData.session.access_token,
+        refresh_token: signInData.session.refresh_token,
+        expires_at: signInData.session.expires_at,
+        expires_in: signInData.session.expires_in,
+        token_type: signInData.session.token_type,
+        user: signInData.user,
+      }), cookieOptions)
+
+      console.log('[API Signup] Auth cookie set for project:', projectRef)
+    }
 
     return response
 

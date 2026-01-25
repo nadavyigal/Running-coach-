@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, FormEvent } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -95,6 +96,21 @@ export function SignupForm({ onSwitchToLogin }: SignupFormProps) {
 
       logger.info('[Signup] User created successfully:', data.user?.id)
 
+      // Set the session on the client if we received tokens
+      if (data.session) {
+        const supabase = createClient()
+        try {
+          await supabase.auth.setSession({
+            access_token: data.session.accessToken,
+            refresh_token: data.session.refreshToken,
+          })
+          logger.info('[Signup] Client session set successfully')
+        } catch (sessionErr) {
+          logger.warn('[Signup] Failed to set client session:', sessionErr)
+          // Continue anyway - cookies are set, page reload will work
+        }
+      }
+
       // Track signup event
       await trackAuthEvent('signup')
 
@@ -102,7 +118,6 @@ export function SignupForm({ onSwitchToLogin }: SignupFormProps) {
       setSuccess(true)
 
       // Force page reload to ensure middleware picks up the session cookies
-      // Cookies are already set by the API response
       setTimeout(() => {
         window.location.href = '/'
       }, 2000)
@@ -117,9 +132,9 @@ export function SignupForm({ onSwitchToLogin }: SignupFormProps) {
         } else if (message.includes('load failed') || message.includes('failed to fetch') || message.includes('network')) {
           setError('Unable to connect to the server. Please check your internet connection and try again.')
           logger.error('[Signup] Network error')
-        } else if (message.includes('invalid api key') || message.includes('anon key')) {
-          setError('Server configuration error. Please contact support.')
-          logger.error('[Signup] Invalid API key - check Supabase configuration')
+        } else if (message.includes('api key') || message.includes('configuration')) {
+          setError('Server configuration error. Please try again later.')
+          logger.error('[Signup] Configuration error:', err.message)
         } else {
           setError(err.message)
         }
