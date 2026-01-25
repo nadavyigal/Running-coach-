@@ -109,25 +109,43 @@ const buildPaceChartSVG = (paceData: PaceData[]): string => {
   const plotWidth = width - padding * 2;
   const plotHeight = height - padding * 2;
 
-  const distances = paceData.map((entry) => entry.distanceKm);
+  // Use time-based X-axis for consistency with main chart
+  const startTime = paceData[0]?.timestamp.getTime() ?? 0;
+  const maxTimeMs = (paceData[paceData.length - 1]?.timestamp.getTime() ?? 0) - startTime;
   const paces = paceData.map((entry) => entry.paceMinPerKm);
-  const maxDistance = Math.max(...distances, 0);
   const minPace = Math.min(...paces);
   const maxPace = Math.max(...paces);
   const paceRange = Math.max(0.1, maxPace - minPace);
 
-  const scaleX = (distanceKm: number) =>
-    padding + (maxDistance > 0 ? (distanceKm / maxDistance) * plotWidth : 0);
+  const scaleX = (timestamp: Date) => {
+    const elapsedMs = timestamp.getTime() - startTime;
+    return padding + (maxTimeMs > 0 ? (elapsedMs / maxTimeMs) * plotWidth : 0);
+  };
   const scaleY = (paceMinPerKm: number) =>
     padding + (1 - (paceMinPerKm - minPace) / paceRange) * plotHeight;
 
   const pathD = paceData
-    .map((entry, index) => `${index === 0 ? "M" : "L"} ${scaleX(entry.distanceKm)} ${scaleY(entry.paceMinPerKm)}`)
+    .map((entry, index) => `${index === 0 ? "M" : "L"} ${scaleX(entry.timestamp)} ${scaleY(entry.paceMinPerKm)}`)
     .join(" ");
+
+  // Create area path for gradient fill
+  const firstPoint = paceData[0];
+  const lastPoint = paceData[paceData.length - 1];
+  const plotBottom = height - padding;
+  const areaPathD = firstPoint && lastPoint
+    ? `${pathD} L ${scaleX(lastPoint.timestamp)} ${plotBottom} L ${scaleX(firstPoint.timestamp)} ${plotBottom} Z`
+    : "";
 
   return `
 <svg viewBox="0 0 600 200" width="100%" height="200" role="img" aria-label="Pace chart">
+  <defs>
+    <linearGradient id="paceGradient" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.05"/>
+    </linearGradient>
+  </defs>
   <rect width="600" height="200" fill="#f8fafc"/>
+  ${areaPathD ? `<path d="${areaPathD}" fill="url(#paceGradient)"/>` : ""}
   <path d="${pathD}" fill="none" stroke="#2563eb" stroke-width="2"/>
 </svg>`.trim();
 };

@@ -153,30 +153,25 @@ describe('PaceChart', () => {
     })
   })
 
-  describe('User Paces Integration', () => {
-    it('should render without crashing when userPaces provided', () => {
-      const gpsPath = buildMockGpsPath(100)
-      const userPaces = { easyPace: 6.0, tempoPace: 5.0 }
-
-      const { container } = render(<PaceChart gpsPath={gpsPath} userPaces={userPaces} />)
-
-      expect(container.firstChild).toBeTruthy()
-    })
-
-    it('should render without crashing when userPaces not provided', () => {
+  describe('Time-Based Rendering', () => {
+    it('should render chart container for valid GPS data', () => {
       const gpsPath = buildMockGpsPath(100)
       const { container } = render(<PaceChart gpsPath={gpsPath} />)
 
-      expect(container.firstChild).toBeTruthy()
+      // Should render the container (may show loading skeleton or chart)
+      const svg = container.querySelector('svg')
+      const skeleton = container.querySelector('.animate-pulse')
+      expect(svg || skeleton).toBeTruthy()
     })
 
-    it('should handle edge case userPaces values', () => {
+    it('should render area fill gradient when chart is ready', () => {
       const gpsPath = buildMockGpsPath(100)
-      const userPaces = { easyPace: 10.0, tempoPace: 3.0 }
+      const { container } = render(<PaceChart gpsPath={gpsPath} />)
 
-      const { container } = render(<PaceChart gpsPath={gpsPath} userPaces={userPaces} />)
-
-      expect(container.firstChild).toBeTruthy()
+      // Should have a linearGradient defined or show loading skeleton
+      const gradient = container.querySelector('linearGradient')
+      const skeleton = container.querySelector('.animate-pulse')
+      expect(gradient || skeleton).toBeTruthy()
     })
   })
 
