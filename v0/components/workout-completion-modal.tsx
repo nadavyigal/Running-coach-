@@ -14,7 +14,7 @@ import { trackAnalyticsEvent } from '@/lib/analytics'
 import { ENABLE_COMPLETION_LOOP } from '@/lib/featureFlags'
 import { daysBetweenUTC } from '@/lib/timezone-utils'
 import type { Workout } from '@/lib/db'
-import { vibrateDouble } from '@/lib/vibration-coach'
+import { cueDouble } from '@/lib/coaching-cues'
 
 const motivationalMessages = [
   'Great job sticking to the plan!',
@@ -87,7 +87,7 @@ export function WorkoutCompletionModal({
       return
     }
 
-    vibrateDouble()
+    cueDouble()
     timerRef.current = setTimeout(onClose, 8000)
 
     return () => {

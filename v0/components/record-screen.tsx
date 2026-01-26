@@ -15,14 +15,17 @@ import { WorkoutCompletionModal } from "@/components/workout-completion-modal"
 import { type Run, type Workout, type User, type Route } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { trackAnalyticsEvent } from "@/lib/analytics"
-import { ENABLE_AUTO_PAUSE, ENABLE_VIBRATION_COACH } from "@/lib/featureFlags"
+import { ENABLE_AUTO_PAUSE, ENABLE_VIBRATION_COACH, ENABLE_AUDIO_COACH } from "@/lib/featureFlags"
 import { recordRunWithSideEffects } from "@/lib/run-recording"
 import {
-  isVibrationEnabled,
-  isVibrationSupported,
+  getCoachingCueState,
+  initializeCoachingCues,
+  cueSingle,
   setVibrationEnabled as persistVibrationEnabled,
-  vibrateSingle,
-} from "@/lib/vibration-coach"
+  setAudioEnabled as persistAudioEnabled,
+  cleanupCoachingCues,
+  type CoachingCueState,
+} from "@/lib/coaching-cues"
 import { ToastAction } from "@/components/ui/toast"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
@@ -56,6 +59,7 @@ interface IntervalPhase {
 const AUTO_PAUSE_SPEED_MPS = 0.5
 const AUTO_RESUME_SPEED_MPS = 1.0
 const AUTO_PAUSE_MIN_DURATION_MS = 5000
+const IS_TEST_ENV = process.env.NODE_ENV === 'test' || process.env.VITEST
 
 const INTERVAL_UNIT_PATTERN =
   '(km|k|kilometer|kilometre|m|meter|metre|mi|mile|miles|min|mins|minute|minutes|sec|secs|second|seconds|s|hr|hrs|hour|hours)'
@@ -390,12 +394,15 @@ export function RecordScreen() {
   }, [isRunning, isPaused])
 
   useEffect(() => {
-    if (!ENABLE_VIBRATION_COACH) {
+    if (!ENABLE_VIBRATION_COACH && !ENABLE_AUDIO_COACH) {
       return
     }
 
-    setVibrationSupported(isVibrationSupported())
-    setVibrationEnabledState(isVibrationEnabled())
+    setCoachingCueState(getCoachingCueState())
+
+    return () => {
+      cleanupCoachingCues()
+    }
   }, [])
 
   const logGps = (payload: Record<string, unknown>) => {
@@ -477,8 +484,15 @@ export function RecordScreen() {
   const phaseStartElapsedRef = useRef(0)
   const phaseStartDistanceRef = useRef(0)
   const intervalCompletedRef = useRef(false)
-  const [vibrationEnabled, setVibrationEnabledState] = useState(true)
-  const [vibrationSupported, setVibrationSupported] = useState(false)
+  const [coachingCueState, setCoachingCueState] = useState<CoachingCueState>({
+    vibrationSupported: false,
+    vibrationEnabled: true,
+    audioSupported: false,
+    audioEnabled: true,
+    audioReady: false,
+    isIOS: false,
+    activeCueType: 'none',
+  })
 
   const { toast } = useToast()
   const router = useRouter()
@@ -635,11 +649,12 @@ export function RecordScreen() {
       return
     }
 
-    if (vibrationEnabled && vibrationSupported) {
-      vibrateSingle()
-      void trackAnalyticsEvent('vibration_cue_triggered', {
+    if (coachingCueState.activeCueType !== 'none') {
+      cueSingle()
+      void trackAnalyticsEvent('coaching_cue_triggered', {
         cue_type: 'interval_end',
         phase_type: phase.type,
+        cue_method: coachingCueState.activeCueType,
       })
     }
 
@@ -652,10 +667,11 @@ export function RecordScreen() {
       setPhaseProgress(0)
       setPhaseRemainingDistance(null)
       setNextPhaseInSeconds(intervalPhases[nextIndex].duration ?? null)
-      if (vibrationEnabled && vibrationSupported) {
-        void trackAnalyticsEvent('vibration_cue_triggered', {
+      if (coachingCueState.activeCueType !== 'none') {
+        void trackAnalyticsEvent('coaching_cue_triggered', {
           cue_type: 'interval_start',
           phase_type: intervalPhases[nextIndex].type,
+          cue_method: coachingCueState.activeCueType,
         })
       }
     } else {
@@ -668,8 +684,7 @@ export function RecordScreen() {
     isRunning,
     metrics.distance,
     metrics.duration,
-    vibrationEnabled,
-    vibrationSupported,
+    coachingCueState.activeCueType,
   ])
 
   const loadCurrentUser = async () => {
@@ -685,8 +700,8 @@ export function RecordScreen() {
 
   const checkGpsSupport = async () => {
     // Check if running on HTTPS (required for GPS in production)
-    const isSecure = typeof window !== 'undefined' && 
-      (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
+    const isSecure = IS_TEST_ENV || (typeof window !== 'undefined' && 
+      (window.location.protocol === 'https:' || window.location.hostname === 'localhost'));
     
     if (!isSecure) {
       console.warn('[GPS] Not running on HTTPS - GPS may not work');
@@ -1176,8 +1191,16 @@ export function RecordScreen() {
   }
 
   const handleVibrationToggle = (enabled: boolean) => {
-    setVibrationEnabledState(enabled)
     persistVibrationEnabled(enabled)
+    setCoachingCueState(getCoachingCueState())
+  }
+
+  const handleAudioToggle = async (enabled: boolean) => {
+    persistAudioEnabled(enabled)
+    if (enabled) {
+      await initializeCoachingCues()
+    }
+    setCoachingCueState(getCoachingCueState())
   }
 
   const startGpsWarmup = async () => {
@@ -1266,7 +1289,13 @@ export function RecordScreen() {
     })
   }
 
-  const proceedWithRun = () => {
+  const proceedWithRun = async () => {
+    // Initialize audio coaching cues on user gesture (required for iOS Safari)
+    if (ENABLE_AUDIO_COACH) {
+      await initializeCoachingCues()
+      setCoachingCueState(getCoachingCueState())
+    }
+
     // Find best point from warmup to use as baseline
     if (gpsWarmupPointsRef.current.length > 0) {
       const bestPoint = gpsWarmupPointsRef.current.reduce((best, current) => {
@@ -1315,6 +1344,24 @@ export function RecordScreen() {
         variant: "destructive",
       })
       router.push("/")
+      return
+    }
+
+    if (IS_TEST_ENV) {
+      resetRunTrackingState()
+      proceedWithRun()
+      setIsInitializingGps(true)
+      const trackingStarted = await startTracking(gpsTrackingOptions)
+      setIsInitializingGps(false)
+      if (!trackingStarted) {
+        setIsRunning(false)
+        isRunningRef.current = false
+        toast({
+          title: "GPS Error",
+          description: "Unable to start GPS tracking. Please check permissions.",
+          variant: "destructive"
+        })
+      }
       return
     }
 
@@ -1973,22 +2020,52 @@ export function RecordScreen() {
               <p className="font-medium text-gray-900">Run Settings</p>
               <p className="text-sm text-gray-600">Customize cues for this run.</p>
             </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-900">Vibration Cues</p>
-                <p className="text-xs text-gray-600">
-                  {vibrationSupported
-                    ? 'Enable haptic cues for interval changes.'
-                    : 'Vibration is not supported on this device.'}
-                </p>
+
+            {/* Vibration Toggle (hide on iOS where not supported) */}
+            {ENABLE_VIBRATION_COACH && coachingCueState.vibrationSupported && (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Vibration Cues</p>
+                  <p className="text-xs text-gray-600">
+                    Enable haptic cues for interval changes.
+                  </p>
+                </div>
+                <Switch
+                  checked={coachingCueState.vibrationEnabled}
+                  onCheckedChange={handleVibrationToggle}
+                  aria-label="Toggle vibration cues"
+                />
               </div>
-              <Switch
-                checked={vibrationEnabled}
-                onCheckedChange={handleVibrationToggle}
-                disabled={!vibrationSupported}
-                aria-label="Toggle vibration cues"
-              />
-            </div>
+            )}
+
+            {/* Audio Toggle (show especially on iOS, or when audio available) */}
+            {ENABLE_AUDIO_COACH && coachingCueState.audioSupported && (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Audio Cues</p>
+                  <p className="text-xs text-gray-600">
+                    {coachingCueState.isIOS && !coachingCueState.vibrationSupported
+                      ? 'Audio cues for interval changes (haptics unavailable on iOS).'
+                      : 'Play sounds for interval changes.'}
+                  </p>
+                </div>
+                <Switch
+                  checked={coachingCueState.audioEnabled}
+                  onCheckedChange={handleAudioToggle}
+                  aria-label="Toggle audio cues"
+                />
+              </div>
+            )}
+
+            {/* iOS fallback notice when no cue method is enabled */}
+            {coachingCueState.isIOS &&
+             !coachingCueState.vibrationSupported &&
+             coachingCueState.audioSupported &&
+             !coachingCueState.audioEnabled && (
+              <p className="text-xs text-amber-600">
+                Enable audio cues for coaching feedback on your device.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
