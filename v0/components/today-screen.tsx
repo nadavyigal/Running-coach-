@@ -21,6 +21,11 @@ import {
   RefreshCw,
   TrendingUp,
   Award,
+  CheckCircle2,
+  Crown,
+  LogIn,
+  LogOut,
+  UserPlus,
 } from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
 import { AddActivityModal } from "@/components/add-activity-modal"
@@ -43,6 +48,7 @@ import { GoalRecommendations } from "@/components/goal-recommendations"
 import { HabitAnalyticsWidget } from "@/components/habit-analytics-widget"
 import { WeeklyRecapNotificationBanner } from "@/components/weekly-recap-notification-banner"
 import { WeeklyRecapWidget } from "@/components/weekly-recap-widget"
+import { AuthModal } from "@/components/auth/auth-modal"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,10 +60,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { ENABLE_WEEKLY_RECAP } from "@/lib/featureFlags"
+import { useAuth } from "@/lib/auth-context"
+import { SyncStatusIndicator } from "@/components/sync-status-indicator"
 
 export function TodayScreen() {
   // Get shared data from context
   const {
+    user: localUser,
     userId,
     plan,
     primaryGoal,
@@ -65,6 +74,7 @@ export function TodayScreen() {
     weeklyStats,
     refresh: refreshContext,
   } = useData()
+  const { user: authUser, loading: authLoading, signOut } = useAuth()
 
   // Use centralized goal progress calculation
   const goalProgress = useGoalProgress(primaryGoal)
@@ -91,6 +101,14 @@ export function TodayScreen() {
   const { toast } = useToast()
   const [showWeeklyRecapNotification, setShowWeeklyRecapNotification] = useState(false)
   const [recapOpenSignal, setRecapOpenSignal] = useState(0)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [authModalTab, setAuthModalTab] = useState<'signup' | 'login'>('signup')
+
+  const accountName = localUser?.name?.trim()
+  const accountShortName = accountName ? accountName.split(' ')[0] : null
+  const accountHeadline = accountShortName
+    ? `${accountShortName}, create your RunSmart account`
+    : "Create your RunSmart account"
 
   const tips = [
     "Focus on your breathing rhythm today. Try the 3:2 pattern - inhale for 3 steps, exhale for 2 steps.",
@@ -574,6 +592,103 @@ export function TodayScreen() {
         </div>
       </div>
 
+      {/* Account Callout */}
+      <div className="px-4">
+        {authLoading ? (
+          <Card className="border">
+            <CardContent className="p-4 flex items-center gap-2 text-sm text-gray-600">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking account status...
+            </CardContent>
+          </Card>
+        ) : authUser ? (
+          <Card className="border border-emerald-200 bg-emerald-50">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                    <span className="font-semibold text-emerald-900">You're registered</span>
+                  </div>
+                  <p className="text-xs text-emerald-700">
+                    {authUser.email ?? "Account connected"}
+                  </p>
+                  <p className="text-xs text-emerald-700 mt-1">
+                    Your runs are backed up in the cloud.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                  onClick={async () => {
+                    try {
+                      await signOut()
+                      toast({
+                        title: "Signed out",
+                        description: "You've been signed out successfully",
+                      })
+                    } catch {
+                      toast({
+                        title: "Error",
+                        description: "Failed to sign out. Please try again.",
+                        variant: "destructive",
+                      })
+                    }
+                  }}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </Button>
+              </div>
+              <div className="rounded-lg border border-emerald-200 bg-white/70 p-3">
+                <SyncStatusIndicator />
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-0 bg-gradient-to-br from-emerald-700 via-teal-600 to-rose-600 text-white shadow-lg">
+            <CardContent className="p-6 space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-wide text-white/70">Account</p>
+                  <h3 className="text-2xl font-semibold">{accountHeadline}</h3>
+                  <p className="text-sm text-white/85">
+                    Back up your runs, keep your plan safe, and sync across devices.
+                  </p>
+                </div>
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/15">
+                  <Crown className="h-6 w-6 text-white" />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  className="bg-white text-emerald-800 hover:bg-white/90"
+                  onClick={() => {
+                    setAuthModalTab('signup')
+                    setShowAuthModal(true)
+                  }}
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Sign Up
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="text-white hover:bg-white/10"
+                  onClick={() => {
+                    setAuthModalTab('login')
+                    setShowAuthModal(true)
+                  }}
+                >
+                  <LogIn className="h-4 w-4 mr-2" />
+                  Log In
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
       {/* Calendar Strip with Staggered Animations */}
       <div className="px-4 animate-in fade-in-0 slide-in-from-left duration-500 delay-200">
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -872,6 +987,12 @@ export function TodayScreen() {
           </div>
         )}
       </div>
+
+      <AuthModal
+        open={showAuthModal}
+        onOpenChange={setShowAuthModal}
+        defaultTab={authModalTab}
+      />
 
       {/* Modals - wrapped with error boundaries to prevent app crashes */}
       <ModalErrorBoundary modalName="Add Run" onClose={() => setShowAddRunModal(false)}>

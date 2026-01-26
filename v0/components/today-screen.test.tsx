@@ -5,8 +5,27 @@ import { TodayScreen } from './today-screen'
 import { dbUtils } from '@/lib/dbUtils'
 
 vi.mock('@/lib/dbUtils')
+const mockUseData = vi.hoisted(() => vi.fn())
+const mockUseGoalProgress = vi.hoisted(() => vi.fn())
+
+vi.mock('@/contexts/DataContext', () => ({
+  useData: () => mockUseData(),
+  useGoalProgress: () => mockUseGoalProgress(),
+}))
 vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() }),
+}))
+vi.mock('@/lib/auth-context', () => ({
+  useAuth: () => ({
+    user: null,
+    profileId: null,
+    loading: false,
+    signOut: vi.fn(),
+    refreshSession: vi.fn(),
+  }),
+}))
+vi.mock('@/components/auth/auth-modal', () => ({
+  AuthModal: () => null,
 }))
 vi.mock('@/components/add-run-modal', () => ({
   AddRunModal: ({ open }: { open: boolean }) => (open ? <div data-testid="add-run-modal" /> : null),
@@ -31,6 +50,14 @@ vi.mock('@/components/goal-recommendations', () => ({
 }))
 vi.mock('@/components/habit-analytics-widget', () => ({
   HabitAnalyticsWidget: () => <div data-testid="habit-analytics-widget" />,
+}))
+vi.mock('@/lib/goalProgressEngine', () => ({
+  GoalProgressEngine: vi.fn().mockImplementation(() => ({
+    calculateGoalProgress: vi.fn().mockResolvedValue({
+      progressPercentage: 40,
+      trajectory: 'on_track',
+    }),
+  })),
 }))
 vi.mock('@/components/modal-error-boundary', () => ({
   __esModule: true,
@@ -64,6 +91,22 @@ const baseWorkout = {
 describe('TodayScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockUseData.mockReturnValue({
+      userId: 1,
+      plan: { id: 10, title: 'Base Plan' },
+      primaryGoal: null,
+      weeklyWorkouts: [],
+      weeklyStats: {
+        runsCompleted: 0,
+        totalDistanceKm: 0,
+        totalDurationSeconds: 0,
+        plannedWorkouts: 0,
+        completedWorkouts: 0,
+        consistencyRate: 0,
+      },
+      refresh: vi.fn().mockResolvedValue(undefined),
+    })
+    mockUseGoalProgress.mockReturnValue(0)
     ;(dbUtils.getCurrentUser as any).mockResolvedValue({ id: 1 })
     ;(dbUtils.getActivePlan as any).mockResolvedValue({ id: 10, title: 'Base Plan' })
     ;(dbUtils.getPrimaryGoal as any).mockResolvedValue(null)
@@ -103,7 +146,7 @@ describe('TodayScreen', () => {
   })
 
   it('shows the active goal card when a primary goal exists', async () => {
-    ;(dbUtils.getPrimaryGoal as any).mockResolvedValueOnce({
+    const primaryGoal = {
       id: 7,
       title: 'Run 10K',
       description: 'Build up to 10K',
@@ -123,6 +166,22 @@ describe('TodayScreen', () => {
       },
       createdAt: new Date(),
       updatedAt: new Date(),
+    }
+
+    mockUseData.mockReturnValue({
+      userId: 1,
+      plan: { id: 10, title: 'Base Plan' },
+      primaryGoal,
+      weeklyWorkouts: [],
+      weeklyStats: {
+        runsCompleted: 0,
+        totalDistanceKm: 0,
+        totalDurationSeconds: 0,
+        plannedWorkouts: 0,
+        completedWorkouts: 0,
+        consistencyRate: 0,
+      },
+      refresh: vi.fn().mockResolvedValue(undefined),
     })
 
     render(<TodayScreen />)
