@@ -363,18 +363,24 @@ export class SyncService {
   }
 
   private getLastSyncTimestamp(): Date | null {
-    if (typeof window === 'undefined') return null
+    if (typeof window === 'undefined') return this.lastSyncTime
 
     try {
       const timestamp = localStorage.getItem('last_sync_timestamp')
-      return timestamp ? new Date(timestamp) : null
+      const parsed = timestamp ? new Date(timestamp) : null
+      if (parsed) {
+        this.lastSyncTime = parsed
+        return parsed
+      }
+      return this.lastSyncTime
     } catch (error) {
       logger.warn('[SyncService] Failed to read last sync timestamp:', error)
-      return null
+      return this.lastSyncTime
     }
   }
 
   private setLastSyncTimestamp(date: Date): void {
+    this.lastSyncTime = date
     if (typeof window === 'undefined') return
 
     try {

@@ -2,6 +2,15 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 // Mock the database module
 vi.mock('../lib/db', () => ({
+  db: {
+    routes: {
+      toArray: vi.fn().mockResolvedValue([]),
+      bulkDelete: vi.fn().mockResolvedValue(undefined),
+    },
+    goals: {
+      toArray: vi.fn().mockResolvedValue([]),
+    },
+  },
   getDatabase: vi.fn(),
   isDatabaseAvailable: vi.fn(() => true),
   safeDbOperation: vi.fn(),
@@ -21,6 +30,7 @@ describe('User Identity Resolution - ensureUserReady', () => {
     // Create mock database with users table
     mockDatabase = {
       users: {
+        toCollection: vi.fn(),
         where: vi.fn().mockReturnThis(),
         equals: vi.fn().mockReturnThis(),
         first: vi.fn(),
@@ -30,9 +40,11 @@ describe('User Identity Resolution - ensureUserReady', () => {
         update: vi.fn(),
         orderBy: vi.fn().mockReturnThis(),
         reverse: vi.fn().mockReturnThis(),
-        toArray: vi.fn()
+        toArray: vi.fn(),
+        filter: vi.fn().mockReturnThis()
       },
-      open: vi.fn()
+      open: vi.fn(),
+      transaction: vi.fn(async (_mode: string, _tables: unknown, callback: () => unknown) => callback())
     }
     
     // Mock getDatabase to return our mock
@@ -57,21 +69,21 @@ describe('User Identity Resolution - ensureUserReady', () => {
         updatedAt: new Date()
       }
       
-      mockDatabase.users.toArray.mockResolvedValue([existingUser]) // For the enhanced version
+      const collection = { first: vi.fn().mockResolvedValue(existingUser) }
+      mockDatabase.users.toCollection.mockReturnValue(collection)
       
       // Act
       const result = await ensureUserReady()
       
       // Assert
       expect(result).toEqual(existingUser)
-      expect(mockDatabase.users.where).toHaveBeenCalledWith('onboardingComplete')
-      expect(mockDatabase.users.equals).toHaveBeenCalledWith(true)
-      expect(mockDatabase.users.toArray).toHaveBeenCalled()
+      expect(mockDatabase.users.toCollection).toHaveBeenCalled()
+      expect(collection.first).toHaveBeenCalled()
     })
   })
 
-  describe('ensureUserReady - incomplete user promotion', () => {
-    it('should promote incomplete user to completed', async () => {
+  describe('ensureUserReady - existing draft user', () => {
+    it('should return existing draft user without promotion', async () => {
       // Arrange
       const incompleteUser = {
         id: 2,
@@ -83,24 +95,15 @@ describe('User Identity Resolution - ensureUserReady', () => {
         updatedAt: new Date()
       }
       
-      // Chain the calls properly for the enhanced version
-      mockDatabase.users.toArray
-        .mockResolvedValueOnce([]) // No completed users (first call)
-        .mockResolvedValueOnce([incompleteUser]) // Found incomplete user (second call)
-      mockDatabase.users.update.mockResolvedValue(undefined)
+      const collection = { first: vi.fn().mockResolvedValue(incompleteUser) }
+      mockDatabase.users.toCollection.mockReturnValue(collection)
       
       // Act
       const result = await ensureUserReady()
       
       // Assert
-      expect(mockDatabase.users.update).toHaveBeenCalledWith(2, expect.objectContaining({
-        goal: 'distance',
-        experience: 'intermediate',
-        onboardingComplete: true,
-        updatedAt: expect.any(Date)
-      }))
-      expect(result.id).toBe(2)
-      expect(result.onboardingComplete).toBe(true)
+      expect(mockDatabase.users.update).not.toHaveBeenCalled()
+      expect(result).toEqual(incompleteUser)
     })
   })
 
@@ -115,15 +118,15 @@ describe('User Identity Resolution - ensureUserReady', () => {
         preferredTimes: ['morning'],
         daysPerWeek: 3,
         consents: { data: true, gdpr: true, push: false },
-        onboardingComplete: true,
+        onboardingComplete: false,
         createdAt: new Date(),
         updatedAt: new Date()
       }
       
-      // Chain the calls properly for the enhanced version
-      mockDatabase.users.toArray
-        .mockResolvedValueOnce([]) // No completed users (first call)
-        .mockResolvedValueOnce([]) // No users at all (second call)
+      const collection = { first: vi.fn().mockResolvedValue(null) }
+      mockDatabase.users.toCollection.mockReturnValue(collection)
+      mockDatabase.users.filter.mockReturnThis()
+      mockDatabase.users.first.mockResolvedValue(null)
       mockDatabase.users.add.mockResolvedValue(newUserId)
       mockDatabase.users.get.mockResolvedValue(createdUser)
       
@@ -134,7 +137,7 @@ describe('User Identity Resolution - ensureUserReady', () => {
       expect(mockDatabase.users.add).toHaveBeenCalledWith(expect.objectContaining({
         goal: 'habit',
         experience: 'beginner',
-        onboardingComplete: true,
+        onboardingComplete: false,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date)
       }))
@@ -142,16 +145,17 @@ describe('User Identity Resolution - ensureUserReady', () => {
       expect(result).toEqual(createdUser)
     })
 
-    it('should throw error if stub user creation fails', async () => {
+    it('should return null if stub user creation fails', async () => {
       // Arrange
-      mockDatabase.users.toArray
-        .mockResolvedValueOnce([]) // No completed users
-        .mockResolvedValueOnce([]) // No users at all
+      const collection = { first: vi.fn().mockResolvedValue(null) }
+      mockDatabase.users.toCollection.mockReturnValue(collection)
+      mockDatabase.users.filter.mockReturnThis()
+      mockDatabase.users.first.mockResolvedValue(null)
       mockDatabase.users.add.mockResolvedValue(1)
       mockDatabase.users.get.mockResolvedValue(null) // Simulate creation failure
       
       // Act & Assert
-      await expect(ensureUserReady()).rejects.toThrow('Failed to create stub user - verification failed')
+      await expect(ensureUserReady()).resolves.toBeNull()
     })
   })
 
@@ -225,7 +229,7 @@ describe('performStartupMigration', () => {
     })
   })
 
-  it('should promote latest draft user and clean up others', async () => {
+  it('should remove redundant drafts without promotion', async () => {
     // Arrange
     const draftUsers = [
       {
@@ -243,7 +247,6 @@ describe('performStartupMigration', () => {
     ]
     
     mockDatabase.users.toArray.mockResolvedValue(draftUsers)
-    mockDatabase.users.update.mockResolvedValue(undefined)
     mockDatabase.users.delete.mockResolvedValue(undefined)
     
     // Act
@@ -251,11 +254,7 @@ describe('performStartupMigration', () => {
     
     // Assert
     expect(result).toBe(true)
-    expect(mockDatabase.users.update).toHaveBeenCalledWith(2, expect.objectContaining({
-      goal: 'distance',
-      onboardingComplete: true,
-      updatedAt: expect.any(Date)
-    }))
+    expect(mockDatabase.users.update).not.toHaveBeenCalled()
     expect(mockDatabase.users.delete).toHaveBeenCalled()
   })
 

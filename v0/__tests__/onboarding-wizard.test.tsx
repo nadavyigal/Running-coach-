@@ -20,28 +20,28 @@ describe('OnboardingScreen - Atomic Finish', () => {
     render(<OnboardingScreen onComplete={onComplete} />)
 
     // Step 1 -> 2
-    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue|next/i }))
 
     // Select goal
     fireEvent.click(screen.getByText(/Build a Running Habit/i))
-    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue|next/i }))
 
     // Experience
     fireEvent.click(screen.getByText(/Beginner/i))
-    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue|next/i }))
 
     // Age
     const ageInput = screen.getByLabelText(/your age/i)
     fireEvent.change(ageInput, { target: { value: '25' } })
-    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue|next/i }))
 
     // Reference race (optional)
-    fireEvent.click(screen.getByLabelText(/Skip this step/i))
-    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue|next/i }))
 
     // Schedule
-    fireEvent.click(screen.getByText(/Morning/i))
-    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+    fireEvent.click(screen.getByText(/3 days/i))
+    fireEvent.click(screen.getByText(/Monday/i))
+    fireEvent.click(screen.getByRole('button', { name: /continue|next/i }))
 
     // Finish
     fireEvent.click(screen.getByRole('button', { name: /Complete Setup/i }))
@@ -61,19 +61,18 @@ describe('OnboardingScreen - Atomic Finish', () => {
     render(<OnboardingScreen onComplete={onComplete} />)
 
     // Minimal path to Finish same as above
-    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue|next/i }))
     fireEvent.click(screen.getByText(/Build a Running Habit/i))
-    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue|next/i }))
     fireEvent.click(screen.getByText(/Beginner/i))
-    fireEvent.click(screen.getByRole('button', { name: /next/i }))
-    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue|next/i }))
     const ageInput = screen.getByLabelText(/your age/i)
     fireEvent.change(ageInput, { target: { value: '25' } })
-    fireEvent.click(screen.getByRole('button', { name: /next/i }))
-    fireEvent.click(screen.getByLabelText(/Skip this step/i))
-    fireEvent.click(screen.getByRole('button', { name: /next/i }))
-    fireEvent.click(screen.getByText(/Morning/i))
-    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue|next/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue|next/i }))
+    fireEvent.click(screen.getByText(/3 days/i))
+    fireEvent.click(screen.getByText(/Monday/i))
+    fireEvent.click(screen.getByRole('button', { name: /continue|next/i }))
 
     fireEvent.click(screen.getByRole('button', { name: /Complete Setup/i }))
 

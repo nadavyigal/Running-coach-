@@ -22,6 +22,11 @@ global.URL = class MockURL extends OriginalURL {
   }
 } as any;
 
+const nativeSetTimeout = globalThis.setTimeout;
+const nativeClearTimeout = globalThis.clearTimeout;
+const nativeSetInterval = globalThis.setInterval;
+const nativeClearInterval = globalThis.clearInterval;
+
 // Configure React Testing Library for fast testing
 configure({ 
   testIdAttribute: 'data-testid',
@@ -314,12 +319,14 @@ if (typeof window !== 'undefined') {
   };
 
   Object.defineProperty(window, 'performance', {
+    configurable: true,
     writable: true,
     value: mockPerformance,
   });
 
   if (!globalThis.performance || typeof globalThis.performance.now !== 'function') {
     Object.defineProperty(globalThis, 'performance', {
+      configurable: true,
       writable: true,
       value: mockPerformance,
     });
@@ -406,7 +413,26 @@ Object.defineProperty(global.navigator, 'permissions', {
 });
 
 // Setup before/after each test hooks for cleanup
+vi.mock('next/font/google', () => ({
+  Inter: () => ({ className: 'font-inter' }),
+  Bebas_Neue: () => ({ className: 'font-bebas' }),
+  Manrope: () => ({ className: 'font-manrope' }),
+}));
+
 beforeEach(() => {
+  if (typeof globalThis.setTimeout !== 'function' && nativeSetTimeout) {
+    globalThis.setTimeout = nativeSetTimeout;
+  }
+  if (typeof globalThis.clearTimeout !== 'function' && nativeClearTimeout) {
+    globalThis.clearTimeout = nativeClearTimeout;
+  }
+  if (typeof globalThis.setInterval !== 'function' && nativeSetInterval) {
+    globalThis.setInterval = nativeSetInterval;
+  }
+  if (typeof globalThis.clearInterval !== 'function' && nativeClearInterval) {
+    globalThis.clearInterval = nativeClearInterval;
+  }
+
   vi.useRealTimers();
   vi.clearAllMocks();
   mockFetch.mockClear();
