@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/components/ui/use-toast';
-import { AlertCircle, Calculator, RotateCcw, Save, ArrowLeft } from 'lucide-react';
+import { AlertCircle, Calculator, RotateCcw, Save, ArrowLeft, Upload } from 'lucide-react';
 import { dbUtils } from '@/lib/dbUtils';
 import { type PlanSetupPreferences, type User } from '@/lib/db';
 import {
@@ -19,6 +19,9 @@ import {
 } from '@/lib/userDataValidation';
 import { calculateVDOT } from '@/lib/pace-zones';
 import { cn } from '@/lib/utils';
+import { HistoricRunUploadModal } from '@/components/profile/historic-run-upload-modal';
+import { HistoricRunCard } from '@/components/profile/historic-run-card';
+import { type HistoricRunEntry } from '@/components/profile/types';
 
 interface UserDataSettingsProps {
   userId: number;
@@ -328,6 +331,8 @@ export function UserDataSettings({ userId, onBack, onSave }: UserDataSettingsPro
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [activeStep, setActiveStep] = useState('profile');
   const [ltPaceInput, setLtPaceInput] = useState('');
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [editingRunIndex, setEditingRunIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (userId) {
@@ -909,7 +914,10 @@ export function UserDataSettings({ userId, onBack, onSave }: UserDataSettingsPro
           </div>
         );
 
-      case 'history':
+      case 'history': {
+        const historicalRuns = userData.historicalRuns ?? [];
+        const canAddRun = historicalRuns.length < 7;
+
         return (
           <div className="space-y-8">
             <div className="space-y-3">
@@ -919,34 +927,26 @@ export function UserDataSettings({ userId, onBack, onSave }: UserDataSettingsPro
               </p>
             </div>
 
-            {userData.historicalRuns && userData.historicalRuns.length > 0 && (
+            {historicalRuns.length > 0 ? (
               <div className="space-y-3">
-                {userData.historicalRuns.map((run, index) => (
-                  <div
+                {historicalRuns.map((run, index) => (
+                  <HistoricRunCard
                     key={`${run.distance}-${run.time}-${index}`}
-                    className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 flex items-center justify-between"
-                  >
-                    <div>
-                      <p className="font-medium text-white">
-                        {run.distance}km in {formatTime(run.time)}
-                      </p>
-                      <p className="text-sm text-white/60">
-                        {formatDate(run.date)} {run.type ? `- ${run.type}` : ''}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-white/60 hover:text-white hover:bg-white/10"
-                      onClick={() => {
-                        const filtered = userData.historicalRuns?.filter((_, i) => i !== index);
-                        updateField('historicalRuns', filtered);
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  </div>
+                    run={{ ...run, date: new Date(run.date) }}
+                    onEdit={() => {
+                      setEditingRunIndex(index);
+                      setShowUploadModal(true);
+                    }}
+                    onDelete={() => {
+                      const filtered = historicalRuns.filter((_, i) => i !== index);
+                      updateField('historicalRuns', filtered);
+                    }}
+                  />
                 ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
+                No historical runs yet. Add up to 7 significant runs for better context.
               </div>
             )}
 
@@ -954,20 +954,49 @@ export function UserDataSettings({ userId, onBack, onSave }: UserDataSettingsPro
               variant="outline"
               className="w-full border-white/20 text-white/70 hover:bg-white/5 hover:text-white"
               onClick={() => {
-                toast({
-                  title: 'Coming soon',
-                  description: 'Historical run entry will be available soon',
-                });
+                setEditingRunIndex(null);
+                setShowUploadModal(true);
               }}
+              disabled={!canAddRun}
             >
-              Add Historical Run
+              <Upload className="h-4 w-4 mr-2" />
+              Add Historical Run ({historicalRuns.length}/7)
             </Button>
+            {!canAddRun && (
+              <p className="text-xs text-white/50 text-center">
+                You have reached the maximum of 7 historical runs.
+              </p>
+            )}
           </div>
         );
+      }
 
       default:
         return null;
     }
+  };
+
+  const editingRun: HistoricRunEntry | undefined =
+    typeof editingRunIndex === 'number' && userData.historicalRuns?.[editingRunIndex]
+      ? { ...userData.historicalRuns[editingRunIndex], date: new Date(userData.historicalRuns[editingRunIndex].date) }
+      : undefined;
+
+  const handleSaveHistoricalRun = (runData: HistoricRunEntry) => {
+    const currentRuns = userData.historicalRuns ?? [];
+    if (typeof editingRunIndex === 'number' && editingRunIndex >= 0 && editingRunIndex < currentRuns.length) {
+      const nextRuns = currentRuns.slice();
+      nextRuns[editingRunIndex] = runData;
+      updateField('historicalRuns', nextRuns);
+    } else {
+      updateField('historicalRuns', [...currentRuns, runData]);
+    }
+    setShowUploadModal(false);
+    setEditingRunIndex(null);
+  };
+
+  const handleCloseUploadModal = () => {
+    setShowUploadModal(false);
+    setEditingRunIndex(null);
   };
 
   return (
@@ -1099,25 +1128,14 @@ export function UserDataSettings({ userId, onBack, onSave }: UserDataSettingsPro
           </div>
         </div>
       </div>
+
+      {showUploadModal && (
+        <HistoricRunUploadModal
+          {...(editingRun ? { initialRun: editingRun } : {})}
+          onClose={handleCloseUploadModal}
+          onSave={handleSaveHistoricalRun}
+        />
+      )}
     </div>
   );
-}
-
-function formatTime(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  }
-  return `${minutes}:${secs.toString().padStart(2, '0')}`;
-}
-
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(date));
 }
