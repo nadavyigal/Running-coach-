@@ -106,6 +106,8 @@ export function TodayScreen() {
   const [authStorageKey, setAuthStorageKey] = useState<string | null>(null)
   const [storedAuthEmail, setStoredAuthEmail] = useState<string | null>(null)
   const [storedAuthUserId, setStoredAuthUserId] = useState<string | null>(null)
+  const [localAuthEmail, setLocalAuthEmail] = useState<string | null>(null)
+  const [localAuthUserId, setLocalAuthUserId] = useState<string | null>(null)
   const [authSnapshotChecked, setAuthSnapshotChecked] = useState(false)
 
   const accountName = localUser?.name?.trim()
@@ -116,8 +118,15 @@ export function TodayScreen() {
   const registeredHeadline = accountShortName
     ? `Welcome back, ${accountShortName}`
     : "RunSmart account active"
-  const registeredEmail = authUser?.email ?? storedAuthEmail
-  const isRegistered = Boolean(authUser || profileId || storedAuthUserId || storedAuthEmail)
+  const registeredEmail = authUser?.email ?? storedAuthEmail ?? localAuthEmail
+  const isRegistered = Boolean(
+    authUser ||
+      profileId ||
+      storedAuthUserId ||
+      storedAuthEmail ||
+      localAuthUserId ||
+      localAuthEmail
+  )
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -128,9 +137,20 @@ export function TodayScreen() {
 
     setAuthStorageKey(storageKey)
 
+    const loadLocalHint = () => {
+      try {
+        setLocalAuthEmail(localStorage.getItem('runsmart_auth_email'))
+        setLocalAuthUserId(localStorage.getItem('runsmart_auth_user_id'))
+      } catch {
+        setLocalAuthEmail(null)
+        setLocalAuthUserId(null)
+      }
+    }
+
     if (!storageKey) {
       setStoredAuthEmail(null)
       setStoredAuthUserId(null)
+      loadLocalHint()
       setAuthSnapshotChecked(true)
       return
     }
@@ -140,6 +160,7 @@ export function TodayScreen() {
       if (!raw) {
         setStoredAuthEmail(null)
         setStoredAuthUserId(null)
+        loadLocalHint()
         setAuthSnapshotChecked(true)
         return
       }
@@ -147,10 +168,12 @@ export function TodayScreen() {
       const parsed = JSON.parse(raw)
       setStoredAuthEmail(parsed?.user?.email ?? null)
       setStoredAuthUserId(parsed?.user?.id ?? null)
+      loadLocalHint()
       setAuthSnapshotChecked(true)
     } catch {
       setStoredAuthEmail(null)
       setStoredAuthUserId(null)
+      loadLocalHint()
       setAuthSnapshotChecked(true)
     }
   }, [authUser, authLoading])
@@ -654,7 +677,7 @@ export function TodayScreen() {
                 <div className="flex items-start gap-4">
                   <div className="relative">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-400/15 shadow-[0_0_24px_rgba(16,185,129,0.45)]">
-                      <img src="/images/runsmart-icon.png" alt="RunSmart" className="h-7 w-7" />
+                      <img src="/images/runsmart-logo-1.png" alt="RunSmart" className="h-8 w-8 object-contain" />
                     </div>
                     <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400">
                       <CheckCircle2 className="h-3 w-3 text-emerald-950" />
@@ -675,17 +698,26 @@ export function TodayScreen() {
                     size="sm"
                     className="border-emerald-300/40 bg-white/5 text-emerald-100 hover:bg-white/10"
                     onClick={async () => {
+                    try {
+                      await signOut()
+                      if (authStorageKey) {
+                        localStorage.removeItem(authStorageKey)
+                      }
+                      setStoredAuthEmail(null)
+                      setStoredAuthUserId(null)
                       try {
-                        await signOut()
-                        if (authStorageKey) {
-                          localStorage.removeItem(authStorageKey)
-                        }
-                        setStoredAuthEmail(null)
-                        setStoredAuthUserId(null)
-                        toast({
-                          title: "Signed out",
-                          description: "You've been signed out successfully",
-                        })
+                        localStorage.removeItem('runsmart_auth_user_id')
+                        localStorage.removeItem('runsmart_auth_email')
+                        localStorage.removeItem('runsmart_auth_at')
+                      } catch {
+                        // ignore
+                      }
+                      setLocalAuthEmail(null)
+                      setLocalAuthUserId(null)
+                      toast({
+                        title: "Signed out",
+                        description: "You've been signed out successfully",
+                      })
                       } catch {
                         toast({
                           title: "Error",
@@ -708,7 +740,7 @@ export function TodayScreen() {
                 <div className="flex items-start gap-4">
                   <div className="relative">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-400/15 shadow-[0_0_24px_rgba(16,185,129,0.45)]">
-                      <img src="/images/runsmart-icon.png" alt="RunSmart" className="h-7 w-7" />
+                      <img src="/images/runsmart-logo-1.png" alt="RunSmart" className="h-8 w-8 object-contain" />
                     </div>
                     <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-300">
                       <Sparkles className="h-3 w-3 text-emerald-950" />
