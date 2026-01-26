@@ -36,22 +36,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return
         }
 
-        setUser(session?.user ?? null)
+        if (session?.user) {
+          setUser(session.user)
+        } else {
+          // Fallback: check server session cookie (httpOnly) via API
+          try {
+            const response = await fetch('/api/auth/session', { credentials: 'include' })
+            if (response.ok) {
+              const data = await response.json()
+              if (data?.user) {
+                setUser(data.user as User)
+                setProfileId(data.profileId ?? null)
+              } else {
+                setUser(null)
+                setProfileId(null)
+              }
+            } else {
+              setUser(null)
+              setProfileId(null)
+            }
+          } catch (fallbackError) {
+            logger.warn('[Auth] Fallback session check failed:', fallbackError)
+            setUser(null)
+            setProfileId(null)
+          }
+
+          setLoading(false)
+          return
+        }
 
         // Fetch profile_id if user is authenticated
-        if (session?.user) {
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('auth_user_id', session.user.id)
-            .single()
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('auth_user_id', session.user.id)
+          .single()
 
-          if (profileError) {
-            logger.error('[Auth] Error fetching profile:', profileError)
-          } else {
-            setProfileId(profile?.id ?? null)
-            logger.info('[Auth] User authenticated, profile_id:', profile?.id)
-          }
+        if (profileError) {
+          logger.error('[Auth] Error fetching profile:', profileError)
+        } else {
+          setProfileId(profile?.id ?? null)
+          logger.info('[Auth] User authenticated, profile_id:', profile?.id)
         }
 
         setLoading(false)
@@ -104,6 +129,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) {
         logger.error('[Auth] Error signing out:', error)
         throw error
+      }
+
+      try {
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+      } catch (logoutError) {
+        logger.warn('[Auth] Logout cookie clear failed:', logoutError)
       }
 
       setUser(null)

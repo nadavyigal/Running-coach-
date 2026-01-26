@@ -22,9 +22,9 @@ import {
   TrendingUp,
   Award,
   CheckCircle2,
-  Crown,
   LogIn,
   LogOut,
+  Sparkles,
   UserPlus,
 } from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
@@ -74,7 +74,7 @@ export function TodayScreen() {
     weeklyStats,
     refresh: refreshContext,
   } = useData()
-  const { user: authUser, loading: authLoading, signOut } = useAuth()
+  const { user: authUser, profileId, loading: authLoading, signOut } = useAuth()
 
   // Use centralized goal progress calculation
   const goalProgress = useGoalProgress(primaryGoal)
@@ -103,12 +103,57 @@ export function TodayScreen() {
   const [recapOpenSignal, setRecapOpenSignal] = useState(0)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'signup' | 'login'>('signup')
+  const [authStorageKey, setAuthStorageKey] = useState<string | null>(null)
+  const [storedAuthEmail, setStoredAuthEmail] = useState<string | null>(null)
+  const [storedAuthUserId, setStoredAuthUserId] = useState<string | null>(null)
+  const [authSnapshotChecked, setAuthSnapshotChecked] = useState(false)
 
   const accountName = localUser?.name?.trim()
   const accountShortName = accountName ? accountName.split(' ')[0] : null
   const accountHeadline = accountShortName
     ? `${accountShortName}, create your RunSmart account`
     : "Create your RunSmart account"
+  const registeredHeadline = accountShortName
+    ? `Welcome back, ${accountShortName}`
+    : "RunSmart account active"
+  const registeredEmail = authUser?.email ?? storedAuthEmail
+  const isRegistered = Boolean(authUser || profileId || storedAuthUserId || storedAuthEmail)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const projectRef = supabaseUrl?.match(/https:\/\/([^.]+)/)?.[1] ?? null
+    const storageKey = projectRef ? `sb-${projectRef}-auth-token` : null
+
+    setAuthStorageKey(storageKey)
+
+    if (!storageKey) {
+      setStoredAuthEmail(null)
+      setStoredAuthUserId(null)
+      setAuthSnapshotChecked(true)
+      return
+    }
+
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (!raw) {
+        setStoredAuthEmail(null)
+        setStoredAuthUserId(null)
+        setAuthSnapshotChecked(true)
+        return
+      }
+
+      const parsed = JSON.parse(raw)
+      setStoredAuthEmail(parsed?.user?.email ?? null)
+      setStoredAuthUserId(parsed?.user?.id ?? null)
+      setAuthSnapshotChecked(true)
+    } catch {
+      setStoredAuthEmail(null)
+      setStoredAuthUserId(null)
+      setAuthSnapshotChecked(true)
+    }
+  }, [authUser, authLoading])
 
   const tips = [
     "Focus on your breathing rhythm today. Try the 3:2 pattern - inhale for 3 steps, exhale for 2 steps.",
@@ -594,99 +639,116 @@ export function TodayScreen() {
 
       {/* Account Callout */}
       <div className="px-4">
-        {authLoading ? (
-          <Card className="border">
-            <CardContent className="p-4 flex items-center gap-2 text-sm text-gray-600">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Checking account status...
-            </CardContent>
-          </Card>
-        ) : authUser ? (
-          <Card className="border border-emerald-200 bg-emerald-50">
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                    <span className="font-semibold text-emerald-900">You're registered</span>
+        <Card className="relative overflow-hidden border border-emerald-500/20 bg-[#0b1512] text-white shadow-[0_20px_60px_rgba(16,185,129,0.25)]">
+          <div className="absolute -right-20 -top-16 h-48 w-48 rounded-full bg-emerald-400/20 blur-3xl" />
+          <div className="absolute -left-16 -bottom-20 h-52 w-52 rounded-full bg-teal-400/20 blur-3xl" />
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/60 to-transparent" />
+          <CardContent className="relative space-y-4 p-6">
+            {authLoading || !authSnapshotChecked ? (
+              <div className="flex items-center gap-2 text-sm text-emerald-100/80">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Checking account status...
+              </div>
+            ) : isRegistered ? (
+              <>
+                <div className="flex items-start gap-4">
+                  <div className="relative">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-400/15 shadow-[0_0_24px_rgba(16,185,129,0.45)]">
+                      <img src="/images/runsmart-icon.png" alt="RunSmart" className="h-7 w-7" />
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400">
+                      <CheckCircle2 className="h-3 w-3 text-emerald-950" />
+                    </div>
                   </div>
-                  <p className="text-xs text-emerald-700">
-                    {authUser.email ?? "Account connected"}
-                  </p>
-                  <p className="text-xs text-emerald-700 mt-1">
-                    Your runs are backed up in the cloud.
-                  </p>
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">Account Active</p>
+                    <h3 className="text-2xl font-semibold">{registeredHeadline}</h3>
+                    <p className="text-sm text-emerald-100/80">
+                      {registeredEmail ? `Signed in as ${registeredEmail}` : "You're signed in on this device."}
+                    </p>
+                  </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                  onClick={async () => {
-                    try {
-                      await signOut()
-                      toast({
-                        title: "Signed out",
-                        description: "You've been signed out successfully",
-                      })
-                    } catch {
-                      toast({
-                        title: "Error",
-                        description: "Failed to sign out. Please try again.",
-                        variant: "destructive",
-                      })
-                    }
-                  }}
-                >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Sign Out
-                </Button>
-              </div>
-              <div className="rounded-lg border border-emerald-200 bg-white/70 p-3">
-                <SyncStatusIndicator />
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="border-0 bg-gradient-to-br from-emerald-700 via-teal-600 to-rose-600 text-white shadow-lg">
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-white/70">Account</p>
-                  <h3 className="text-2xl font-semibold">{accountHeadline}</h3>
-                  <p className="text-sm text-white/85">
-                    Back up your runs, keep your plan safe, and sync across devices.
-                  </p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span className="text-xs text-emerald-100/70">Your runs are syncing across devices</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-emerald-300/40 bg-white/5 text-emerald-100 hover:bg-white/10"
+                    onClick={async () => {
+                      try {
+                        await signOut()
+                        if (authStorageKey) {
+                          localStorage.removeItem(authStorageKey)
+                        }
+                        setStoredAuthEmail(null)
+                        setStoredAuthUserId(null)
+                        toast({
+                          title: "Signed out",
+                          description: "You've been signed out successfully",
+                        })
+                      } catch {
+                        toast({
+                          title: "Error",
+                          description: "Failed to sign out. Please try again.",
+                          variant: "destructive",
+                        })
+                      }
+                    }}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sign Out
+                  </Button>
                 </div>
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/15">
-                  <Crown className="h-6 w-6 text-white" />
+                <div className="rounded-lg border border-emerald-400/30 bg-black/30 p-3">
+                  <SyncStatusIndicator />
                 </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  className="bg-white text-emerald-800 hover:bg-white/90"
-                  onClick={() => {
-                    setAuthModalTab('signup')
-                    setShowAuthModal(true)
-                  }}
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Sign Up
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="text-white hover:bg-white/10"
-                  onClick={() => {
-                    setAuthModalTab('login')
-                    setShowAuthModal(true)
-                  }}
-                >
-                  <LogIn className="h-4 w-4 mr-2" />
-                  Log In
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+              </>
+            ) : (
+              <>
+                <div className="flex items-start gap-4">
+                  <div className="relative">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-400/15 shadow-[0_0_24px_rgba(16,185,129,0.45)]">
+                      <img src="/images/runsmart-icon.png" alt="RunSmart" className="h-7 w-7" />
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-300">
+                      <Sparkles className="h-3 w-3 text-emerald-950" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">Account</p>
+                    <h3 className="text-2xl font-semibold">{accountHeadline}</h3>
+                    <p className="text-sm text-emerald-100/80">
+                      Back up your runs, keep your plan safe, and sync across devices.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    className="bg-emerald-300 text-emerald-950 hover:bg-emerald-200"
+                    onClick={() => {
+                      setAuthModalTab('signup')
+                      setShowAuthModal(true)
+                    }}
+                  >
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Sign Up
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-emerald-300/40 bg-white/5 text-emerald-100 hover:bg-white/10"
+                    onClick={() => {
+                      setAuthModalTab('login')
+                      setShowAuthModal(true)
+                    }}
+                  >
+                    <LogIn className="mr-2 h-4 w-4" />
+                    Log In
+                  </Button>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Calendar Strip with Staggered Animations */}
