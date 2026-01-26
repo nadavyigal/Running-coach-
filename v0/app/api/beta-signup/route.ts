@@ -11,7 +11,7 @@ const betaSignupRequestSchema = z
     experienceLevel: z.enum(['beginner', 'intermediate', 'advanced']),
     goals: z.array(z.enum(['habit', 'race', 'fitness', 'injury_prevention'])).min(1),
     hearAboutUs: z
-      .enum(['friend', 'instagram', 'twitter', 'reddit', 'product_hunt', 'search', 'blog', 'other'])
+      .enum(['friend', 'instagram', 'twitter', 'reddit', 'product_hunt', 'search', 'blog', 'whatsapp', 'other'])
       .optional(),
     hearAboutUsOther: z.string().trim().optional(),
     agreedToTerms: z.boolean(),
