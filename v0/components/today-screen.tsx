@@ -21,10 +21,8 @@ import {
   RefreshCw,
   TrendingUp,
   Award,
-  CheckCircle2,
   LogIn,
   LogOut,
-  Sparkles,
   UserPlus,
 } from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
@@ -676,11 +674,8 @@ export function TodayScreen() {
               <>
                 <div className="flex items-start gap-4">
                   <div className="relative">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-400/15 shadow-[0_0_24px_rgba(16,185,129,0.45)]">
-                      <img src="/images/runsmart-logo-1.png" alt="RunSmart" className="h-8 w-8 object-contain" />
-                    </div>
-                    <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400">
-                      <CheckCircle2 className="h-3 w-3 text-emerald-950" />
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-400/15 p-1 shadow-[0_0_24px_rgba(16,185,129,0.45)]">
+                      <img src="/images/runsmart-logo-1.png" alt="RunSmart" className="h-full w-full object-contain" />
                     </div>
                   </div>
                   <div className="space-y-1">
@@ -739,11 +734,8 @@ export function TodayScreen() {
               <>
                 <div className="flex items-start gap-4">
                   <div className="relative">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-400/15 shadow-[0_0_24px_rgba(16,185,129,0.45)]">
-                      <img src="/images/runsmart-logo-1.png" alt="RunSmart" className="h-8 w-8 object-contain" />
-                    </div>
-                    <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-300">
-                      <Sparkles className="h-3 w-3 text-emerald-950" />
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-400/15 p-1 shadow-[0_0_24px_rgba(16,185,129,0.45)]">
+                      <img src="/images/runsmart-logo-1.png" alt="RunSmart" className="h-full w-full object-contain" />
                     </div>
                   </div>
                   <div className="space-y-1">
