@@ -113,8 +113,8 @@ export function TodayScreen() {
   const accountName = localUser?.name?.trim()
   const accountShortName = accountName ? accountName.split(' ')[0] : null
   const accountHeadline = accountShortName
-    ? `${accountShortName}, create your RunSmart account`
-    : "Create your RunSmart account"
+    ? `${accountShortName}, be among the first!`
+    : "Be Among the First!"
   const registeredHeadline = accountShortName
     ? `Welcome back, ${accountShortName}`
     : "RunSmart account active"
@@ -747,10 +747,10 @@ export function TodayScreen() {
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">Account</p>
+                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">Early Access</p>
                     <h3 className="text-2xl font-semibold">{accountHeadline}</h3>
                     <p className="text-sm text-emerald-100/80">
-                      Back up your runs, keep your plan safe, and sync across devices.
+                      Experience AI-Powered Running Coaching. Get exclusive early access, lifetime discounts, and help shape the future of Run-Smart.
                     </p>
                   </div>
                 </div>
