@@ -8,7 +8,7 @@
 export interface PaceRange {
   min: number;  // seconds per km (faster)
   max: number;  // seconds per km (slower)
-  label: string; // formatted "M:SS-M:SS/km"
+  label: string; // formatted "M:SS-M:SS min/km"
 }
 
 export interface PaceZones {
@@ -67,7 +67,7 @@ function calculatePaceFromVDOT(vdot: number, percentVO2max: number): number {
 
   // Quadratic formula: v = (-b + sqrt(b^2 - 4ac)) / 2a
   const discriminant = Math.pow(b, 2) - 4 * a * c;
-  if (discriminant < 0) return 600; // Fallback to 10:00/km
+  if (discriminant < 0) return 600; // Fallback to 10:00 min/km
 
   const velocity = (-b + Math.sqrt(discriminant)) / (2 * a); // meters per minute
 
@@ -166,17 +166,17 @@ export function formatPace(secondsPerKm: number): string {
 }
 
 /**
- * Format a pace range to "M:SS-M:SS/km" string
+ * Format a pace range to "M:SS-M:SS min/km" string
  */
 export function formatPaceRange(range: PaceRange): string {
   const minPace = formatPace(range.min);
   const maxPace = formatPace(range.max);
 
   if (minPace === maxPace) {
-    return `${minPace}/km`;
+    return `${minPace} min/km`;
   }
 
-  return `${minPace}-${maxPace}/km`;
+  return `${minPace}-${maxPace} min/km`;
 }
 
 /**
@@ -187,13 +187,13 @@ export function getTargetPace(range: PaceRange): number {
 }
 
 /**
- * Format target pace with range: "M:SS/km (M:SS-M:SS/km)"
+ * Format target pace with range: "M:SS min/km (M:SS-M:SS min/km)"
  */
 export function formatTargetWithRange(range: PaceRange): string {
   const target = formatPace(getTargetPace(range));
   const rangeStr = formatPaceRange(range);
 
-  return `${target}/km (${rangeStr})`;
+  return `${target} min/km (${rangeStr})`;
 }
 
 /**

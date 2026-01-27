@@ -140,7 +140,7 @@ function StepCard({ step, compact = false, darkMode = false }: StepCardProps) {
             <div className={`${subtextColor} ${compact ? "text-xs" : "text-sm"} mt-1`}>
               <span className="font-medium">Intensity Target</span>
               {" · "}
-              {formatPace(getTargetPace(step.targetPace))}/km
+              {formatPace(getTargetPace(step.targetPace))} min/km
               {!compact && (
                 <span className="block text-xs mt-0.5">
                   ({formatPaceRange(step.targetPace)})
@@ -216,7 +216,7 @@ export function WorkoutPhasesCompact({
     const duration = formatStepDuration(step)
     if (step.targetPace) {
       const pace = formatPace(getTargetPace(step.targetPace))
-      return `${duration} @ ${pace}/km`
+      return `${duration} @ ${pace} min/km`
     }
     return duration
   }

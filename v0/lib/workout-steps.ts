@@ -32,7 +32,7 @@ export interface RepeatBlock {
 
 export interface StructuredWorkout {
   name: string;
-  notes: string;              // Short summary e.g., "8x2:00@4:25/km"
+  notes: string;              // Short summary e.g., "8x2:00@4:25 min/km"
   warmup?: WorkoutStep;
   drills?: WorkoutStep;
   mainSteps: (WorkoutStep | RepeatBlock)[];
@@ -188,7 +188,7 @@ function generateEasyWorkout(
 
   return {
     name: 'Easy Run',
-    notes: `${targetDistance}km @ ${formatPace(avgPace)}/km`,
+    notes: `${targetDistance}km @ ${formatPace(avgPace)} min/km`,
     warmup: {
       type: 'warmup',
       durationType: 'time',
@@ -225,7 +225,7 @@ function generateEasyWorkout(
  */
 function generateTempoWorkout(
   paceZones: PaceZones,
-  targetDistance: number,
+  _targetDistance: number,
   experience: 'beginner' | 'intermediate' | 'advanced'
 ): StructuredWorkout {
   const warmupDuration = experience === 'beginner' ? 600 : 900; // 10-15 min
@@ -240,7 +240,7 @@ function generateTempoWorkout(
 
   return {
     name: 'Tempo Run',
-    notes: `${formatTime(tempoDuration)} @ ${formatPace(getTargetPace(paceZones.tempo))}/km`,
+    notes: `${formatTime(tempoDuration)} @ ${formatPace(getTargetPace(paceZones.tempo))} min/km`,
     warmup: {
       type: 'warmup',
       durationType: 'time',
@@ -313,7 +313,7 @@ function generateIntervalsWorkout(
 
   return {
     name: 'Intervals',
-    notes: `${reps}x${formatTime(intervalDuration)}@${intervalPace}/km`,
+    notes: `${reps}x${formatTime(intervalDuration)}@${intervalPace} min/km`,
     warmup: {
       type: 'warmup',
       durationType: 'time',
@@ -381,7 +381,7 @@ function generateLongRunWorkout(
 
   return {
     name: 'Long Run',
-    notes: `${targetDistance}km @ ${formatPace(avgPace)}/km`,
+    notes: `${targetDistance}km @ ${formatPace(avgPace)} min/km`,
     warmup: {
       type: 'warmup',
       durationType: 'time',
@@ -625,7 +625,7 @@ function generateRacePaceWorkout(
 
   return {
     name: 'Race Pace',
-    notes: `${reps}x5:00@${racePace}/km`,
+    notes: `${reps}x5:00@${racePace} min/km`,
     warmup: {
       type: 'warmup',
       durationType: 'time',
