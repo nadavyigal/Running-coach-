@@ -34,6 +34,7 @@ import { GPSAccuracyIndicator } from "@/components/gps-accuracy-indicator"
 import { GPSMonitoringService, type GPSAccuracyData } from "@/lib/gps-monitoring"
 import { calculateDistance, calculateWaypointDistance } from "@/lib/routeUtils"
 import { useGpsTracking, type GPSPoint } from "@/hooks/use-gps-tracking"
+import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
 
 type GPSCoordinate = GPSPoint
 
@@ -1791,16 +1792,34 @@ export function RecordScreen() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <Button variant="ghost" size="sm" onClick={() => router.push('/')} aria-label="Back to Today Screen">
+      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => router.push('/')}
+          aria-label="Back to Today Screen"
+        >
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <h1 className="text-xl font-semibold">Record Run</h1>
+        <div className="flex items-center justify-center gap-2">
+          <RunSmartBrandMark compact size="sm" className="opacity-90" />
+          <h1 className="text-xl font-semibold">Record Run</h1>
+        </div>
         <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setShowRoutesModal(true)} aria-label="Open Route Selector">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowRoutesModal(true)}
+            aria-label="Open Route Selector"
+          >
             <MapPin className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setShowRouteWizard(true)} aria-label="Open Route Wizard">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowRouteWizard(true)}
+            aria-label="Open Route Wizard"
+          >
             <Map className="h-4 w-4" />
           </Button>
         </div>

@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useData } from "@/contexts/DataContext"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { formatLocalizedDate } from "@/lib/timezone-utils"
+import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
 
 export function PlanScreen() {
   // Get shared data from context
@@ -415,7 +416,10 @@ export function PlanScreen() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Training Plan</h1>
+          <div className="flex items-center gap-3">
+            <RunSmartBrandMark compact size="sm" className="opacity-90" />
+            <h1 className="text-2xl font-bold">Training Plan</h1>
+          </div>
           <div className="text-sm text-gray-600">
             <span className="font-medium">{plan?.title || "21-Day Rookie Challenge"}</span>
             <span className="mx-2">•</span>

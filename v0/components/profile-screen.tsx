@@ -61,6 +61,7 @@ import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { UserDataSettings } from "@/components/user-data-settings";
+import { RunSmartBrandMark } from "@/components/run-smart-brand-mark";
 
 export function ProfileScreen() {
   // Get shared data from context
@@ -475,8 +476,11 @@ export function ProfileScreen() {
   return (
     <div className="p-4 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Profile</h1>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <RunSmartBrandMark compact size="lg" className="opacity-90" />
+          <h1 className="text-2xl font-bold">Profile</h1>
+        </div>
         <Button variant="ghost" size="sm">
           <Settings className="h-5 w-5" />
         </Button>

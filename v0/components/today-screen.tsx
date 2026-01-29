@@ -62,6 +62,7 @@ import { ENABLE_WEEKLY_RECAP } from "@/lib/featureFlags"
 import { useAuth } from "@/lib/auth-context"
 import { SyncStatusIndicator } from "@/components/sync-status-indicator"
 import { useBetaSignupCount } from "@/lib/hooks/useBetaSignupCount"
+import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
 
 export function TodayScreen() {
   // Get shared data from context
@@ -554,6 +555,9 @@ export function TodayScreen() {
 
   return (
     <div className="pb-24 space-y-4">
+      <div className="px-4 pt-2">
+        <RunSmartBrandMark className="opacity-90" />
+      </div>
       {showWeeklyRecapNotification && (
         <div className="px-4 animate-in fade-in-0 slide-in-from-top-4 duration-300">
           <WeeklyRecapNotificationBanner
@@ -1050,17 +1054,20 @@ export function TodayScreen() {
                 <Zap className="h-6 w-6 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
-                  Coach&apos;s Tip
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-gray-900">Coach&apos;s Tip</h3>
+                    <RunSmartBrandMark compact size="sm" className="opacity-60" />
+                  </div>
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={refreshTip}
-                    className="ml-auto h-8 w-8"
+                    className="h-8 w-8"
                   >
                     <RefreshCw className="h-3 w-3" />
                   </Button>
-                </h3>
+                </div>
                 <p className="text-sm text-gray-700 leading-relaxed">{dailyTip}</p>
               </div>
             </div>
