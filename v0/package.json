@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "init": "npm install",
     "build": "next build",
     "start": "next start",
     "lint": "node scripts/run-eslint.cjs",
