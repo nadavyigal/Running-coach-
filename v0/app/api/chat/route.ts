@@ -25,6 +25,13 @@ function getClientIP(request: Request): string {
 }
 
 export async function POST(req: Request): Promise<Response> {
+  if (!process.env.OPENAI_API_KEY?.trim()) {
+    return NextResponse.json(
+      { error: 'OpenAI API key not configured', fallback: true },
+      { status: 503 }
+    );
+  }
+
   console.log('💬 Chat API: POST request received');
 
   // Rate limiting check (10 requests per minute for chat)
@@ -171,3 +178,5 @@ export async function OPTIONS(req: Request): Promise<Response> {
     },
   });
 }
+
+export const chatHandler = POST;

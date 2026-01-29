@@ -24,12 +24,15 @@
       "Bash(rm:*)",
       "Bash(cp:*)",
       "WebFetch(domain:github.com)",
-      "Bash(NODE_ENV=production npm run build:*)"
+      "Bash(NODE_ENV=production npm run build:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_snapshot"
     ],
     "deny": []
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "supabase"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

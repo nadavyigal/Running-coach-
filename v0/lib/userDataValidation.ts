@@ -56,7 +56,7 @@ export const UserDataSchemas = {
     distance: z.number().min(0).max(50),
     time: z.number().min(0).max(28800),
     date: z.date(),
-    type: z.enum(['race', 'long_run', 'workout', 'easy']).optional(),
+    type: z.enum(['easy', 'tempo', 'long', 'intervals', 'race']).optional(),
     notes: z.string().max(500).optional(),
     surface: z.enum(['road', 'trail', 'track', 'treadmill']).optional(),
   }),

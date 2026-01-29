@@ -2,6 +2,18 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ShareRunModal } from "./share-run-modal";
 import "@testing-library/jest-dom";
+import { dbUtils } from "@/lib/dbUtils";
+import { useToast } from "@/hooks/use-toast";
+
+vi.mock("@/lib/dbUtils", () => ({
+  dbUtils: {
+    getCurrentUser: vi.fn(),
+  },
+}));
+
+vi.mock("@/hooks/use-toast", () => ({
+  useToast: vi.fn(),
+}));
 
 // Mock the fetch API
 global.fetch = vi.fn(() =>
@@ -24,6 +36,7 @@ global.alert = vi.fn();
 
 describe("ShareRunModal", () => {
   const mockOnClose = vi.fn();
+  let toastSpy: any;
   const runProps = {
     runId: "run123",
     runDate: "2025-07-16",
@@ -33,6 +46,9 @@ describe("ShareRunModal", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    (dbUtils.getCurrentUser as any).mockResolvedValue({ id: 456 });
+    toastSpy = vi.fn();
+    (useToast as any).mockReturnValue({ toast: toastSpy });
   });
 
   it("renders correctly when open", () => {
@@ -50,6 +66,9 @@ describe("ShareRunModal", () => {
 
   it("generates a shareable link when 'Generate Share Link' is clicked", async () => {
     render(<ShareRunModal {...runProps} />);
+    await waitFor(() => {
+      expect(dbUtils.getCurrentUser).toHaveBeenCalled();
+    });
     fireEvent.click(screen.getByRole("button", { name: /Generate Share Link/i }));
 
     await waitFor(() => {
@@ -58,10 +77,14 @@ describe("ShareRunModal", () => {
         "/api/share-run",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ runId: "run123", userId: "current_user_id" }),
+          body: expect.any(String),
         })
       );
     });
+
+    const fetchCall = (global.fetch as any).mock.calls.find((call: any[]) => call[0] === "/api/share-run");
+    const requestBody = JSON.parse(fetchCall?.[1]?.body ?? "{}");
+    expect(requestBody).toMatchObject({ runId: "run123", userId: "456" });
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("https://mock.link/run123")).toBeInTheDocument();
@@ -71,6 +94,9 @@ describe("ShareRunModal", () => {
 
   it("copies the shareable link to clipboard", async () => {
     render(<ShareRunModal {...runProps} />);
+    await waitFor(() => {
+      expect(dbUtils.getCurrentUser).toHaveBeenCalled();
+    });
     fireEvent.click(screen.getByRole("button", { name: /Generate Share Link/i }));
 
     await waitFor(() => {
@@ -78,8 +104,10 @@ describe("ShareRunModal", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /Copy link/i }));
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("https://mock.link/run123");
-    expect(window.alert).toHaveBeenCalledWith("Link copied to clipboard!"); // Assuming alert is used for feedback
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("https://mock.link/run123");
+      expect(toastSpy).toHaveBeenCalled();
+    });
   });
 
   it("displays an error message if link generation fails", async () => {
@@ -93,6 +121,9 @@ describe("ShareRunModal", () => {
     );
 
     render(<ShareRunModal {...runProps} />);
+    await waitFor(() => {
+      expect(dbUtils.getCurrentUser).toHaveBeenCalled();
+    });
     fireEvent.click(screen.getByRole("button", { name: /Generate Share Link/i }));
 
     await waitFor(() => {

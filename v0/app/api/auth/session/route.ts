@@ -19,7 +19,13 @@ function parseSessionCookie(rawValue: string | undefined): SessionPayload | null
     try {
       return JSON.parse(decodeURIComponent(rawValue))
     } catch {
-      return null
+      try {
+        const trimmed = rawValue.startsWith('base64-') ? rawValue.slice(7) : rawValue
+        const decoded = Buffer.from(trimmed, 'base64').toString('utf8')
+        return JSON.parse(decoded)
+      } catch {
+        return null
+      }
     }
   }
 }

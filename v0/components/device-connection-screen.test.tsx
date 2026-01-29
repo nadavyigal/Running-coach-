@@ -3,18 +3,25 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { DeviceConnectionScreen } from './device-connection-screen';
 import { db } from '@/lib/db';
 
+const { mockToArray, mockEquals, mockWhere } = vi.hoisted(() => {
+  const mockToArray = vi.fn();
+  const mockEquals = vi.fn(() => ({
+    and: vi.fn(() => ({
+      first: vi.fn()
+    })),
+    toArray: mockToArray
+  }));
+  const mockWhere = vi.fn(() => ({
+    equals: mockEquals
+  }));
+  return { mockToArray, mockEquals, mockWhere };
+});
+
 // Mock the database
 vi.mock('@/lib/db', () => ({
   db: {
     wearableDevices: {
-      where: vi.fn(() => ({
-        equals: vi.fn(() => ({
-          and: vi.fn(() => ({
-            first: vi.fn()
-          })),
-          toArray: vi.fn()
-        }))
-      }))
+      where: mockWhere
     }
   }
 }));
@@ -36,6 +43,7 @@ describe('DeviceConnectionScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (global.fetch as any).mockClear();
+    mockToArray.mockResolvedValue([]);
     
     // Mock successful API response for loading devices
     (global.fetch as any).mockResolvedValue({
@@ -101,7 +109,7 @@ describe('DeviceConnectionScreen', () => {
   describe('Device Connection', () => {
     beforeEach(() => {
       // Mock no connected devices initially
-      (db.wearableDevices.where as any)().equals().toArray.mockResolvedValue([]);
+      mockToArray.mockResolvedValue([]);
     });
 
     it('should connect Apple Watch successfully', async () => {
@@ -143,16 +151,20 @@ describe('DeviceConnectionScreen', () => {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            userId: mockUserId,
-            deviceType: 'apple_watch',
-            deviceId: expect.stringContaining('apple-watch-'),
-            name: 'Apple Watch',
-            model: 'Series 8',
-            capabilities: ['heart_rate', 'workouts', 'health_kit']
-          })
+          body: expect.any(String),
         });
       }, { timeout: 3000 });
+
+      const fetchCall = (global.fetch as any).mock.calls.find((call: any[]) => call[0] === '/api/devices/connect');
+      const requestBody = JSON.parse(fetchCall?.[1]?.body ?? '{}');
+      expect(requestBody).toMatchObject({
+        userId: mockUserId,
+        deviceType: 'apple_watch',
+        name: 'Apple Watch',
+        model: 'Series 8',
+        capabilities: ['heart_rate', 'workouts', 'health_kit']
+      });
+      expect(requestBody.deviceId).toEqual(expect.stringContaining('apple-watch-'));
 
       await waitFor(() => {
         expect(mockOnDeviceConnected).toHaveBeenCalledWith(mockResponse.device);
@@ -284,7 +296,7 @@ describe('DeviceConnectionScreen', () => {
         }
       ];
 
-      (db.wearableDevices.where as any)().equals().toArray.mockResolvedValue(mockConnectedDevices);
+      mockToArray.mockResolvedValue(mockConnectedDevices);
 
       render(
         <DeviceConnectionScreen 
@@ -313,7 +325,7 @@ describe('DeviceConnectionScreen', () => {
         }
       ];
 
-      (db.wearableDevices.where as any)().equals().toArray.mockResolvedValue(mockConnectedDevices);
+      mockToArray.mockResolvedValue(mockConnectedDevices);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true })
@@ -352,7 +364,7 @@ describe('DeviceConnectionScreen', () => {
         }
       ];
 
-      (db.wearableDevices.where as any)().equals().toArray.mockResolvedValue(mockConnectedDevices);
+      mockToArray.mockResolvedValue(mockConnectedDevices);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true })
@@ -391,7 +403,7 @@ describe('DeviceConnectionScreen', () => {
         }
       ];
 
-      (db.wearableDevices.where as any)().equals().toArray.mockResolvedValue(mockConnectedDevices);
+      mockToArray.mockResolvedValue(mockConnectedDevices);
 
       render(
         <DeviceConnectionScreen 
@@ -429,7 +441,7 @@ describe('DeviceConnectionScreen', () => {
         }
       ];
 
-      (db.wearableDevices.where as any)().equals().toArray.mockResolvedValue(mockDevices);
+      mockToArray.mockResolvedValue(mockDevices);
 
       render(
         <DeviceConnectionScreen 
@@ -460,7 +472,7 @@ describe('DeviceConnectionScreen', () => {
         }
       ];
 
-      (db.wearableDevices.where as any)().equals().toArray.mockResolvedValue(mockDevices);
+      mockToArray.mockResolvedValue(mockDevices);
 
       render(
         <DeviceConnectionScreen 

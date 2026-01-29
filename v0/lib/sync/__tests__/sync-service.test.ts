@@ -3,21 +3,16 @@ import { SyncService } from '../sync-service'
 import { db } from '@/lib/db'
 import type { Run, Goal, Shoe } from '@/lib/db'
 
+const mockSupabase = vi.hoisted(() => ({
+  auth: {
+    getSession: vi.fn(),
+  },
+  from: vi.fn(),
+}))
+
 // Mock dependencies
 vi.mock('@/lib/supabase/client', () => ({
-  createClient: vi.fn(() => ({
-    auth: {
-      getSession: vi.fn(),
-    },
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(),
-        })),
-      })),
-      upsert: vi.fn(() => Promise.resolve({ error: null })),
-    })),
-  })),
+  createClient: vi.fn(() => mockSupabase),
 }))
 
 vi.mock('@/lib/logger', () => ({
@@ -50,6 +45,25 @@ describe('SyncService', () => {
 
     // Stop any running auto-sync
     syncService.stopAutoSync()
+
+    mockSupabase.auth.getSession.mockResolvedValue({
+      data: { session: null },
+      error: null,
+    })
+
+    mockSupabase.from.mockImplementation(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          single: vi.fn(() =>
+            Promise.resolve({
+              data: { id: 'profile-id' },
+              error: null,
+            })
+          ),
+        })),
+      })),
+      upsert: vi.fn(() => Promise.resolve({ error: null })),
+    }))
   })
 
   afterEach(() => {
@@ -463,8 +477,10 @@ describe('SyncService', () => {
   describe('Error Handling', () => {
     it('should handle database errors gracefully', async () => {
       // Mock db.runs to throw an error
-      const originalToArray = db.runs.toArray
-      db.runs.toArray = vi.fn(() => Promise.reject(new Error('DB error')))
+      const originalToCollection = db.runs.toCollection
+      db.runs.toCollection = vi.fn(() => ({
+        toArray: vi.fn(() => Promise.reject(new Error('DB error'))),
+      })) as any
 
       const { createClient } = await import('@/lib/supabase/client')
       const mockSupabase = createClient()
@@ -476,7 +492,7 @@ describe('SyncService', () => {
       ).rejects.toThrow('DB error')
 
       // Restore
-      db.runs.toArray = originalToArray
+      db.runs.toCollection = originalToCollection
     })
 
     it('should handle Supabase upsert errors', async () => {

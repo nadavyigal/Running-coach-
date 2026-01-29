@@ -310,7 +310,7 @@ export interface User {
     distance: number;      // km
     time: number;          // seconds
     date: Date;
-    type?: 'race' | 'long_run' | 'workout' | 'easy';
+    type?: 'easy' | 'tempo' | 'long' | 'intervals' | 'race';
     notes?: string;
     surface?: 'road' | 'trail' | 'track' | 'treadmill';
   }>;

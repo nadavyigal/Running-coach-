@@ -26,6 +26,15 @@ vi.mock('@/components/ui/use-toast', () => ({
   }),
 }));
 
+// Mock auth context
+vi.mock('@/lib/auth-context', () => ({
+  useAuth: () => ({
+    user: null,
+    loading: false,
+    signOut: vi.fn(),
+  }),
+}));
+
 describe('ProfileScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();

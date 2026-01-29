@@ -76,7 +76,7 @@ describe('RecoveryDashboard', () => {
     // Then check for score elements
     expect(screen.getByText('Sleep')).toBeInTheDocument();
     expect(screen.getByText('HRV')).toBeInTheDocument();
-    expect(screen.getByText('Resting HR')).toBeInTheDocument();
+    expect(screen.getAllByText('Resting HR').length).toBeGreaterThan(0);
   });
 
   it('displays recovery recommendations', async () => {
@@ -127,9 +127,12 @@ describe('RecoveryDashboard', () => {
     
     // Click on wellness tab to see the content
     const wellnessTab = screen.getByRole('tab', { name: /wellness input/i });
+    fireEvent.mouseDown(wellnessTab);
     fireEvent.click(wellnessTab);
     
     // Then check for wellness content
-    expect(screen.getByText('How are you feeling today?')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('How are you feeling today?')).toBeInTheDocument();
+    });
   });
 });

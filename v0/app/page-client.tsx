@@ -176,6 +176,13 @@ const ChatScreen = dynamic(
     )
   }
 )
+const BetaLandingScreen = dynamic(
+  () => import("@/components/beta-landing-screen").then(m => ({ default: m.BetaLandingScreen })),
+  {
+    ssr: false,
+    loading: () => <div className="p-6 flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div></div>
+  }
+)
 const ProfileScreen = dynamic(
   () =>
     import("@/components/profile-screen")
@@ -226,6 +233,7 @@ export default function RunSmartApp() {
   const [currentScreen, setCurrentScreen] = useState<string>("onboarding")
   const [runReportId, setRunReportId] = useState<number | null>(null)
   const [isOnboardingComplete, setIsOnboardingComplete] = useState(false)
+  const [isBetaSignupComplete, setIsBetaSignupComplete] = useState(false)
   const [isLoading, setIsLoading] = useState(true) // Start with loading=true
   const [hasError, setHasError] = useState(false)
   const [showDebugPanel, setShowDebugPanel] = useState(false)
@@ -374,14 +382,24 @@ export default function RunSmartApp() {
       if (typeof window !== 'undefined') {
         try {
           logger.log('[app:init:start] Starting application initialization...');
-          
+
+          // Check if beta signup has been completed
+          const betaSignupEmail = localStorage.getItem('beta_signup_email');
+          if (betaSignupEmail) {
+            logger.log('[app:init:beta] ✅ Beta signup already completed:', betaSignupEmail);
+            setIsBetaSignupComplete(true);
+          } else {
+            logger.log('[app:init:beta] ⚠️ Beta signup not completed yet');
+            setIsBetaSignupComplete(false);
+          }
+
           // Dynamically load database utilities
           if (!dbUtilsRef.current) {
             const dbUtilsModule = await import("@/lib/dbUtils");
             dbUtilsRef.current = dbUtilsModule.dbUtils ?? dbUtilsModule.default ?? dbUtilsModule;
             logger.log('[app:init:modules] ✅ Database utilities loaded');
           }
-          
+
           const dbUtils = dbUtilsRef.current;
           
           await dbUtils.initializeDatabase();
@@ -552,6 +570,14 @@ export default function RunSmartApp() {
     }
   }, []) // Empty dependency array - event listeners should only be set up once
 
+  const handleBetaSignupComplete = () => {
+    logger.log('✅ [handleBetaSignupComplete] Beta signup completed')
+    flushSync(() => {
+      setIsBetaSignupComplete(true)
+    })
+    logger.log('✅ [handleBetaSignupComplete] Moving to onboarding screen')
+  }
+
   const handleOnboardingComplete = (userData?: any) => {
     logger.log('✅ [handleOnboardingComplete] Starting navigation to Today screen...')
 
@@ -656,6 +682,14 @@ export default function RunSmartApp() {
 
   const renderScreen = () => {
     try {
+      // Show beta landing screen if beta signup not completed
+      if (!isBetaSignupComplete) {
+        logger.log('🎯 Rendering beta landing screen - isBetaSignupComplete:', isBetaSignupComplete);
+        return (
+          <BetaLandingScreen onContinue={handleBetaSignupComplete} />
+        )
+      }
+
       // Always show onboarding if not completed, regardless of currentScreen
       if (!isOnboardingComplete) {
         logger.log('🎓 Rendering onboarding screen - isOnboardingComplete:', isOnboardingComplete);
@@ -712,10 +746,16 @@ export default function RunSmartApp() {
     }
   }
 
+  // Beta landing and onboarding should render without wrapper
+  if (!isBetaSignupComplete || !isOnboardingComplete) {
+    return renderScreen()
+  }
+
+  // Main app with wrapper and navigation
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50/30 to-cyan-50/30 max-w-md mx-auto relative">
       <div className="pb-20">{renderScreen()}</div>
-      {isOnboardingComplete && <BottomNavigation currentScreen={currentScreen} onScreenChange={setCurrentScreen} />}
+      <BottomNavigation currentScreen={currentScreen} onScreenChange={setCurrentScreen} />
 
       {/* Welcome Modal for existing users */}
       <WelcomeModal />
