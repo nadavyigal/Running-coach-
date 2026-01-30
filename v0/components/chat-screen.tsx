@@ -280,9 +280,11 @@ export function ChatScreen() {
       setIsLoading(false)
       toast({
         title: "Chat unavailable",
-        description: "We couldn't load your profile. Please try again.",
+        description: "We couldn't load your profile. Try refreshing the page or resetting your app data from the Profile screen.",
         variant: "destructive",
+        duration: 8000,
       })
+      console.error('❌ Chat error: User profile not available. User state:', user, 'Context user:', contextUser)
       return
     }
 
