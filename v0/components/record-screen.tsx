@@ -399,7 +399,19 @@ export function RecordScreen() {
       return
     }
 
-    setCoachingCueState(getCoachingCueState())
+    // Initialize coaching cue state on mount to detect capabilities
+    // Audio will need user gesture later, but vibration support can be detected now
+    const initialState = getCoachingCueState()
+    setCoachingCueState(initialState)
+
+    // Log capabilities for debugging
+    if (initialState.vibrationSupported || initialState.audioSupported) {
+      console.log('[CoachingCues] Capabilities detected:', {
+        vibration: initialState.vibrationSupported,
+        audio: initialState.audioSupported,
+        isIOS: initialState.isIOS,
+      })
+    }
 
     return () => {
       cleanupCoachingCues()
@@ -1291,8 +1303,9 @@ export function RecordScreen() {
   }
 
   const proceedWithRun = async () => {
-    // Initialize audio coaching cues on user gesture (required for iOS Safari)
-    if (ENABLE_AUDIO_COACH) {
+    // Initialize coaching cues on user gesture (required for iOS Safari audio)
+    // This ensures both vibration and audio are properly detected and enabled
+    if (ENABLE_AUDIO_COACH || ENABLE_VIBRATION_COACH) {
       await initializeCoachingCues()
       setCoachingCueState(getCoachingCueState())
     }
@@ -1378,6 +1391,12 @@ export function RecordScreen() {
         title: "GPS Ready",
         description: `Starting run with ${currentGPSAccuracy.signalStrength}% signal strength...`,
       })
+
+      // Initialize coaching cues before starting (user gesture required for iOS audio)
+      if (ENABLE_AUDIO_COACH || ENABLE_VIBRATION_COACH) {
+        await initializeCoachingCues()
+        setCoachingCueState(getCoachingCueState())
+      }
 
       // Reset only run-specific state (not GPS tracking!)
       gpsPathRef.current = []

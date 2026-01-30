@@ -563,7 +563,8 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
       {paceChartEnabled && (
         <Card>
           <CardContent className="p-4">
-            <h3 className="font-medium mb-3">Pace</h3>
+            <h3 className="font-medium mb-3">Pace Over Distance</h3>
+            <p className="text-xs text-gray-500 mb-3">Your pace (min/km) at each kilometer of your run</p>
             <PaceChart gpsPath={pacePath} />
           </CardContent>
         </Card>

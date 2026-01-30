@@ -18,7 +18,7 @@ type ChartPoint = {
   entry: PaceData
   x: number
   y: number
-  elapsedMs: number
+  distanceKm: number
 }
 
 const VIEWBOX_WIDTH = 1000
@@ -41,32 +41,30 @@ const formatPaceLabel = (paceMinPerKm: number): string => {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
-const formatElapsedTime = (milliseconds: number): string => {
-  const totalSeconds = Math.floor(milliseconds / 1000)
-  const hours = Math.floor(totalSeconds / 3600)
-  const mins = Math.floor((totalSeconds % 3600) / 60)
-  const secs = totalSeconds % 60
+const formatDistance = (distanceKm: number): string => {
+  if (!Number.isFinite(distanceKm) || distanceKm < 0) return '0'
 
-  if (hours > 0) {
-    return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  // Show one decimal place for values under 10km, whole numbers for 10km+
+  if (distanceKm < 10) {
+    return distanceKm.toFixed(1)
   }
-  return `${mins}:${secs.toString().padStart(2, '0')}`
+  return Math.round(distanceKm).toString()
 }
 
-const computeTimeTicks = (maxTimeMs: number): number[] => {
-  if (maxTimeMs <= 0) return [0]
+const computeDistanceTicks = (maxDistanceKm: number): number[] => {
+  if (maxDistanceKm <= 0) return [0]
 
-  const totalSeconds = maxTimeMs / 1000
   let interval: number
 
-  if (totalSeconds <= 300) interval = 30000        // 30s for runs < 5min
-  else if (totalSeconds <= 1800) interval = 60000  // 1min for runs < 30min
-  else if (totalSeconds <= 3600) interval = 300000 // 5min for runs < 1hr
-  else interval = 600000                           // 10min for longer runs
+  if (maxDistanceKm <= 1) interval = 0.2      // 200m for runs < 1km
+  else if (maxDistanceKm <= 5) interval = 0.5  // 500m for runs < 5km
+  else if (maxDistanceKm <= 10) interval = 1   // 1km for runs < 10km
+  else if (maxDistanceKm <= 21) interval = 2   // 2km for runs < 21km
+  else interval = 5                            // 5km for longer runs
 
   const ticks: number[] = []
-  for (let t = 0; t <= maxTimeMs; t += interval) {
-    ticks.push(t)
+  for (let d = 0; d <= maxDistanceKm; d += interval) {
+    ticks.push(Number(d.toFixed(2)))
   }
   return ticks
 }
@@ -133,12 +131,12 @@ export function PaceChart({ gpsPath }: PaceChartProps) {
     if (processedData.length === 0) {
       return {
         points: [] as ChartPoint[],
-        elapsedTimes: [] as number[],
+        distances: [] as number[],
         minPace: 0,
         maxPace: 0,
-        maxTimeMs: 0,
+        maxDistanceKm: 0,
         paceTicks: [] as number[],
-        timeTicks: [] as number[],
+        distanceTicks: [] as number[],
       }
     }
 
@@ -148,21 +146,20 @@ export function PaceChart({ gpsPath }: PaceChartProps) {
     if (paceValues.length === 0) {
       return {
         points: [] as ChartPoint[],
-        elapsedTimes: [] as number[],
+        distances: [] as number[],
         minPace: 0,
         maxPace: 0,
-        maxTimeMs: 0,
+        maxDistanceKm: 0,
         paceTicks: [] as number[],
-        timeTicks: [] as number[],
+        distanceTicks: [] as number[],
       }
     }
 
     const minPace = Math.min(...paceValues)
     const maxPace = Math.max(...paceValues)
 
-    // Calculate time range from timestamps
-    const startTime = processedData[0]?.timestamp.getTime() ?? 0
-    const maxTimeMs = (processedData.at(-1)?.timestamp.getTime() ?? 0) - startTime
+    // Calculate distance range
+    const maxDistanceKm = processedData.at(-1)?.distanceKm ?? 0
 
     const paceMin = Math.floor(minPace / PACE_STEP_MIN) * PACE_STEP_MIN
     const paceMax = Math.ceil(maxPace / PACE_STEP_MIN) * PACE_STEP_MIN
@@ -173,17 +170,16 @@ export function PaceChart({ gpsPath }: PaceChartProps) {
       paceTicks.push(Number(pace.toFixed(2)))
     }
 
-    // Calculate time ticks instead of distance ticks
-    const timeTicks = computeTimeTicks(maxTimeMs)
+    // Calculate distance ticks
+    const distanceTicks = computeDistanceTicks(maxDistanceKm)
 
     const plotWidth = VIEWBOX_WIDTH - PADDING.left - PADDING.right
     const plotHeight = VIEWBOX_HEIGHT - PADDING.top - PADDING.bottom
     const paceRange = normalizedMax - paceMin
 
-    const scaleX = (timestamp: Date) => {
-      const elapsedMs = timestamp.getTime() - startTime
-      if (maxTimeMs <= 0) return PADDING.left
-      return PADDING.left + (elapsedMs / maxTimeMs) * plotWidth
+    const scaleX = (distanceKm: number) => {
+      if (maxDistanceKm <= 0) return PADDING.left
+      return PADDING.left + (distanceKm / maxDistanceKm) * plotWidth
     }
 
     const scaleY = (paceMinPerKm: number) => {
@@ -192,23 +188,22 @@ export function PaceChart({ gpsPath }: PaceChartProps) {
     }
 
     const points = processedData.map((entry) => {
-      const elapsedMs = entry.timestamp.getTime() - startTime
       return {
         entry,
-        x: scaleX(entry.timestamp),
+        x: scaleX(entry.distanceKm),
         y: scaleY(entry.paceMinPerKm),
-        elapsedMs,
+        distanceKm: entry.distanceKm,
       }
     })
 
     return {
       points,
-      elapsedTimes: points.map((point) => point.elapsedMs),
+      distances: points.map((point) => point.distanceKm),
       minPace: paceMin,
       maxPace: normalizedMax,
-      maxTimeMs,
+      maxDistanceKm,
       paceTicks,
-      timeTicks,
+      distanceTicks,
     }
   }, [processedData])
 
@@ -232,7 +227,7 @@ export function PaceChart({ gpsPath }: PaceChartProps) {
     )
   }
 
-  if (chartMetrics.points.length === 0 || chartMetrics.maxTimeMs <= 0) {
+  if (chartMetrics.points.length === 0 || chartMetrics.maxDistanceKm <= 0) {
     return (
       <div className="h-[300px] w-full rounded-lg border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center text-sm text-gray-600">
         Insufficient data for chart
@@ -265,9 +260,9 @@ export function PaceChart({ gpsPath }: PaceChartProps) {
     const relativeX = event.clientX - rect.left
     const viewBoxX = (relativeX / rect.width) * VIEWBOX_WIDTH
     const clampedX = Math.max(PADDING.left, Math.min(viewBoxX, VIEWBOX_WIDTH - PADDING.right))
-    const timeRatio = (clampedX - PADDING.left) / plotWidth
-    const targetTimeMs = timeRatio * chartMetrics.maxTimeMs
-    return getNearestIndex(targetTimeMs, chartMetrics.elapsedTimes)
+    const distanceRatio = (clampedX - PADDING.left) / plotWidth
+    const targetDistanceKm = distanceRatio * chartMetrics.maxDistanceKm
+    return getNearestIndex(targetDistanceKm, chartMetrics.distances)
   }
 
   const handlePointerMove = (event: PointerEvent<SVGSVGElement>) => {
@@ -354,19 +349,19 @@ export function PaceChart({ gpsPath }: PaceChartProps) {
           )
         })}
 
-        {chartMetrics.timeTicks.map((timeMs) => {
-          const x = chartMetrics.maxTimeMs > 0
-            ? PADDING.left + (timeMs / chartMetrics.maxTimeMs) * plotWidth
+        {chartMetrics.distanceTicks.map((distanceKm) => {
+          const x = chartMetrics.maxDistanceKm > 0
+            ? PADDING.left + (distanceKm / chartMetrics.maxDistanceKm) * plotWidth
             : PADDING.left
           return (
             <text
-              key={`time-${timeMs}`}
+              key={`distance-${distanceKm}`}
               x={x}
               y={VIEWBOX_HEIGHT - 10}
               textAnchor="middle"
               className="fill-gray-500 text-[12px]"
             >
-              {formatElapsedTime(timeMs)}
+              {formatDistance(distanceKm)}
             </text>
           )
         })}
@@ -418,7 +413,7 @@ export function PaceChart({ gpsPath }: PaceChartProps) {
                 className="fill-white text-[12px]"
               >
                 {formatPaceLabel(activePoint.entry.paceMinPerKm)} min/km at{' '}
-                {formatElapsedTime(activePoint.elapsedMs)}
+                {formatDistance(activePoint.distanceKm)}km
               </text>
             </g>
           </>
