@@ -59,6 +59,18 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
 
       logger.info('[Login] User logged in successfully:', data.user?.id)
 
+      try {
+        if (data.user?.id) {
+          localStorage.setItem('runsmart_auth_user_id', data.user.id)
+        }
+        if (data.user?.email) {
+          localStorage.setItem('runsmart_auth_email', data.user.email)
+        }
+        localStorage.setItem('runsmart_auth_at', new Date().toISOString())
+      } catch {
+        // Best-effort local hint for signed-in UI
+      }
+
       // Set the session on the client if we received tokens
       if (data.session) {
         const supabase = createClient()

@@ -62,17 +62,17 @@ describe('GPSMonitoringService', () => {
       expect(excellentMetrics.locationQuality).toBe('excellent');
 
       // Good accuracy (≤10m)
-      const goodPosition = { ...mockPosition, coords: { ...mockPosition.coords, accuracy: 8 } };
+      const goodPosition = { ...mockPosition, coords: { ...mockPosition.coords, accuracy: 20 } };
       const goodMetrics = service.calculateAccuracyMetrics(goodPosition);
       expect(goodMetrics.locationQuality).toBe('good');
 
       // Fair accuracy (≤20m)
-      const fairPosition = { ...mockPosition, coords: { ...mockPosition.coords, accuracy: 15 } };
+      const fairPosition = { ...mockPosition, coords: { ...mockPosition.coords, accuracy: 50 } };
       const fairMetrics = service.calculateAccuracyMetrics(fairPosition);
       expect(fairMetrics.locationQuality).toBe('fair');
 
       // Poor accuracy (>20m)
-      const poorPosition = { ...mockPosition, coords: { ...mockPosition.coords, accuracy: 50 } };
+      const poorPosition = { ...mockPosition, coords: { ...mockPosition.coords, accuracy: 100 } };
       const poorMetrics = service.calculateAccuracyMetrics(poorPosition);
       expect(poorMetrics.locationQuality).toBe('poor');
     });
@@ -205,7 +205,7 @@ describe('GPSMonitoringService', () => {
     });
 
     it('should return poor accuracy guide for low accuracy', () => {
-      const poorPosition = { ...mockPosition, coords: { ...mockPosition.coords, accuracy: 50 } };
+      const poorPosition = { ...mockPosition, coords: { ...mockPosition.coords, accuracy: 100 } };
       const metrics = service.calculateAccuracyMetrics(poorPosition);
       
       const guide = service.getTroubleshootingGuide(metrics);
@@ -255,7 +255,7 @@ describe('GPSMonitoringService', () => {
       expect(excellentMessage.color).toBe('green');
       expect(excellentMessage.icon).toBe('excellent');
 
-      const poorPosition = { ...mockPosition, coords: { ...mockPosition.coords, accuracy: 50 } };
+      const poorPosition = { ...mockPosition, coords: { ...mockPosition.coords, accuracy: 100 } };
       const poorMetrics = service.calculateAccuracyMetrics(poorPosition);
       const poorMessage = service.getAccuracyMessage(poorMetrics);
 

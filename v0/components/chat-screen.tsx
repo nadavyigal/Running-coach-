@@ -10,7 +10,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Send,
-  Bot,
   User,
   Loader2,
   ThumbsUp,
@@ -658,9 +657,15 @@ export function ChatScreen() {
     return (
       <div className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
         {!isUser && (
-          <Avatar className="h-8 w-8 mt-1">
-            <AvatarFallback className="bg-primary text-primary-foreground">
-              <Bot className="h-4 w-4" />
+          <Avatar className="h-9 w-9 mt-1 rounded-[18px]">
+            <AvatarFallback className="bg-transparent rounded-[18px]">
+              <img
+                src="/images/runsmart-logo-oval.png"
+                alt="RunSmart"
+                className="h-full w-full object-contain"
+                loading="lazy"
+                decoding="async"
+              />
             </AvatarFallback>
           </Avatar>
         )}
@@ -738,9 +743,15 @@ export function ChatScreen() {
       <div className="border-b bg-card p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Avatar className="h-10 w-10">
-              <AvatarFallback className="bg-primary text-primary-foreground">
-                <Bot className="h-5 w-5" />
+            <Avatar className="h-12 w-12 rounded-[22px]">
+              <AvatarFallback className="bg-transparent rounded-[22px]">
+                <img
+                  src="/images/runsmart-logo-oval.png"
+                  alt="RunSmart"
+                  className="h-full w-full object-contain"
+                  loading="lazy"
+                  decoding="async"
+                />
               </AvatarFallback>
             </Avatar>
             <div>

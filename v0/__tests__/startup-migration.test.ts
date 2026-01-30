@@ -8,6 +8,18 @@ vi.mock('../lib/db', () => ({
   resetDatabaseInstance: vi.fn()
 }))
 
+vi.mock('@/lib/migrations/clearTelAvivRoutesMigration', () => ({
+  runClearTelAvivRoutesMigration: vi.fn().mockResolvedValue({
+    migrationRun: false,
+    routesCleared: 0,
+    message: 'Migration already completed',
+  }),
+}))
+
+vi.mock('@/lib/migrations/migrateExistingGoals', () => ({
+  migrateExistingGoals: vi.fn().mockResolvedValue({ migrated: 0, errors: [] }),
+}))
+
 import { performStartupMigration } from '@/lib/dbUtils'
 import { getDatabase } from '../lib/db'
 
@@ -47,7 +59,7 @@ describe('Startup Migration', () => {
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
   })
 
-  describe('Draft user migration scenarios', () => {
+  describe('User cleanup scenarios', () => {
     it('should handle cold start with no existing users', async () => {
       // Arrange
       mockDatabase.users.toArray.mockResolvedValue([])
@@ -62,22 +74,35 @@ describe('Startup Migration', () => {
       expect(consoleLogSpy).toHaveBeenCalledWith('[migration:complete] Startup migration completed successfully')
     })
 
-    it('should promote single draft user to canonical', async () => {
+    it('should remove redundant completed users and drafts when a completed user exists', async () => {
       // Arrange
-      const draftUser = {
+      const completedOlder = {
         id: 1,
-        goal: 'habit',
-        experience: 'beginner',
-        preferredTimes: ['morning'],
-        daysPerWeek: 3,
-        onboardingComplete: false,
-        consents: { data: true, gdpr: true, push: true },
+        onboardingComplete: true,
         updatedAt: new Date('2024-01-01'),
-        createdAt: new Date('2024-01-01')
       }
-      
-      mockDatabase.users.toArray.mockResolvedValue([draftUser])
-      mockDatabase.users.update.mockResolvedValue(undefined)
+      const completedNewer = {
+        id: 2,
+        onboardingComplete: true,
+        updatedAt: new Date('2024-01-02'),
+      }
+      const draftUser = {
+        id: 3,
+        onboardingComplete: false,
+        updatedAt: new Date('2024-01-03'),
+      }
+      const draftUser2 = {
+        id: 4,
+        onboardingComplete: false,
+        updatedAt: new Date('2024-01-04'),
+      }
+
+      mockDatabase.users.toArray.mockResolvedValue([
+        completedOlder,
+        completedNewer,
+        draftUser,
+        draftUser2,
+      ])
       mockDatabase.open.mockResolvedValue(undefined)
       
       // Act  
@@ -85,37 +110,28 @@ describe('Startup Migration', () => {
       
       // Assert
       expect(result).toBe(true)
-      expect(mockDatabase.users.update).toHaveBeenCalledWith(1, expect.objectContaining({
-        goal: 'habit',
-        experience: 'beginner',
-        onboardingComplete: true,
-        updatedAt: expect.any(Date)
-      }))
-      expect(consoleLogSpy).toHaveBeenCalledWith('[migration:promote] Found 1 draft profiles to promote')
-      expect(consoleLogSpy).toHaveBeenCalledWith('[migration:promoted] Promoted draft user 1 to canonical')
+      const deleteArgs = mockDatabase.users.anyOf.mock.calls[0][0]
+      expect(deleteArgs).toEqual(expect.arrayContaining([1, 3, 4]))
+      expect(deleteArgs).toHaveLength(3)
+      expect(mockDatabase.users.delete).toHaveBeenCalled()
+      expect(consoleLogSpy).toHaveBeenCalledWith('[migration:users] Kept user 2; removed 3 duplicates/drafts')
     })
 
-    it('should promote latest draft and cleanup others', async () => {
+    it('should remove redundant drafts when only drafts exist', async () => {
       // Arrange
       const olderDraft = {
         id: 1,
-        goal: 'habit',
         onboardingComplete: false,
         updatedAt: new Date('2024-01-01'),
-        consents: { data: true, gdpr: true, push: false }
       }
       
       const newerDraft = {
         id: 2,  
-        goal: 'distance',
-        experience: 'intermediate',
         onboardingComplete: false,
         updatedAt: new Date('2024-01-02'),
-        consents: { data: true, gdpr: true, push: true }
       }
       
       mockDatabase.users.toArray.mockResolvedValue([olderDraft, newerDraft])
-      mockDatabase.users.update.mockResolvedValue(undefined)
       mockDatabase.users.delete.mockResolvedValue(undefined)
       mockDatabase.open.mockResolvedValue(undefined)
       
@@ -125,49 +141,28 @@ describe('Startup Migration', () => {
       // Assert
       expect(result).toBe(true)
       
-      // Should promote the newer draft (id: 2)
-      expect(mockDatabase.users.update).toHaveBeenCalledWith(2, expect.objectContaining({
-        goal: 'distance',
-        experience: 'intermediate', 
-        onboardingComplete: true,
-        updatedAt: expect.any(Date)
-      }))
-      
-      // Should cleanup the older draft (id: 1)
+      // Should cleanup the older draft (id: 1), keeping the latest
       expect(mockDatabase.users.anyOf).toHaveBeenCalledWith([1])
       expect(mockDatabase.users.delete).toHaveBeenCalled()
       
-      expect(consoleLogSpy).toHaveBeenCalledWith('[migration:promoted] Promoted draft user 2 to canonical')
-      expect(consoleLogSpy).toHaveBeenCalledWith('[migration:cleanup] Removed 1 redundant draft users')
+      expect(consoleLogSpy).toHaveBeenCalledWith('[migration:users] Kept draft user 2; removed 1 redundant drafts')
     })
 
-    it('should handle schema upgrades by filling missing fields', async () => {
-      // Arrange - draft user with missing optional fields
-      const incompleteDraft = {
+    it('should not delete when only one draft exists', async () => {
+      const draftUser = {
         id: 1,
         onboardingComplete: false,
-        updatedAt: new Date(),
-        // Missing: goal, experience, preferredTimes, daysPerWeek, consents
+        updatedAt: new Date('2024-01-01'),
       }
-      
-      mockDatabase.users.toArray.mockResolvedValue([incompleteDraft])
-      mockDatabase.users.update.mockResolvedValue(undefined)
+
+      mockDatabase.users.toArray.mockResolvedValue([draftUser])
       mockDatabase.open.mockResolvedValue(undefined)
-      
-      // Act
+
       const result = await performStartupMigration()
-      
-      // Assert
+
       expect(result).toBe(true)
-      expect(mockDatabase.users.update).toHaveBeenCalledWith(1, expect.objectContaining({
-        goal: 'habit', // Default value
-        experience: 'beginner', // Default value 
-        preferredTimes: ['morning'], // Default value
-        daysPerWeek: 3, // Default value
-        consents: { data: true, gdpr: true, push: false }, // Default value
-        onboardingComplete: true,
-        updatedAt: expect.any(Date)
-      }))
+      expect(mockDatabase.users.anyOf).not.toHaveBeenCalled()
+      expect(mockDatabase.users.delete).not.toHaveBeenCalled()
     })
   })
 
@@ -209,13 +204,14 @@ describe('Startup Migration', () => {
       expect(consoleLogSpy).toHaveBeenCalledWith('[migration:skip] Database not available')
     })
 
-    it('should handle user update failures', async () => {
+    it('should handle user cleanup failures', async () => {
       // Arrange
-      const draftUser = { id: 1, onboardingComplete: false, updatedAt: new Date() }
+      const olderDraft = { id: 1, onboardingComplete: false, updatedAt: new Date('2024-01-01') }
+      const newerDraft = { id: 2, onboardingComplete: false, updatedAt: new Date('2024-01-02') }
       
-      mockDatabase.users.toArray.mockResolvedValue([draftUser])
+      mockDatabase.users.toArray.mockResolvedValue([olderDraft, newerDraft])
       mockDatabase.open.mockResolvedValue(undefined)
-      mockDatabase.users.update.mockRejectedValue(new Error('Update failed'))
+      mockDatabase.users.delete.mockRejectedValue(new Error('Delete failed'))
       
       // Act
       const result = await performStartupMigration()
@@ -229,15 +225,16 @@ describe('Startup Migration', () => {
   describe('Race condition handling', () => {
     it('should handle concurrent migration attempts', async () => {
       // Arrange
-      const draftUser = { id: 1, onboardingComplete: false, updatedAt: new Date() }
+      const olderDraft = { id: 1, onboardingComplete: false, updatedAt: new Date('2024-01-01') }
+      const newerDraft = { id: 2, onboardingComplete: false, updatedAt: new Date('2024-01-02') }
       
-      mockDatabase.users.toArray.mockResolvedValue([draftUser])
+      mockDatabase.users.toArray.mockResolvedValue([olderDraft, newerDraft])
       mockDatabase.open.mockResolvedValue(undefined)
       
-      // Simulate delay in update to create race condition window
-      let updateCallCount = 0
-      mockDatabase.users.update.mockImplementation(async () => {
-        updateCallCount++
+      // Simulate delay in delete to create race condition window
+      let deleteCallCount = 0
+      mockDatabase.users.delete.mockImplementation(async () => {
+        deleteCallCount++
         await new Promise(resolve => setTimeout(resolve, 10))
         return undefined
       })
@@ -252,8 +249,8 @@ describe('Startup Migration', () => {
       expect(result1).toBe(true)
       expect(result2).toBe(true)
       
-      // Update should be called for each migration attempt
-      expect(updateCallCount).toBeGreaterThanOrEqual(1)
+      // Cleanup should be attempted for each migration attempt
+      expect(deleteCallCount).toBeGreaterThanOrEqual(1)
     }, 10000) // Increase timeout for this test
   })
 
@@ -268,7 +265,6 @@ describe('Startup Migration', () => {
       }))
       
       mockDatabase.users.toArray.mockResolvedValue(manyDrafts)
-      mockDatabase.users.update.mockResolvedValue(undefined)
       mockDatabase.users.delete.mockResolvedValue(undefined)
       mockDatabase.open.mockResolvedValue(undefined)
       
@@ -280,8 +276,7 @@ describe('Startup Migration', () => {
       expect(result).toBe(true)
       expect(duration).toBeLessThan(300) // Should complete in under 300ms
       
-      // Should promote the latest (id: 10) and clean up others
-      expect(mockDatabase.users.update).toHaveBeenCalledWith(10, expect.any(Object))
+      // Should keep the latest (id: 10) and clean up others
       expect(mockDatabase.users.anyOf).toHaveBeenCalledWith([9, 8, 7, 6, 5, 4, 3, 2, 1]) // Order reflects reverse sorting by date
     })
   })

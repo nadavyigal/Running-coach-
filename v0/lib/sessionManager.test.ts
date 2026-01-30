@@ -14,10 +14,8 @@ vi.mock('./db', () => ({
           and: vi.fn(() => ({
             toArray: vi.fn()
           })),
-          orderBy: vi.fn(() => ({
-            reverse: vi.fn(() => ({
-              first: vi.fn()
-            }))
+          reverse: vi.fn(() => ({
+            first: vi.fn()
           })),
           first: vi.fn(),
           delete: vi.fn()
@@ -107,7 +105,8 @@ describe('SessionManager', () => {
     it('should detect conflicts when creating sessions', async () => {
       const { db } = await import('./db')
       const existingSessions = [
-        { id: 1, conversationId: 'conv_1', isCompleted: false }
+        { id: 1, userId: 123, conversationId: 'conv_1', goalDiscoveryPhase: 'motivation', sessionProgress: 0, isCompleted: false },
+        { id: 2, userId: 123, conversationId: 'conv_2', goalDiscoveryPhase: 'assessment', sessionProgress: 0, isCompleted: false }
       ]
 
       vi.mocked(db.onboardingSessions.add).mockResolvedValue(2)
@@ -129,8 +128,8 @@ describe('SessionManager', () => {
         forceNew: true
       })
 
-      expect(result.conflicts).toHaveLength(1)
-      expect(result.conflicts[0].type).toBe('multiple_active')
+      expect(result.conflicts).toHaveLength(2)
+      expect(result.conflicts.every((conflict) => conflict.type === 'multiple_active')).toBe(true)
     })
   })
 
@@ -153,10 +152,11 @@ describe('SessionManager', () => {
 
       vi.mocked(db.onboardingSessions.where).mockReturnValue({
         equals: vi.fn(() => ({
-          orderBy: vi.fn(() => ({
-            reverse: vi.fn(() => ({
-              first: vi.fn().mockResolvedValue(existingSession)
-            }))
+          and: vi.fn(() => ({
+            toArray: vi.fn().mockResolvedValue([])
+          })),
+          reverse: vi.fn(() => ({
+            first: vi.fn().mockResolvedValue(existingSession)
           }))
         }))
       } as any)
@@ -182,10 +182,11 @@ describe('SessionManager', () => {
       const { db } = await import('./db')
       vi.mocked(db.onboardingSessions.where).mockReturnValue({
         equals: vi.fn(() => ({
-          orderBy: vi.fn(() => ({
-            reverse: vi.fn(() => ({
-              first: vi.fn().mockResolvedValue(null)
-            }))
+          and: vi.fn(() => ({
+            toArray: vi.fn().mockResolvedValue([])
+          })),
+          reverse: vi.fn(() => ({
+            first: vi.fn().mockResolvedValue(null)
           }))
         }))
       } as any)
@@ -304,8 +305,8 @@ describe('SessionManager', () => {
     it('should detect multiple active sessions', async () => {
       const { db } = await import('./db')
       const multipleSessions = [
-        { id: 1, conversationId: 'conv_1', isCompleted: false },
-        { id: 2, conversationId: 'conv_2', isCompleted: false }
+        { id: 1, userId: 123, conversationId: 'conv_1', goalDiscoveryPhase: 'motivation', sessionProgress: 0, isCompleted: false },
+        { id: 2, userId: 123, conversationId: 'conv_2', goalDiscoveryPhase: 'assessment', sessionProgress: 0, isCompleted: false }
       ]
 
       vi.mocked(db.onboardingSessions.where).mockReturnValue({
@@ -319,15 +320,15 @@ describe('SessionManager', () => {
       const conflicts = await manager.detectSessionConflicts(123, 'conv_123')
 
       expect(conflicts).toHaveLength(2)
-      expect(conflicts[0].type).toBe('multiple_active')
-      expect(conflicts[0].severity).toBe('high')
-      expect(conflicts[0].resolutionOptions).toBeDefined()
+      expect(conflicts.every((conflict) => conflict.type === 'multiple_active')).toBe(true)
+      expect(conflicts[0]?.severity).toBe('high')
+      expect(conflicts[0]?.resolutionOptions).toBeDefined()
     })
 
     it('should detect orphaned sessions', async () => {
       const { db } = await import('./db')
       const orphanedSession = [
-        { id: 1, conversationId: 'conv_1', isCompleted: false, sessionProgress: 50 }
+        { id: 1, userId: 123, conversationId: 'conv_1', goalDiscoveryPhase: 'motivation', isCompleted: false, sessionProgress: 50 }
       ]
 
       vi.mocked(db.onboardingSessions.where).mockReturnValue({
@@ -420,17 +421,14 @@ describe('SessionManager', () => {
       const session = {
         id: 1,
         userId: 123,
-        conversationId: 'conv_123'
+        conversationId: 'conv_123',
+        createdAt: new Date()
       }
 
       vi.mocked(db.onboardingSessions.where).mockReturnValue({
         equals: vi.fn(() => ({
           and: vi.fn(() => ({
-            orderBy: vi.fn(() => ({
-              reverse: vi.fn(() => ({
-                first: vi.fn().mockResolvedValue(session)
-              }))
-            }))
+            toArray: vi.fn().mockResolvedValue([session])
           }))
         }))
       } as any)

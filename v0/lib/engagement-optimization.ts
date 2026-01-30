@@ -87,7 +87,7 @@ class EngagementOptimizationService {
       if (!user) return 0;
 
       const runs: Run[] = await dbUtils.getUserRuns(userId);
-      const goals: Goal[] = await dbUtils.getGoals(userId);
+      const goals: Goal[] = await dbUtils.getUserGoals(userId);
       
       // Calculate various engagement factors
       const activityScore = this.calculateActivityScore(runs);
@@ -248,7 +248,7 @@ class EngagementOptimizationService {
       }
 
       // Achievement-based triggers
-      const badges: Badge[] = await dbUtils.getBadges(userId);
+      const badges: Badge[] = await dbUtils.getUserBadges(userId);
       const recentBadges = badges.filter((badge: Badge) => {
         const badgeDate = new Date(badge.unlockedAt);
         const sevenDaysAgo = new Date();
@@ -268,7 +268,7 @@ class EngagementOptimizationService {
       }
 
       // Goal progress triggers
-      const goals: Goal[] = await dbUtils.getGoals(userId);
+      const goals: Goal[] = await dbUtils.getUserGoals(userId);
       const activeGoals = goals.filter((goal: Goal) => goal.status === 'active');
       
       activeGoals.forEach((goal: Goal) => {

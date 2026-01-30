@@ -1,6 +1,7 @@
 'use client'
 
 import Script from 'next/script'
+import { Analytics } from '@vercel/analytics/next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
@@ -133,6 +134,7 @@ export default function RootLayout({
             </PostHogProvider>
           </ChunkErrorBoundary>
         </ErrorBoundary>
+        <Analytics />
       </body>
     </html>
   )

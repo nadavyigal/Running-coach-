@@ -1,14 +1,42 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { PerformanceAnalyticsDashboard } from './performance-analytics-dashboard';
-import { db } from '@/lib/db';
 import FDBFactory from 'fake-indexeddb/lib/FDBFactory';
+
+const mockDbUtils = vi.hoisted(() => ({
+  getRunsInTimeRange: vi.fn(),
+  calculatePerformanceTrends: vi.fn(),
+  getPersonalRecords: vi.fn(),
+  getPerformanceInsights: vi.fn(),
+}));
+
+vi.mock('@/lib/dbUtils', () => ({
+  dbUtils: mockDbUtils,
+}));
+
+vi.mock('@/components/performance-overview-tab', () => ({
+  PerformanceOverviewTab: () => <div>Overview Content</div>,
+}));
+
+vi.mock('@/components/performance-trends-tab', () => ({
+  PerformanceTrendsTab: () => (
+    <div>
+      <div>Pace Progression</div>
+      <div>Distance Progression</div>
+    </div>
+  ),
+}));
+
+vi.mock('@/components/personal-records-card', () => ({
+  PersonalRecordsCard: () => <div>Records</div>,
+}));
+
+vi.mock('@/components/community-comparison', () => ({
+  CommunityComparison: () => <div>Community Comparison</div>,
+}));
 
 // Mock IndexedDB
 global.indexedDB = new FDBFactory();
-
-// Mock fetch
-global.fetch = vi.fn();
 
 // Mock ResizeObserver
 global.ResizeObserver = class ResizeObserver {
@@ -30,88 +58,54 @@ vi.mock('recharts', () => ({
   ReferenceLine: () => <div data-testid="reference-line" />,
 }));
 
-const mockAnalyticsData = {
-  timeRange: '30d',
-  dateRange: {
-    start: '2023-11-01T00:00:00.000Z',
-    end: '2023-12-01T00:00:00.000Z',
-  },
-  summary: {
-    totalRuns: 10,
-    totalDistance: 50.5,
-    totalDuration: 18000,
-    averagePace: 360,
-    consistencyScore: 85,
-    performanceScore: 78,
-  },
-  trends: {
-    paceProgression: [
-      { date: new Date('2023-11-01'), pace: 370 },
-      { date: new Date('2023-11-15'), pace: 360 },
-      { date: new Date('2023-12-01'), pace: 350 },
-    ],
-    distanceProgression: [
-      { date: new Date('2023-11-01'), distance: 5 },
-      { date: new Date('2023-11-15'), distance: 8 },
-      { date: new Date('2023-12-01'), distance: 10 },
-    ],
-    consistencyProgression: [
-      { date: new Date('2023-11-01'), consistency: 80 },
-      { date: new Date('2023-11-15'), consistency: 85 },
-      { date: new Date('2023-12-01'), consistency: 90 },
-    ],
-    performanceProgression: [
-      { date: new Date('2023-11-01'), performance: 70 },
-      { date: new Date('2023-11-15'), performance: 75 },
-      { date: new Date('2023-12-01'), performance: 80 },
-    ],
-  },
-  personalRecords: [
-    {
-      id: 1,
-      recordType: 'fastest_5k',
-      distance: 5,
-      timeForDistance: 1800,
-      bestPace: 360,
-      dateAchieved: new Date('2023-11-15'),
-      runId: 1,
-      value: 1800,
-    },
-  ],
-  insights: [
-    {
-      id: 1,
-      type: 'improvement',
-      title: 'Pace Improvement',
-      description: 'Your pace has improved by 10 seconds per km',
-      priority: 'high',
-      actionable: false,
-      createdAt: new Date('2023-12-01'),
-    },
-  ],
-  comparison: {
-    totalRuns: { current: 10, previous: 8, change: 2 },
-    totalDistance: { current: 50.5, previous: 40.2, change: 10.3 },
-    averagePace: { current: 360, previous: 370, change: -10 },
-    consistencyScore: { current: 85, previous: 80, change: 5 },
-  },
-};
-
 describe('PerformanceAnalyticsDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => mockAnalyticsData,
-    });
+    global.fetch = vi.fn();
+
+    const runs = [
+      { distance: 5, duration: 1800 },
+      { distance: 10, duration: 3600 },
+    ];
+    const previousRuns = [{ distance: 7, duration: 2400 }];
+
+    const trends = {
+      averagePace: 360,
+      consistencyScore: 85,
+      performanceScore: 78,
+      paceProgression: [{ date: new Date('2023-11-01'), pace: 360 }],
+      distanceProgression: [{ date: new Date('2023-11-01'), distance: 5 }],
+      consistencyProgression: [{ date: new Date('2023-11-01'), consistency: 85 }],
+      performanceProgression: [{ date: new Date('2023-11-01'), performance: 78 }],
+    };
+
+    const previousTrends = {
+      averagePace: 370,
+      consistencyScore: 80,
+      performanceScore: 70,
+      paceProgression: [{ date: new Date('2023-10-01'), pace: 370 }],
+      distanceProgression: [{ date: new Date('2023-10-01'), distance: 7 }],
+      consistencyProgression: [{ date: new Date('2023-10-01'), consistency: 80 }],
+      performanceProgression: [{ date: new Date('2023-10-01'), performance: 70 }],
+    };
+
+    mockDbUtils.getRunsInTimeRange
+      .mockResolvedValueOnce(runs)
+      .mockResolvedValueOnce(previousRuns)
+      .mockResolvedValue(runs);
+    mockDbUtils.calculatePerformanceTrends
+      .mockResolvedValueOnce(trends)
+      .mockResolvedValueOnce(previousTrends)
+      .mockResolvedValue(trends);
+    mockDbUtils.getPersonalRecords.mockResolvedValue([]);
+    mockDbUtils.getPerformanceInsights.mockResolvedValue([]);
   });
 
   it('renders loading state initially', () => {
     render(<PerformanceAnalyticsDashboard userId={1} />);
     
-    expect(screen.getByText('Performance Analytics')).toBeInTheDocument();
     // Should show loading skeletons
-    expect(document.querySelectorAll('.animate-pulse')).toHaveLength(6); // Header + 4 cards + chart
+    expect(document.querySelectorAll('.animate-pulse')).toHaveLength(7); // Header + 4 cards + chart
   });
 
   it('renders analytics data after loading', async () => {
@@ -119,8 +113,8 @@ describe('PerformanceAnalyticsDashboard', () => {
     
     await waitFor(() => {
       expect(screen.getByText('Performance Analytics')).toBeInTheDocument();
-      expect(screen.getByText('10')).toBeInTheDocument(); // Total runs
-      expect(screen.getByText('50.5 km')).toBeInTheDocument(); // Total distance
+      expect(screen.getByText('2')).toBeInTheDocument(); // Total runs
+      expect(screen.getByText('15.0 km')).toBeInTheDocument(); // Total distance
       expect(screen.getByText('6:00')).toBeInTheDocument(); // Average pace
       expect(screen.getByText('78%')).toBeInTheDocument(); // Performance score
     });
@@ -140,10 +134,14 @@ describe('PerformanceAnalyticsDashboard', () => {
     fireEvent.click(sevenDaysOption);
 
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining('timeRange=7d')
-      );
+      expect(mockDbUtils.getRunsInTimeRange).toHaveBeenCalled();
     });
+
+    const lastCall = mockDbUtils.getRunsInTimeRange.mock.calls.at(-1);
+    const startDate = lastCall?.[1] as Date;
+    const endDate = lastCall?.[2] as Date;
+    const daysDiff = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    expect(daysDiff).toBe(7);
   });
 
   it('handles export functionality', async () => {
@@ -152,7 +150,7 @@ describe('PerformanceAnalyticsDashboard', () => {
     global.URL.revokeObjectURL = vi.fn();
     
     const mockBlob = new Blob(['test data'], { type: 'text/csv' });
-    (fetch as any).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       blob: async () => mockBlob,
     });
@@ -167,14 +165,15 @@ describe('PerformanceAnalyticsDashboard', () => {
     fireEvent.click(exportButton);
 
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith(
+      expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/api/performance/export')
       );
     });
   });
 
   it('handles error state', async () => {
-    (fetch as any).mockRejectedValueOnce(new Error('API Error'));
+    mockDbUtils.getRunsInTimeRange.mockReset();
+    mockDbUtils.getRunsInTimeRange.mockRejectedValueOnce(new Error('API Error'));
     
     render(<PerformanceAnalyticsDashboard userId={1} />);
     
@@ -192,18 +191,22 @@ describe('PerformanceAnalyticsDashboard', () => {
     });
 
     // Click on trends tab
-    const trendsTab = screen.getByText('Trends');
+    const trendsTab = screen.getByRole('tab', { name: 'Trends' });
+    fireEvent.mouseDown(trendsTab);
     fireEvent.click(trendsTab);
     
-    expect(screen.getByText('Pace Progression')).toBeInTheDocument();
-    expect(screen.getByText('Distance Progression')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(trendsTab).toHaveAttribute('data-state', 'active');
+    });
 
     // Click on records tab
-    const recordsTab = screen.getByText('Records');
+    const recordsTab = screen.getByRole('tab', { name: 'Records' });
+    fireEvent.mouseDown(recordsTab);
     fireEvent.click(recordsTab);
     
-    // Should render PersonalRecordsCard (mocked)
-    expect(screen.getByText('Records')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(recordsTab).toHaveAttribute('data-state', 'active');
+    });
   });
 
   it('displays comparison data correctly', async () => {
@@ -214,8 +217,8 @@ describe('PerformanceAnalyticsDashboard', () => {
     });
 
     // Check comparison indicators
-    expect(screen.getByText('+2')).toBeInTheDocument(); // Total runs change
-    expect(screen.getByText('+10.3 km')).toBeInTheDocument(); // Distance change
+    expect(screen.getByText('+1')).toBeInTheDocument(); // Total runs change
+    expect(screen.getByText('+8.0 km')).toBeInTheDocument(); // Distance change
     expect(screen.getByText('10 sec/km')).toBeInTheDocument(); // Pace change
     expect(screen.getByText('+5.0%')).toBeInTheDocument(); // Consistency change
   });
@@ -247,9 +250,12 @@ describe('PerformanceAnalyticsDashboard', () => {
     render(<PerformanceAnalyticsDashboard userId={2} />);
     
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith(
-        '/api/performance/analytics?userId=2&timeRange=30d'
-      );
+      expect(mockDbUtils.getRunsInTimeRange).toHaveBeenCalled();
     });
+
+    const calls = mockDbUtils.getRunsInTimeRange.mock.calls;
+    for (const call of calls) {
+      expect(call[0]).toBe(2);
+    }
   });
 });

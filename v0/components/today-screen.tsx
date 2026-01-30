@@ -24,6 +24,7 @@ import {
   LogIn,
   LogOut,
   UserPlus,
+  Users,
 } from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
 import { AddActivityModal } from "@/components/add-activity-modal"
@@ -60,6 +61,8 @@ import {
 import { ENABLE_WEEKLY_RECAP } from "@/lib/featureFlags"
 import { useAuth } from "@/lib/auth-context"
 import { SyncStatusIndicator } from "@/components/sync-status-indicator"
+import { useBetaSignupCount } from "@/lib/hooks/useBetaSignupCount"
+import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
 
 export function TodayScreen() {
   // Get shared data from context
@@ -73,6 +76,7 @@ export function TodayScreen() {
     refresh: refreshContext,
   } = useData()
   const { user: authUser, profileId, loading: authLoading, signOut } = useAuth()
+  const betaSignups = useBetaSignupCount()
 
   // Use centralized goal progress calculation
   const goalProgress = useGoalProgress(primaryGoal)
@@ -551,6 +555,9 @@ export function TodayScreen() {
 
   return (
     <div className="pb-24 space-y-4">
+      <div className="px-4 pt-2">
+        <RunSmartBrandMark className="opacity-90" />
+      </div>
       {showWeeklyRecapNotification && (
         <div className="px-4 animate-in fade-in-0 slide-in-from-top-4 duration-300">
           <WeeklyRecapNotificationBanner
@@ -738,29 +745,78 @@ export function TodayScreen() {
                       <img src="/images/runsmart-logo-1.png" alt="RunSmart" className="h-full w-full object-contain" />
                     </div>
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">Early Access</p>
                     <h3 className="text-2xl font-semibold">{accountHeadline}</h3>
-                    <p className="text-sm text-emerald-100/80">
-                      Experience AI-Powered Running Coaching. Get exclusive early access, lifetime discounts, and help shape the future of Run-Smart.
-                    </p>
+                    <div className="flex items-center gap-2 text-xs text-emerald-200/80">
+                      <Users className="h-3 w-3" />
+                      <span>200+ runners already registered</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <ul className="text-sm text-emerald-100/80 space-y-2">
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-300 flex-shrink-0">✓</span>
+                      <span>AI coach tailored to your running level</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-300 flex-shrink-0">✓</span>
+                      <span>50% lifetime discount ($4.99/mo forever)</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-300 flex-shrink-0">✓</span>
+                      <span>Exclusive Beta Pioneer badge</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-300 flex-shrink-0">✓</span>
+                      <span>Sync runs across all your devices</span>
+                    </li>
+                  </ul>
+                  <div className="flex items-center gap-2 text-xs text-amber-300/90 bg-amber-500/10 rounded-lg px-3 py-2 border border-amber-400/20">
+                    <Zap className="h-3 w-3 fill-current" />
+                    <span className="font-medium">
+                      {betaSignups.loading
+                        ? 'Loading...'
+                        : betaSignups.isNearCapacity
+                          ? `Almost full! Only ${betaSignups.spotsRemaining} spots left`
+                          : `Limited: ${betaSignups.count}/500 early access spots taken`
+                      }
+                    </span>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
-                    className="bg-emerald-300 text-emerald-950 hover:bg-emerald-200"
+                    className="bg-emerald-300 text-emerald-950 hover:bg-emerald-200 font-semibold"
                     onClick={() => {
+                      // Track early access CTA click
+                      trackAnalyticsEvent('early_access_cta_clicked', {
+                        source: 'today_screen_callout',
+                        action: 'signup',
+                        variant: 'optimized_v1',
+                        user_type: accountShortName ? 'returning' : 'new',
+                        signup_count: betaSignups.count,
+                        spots_remaining: betaSignups.spotsRemaining,
+                        percent_filled: betaSignups.percentFilled,
+                      })
                       setAuthModalTab('signup')
                       setShowAuthModal(true)
                     }}
                   >
                     <UserPlus className="mr-2 h-4 w-4" />
-                    Sign Up
+                    Claim Your Spot
                   </Button>
                   <Button
                     variant="outline"
                     className="border-emerald-300/40 bg-white/5 text-emerald-100 hover:bg-white/10"
                     onClick={() => {
+                      // Track login CTA click
+                      trackAnalyticsEvent('early_access_cta_clicked', {
+                        source: 'today_screen_callout',
+                        action: 'login',
+                        variant: 'optimized_v1',
+                        user_type: accountShortName ? 'returning' : 'new',
+                      })
                       setAuthModalTab('login')
                       setShowAuthModal(true)
                     }}
@@ -998,17 +1054,20 @@ export function TodayScreen() {
                 <Zap className="h-6 w-6 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
-                  Coach&apos;s Tip
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-gray-900">Coach&apos;s Tip</h3>
+                    <RunSmartBrandMark compact size="sm" className="opacity-60" />
+                  </div>
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={refreshTip}
-                    className="ml-auto h-8 w-8"
+                    className="h-8 w-8"
                   >
                     <RefreshCw className="h-3 w-3" />
                   </Button>
-                </h3>
+                </div>
                 <p className="text-sm text-gray-700 leading-relaxed">{dailyTip}</p>
               </div>
             </div>

@@ -123,8 +123,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     const supabase = createClient()
 
-    try {
-      const { error } = await supabase.auth.signOut()
+      try {
+        const { error } = await supabase.auth.signOut()
 
       if (error) {
         logger.error('[Auth] Error signing out:', error)
@@ -135,6 +135,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
       } catch (logoutError) {
         logger.warn('[Auth] Logout cookie clear failed:', logoutError)
+      }
+
+      try {
+        localStorage.removeItem('runsmart_auth_user_id')
+        localStorage.removeItem('runsmart_auth_email')
+        localStorage.removeItem('runsmart_auth_at')
+      } catch {
+        // ignore
       }
 
       setUser(null)

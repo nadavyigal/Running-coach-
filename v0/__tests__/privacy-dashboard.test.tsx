@@ -23,7 +23,7 @@ describe('PrivacyDashboard', () => {
   const mockToast = vi.fn()
   const mockOnSettingsChange = vi.fn()
 
-  const defaultUser = {
+  const buildDefaultUser = () => ({
     id: 1,
     name: 'Test User',
     privacySettings: {
@@ -37,11 +37,14 @@ describe('PrivacyDashboard', () => {
       exportData: false,
       deleteData: false,
     }
-  }
+  })
+
+  let defaultUser = buildDefaultUser()
 
   beforeEach(() => {
     vi.clearAllMocks()
     ;(useToast as any).mockReturnValue({ toast: mockToast })
+    defaultUser = buildDefaultUser()
     createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
       const element = originalCreateElement(tagName)
       if (tagName.toLowerCase() === 'a') {

@@ -2,6 +2,18 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ShareBadgeModal } from "@/components/share-badge-modal";
 import { vi } from "vitest";
 import "@testing-library/jest-dom";
+import { dbUtils } from "@/lib/dbUtils";
+import { toast } from "@/components/ui/use-toast";
+
+vi.mock("@/lib/dbUtils", () => ({
+  dbUtils: {
+    getCurrentUser: vi.fn(),
+  },
+}));
+
+vi.mock("@/components/ui/use-toast", () => ({
+  toast: vi.fn(),
+}));
 
 // Mock the fetch API
 global.fetch = vi.fn(() =>
@@ -33,6 +45,7 @@ describe("ShareBadgeModal", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    (dbUtils.getCurrentUser as any).mockResolvedValue({ id: 123 });
   });
 
   it("renders correctly when open", () => {
@@ -50,6 +63,9 @@ describe("ShareBadgeModal", () => {
 
   it("generates a shareable link when 'Generate Share Link' is clicked", async () => {
     render(<ShareBadgeModal {...badgeProps} />);
+    await waitFor(() => {
+      expect(dbUtils.getCurrentUser).toHaveBeenCalled();
+    });
     fireEvent.click(screen.getByRole("button", { name: /Generate Share Link/i }));
 
     await waitFor(() => {
@@ -58,10 +74,14 @@ describe("ShareBadgeModal", () => {
         "/api/share-badge",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ badgeId: "badge123", userId: "current_user_id" }),
+          body: expect.any(String),
         })
       );
     });
+
+    const fetchCall = (global.fetch as any).mock.calls.find((call: any[]) => call[0] === "/api/share-badge");
+    const requestBody = JSON.parse(fetchCall?.[1]?.body ?? "{}");
+    expect(requestBody).toMatchObject({ badgeId: "badge123", userId: 123 });
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("https://mock.link/badge123")).toBeInTheDocument();
@@ -71,6 +91,9 @@ describe("ShareBadgeModal", () => {
 
   it("copies the shareable link to clipboard", async () => {
     render(<ShareBadgeModal {...badgeProps} />);
+    await waitFor(() => {
+      expect(dbUtils.getCurrentUser).toHaveBeenCalled();
+    });
     fireEvent.click(screen.getByRole("button", { name: /Generate Share Link/i }));
 
     await waitFor(() => {
@@ -78,8 +101,10 @@ describe("ShareBadgeModal", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /Copy link/i }));
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("https://mock.link/badge123");
-    expect(window.alert).toHaveBeenCalledWith("Link copied to clipboard!"); // Assuming alert is used for feedback
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("https://mock.link/badge123");
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "Copied!" }));
+    });
   });
 
   it("displays an error message if link generation fails", async () => {
@@ -93,10 +118,13 @@ describe("ShareBadgeModal", () => {
     );
 
     render(<ShareBadgeModal {...badgeProps} />);
+    await waitFor(() => {
+      expect(dbUtils.getCurrentUser).toHaveBeenCalled();
+    });
     fireEvent.click(screen.getByRole("button", { name: /Generate Share Link/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Could not generate share link. Please try again./i)).toBeInTheDocument();
+      expect(screen.getByText(/Internal Server Error/i)).toBeInTheDocument();
     });
   });
 });
