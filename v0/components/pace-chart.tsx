@@ -184,7 +184,7 @@ export function PaceChart({ gpsPath }: PaceChartProps) {
 
     const scaleY = (paceMinPerKm: number) => {
       const ratio = paceRange > 0 ? (paceMinPerKm - paceMin) / paceRange : 0
-      return PADDING.top + (1 - ratio) * plotHeight
+      return PADDING.top + ratio * plotHeight
     }
 
     const points = processedData.map((entry) => {
@@ -251,7 +251,7 @@ export function PaceChart({ gpsPath }: PaceChartProps) {
 
   const scaleY = (paceMinPerKm: number) => {
     const ratio = paceRange > 0 ? (paceMinPerKm - chartMetrics.minPace) / paceRange : 0
-    return PADDING.top + (1 - ratio) * plotHeight
+    return PADDING.top + ratio * plotHeight
   }
 
   const handlePointerPosition = (event: PointerEvent<SVGSVGElement>) => {

@@ -35,6 +35,7 @@ import { GPSMonitoringService, type GPSAccuracyData } from "@/lib/gps-monitoring
 import { calculateDistance, calculateWaypointDistance } from "@/lib/routeUtils"
 import { useGpsTracking, type GPSPoint } from "@/hooks/use-gps-tracking"
 import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
+import { useWakeLock } from "@/hooks/use-wake-lock"
 
 type GPSCoordinate = GPSPoint
 
@@ -57,9 +58,9 @@ interface IntervalPhase {
   distance?: number // km
 }
 
-const AUTO_PAUSE_SPEED_MPS = 0.5
+const AUTO_PAUSE_SPEED_MPS = 0.2
 const AUTO_RESUME_SPEED_MPS = 1.0
-const AUTO_PAUSE_MIN_DURATION_MS = 5000
+const AUTO_PAUSE_MIN_DURATION_MS = 10000
 const IS_TEST_ENV = process.env.NODE_ENV === 'test' || process.env.VITEST
 
 const INTERVAL_UNIT_PATTERN =
@@ -317,25 +318,25 @@ export function RecordScreen() {
   const [completionModalData, setCompletionModalData] = useState<CompletionModalData | null>(null)
   const [currentWorkout, setCurrentWorkout] = useState<Workout | null>(null)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
-	  const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
-	  
- 	  // GPS monitoring state
- 	  const [currentGPSAccuracy, setCurrentGPSAccuracy] = useState<GPSAccuracyData | null>(null)
- 	  const [gpsAccuracyHistory, setGpsAccuracyHistory] = useState<GPSAccuracyData[]>([])
+  const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
 
- 	  // GPS warm-up countdown state
- 	  const [isGpsWarmingUp, setIsGpsWarmingUp] = useState(false)
- 	  const [gpsWarmupCountdown, setGpsWarmupCountdown] = useState(10)
- 	  const [gpsWarmupQuality, setGpsWarmupQuality] = useState<{
- 	    bestAccuracy: number | null;
- 	    currentAccuracy: number | null;
- 	    signalStrength: number;
- 	    canStart: boolean;
- 	  }>({ bestAccuracy: null, currentAccuracy: null, signalStrength: 0, canStart: false })
- 	  const gpsWarmupTimerRef = useRef<NodeJS.Timeout | null>(null)
- 	  const gpsWarmupPointsRef = useRef<GPSCoordinate[]>([])
- 	  const GPS_WARMUP_DURATION_SECONDS = 10
- 	  const GPS_MIN_SIGNAL_STRENGTH_TO_START = 60
+  // GPS monitoring state
+  const [currentGPSAccuracy, setCurrentGPSAccuracy] = useState<GPSAccuracyData | null>(null)
+  const [gpsAccuracyHistory, setGpsAccuracyHistory] = useState<GPSAccuracyData[]>([])
+
+  // GPS warm-up countdown state
+  const [isGpsWarmingUp, setIsGpsWarmingUp] = useState(false)
+  const [gpsWarmupCountdown, setGpsWarmupCountdown] = useState(10)
+  const [gpsWarmupQuality, setGpsWarmupQuality] = useState<{
+    bestAccuracy: number | null;
+    currentAccuracy: number | null;
+    signalStrength: number;
+    canStart: boolean;
+  }>({ bestAccuracy: null, currentAccuracy: null, signalStrength: 0, canStart: false })
+  const gpsWarmupTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const gpsWarmupPointsRef = useRef<GPSCoordinate[]>([])
+  const GPS_WARMUP_DURATION_SECONDS = 10
+  const GPS_MIN_SIGNAL_STRENGTH_TO_START = 60
 
   const gpsDebugEnabled =
     process.env.NODE_ENV !== 'production' &&
@@ -343,7 +344,7 @@ export function RecordScreen() {
       (typeof window !== 'undefined' &&
         new URLSearchParams(window.location.search).has('gpsDebug')))
   const autoPauseEnabled = ENABLE_AUTO_PAUSE
-   
+
   // GPS and tracking state
   const [gpsPath, setGpsPath] = useState<GPSCoordinate[]>([])
   const [currentPosition, setCurrentPosition] = useState<GPSCoordinate | null>(null)
@@ -388,6 +389,11 @@ export function RecordScreen() {
     deltaMeters: number
   } | null>(null)
   const [goldenRunError, setGoldenRunError] = useState<string | null>(null)
+
+  const { requestWakeLock, releaseWakeLock } = useWakeLock({
+    enableScreenLock: true,
+    enableAudioLock: true
+  })
 
   useEffect(() => {
     isRunningRef.current = isRunning
@@ -477,7 +483,7 @@ export function RecordScreen() {
     setPhaseRemainingDistance(null)
     setNextPhaseInSeconds(phases[0]?.duration ?? null)
   }
-  
+
   // Metrics state
   const [metrics, setMetrics] = useState<RunMetrics>({
     distance: 0,
@@ -543,13 +549,13 @@ export function RecordScreen() {
   useEffect(() => {
     loadTodaysWorkout()
     loadCurrentUser()
-    
+
     // Check GPS support but do not request permission until the run starts (Start/Resume).
     const setupGps = async () => {
       await checkGpsSupport()
     }
     setupGps()
-    
+
     return () => {
       stopTracking()
     }
@@ -713,9 +719,9 @@ export function RecordScreen() {
 
   const checkGpsSupport = async () => {
     // Check if running on HTTPS (required for GPS in production)
-    const isSecure = IS_TEST_ENV || (typeof window !== 'undefined' && 
+    const isSecure = IS_TEST_ENV || (typeof window !== 'undefined' &&
       (window.location.protocol === 'https:' || window.location.hostname === 'localhost'));
-    
+
     if (!isSecure) {
       console.warn('[GPS] Not running on HTTPS - GPS may not work');
       setGpsPermission('unsupported')
@@ -732,7 +738,7 @@ export function RecordScreen() {
       const permission = await navigator.permissions.query({ name: 'geolocation' as PermissionName })
       console.log('[GPS] Permission state:', permission.state);
       setGpsPermission(permission.state)
-      
+
       permission.onchange = () => {
         console.log('[GPS] Permission changed to:', permission.state);
         setGpsPermission(permission.state)
@@ -897,9 +903,9 @@ export function RecordScreen() {
     // Better GPS (<=20m accuracy) uses stricter filtering (0.5m minimum)
     // Poor GPS (>80m accuracy) uses relaxed filtering (3.0m minimum)
     const minDistanceMeters = accuracyValue <= 20 ? 0.5 :   // Good GPS: strict jitter filter
-                              accuracyValue <= 40 ? 1.0 :   // Fair GPS: moderate jitter filter
-                              accuracyValue <= 80 ? 2.0 :   // Poor GPS: relaxed jitter filter
-                              3.0;                          // Very poor GPS: very relaxed jitter filter
+      accuracyValue <= 40 ? 1.0 :   // Fair GPS: moderate jitter filter
+        accuracyValue <= 80 ? 2.0 :   // Poor GPS: relaxed jitter filter
+          3.0;                          // Very poor GPS: very relaxed jitter filter
 
     let isAutoPauseActive = autoPauseEnabled ? autoPauseActiveRef.current : false
     if (autoPauseEnabled) {
@@ -1073,7 +1079,7 @@ export function RecordScreen() {
 
       setGpsWarmupQuality(prev => {
         const bestAccuracy = prev.bestAccuracy === null ? currentAccuracy :
-                            Math.min(prev.bestAccuracy, currentAccuracy)
+          Math.min(prev.bestAccuracy, currentAccuracy)
 
         return {
           bestAccuracy,
@@ -1265,7 +1271,6 @@ export function RecordScreen() {
 
     // Evaluate GPS quality after warmup
     const quality = gpsWarmupQuality
-    const gpsService = gpsMonitoringRef.current
 
     if (!quality.canStart || quality.signalStrength < GPS_MIN_SIGNAL_STRENGTH_TO_START) {
       // GPS quality is poor - show toast with option to proceed or wait
@@ -1347,9 +1352,12 @@ export function RecordScreen() {
     })
 
     logRunStats({ event: 'start', startedAt: Date.now() })
+
+    // Activate wake lock
+    void requestWakeLock()
   }
 
- 	  const startRun = async () => {
+  const startRun = async () => {
     const user = await resolveCurrentUser()
     if (!user?.id) {
       toast({
@@ -1419,6 +1427,7 @@ export function RecordScreen() {
 
       // Start run immediately without warmup
       proceedWithRun()
+      void requestWakeLock()
       return
     }
 
@@ -1472,6 +1481,9 @@ export function RecordScreen() {
       title: "Run Paused",
       description: "Your run has been paused. Resume when ready.",
     })
+
+    // Release wake lock to save battery
+    void releaseWakeLock()
   }
 
   const resumeRun = async () => {
@@ -1513,6 +1525,9 @@ export function RecordScreen() {
       title: "Run Resumed",
       description: "GPS tracking resumed. Your run continues.",
     })
+
+    // Re-activate wake lock
+    void requestWakeLock()
   }
 
   const stopRun = async () => {
@@ -1548,12 +1563,14 @@ export function RecordScreen() {
         description: "Run stopped. No data to save.",
       })
     }
+
+    void releaseWakeLock()
   }
 
-	  const saveRun = async (distance: number, duration: number) => {
-	    try {
-	      const user = await resolveCurrentUser()
-	      if (!user?.id) {
+  const saveRun = async (distance: number, duration: number) => {
+    try {
+      const user = await resolveCurrentUser()
+      if (!user?.id) {
         toast({
           title: "Error",
           description: "User not found. Please complete onboarding first.",
@@ -1562,27 +1579,27 @@ export function RecordScreen() {
         return
       }
 
-	      const startAccuracy = gpsPathRef.current.at(0)?.accuracy
-	      const endAccuracy = gpsPathRef.current.at(-1)?.accuracy
-	      const averageAccuracy =
-	        gpsAccuracyHistory.length > 0
-	          ? gpsAccuracyHistory.reduce((sum, acc) => sum + acc.accuracyRadius, 0) / gpsAccuracyHistory.length
-	          : undefined
+      const startAccuracy = gpsPathRef.current.at(0)?.accuracy
+      const endAccuracy = gpsPathRef.current.at(-1)?.accuracy
+      const averageAccuracy =
+        gpsAccuracyHistory.length > 0
+          ? gpsAccuracyHistory.reduce((sum, acc) => sum + acc.accuracyRadius, 0) / gpsAccuracyHistory.length
+          : undefined
 
-	      const gpsPath =
-	        gpsPathRef.current.length > 0
-	          ? JSON.stringify(
-	              gpsPathRef.current.map((point) => ({
-	                lat: point.latitude,
-	                lng: point.longitude,
-	                timestamp: point.timestamp,
-	                accuracy: point.accuracy,
-	              }))
-	            )
-	          : undefined
+      const gpsPath =
+        gpsPathRef.current.length > 0
+          ? JSON.stringify(
+            gpsPathRef.current.map((point) => ({
+              lat: point.latitude,
+              lng: point.longitude,
+              timestamp: point.timestamp,
+              accuracy: point.accuracy,
+            }))
+          )
+          : undefined
 
-	      const gpsAccuracyData =
-	        gpsAccuracyHistory.length > 0 ? JSON.stringify(gpsAccuracyHistory) : undefined
+      const gpsAccuracyData =
+        gpsAccuracyHistory.length > 0 ? JSON.stringify(gpsAccuracyHistory) : undefined
 
       const { runId, matchedWorkout, adaptationTriggered } = await recordRunWithSideEffects({
         userId: user.id,
@@ -1590,14 +1607,14 @@ export function RecordScreen() {
         durationSeconds: duration,
         completedAt: new Date(),
         autoMatchWorkout: true,
-	        ...(currentWorkout?.type ? { type: resolveRunType(currentWorkout.type) } : {}),
-	        ...(typeof currentWorkout?.id === 'number' ? { workoutId: currentWorkout.id } : {}),
-	        ...(selectedRoute ? { notes: `Route: ${selectedRoute.name}`, route: selectedRoute.name } : {}),
-	        ...(gpsPath ? { gpsPath } : {}),
-	        ...(gpsAccuracyData ? { gpsAccuracyData } : {}),
-	        ...(typeof startAccuracy === 'number' ? { startAccuracy } : {}),
-	        ...(typeof endAccuracy === 'number' ? { endAccuracy } : {}),
-	        ...(typeof averageAccuracy === 'number' ? { averageAccuracy } : {}),
+        ...(currentWorkout?.type ? { type: resolveRunType(currentWorkout.type) } : {}),
+        ...(typeof currentWorkout?.id === 'number' ? { workoutId: currentWorkout.id } : {}),
+        ...(selectedRoute ? { notes: `Route: ${selectedRoute.name}`, route: selectedRoute.name } : {}),
+        ...(gpsPath ? { gpsPath } : {}),
+        ...(gpsAccuracyData ? { gpsAccuracyData } : {}),
+        ...(typeof startAccuracy === 'number' ? { startAccuracy } : {}),
+        ...(typeof endAccuracy === 'number' ? { endAccuracy } : {}),
+        ...(typeof averageAccuracy === 'number' ? { averageAccuracy } : {}),
       })
 
       if (matchedWorkout) {
@@ -1609,8 +1626,8 @@ export function RecordScreen() {
             matchedWorkout.scheduledDate instanceof Date
               ? matchedWorkout.scheduledDate
               : matchedWorkout.scheduledDate
-              ? new Date(matchedWorkout.scheduledDate)
-              : new Date()
+                ? new Date(matchedWorkout.scheduledDate)
+                : new Date()
           if (Number.isNaN(referenceDate.getTime())) {
             referenceDate = new Date()
           }
@@ -1697,8 +1714,8 @@ export function RecordScreen() {
   const intervalTotal = intervalPhases.filter((phase) => phase.type === 'interval').length
   const intervalIndex = currentPhase
     ? intervalPhases
-        .slice(0, currentPhaseIndex + 1)
-        .filter((phase) => phase.type === 'interval').length
+      .slice(0, currentPhaseIndex + 1)
+      .filter((phase) => phase.type === 'interval').length
     : 0
   const intervalLabel = formatIntervalLabel(currentWorkout?.notes, currentWorkout?.type)
   const intervalHeaderText = currentPhase
@@ -1753,11 +1770,10 @@ export function RecordScreen() {
                       value={gpsWarmupQuality.signalStrength}
                       className="w-32 h-2"
                     />
-                    <span className={`text-sm font-bold ${
-                      gpsWarmupQuality.signalStrength >= 75 ? 'text-green-600' :
+                    <span className={`text-sm font-bold ${gpsWarmupQuality.signalStrength >= 75 ? 'text-green-600' :
                       gpsWarmupQuality.signalStrength >= 50 ? 'text-yellow-600' :
-                      'text-red-600'
-                    }`}>
+                        'text-red-600'
+                      }`}>
                       {gpsWarmupQuality.signalStrength}%
                     </span>
                   </div>
@@ -1766,11 +1782,10 @@ export function RecordScreen() {
                 {gpsWarmupQuality.currentAccuracy !== null && (
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium text-gray-700">Current Accuracy:</span>
-                    <span className={`text-sm font-bold ${
-                      gpsWarmupQuality.currentAccuracy <= 20 ? 'text-green-600' :
+                    <span className={`text-sm font-bold ${gpsWarmupQuality.currentAccuracy <= 20 ? 'text-green-600' :
                       gpsWarmupQuality.currentAccuracy <= 50 ? 'text-yellow-600' :
-                      'text-red-600'
-                    }`}>
+                        'text-red-600'
+                      }`}>
                       ±{Math.round(gpsWarmupQuality.currentAccuracy)}m
                     </span>
                   </div>
@@ -1855,9 +1870,9 @@ export function RecordScreen() {
                   {selectedRoute.distance}km • {selectedRoute.safetyScore}% safe • {selectedRoute.difficulty}
                 </p>
               </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setSelectedRoute(null)}
                 className="text-green-700 border-green-300"
               >
@@ -2097,13 +2112,13 @@ export function RecordScreen() {
 
             {/* iOS fallback notice when no cue method is enabled */}
             {coachingCueState.isIOS &&
-             !coachingCueState.vibrationSupported &&
-             coachingCueState.audioSupported &&
-             !coachingCueState.audioEnabled && (
-              <p className="text-xs text-amber-600">
-                Enable audio cues for coaching feedback on your device.
-              </p>
-            )}
+              !coachingCueState.vibrationSupported &&
+              coachingCueState.audioSupported &&
+              !coachingCueState.audioEnabled && (
+                <p className="text-xs text-amber-600">
+                  Enable audio cues for coaching feedback on your device.
+                </p>
+              )}
           </CardContent>
         </Card>
       )}
@@ -2166,10 +2181,10 @@ export function RecordScreen() {
                       <Play className="h-5 w-5 mr-2" />
                     )}
                     {isInitializingGps ? 'Initializing GPS...' :
-                     isGpsWarmingUp ? 'Warming Up GPS...' :
-                     isGpsTracking && currentGPSAccuracy && currentGPSAccuracy.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START ?
-                       `Start Run (${currentGPSAccuracy.signalStrength}% GPS)` :
-                     'Start Run'}
+                      isGpsWarmingUp ? 'Warming Up GPS...' :
+                        isGpsTracking && currentGPSAccuracy && currentGPSAccuracy.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START ?
+                          `Start Run (${currentGPSAccuracy.signalStrength}% GPS)` :
+                          'Start Run'}
                   </Button>
                   {/* Show "Start Anyway" button if GPS is tracking but run hasn't started (post-warmup with poor signal) */}
                   {!isInitializingGps && !isGpsWarmingUp && isGpsTracking && gpsAccuracy > 0 && (
@@ -2352,8 +2367,8 @@ export function RecordScreen() {
                 lastSegment:{' '}
                 {lastSegmentStats
                   ? `${Math.round(lastSegmentStats.distanceMeters)}m in ${Math.round(
-                      lastSegmentStats.timeDeltaMs / 1000
-                    )}s @ ${lastSegmentStats.speedMps.toFixed(2)} m/s`
+                    lastSegmentStats.timeDeltaMs / 1000
+                  )}s @ ${lastSegmentStats.speedMps.toFixed(2)} m/s`
                   : '--'}
               </div>
             </div>
@@ -2401,7 +2416,7 @@ export function RecordScreen() {
                 {isPaused ? 'Take your time! ⏸️' : 'Keep it up! 🏃‍♂️'}
               </h3>
               <p className="text-sm text-blue-800">
-                {isPaused 
+                {isPaused
                   ? 'Resume when you\'re ready to continue.'
                   : 'Maintain a steady rhythm and focus on your breathing.'
                 }
@@ -2411,11 +2426,11 @@ export function RecordScreen() {
         </Card>
       )}
 
-	      {/* Recovery Status */}
-	      <RecoveryRecommendations
-	        {...(currentUser?.id ? { userId: currentUser.id } : {})}
-	        showBreakdown={false}
-	      />
+      {/* Recovery Status */}
+      <RecoveryRecommendations
+        {...(currentUser?.id ? { userId: currentUser.id } : {})}
+        showBreakdown={false}
+      />
 
       {/* Modals */}
       {showRoutesModal && (
@@ -2433,15 +2448,15 @@ export function RecordScreen() {
           onRouteSelected={handleRouteSelected}
         />
       )}
-	      {showManualModal && (
-	        <ManualRunModal
-	          isOpen={showManualModal}
-	          onClose={() => setShowManualModal(false)}
-	          {...(currentWorkout?.id ? { workoutId: currentWorkout.id } : {})}
-	          onSaved={() => {
-	            // Navigate back to today screen after saving manual run
-	            router.push('/')
-	          }}
+      {showManualModal && (
+        <ManualRunModal
+          isOpen={showManualModal}
+          onClose={() => setShowManualModal(false)}
+          {...(currentWorkout?.id ? { workoutId: currentWorkout.id } : {})}
+          onSaved={() => {
+            // Navigate back to today screen after saving manual run
+            router.push('/')
+          }}
         />
       )}
       {showAddActivityModal && (
