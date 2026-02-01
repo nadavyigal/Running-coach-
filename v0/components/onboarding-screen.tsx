@@ -302,7 +302,7 @@ interface OnboardingScreenProps {
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   // Initialize session tracker
   const [sessionTracker] = useState(() => new OnboardingSessionTracker())
-  
+
   // Initialize error handling hooks
   const { showError } = useErrorToast()
   const { isOnline } = useNetworkErrorHandling({
@@ -310,9 +310,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     enableAutoRetry: true,
     showToasts: true
   })
-  const { 
-    checkDatabaseHealth, 
-    recoverFromDatabaseError 
+  const {
+    checkDatabaseHealth,
+    recoverFromDatabaseError
   } = useDatabaseErrorHandling()
   useAIServiceErrorHandling({
     enableFallbacks: true,
@@ -322,7 +322,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   useEffect(() => {
     // Track onboarding start
     trackOnboardingStarted('guided_form')
-    
+
     // Track user context on start
     trackUserContext({
       demographics: { experience: '', goal: '' } as any,
@@ -369,7 +369,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         })
       }
     };
-    
+
     initializeDatabase()
     checkAndCleanupOnboarding();
   }, [checkDatabaseHealth, recoverFromDatabaseError, showError]);
@@ -437,6 +437,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     push: false,
   })
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
+  const [privacyAccepted, setPrivacyAccepted] = useState(false)
   const [privacySettings] = useState<UserPrivacySettings>({
     dataCollection: {
       location: true,
@@ -472,7 +473,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       trackStepProgression(currentStep + 1, `step_${currentStep + 1}`, 'forward')
       sessionTracker.startStep(`step_${currentStep + 1}`)
       sessionTracker.completeStep(`step_${currentStep}`)
-      
+
       setCurrentStep(currentStep + 1)
     }
   }
@@ -497,6 +498,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           return referenceRaceTimeSeconds > 0
         case 6:
           return daysPerWeek >= 2 && Boolean(longRunDay)
+        case 7:
+          return privacyAccepted
         default:
           return true
       }
@@ -515,7 +518,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           case 5:
             return { field: 'referenceRace', message: 'Enter your current race time' }
           case 6:
-            return { field: 'schedule', message: 'Select your schedule details to continue' }
+            return { field: 'schedule', message: 'Select your training days and long run day' }
+          case 7:
+            return { field: 'privacy', message: 'Please accept the privacy policy to continue' }
           default:
             return { field: 'unknown', message: 'Validation failed' }
         }
@@ -545,6 +550,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         return "Enter your current race time to continue"
       case 6:
         return "Select your training days and long run day"
+      case 7:
+        return "Please accept the privacy policy to continue"
       default:
         return "Please complete all required fields"
     }
@@ -590,15 +597,15 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
   const handleComplete = async () => {
     console.log('🚀 ONBOARDING COMPLETION STARTED - WITH USER CREATION')
-    
+
     setIsGeneratingPlan(true)
     let retryCount = 0
     const maxRetries = 3
-      
+
     const attemptUserCreation = async (): Promise<boolean> => {
       try {
         console.log(`📝 Attempt ${retryCount + 1}/${maxRetries}: Atomic Finish commit...`)
-        
+
         const availableDays = ALL_WEEKDAYS
         const trainingDays = selectTrainingDays(availableDays, daysPerWeek, longRunDay)
         const planPreferences = {
@@ -621,7 +628,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           privacySettings,
           planPreferences,
         }
-        
+
         // Validate required fields
         if (!selectedGoal || !selectedExperience) {
           throw new Error('Missing required onboarding data')
@@ -633,7 +640,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           gdpr: true,
           push: false
         }
-        
+
         console.log('📋 Creating user profile (atomic) ...')
         const { userId, planId } = await dbUtils.completeOnboardingAtomic({
           goal: formData.goal as any,
@@ -663,89 +670,89 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         // Generate AI-powered training plan with enhanced error handling
         if (isOnline) {
           void (async () => {
-        console.log('🤖 Generating personalized training plan...')
-        let aiPlanGenerated = false;
-        
-        try {
-          // Set a reasonable timeout for AI generation
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
-          
-          const planResponse = await fetch('/api/generate-plan', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              user: {
-                experience: formData.experience,
-                goal: formData.goal,
-                daysPerWeek: formData.daysPerWeek,
-                preferredTimes: formData.selectedTimes,
-                age: formData.age,
-                averageWeeklyKm: formData.averageWeeklyKm ?? undefined
-              }
-            }),
-            signal: controller.signal
-          });
-          
-          clearTimeout(timeoutId);
+            console.log('🤖 Generating personalized training plan...')
+            let aiPlanGenerated = false;
 
-          if (planResponse.ok) {
-            const planData = await planResponse.json();
-            console.log('✅ AI plan generated successfully:', planData);
+            try {
+              // Set a reasonable timeout for AI generation
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-            // Update the plan with AI-generated workouts
-            if (planData.plan && planData.plan.workouts) {
-              await dbUtils.updatePlanWithAIWorkouts(planId, planData.plan);
-              console.log('✅ Plan updated with AI workouts');
-              aiPlanGenerated = true;
-            }
-          } else {
-            const errorData = await planResponse.json().catch(() => ({}));
-            console.warn('⚠️ AI plan generation failed:', {
-              status: planResponse.status,
-              error: errorData
-            });
-            
-            // Check if it's an API key issue
-            if (planResponse.status === 503 || errorData.fallbackRequired) {
-              console.log('📋 AI service unavailable - using default plan template');
-              toast({
-                title: "Using Default Plan",
-                description: "AI coach is currently unavailable. We've created a great starter plan for you!",
-                variant: "default"
+              const planResponse = await fetch('/api/generate-plan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  user: {
+                    experience: formData.experience,
+                    goal: formData.goal,
+                    daysPerWeek: formData.daysPerWeek,
+                    preferredTimes: formData.selectedTimes,
+                    age: formData.age,
+                    averageWeeklyKm: formData.averageWeeklyKm ?? undefined
+                  }
+                }),
+                signal: controller.signal
               });
+
+              clearTimeout(timeoutId);
+
+              if (planResponse.ok) {
+                const planData = await planResponse.json();
+                console.log('✅ AI plan generated successfully:', planData);
+
+                // Update the plan with AI-generated workouts
+                if (planData.plan && planData.plan.workouts) {
+                  await dbUtils.updatePlanWithAIWorkouts(planId, planData.plan);
+                  console.log('✅ Plan updated with AI workouts');
+                  aiPlanGenerated = true;
+                }
+              } else {
+                const errorData = await planResponse.json().catch(() => ({}));
+                console.warn('⚠️ AI plan generation failed:', {
+                  status: planResponse.status,
+                  error: errorData
+                });
+
+                // Check if it's an API key issue
+                if (planResponse.status === 503 || errorData.fallbackRequired) {
+                  console.log('📋 AI service unavailable - using default plan template');
+                  toast({
+                    title: "Using Default Plan",
+                    description: "AI coach is currently unavailable. We've created a great starter plan for you!",
+                    variant: "default"
+                  });
+                }
+              }
+            } catch (planError: any) {
+              // Handle specific error types
+              if (planError.name === 'AbortError') {
+                console.warn('⚠️ AI plan generation timed out, using default plan');
+                toast({
+                  title: "Plan Generation Timeout",
+                  description: "AI took too long to respond. Using a pre-built plan instead.",
+                  variant: "default"
+                });
+              } else {
+                console.warn('⚠️ AI plan generation error:', planError.message || planError);
+              }
+              // Continue with default plan - not a critical error
             }
-          }
-        } catch (planError: any) {
-          // Handle specific error types
-          if (planError.name === 'AbortError') {
-            console.warn('⚠️ AI plan generation timed out, using default plan');
-            toast({
-              title: "Plan Generation Timeout",
-              description: "AI took too long to respond. Using a pre-built plan instead.",
-              variant: "default"
-            });
-          } else {
-            console.warn('⚠️ AI plan generation error:', planError.message || planError);
-          }
-          // Continue with default plan - not a critical error
-        }
-        
-        // Show appropriate success message based on AI availability
-        if (!aiPlanGenerated) {
-          console.log('📋 Using default plan template (AI unavailable)');
-        }
+
+            // Show appropriate success message based on AI availability
+            if (!aiPlanGenerated) {
+              console.log('📋 Using default plan template (AI unavailable)');
+            }
           })()
         }
 
         return true
-        
+
       } catch (error) {
         console.error(`❌ Attempt ${retryCount + 1} failed:`, error)
-        
+
         // Check if it's a DB availability error
         const errorMsg = error instanceof Error ? error.message : String(error)
-        
+
         if (errorMsg.includes('User not found') || errorMsg.includes('Database not available')) {
           // Try database recovery
           console.log('🔄 Attempting database recovery...')
@@ -757,24 +764,24 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             console.warn('Database recovery failed:', recoveryError)
           }
         }
-        
+
         retryCount++
         return false
       }
     }
-    
+
     try {
       // Attempt user creation with retries
       let success = false
       while (retryCount < maxRetries && !success) {
         success = await attemptUserCreation()
-        
+
         if (!success && retryCount < maxRetries) {
           // Wait before retry
           await new Promise(resolve => setTimeout(resolve, 1000 * retryCount))
         }
       }
-      
+
       if (success) {
         // Success path - customize message based on AI availability
         console.log('🎉 [OnboardingScreen] Onboarding completed successfully!')
@@ -809,7 +816,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         })
         setIsGeneratingPlan(false)
       }
-      
+
     } catch (error) {
       console.error('❌ Critical onboarding failure:', error)
 
@@ -825,7 +832,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       // User can retry by clicking "Complete Setup" again
     }
   }
-      
+
 
   const renderStep = () => {
     switch (currentStep) {
@@ -1195,6 +1202,19 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                   <span className="text-white font-medium">{getWeekdayLabel(longRunDay)}</span>
                 </li>
               </ul>
+            </div>
+
+            <div className="flex items-start space-x-3 p-4 rounded-2xl bg-white/5 border border-white/10">
+              <input
+                type="checkbox"
+                id="privacy-policy"
+                checked={privacyAccepted}
+                onChange={(e) => setPrivacyAccepted(e.target.checked)}
+                className="mt-1 h-5 w-5 rounded border-white/30 bg-white/10 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+              />
+              <label htmlFor="privacy-policy" className="text-sm text-white/80 leading-relaxed cursor-pointer select-none">
+                I have read and agree to the <a href="/privacy" target="_blank" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium" onClick={(e) => e.stopPropagation()}>Privacy Policy</a>. I understand that my running data is stored locally on my device.
+              </label>
             </div>
           </div>
         )

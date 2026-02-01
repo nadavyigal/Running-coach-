@@ -469,7 +469,7 @@ export function ProfileScreen() {
     { icon: Target, name: "Goal Settings", desc: "Manage your running goals and targets", action: "goal-settings" },
     { icon: Brain, name: "Coaching Preferences", desc: "Customize your AI coach behavior", action: "coaching-preferences" },
     { icon: Bell, name: "Notifications", desc: "Reminders and updates" },
-    { icon: Shield, name: "Privacy & Data", desc: "Manage your data" },
+    { icon: Shield, name: "Privacy & Data", desc: "Manage your data", action: "privacy" },
     { icon: HelpCircle, name: "Help & Support", desc: "Get help and contact us" },
   ]
 
@@ -638,12 +638,11 @@ export function ProfileScreen() {
                         {getGoalTrajectory(primaryGoal.id) && (
                           <Badge
                             variant="outline"
-                            className={`text-xs capitalize ${
-                              getGoalTrajectory(primaryGoal.id) === 'ahead' ? 'text-emerald-600 border-emerald-300' :
-                              getGoalTrajectory(primaryGoal.id) === 'on_track' ? 'text-blue-600 border-blue-300' :
-                              getGoalTrajectory(primaryGoal.id) === 'behind' ? 'text-amber-600 border-amber-300' :
-                              'text-red-600 border-red-300'
-                            }`}
+                            className={`text-xs capitalize ${getGoalTrajectory(primaryGoal.id) === 'ahead' ? 'text-emerald-600 border-emerald-300' :
+                                getGoalTrajectory(primaryGoal.id) === 'on_track' ? 'text-blue-600 border-blue-300' :
+                                  getGoalTrajectory(primaryGoal.id) === 'behind' ? 'text-amber-600 border-amber-300' :
+                                    'text-red-600 border-red-300'
+                              }`}
                           >
                             {getGoalTrajectory(primaryGoal.id)?.replace('_', ' ')}
                           </Badge>
@@ -725,12 +724,11 @@ export function ProfileScreen() {
                             <div className="flex items-center gap-2">
                               <span>{Math.round(getGoalProgress(goal.id))}%</span>
                               {getGoalTrajectory(goal.id) && (
-                                <span className={`capitalize ${
-                                  getGoalTrajectory(goal.id) === 'ahead' ? 'text-emerald-600' :
-                                  getGoalTrajectory(goal.id) === 'on_track' ? 'text-blue-600' :
-                                  getGoalTrajectory(goal.id) === 'behind' ? 'text-amber-600' :
-                                  'text-red-600'
-                                }`}>
+                                <span className={`capitalize ${getGoalTrajectory(goal.id) === 'ahead' ? 'text-emerald-600' :
+                                    getGoalTrajectory(goal.id) === 'on_track' ? 'text-blue-600' :
+                                      getGoalTrajectory(goal.id) === 'behind' ? 'text-amber-600' :
+                                        'text-red-600'
+                                  }`}>
                                   {getGoalTrajectory(goal.id)?.replace('_', ' ')}
                                 </span>
                               )}
@@ -1150,6 +1148,8 @@ export function ProfileScreen() {
                     if (goalSection) {
                       goalSection.scrollIntoView({ behavior: 'smooth' });
                     }
+                  } else if (setting.action === "privacy") {
+                    window.location.href = '/privacy';
                   }
                   // Add other setting handlers here
                 };
