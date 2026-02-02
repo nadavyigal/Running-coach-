@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 export const metadata: Metadata = {
   title: 'Terms of Service',
-  description: 'Run-Smart terms of service.',
+  description: 'Run-Smart AI terms of service.',
   alternates: { canonical: '/landing/terms' },
   robots: { index: false, follow: false },
 }
@@ -17,13 +17,13 @@ export default function TermsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Terms of Service</CardTitle>
-          <CardDescription>Last updated: December 25, 2025</CardDescription>
+          <CardDescription>Last updated: February 2, 2026</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 text-sm text-muted-foreground">
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-foreground">Beta program</h2>
             <p>
-              Run-Smart is in active development. Features may change, be removed, or experience
+              Run-Smart AI is in active development. Features may change, be removed, or experience
               downtime as we iterate during the beta.
             </p>
           </section>
@@ -36,7 +36,7 @@ export default function TermsPage() {
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-foreground">No medical advice</h2>
             <p>
-              Run-Smart provides general fitness guidance. It is not medical advice and should not
+              Run-Smart AI provides general fitness guidance. It is not medical advice and should not
               replace professional medical guidance. Always consult a professional for medical or
               injury concerns.
             </p>
@@ -62,14 +62,17 @@ export default function TermsPage() {
             <h2 className="text-base font-semibold text-foreground">Limitation of liability</h2>
             <p>
               The beta is provided &quot;as is&quot; without warranties of any kind. To the fullest extent
-              permitted by law, Run-Smart is not liable for damages arising from use of the beta.
+              permitted by law, Run-Smart AI is not liable for damages arising from use of the beta.
             </p>
           </section>
 
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-foreground">Contact</h2>
             <p>
-              Questions? Email us at <a className="underline" href="mailto:runsmartteam@gmail.com">runsmartteam@gmail.com</a>.
+              Questions? Email us at{' '}
+              <a className="underline" href="mailto:firstname.lastname@runsmart-ai.com">
+                firstname.lastname@runsmart-ai.com
+              </a>.
             </p>
           </section>
 
@@ -81,4 +84,3 @@ export default function TermsPage() {
     </div>
   )
 }
-

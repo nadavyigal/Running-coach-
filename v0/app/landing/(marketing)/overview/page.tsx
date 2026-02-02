@@ -13,13 +13,13 @@ export const metadata: Metadata = {
   description:
     'Build a lasting running habit with AI-powered training plans that adapt to your life. Recovery-focused coaching, 21-day challenge, works offline. Start free.',
   alternates: {
-    canonical: '/',
+    canonical: '/landing/overview',
   },
   openGraph: {
     title: 'Your Personal AI Running Coach That Adapts to Your Life',
     description:
       'Build lasting running habits with adaptive AI coaching and recovery-focused training plans.',
-    url: '/',
+    url: '/landing/overview',
     type: 'website',
     images: [
       {
