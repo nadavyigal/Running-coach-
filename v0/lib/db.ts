@@ -867,6 +867,28 @@ export interface Run {
   updatedAt?: Date;
 }
 
+// Active recording sessions for checkpoint/recovery
+export interface ActiveRecordingSession {
+  id?: number;
+  userId: number;
+  status: 'recording' | 'paused' | 'interrupted';
+  startedAt: Date;
+  lastCheckpointAt: Date;
+  distanceKm: number;
+  durationSeconds: number;
+  elapsedRunMs: number;
+  gpsPath: string; // JSON stringified GPSPoint[]
+  lastRecordedPoint?: string; // JSON stringified GPSPoint
+  workoutId?: number;
+  routeId?: number;
+  routeName?: string;
+  autoPauseCount: number;
+  acceptedPointCount: number;
+  rejectedPointCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Goal tracking system
 export interface Goal {
   id?: number;
@@ -1027,6 +1049,7 @@ export class RunSmartDB extends Dexie {
   plans!: EntityTable<Plan, 'id'>;
   workouts!: EntityTable<Workout, 'id'>;
   runs!: EntityTable<Run, 'id'>;
+  activeRecordingSessions!: EntityTable<ActiveRecordingSession, 'id'>;
   shoes!: EntityTable<Shoe, 'id'>;
   chatMessages!: EntityTable<ChatMessage, 'id'>;
   badges!: EntityTable<Badge, 'id'>;
@@ -1097,6 +1120,9 @@ export class RunSmartDB extends Dexie {
 
       // Runs: Optimized for user timeline and type filtering
       runs: '++id, userId, type, distance, duration, completedAt, [userId+completedAt], [userId+type]',
+
+      // Active recording sessions: Optimized for user and status lookups
+      activeRecordingSessions: '++id, userId, status, startedAt, lastCheckpointAt, [userId+status]',
 
       // Shoes: Optimized for active shoe lookups
       shoes: '++id, userId, name, brand, model, isActive, [userId+isActive]',
@@ -1268,6 +1294,13 @@ export class RunSmartDB extends Dexie {
 
     this.version(4).stores({
       syncJobs: '++id, userId, deviceId, type, status, priority, createdAt, [userId+status], [status+priority], [userId+deviceId+type]',
+    });
+
+    this.version(5).stores({
+      activeRecordingSessions: '++id, userId, status, startedAt, lastCheckpointAt, [userId+status]',
+    }).upgrade(async (trans) => {
+      console.log('🔄 Upgrading database to version 5: Adding active recording sessions table');
+      console.log('✓ Database upgrade complete: Active recording sessions table added');
     });
 
   }

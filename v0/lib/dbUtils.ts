@@ -1,5 +1,6 @@
 import { db, isDatabaseAvailable, safeDbOperation, getDatabase, resetDatabaseInstance } from './db';
 import type {
+  ActiveRecordingSession,
   ChatMessage as ChatMessageEntity,
   CoachingFeedback,
   CoachingInteraction,
@@ -4318,6 +4319,129 @@ export async function getUserOnboardingStatus(userId: number): Promise<{
 }
 
 // ============================================================================
+// RECORDING CHECKPOINT UTILITIES
+// ============================================================================
+
+/**
+ * Create or update an active recording session checkpoint
+ */
+export async function upsertActiveRecordingSession(
+  session: Partial<ActiveRecordingSession>
+): Promise<number> {
+  return safeDbOperation(async () => {
+    if (!session.userId) {
+      throw new Error('User ID is required for recording session');
+    }
+
+    const validatedUserId = validateUserId(session.userId);
+    const now = new Date();
+
+    if (session.id) {
+      // Update existing session
+      await db.activeRecordingSessions.update(session.id, {
+        ...session,
+        updatedAt: now,
+      });
+      return session.id;
+    } else {
+      // Create new session
+      const sessionData: ActiveRecordingSession = {
+        userId: validatedUserId,
+        status: session.status || 'recording',
+        startedAt: session.startedAt || now,
+        lastCheckpointAt: session.lastCheckpointAt || now,
+        distanceKm: session.distanceKm || 0,
+        durationSeconds: session.durationSeconds || 0,
+        elapsedRunMs: session.elapsedRunMs || 0,
+        gpsPath: session.gpsPath || '[]',
+        lastRecordedPoint: session.lastRecordedPoint,
+        workoutId: session.workoutId,
+        routeId: session.routeId,
+        routeName: session.routeName,
+        autoPauseCount: session.autoPauseCount || 0,
+        acceptedPointCount: session.acceptedPointCount || 0,
+        rejectedPointCount: session.rejectedPointCount || 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const id = await db.activeRecordingSessions.add(sessionData);
+      return id;
+    }
+  }, 'upsertActiveRecordingSession', 0);
+}
+
+/**
+ * Get an active recording session for a user
+ */
+export async function getActiveRecordingSession(
+  userId: number
+): Promise<ActiveRecordingSession | null> {
+  return safeDbOperation(async () => {
+    const validatedUserId = validateUserId(userId);
+
+    const sessions = await db.activeRecordingSessions
+      .where('userId')
+      .equals(validatedUserId)
+      .filter(s => s.status === 'recording' || s.status === 'paused')
+      .toArray();
+
+    if (sessions.length === 0) {
+      return null;
+    }
+
+    // Return the most recent session
+    return sessions.sort((a, b) => b.lastCheckpointAt.getTime() - a.lastCheckpointAt.getTime())[0];
+  }, 'getActiveRecordingSession', null);
+}
+
+/**
+ * Delete an active recording session
+ */
+export async function deleteActiveRecordingSession(sessionId: number): Promise<void> {
+  return safeDbOperation(async () => {
+    await db.activeRecordingSessions.delete(sessionId);
+  }, 'deleteActiveRecordingSession', undefined);
+}
+
+/**
+ * Mark a session as interrupted
+ */
+export async function markSessionAsInterrupted(sessionId: number): Promise<void> {
+  return safeDbOperation(async () => {
+    await db.activeRecordingSessions.update(sessionId, {
+      status: 'interrupted',
+      updatedAt: new Date(),
+    });
+  }, 'markSessionAsInterrupted', undefined);
+}
+
+/**
+ * Clean up old interrupted sessions (older than 7 days)
+ */
+export async function cleanupOldRecordingSessions(userId: number): Promise<number> {
+  return safeDbOperation(async () => {
+    const validatedUserId = validateUserId(userId);
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const oldSessions = await db.activeRecordingSessions
+      .where('userId')
+      .equals(validatedUserId)
+      .filter(s => s.lastCheckpointAt < sevenDaysAgo)
+      .toArray();
+
+    for (const session of oldSessions) {
+      if (session.id) {
+        await db.activeRecordingSessions.delete(session.id);
+      }
+    }
+
+    return oldSessions.length;
+  }, 'cleanupOldRecordingSessions', 0);
+}
+
+// ============================================================================
 // EXPORT ALL UTILITIES
 // ============================================================================
 
@@ -4458,7 +4582,14 @@ export const dbUtils = {
   saveFusedDataPoint,
   logDataConflict,
   saveDataSource,
-  
+
+  // Recording checkpoints
+  upsertActiveRecordingSession,
+  getActiveRecordingSession,
+  deleteActiveRecordingSession,
+  markSessionAsInterrupted,
+  cleanupOldRecordingSessions,
+
   // Error handling
   handleDatabaseError,
 

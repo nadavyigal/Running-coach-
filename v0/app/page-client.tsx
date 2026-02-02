@@ -8,6 +8,9 @@
 	import { WelcomeModal } from '@/components/auth/welcome-modal';
 	import { SyncService } from '@/lib/sync/sync-service';
 	import { useAuth } from '@/lib/auth-context';
+import { RunRecoveryModal } from '@/components/run-recovery-modal';
+import { RecordingCheckpointService } from '@/lib/recording-checkpoint';
+import type { ActiveRecordingSession } from '@/lib/db';
 
 type MainScreen = 'today' | 'plan' | 'record' | 'chat' | 'profile' | 'run-report'
 
@@ -239,6 +242,8 @@ export default function RunSmartApp() {
   const [showDebugPanel, setShowDebugPanel] = useState(false)
   const [safeMode, setSafeMode] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [incompleteRecording, setIncompleteRecording] = useState<ActiveRecordingSession | null>(null)
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false)
 
   // Ref to prevent double initialization in React Strict Mode
   const initRef = useRef(false)
@@ -418,6 +423,26 @@ export default function RunSmartApp() {
                 logger.log("[app:init:sync] ✅ Run data synchronized", syncResult);
               } catch (syncError) {
                 logger.warn("[app:init:sync] ⚠️ Failed to sync run data:", syncError);
+              }
+
+              // Check for incomplete recording session
+              try {
+                const checkpointService = new RecordingCheckpointService(user.id);
+                const incompleteSession = await checkpointService.getIncompleteSession(user.id);
+                if (incompleteSession) {
+                  logger.log("[app:init:recovery] ⚠️ Found incomplete recording session", {
+                    sessionId: incompleteSession.id,
+                    startedAt: incompleteSession.startedAt,
+                    distanceKm: incompleteSession.distanceKm,
+                    durationSeconds: incompleteSession.durationSeconds,
+                  });
+                  setIncompleteRecording(incompleteSession);
+                  setShowRecoveryModal(true);
+                } else {
+                  logger.log("[app:init:recovery] ✅ No incomplete recording sessions found");
+                }
+              } catch (recoveryError) {
+                logger.warn("[app:init:recovery] ⚠️ Failed to check for incomplete recordings:", recoveryError);
               }
             }
             if (user.onboardingComplete) {
@@ -746,6 +771,58 @@ export default function RunSmartApp() {
     }
   }
 
+  // Recovery modal handlers
+  const handleResumeRecording = async () => {
+    if (!incompleteRecording) return;
+
+    try {
+      // Parse GPS data
+      const gpsPath = JSON.parse(incompleteRecording.gpsPath);
+      const lastRecordedPoint = incompleteRecording.lastRecordedPoint
+        ? JSON.parse(incompleteRecording.lastRecordedPoint)
+        : null;
+
+      // Store recovery data in sessionStorage for RecordScreen to pick up
+      sessionStorage.setItem('recording_recovery', JSON.stringify({
+        sessionId: incompleteRecording.id,
+        gpsPath,
+        lastRecordedPoint,
+        distanceKm: incompleteRecording.distanceKm,
+        elapsedRunMs: incompleteRecording.elapsedRunMs,
+        workoutId: incompleteRecording.workoutId,
+        routeId: incompleteRecording.routeId,
+        autoPauseCount: incompleteRecording.autoPauseCount,
+        acceptedPointCount: incompleteRecording.acceptedPointCount,
+        rejectedPointCount: incompleteRecording.rejectedPointCount,
+      }));
+
+      logger.log('[app:recovery] ✅ Recovery data stored in sessionStorage');
+
+      // Navigate to record screen
+      setShowRecoveryModal(false);
+      setCurrentScreen('record');
+      setIncompleteRecording(null);
+    } catch (err) {
+      logger.error('[app:recovery] ❌ Failed to prepare recovery:', err);
+    }
+  };
+
+  const handleDiscardRecording = async () => {
+    if (!incompleteRecording || !incompleteRecording.id) return;
+
+    try {
+      const checkpointService = new RecordingCheckpointService(incompleteRecording.userId);
+      await checkpointService.clearCheckpoint(incompleteRecording.id);
+
+      logger.log('[app:recovery] ✅ Recording discarded successfully');
+
+      setShowRecoveryModal(false);
+      setIncompleteRecording(null);
+    } catch (err) {
+      logger.error('[app:recovery] ❌ Failed to discard recording:', err);
+    }
+  };
+
   // Beta landing and onboarding should render without wrapper
   if (!isBetaSignupComplete || !isOnboardingComplete) {
     return renderScreen()
@@ -759,6 +836,16 @@ export default function RunSmartApp() {
 
       {/* Welcome Modal for existing users */}
       <WelcomeModal />
+
+      {/* Recovery Modal for incomplete recordings */}
+      {incompleteRecording && (
+        <RunRecoveryModal
+          session={incompleteRecording}
+          onResume={handleResumeRecording}
+          onDiscard={handleDiscardRecording}
+          isOpen={showRecoveryModal}
+        />
+      )}
 
       {/* Debug Panel - Access with Ctrl+Shift+D */}
       <OnboardingDebugPanel

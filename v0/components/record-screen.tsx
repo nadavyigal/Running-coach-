@@ -36,6 +36,7 @@ import { calculateDistance, calculateWaypointDistance } from "@/lib/routeUtils"
 import { useGpsTracking, type GPSPoint } from "@/hooks/use-gps-tracking"
 import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
 import { useWakeLock } from "@/hooks/use-wake-lock"
+import { RecordingCheckpointService, type RecordingCheckpoint } from "@/lib/recording-checkpoint"
 
 type GPSCoordinate = GPSPoint
 
@@ -368,6 +369,11 @@ export function RecordScreen() {
   const autoPauseStartTimeRef = useRef<number | null>(null)
   const autoPauseCountRef = useRef(0)
 
+  // Checkpoint service for recording persistence
+  const checkpointServiceRef = useRef<RecordingCheckpointService | null>(null)
+  const checkpointFlushTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const sessionIdRef = useRef<number | undefined>(undefined)
+
   const [lastGpsSpeedMps, setLastGpsSpeedMps] = useState<number | null>(null)
   const [gpsAcceptedCount, setGpsAcceptedCount] = useState(0)
   const [gpsRejectedCount, setGpsRejectedCount] = useState(0)
@@ -523,11 +529,37 @@ export function RecordScreen() {
       const user = await dbUtils.getCurrentUser()
       if (user) {
         setCurrentUser(user)
+        // Initialize checkpoint service when user is loaded
+        if (!checkpointServiceRef.current) {
+          checkpointServiceRef.current = new RecordingCheckpointService(user.id)
+        }
       }
       return user
     } catch (error) {
       console.error("Error resolving current user:", error)
       return null
+    }
+  }
+
+  // Helper to create checkpoint from current state
+  const getCurrentCheckpoint = (): RecordingCheckpoint => {
+    return {
+      sessionId: sessionIdRef.current,
+      userId: currentUser!.id,
+      status: isPausedRef.current ? 'paused' : 'recording',
+      startedAt: startTimeRef.current,
+      lastCheckpointAt: Date.now(),
+      distanceKm: totalDistanceKmRef.current,
+      durationSeconds: Math.floor(elapsedRunMsRef.current / 1000),
+      elapsedRunMs: elapsedRunMsRef.current,
+      gpsPath: gpsPathRef.current,
+      lastRecordedPoint: lastRecordedPointRef.current || undefined,
+      workoutId: currentWorkout?.id,
+      routeId: selectedRoute?.id,
+      routeName: selectedRoute?.name,
+      autoPauseCount: autoPauseCountRef.current,
+      acceptedPointCount: acceptedPointCountRef.current,
+      rejectedPointCount: rejectedPointCountRef.current,
     }
   }
 
@@ -560,6 +592,71 @@ export function RecordScreen() {
       stopTracking()
     }
   }, [])
+
+  // Lifecycle event handlers for checkpoint persistence
+  useEffect(() => {
+    if (!currentUser || !checkpointServiceRef.current) return
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && isRunningRef.current) {
+        console.log('[RecordScreen] App going to background, flushing checkpoint')
+        // Flush checkpoint to IndexedDB immediately when app goes to background
+        checkpointServiceRef.current?.flushToDatabase().catch(err => {
+          console.error('[RecordScreen] Failed to flush checkpoint on visibility change:', err)
+        })
+      } else if (document.visibilityState === 'visible' && isRunningRef.current) {
+        console.log('[RecordScreen] App returned to foreground')
+      }
+    }
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isRunningRef.current && checkpointServiceRef.current) {
+        // Synchronous localStorage write
+        const checkpoint = getCurrentCheckpoint()
+        checkpointServiceRef.current.saveToLocalStorage(checkpoint)
+
+        // Show browser confirmation dialog
+        e.preventDefault()
+        e.returnValue = 'You have an active run recording. Your progress will be saved for recovery.'
+      }
+    }
+
+    const handlePageHide = () => {
+      if (isRunningRef.current && checkpointServiceRef.current) {
+        // Last chance to save before page unload
+        const checkpoint = getCurrentCheckpoint()
+        checkpointServiceRef.current.saveToLocalStorage(checkpoint)
+      }
+    }
+
+    // Add event listeners
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    window.addEventListener('pagehide', handlePageHide)
+
+    // Setup periodic checkpoint flush (every 30 seconds)
+    if (isRunningRef.current) {
+      checkpointFlushTimerRef.current = setInterval(() => {
+        if (checkpointServiceRef.current && isRunningRef.current) {
+          console.log('[RecordScreen] Periodic checkpoint flush')
+          checkpointServiceRef.current.flushToDatabase().catch(err => {
+            console.error('[RecordScreen] Periodic flush failed:', err)
+          })
+        }
+      }, 30000) // 30 seconds
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      window.removeEventListener('pagehide', handlePageHide)
+
+      if (checkpointFlushTimerRef.current) {
+        clearInterval(checkpointFlushTimerRef.current)
+        checkpointFlushTimerRef.current = null
+      }
+    }
+  }, [currentUser, isRunning])
 
   useEffect(() => {
     if (!ENABLE_VIBRATION_COACH) {
@@ -1039,6 +1136,16 @@ export function RecordScreen() {
       segmentAdded: round(segmentDistanceKm, 4),
     })
 
+    // Save checkpoint to localStorage (fast write)
+    if (checkpointServiceRef.current && currentUser) {
+      try {
+        const checkpoint = getCurrentCheckpoint()
+        checkpointServiceRef.current.saveToLocalStorage(checkpoint)
+      } catch (err) {
+        console.error('[RecordScreen] Failed to save checkpoint:', err)
+      }
+    }
+
     logRunStats({
       event: 'gps_point_accepted',
       distanceKm: totalDistanceKmRef.current,
@@ -1369,6 +1476,24 @@ export function RecordScreen() {
       return
     }
 
+    // Initialize checkpoint service if not already done
+    if (!checkpointServiceRef.current) {
+      checkpointServiceRef.current = new RecordingCheckpointService(user.id)
+    }
+
+    // Check for existing active session
+    if (checkpointServiceRef.current) {
+      const existingSession = await checkpointServiceRef.current.getIncompleteSession(user.id)
+      if (existingSession) {
+        toast({
+          title: "Previous Recording Found",
+          description: "You have an incomplete recording. Please use the recovery option from the home screen.",
+          variant: "default",
+        })
+        return
+      }
+    }
+
     if (IS_TEST_ENV) {
       resetRunTrackingState()
       proceedWithRun()
@@ -1663,6 +1788,17 @@ export function RecordScreen() {
             </ToastAction>
           ),
         })
+      }
+
+      // Clear checkpoint after successful save
+      if (checkpointServiceRef.current) {
+        try {
+          await checkpointServiceRef.current.clearCheckpoint(sessionIdRef.current)
+          sessionIdRef.current = undefined
+          console.log('[RecordScreen] Checkpoint cleared after successful save')
+        } catch (err) {
+          console.error('[RecordScreen] Failed to clear checkpoint:', err)
+        }
       }
 
       try {
