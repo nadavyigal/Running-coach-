@@ -410,6 +410,15 @@ export default function RunSmartApp() {
           await dbUtils.initializeDatabase();
           logger.log('[app:init:db] ✅ Database initialized successfully');
 
+          // Seed challenge templates on first launch
+          try {
+            await dbUtils.seedChallengeTemplates();
+            logger.log('[app:init:challenges] ✅ Challenge templates seeded');
+          } catch (challengeError) {
+            logger.warn('[app:init:challenges] Failed to seed challenge templates:', challengeError);
+            // Non-fatal error, continue initialization
+          }
+
           await dbUtils.performStartupMigration();
           logger.log('[app:init:migration] ✅ Startup migration completed');
 

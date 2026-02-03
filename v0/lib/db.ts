@@ -786,6 +786,17 @@ export interface Plan {
   userFeedback?: PlanFeedback[];
   // Goal linkage
   goalId?: number;
+  // Challenge-specific fields
+  isChallenge?: boolean;                // Flag to differentiate from regular plans
+  challengeTemplateId?: number;         // Link to ChallengeTemplate
+  challengeConfig?: {
+    dailyPromptsBefore: string[];       // Pre-run prompts
+    dailyPromptsDuring: string[];       // Mid-run cues (future audio)
+    dailyPromptsAfter: string[];        // Post-run reflection
+    microLessons: string[];             // N "why this matters" lessons (N = durationDays)
+    progressionArc: string;             // Day 1 → N transformation story
+    coachTone: 'gentle' | 'tough_love' | 'analytical' | 'calm';
+  };
   // Timezone handling for UTC plan activation
   createdInTimezone?: string; // Timezone where plan was originally created
   createdAt: Date;
@@ -1004,6 +1015,47 @@ export interface GoalRecommendation {
   updatedAt?: Date;
 }
 
+// Challenge system for growth engine
+export interface ChallengeTemplate {
+  id?: number;
+  slug: string;                     // 'start-running', 'morning-ritual', 'plateau-breaker'
+  name: string;                     // "21-Day Start Running"
+  tagline: string;                  // "From zero to 30 minutes"
+  description: string;              // Full challenge description
+  targetAudience: string;           // 'brand-new runners', 'casual runners', etc.
+  promise: string;                  // What user will achieve
+  durationDays: number;             // 7, 14, 21, or 30 (flexible)
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  category: 'habit' | 'mindful' | 'performance' | 'recovery';
+  thumbnailUrl?: string;
+  previewVideoUrl?: string;
+  workoutPattern: string;           // Description of workout structure
+  coachTone: 'gentle' | 'tough_love' | 'analytical' | 'calm';
+  dailyThemes: string[];            // JSON array of day-specific themes
+  isActive: boolean;
+  isFeatured: boolean;              // For marketing/promotion
+  sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ChallengeProgress {
+  id?: number;
+  userId: number;
+  challengeTemplateId: number;
+  planId: number;                   // Link to the plan executing this challenge
+  startDate: Date;
+  currentDay: number;               // 1-N (where N is durationDays)
+  status: 'active' | 'completed' | 'abandoned';
+  completedAt?: Date;
+  streakDays: number;               // Consecutive days completed
+  totalDaysCompleted: number;       // Total days with workouts done
+  lastPromptShownAt?: Date;
+  nextChallengeRecommended?: number; // ChallengeTemplate ID
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Running shoes tracking
 export interface Shoe {
   id?: number;
@@ -1102,6 +1154,10 @@ export class RunSmartDB extends Dexie {
   routes!: EntityTable<Route, 'id'>;
   routeRecommendations!: EntityTable<RouteRecommendation, 'id'>;
   userRoutePreferences!: EntityTable<UserRoutePreferences, 'id'>;
+
+  // Challenge tables
+  challengeTemplates!: EntityTable<ChallengeTemplate, 'id'>;
+  challengeProgress!: EntityTable<ChallengeProgress, 'id'>;
 
   constructor() {
     super('RunSmartDB');
@@ -1252,6 +1308,12 @@ export class RunSmartDB extends Dexie {
 
       // User Route Preferences: Simple user lookup
       userRoutePreferences: '++id, userId, maxDistance, preferredDifficulty, createdAt',
+
+      // Challenge Templates: Optimized for discovery and sorting
+      challengeTemplates: '++id, slug, category, difficulty, durationDays, isActive, isFeatured, sortOrder, createdAt, [category+difficulty], [isActive+isFeatured], [isActive+sortOrder]',
+
+      // Challenge Progress: Optimized for user active challenge lookups
+      challengeProgress: '++id, userId, challengeTemplateId, planId, status, currentDay, createdAt, [userId+status], [userId+challengeTemplateId], [planId+status]',
     });
 
     this.version(2).stores({}).upgrade(async (trans) => {
@@ -1301,6 +1363,14 @@ export class RunSmartDB extends Dexie {
     }).upgrade(async (trans) => {
       console.log('🔄 Upgrading database to version 5: Adding active recording sessions table');
       console.log('✓ Database upgrade complete: Active recording sessions table added');
+    });
+
+    this.version(6).stores({
+      challengeTemplates: '++id, slug, category, difficulty, durationDays, isActive, isFeatured, sortOrder, createdAt, [category+difficulty], [isActive+isFeatured], [isActive+sortOrder]',
+      challengeProgress: '++id, userId, challengeTemplateId, planId, status, currentDay, createdAt, [userId+status], [userId+challengeTemplateId], [planId+status]',
+    }).upgrade(async (trans) => {
+      console.log('🔄 Upgrading database to version 6: Adding challenge tables for Challenge-Led Growth Engine');
+      console.log('✓ Database upgrade complete: Challenge tables added');
     });
 
   }
