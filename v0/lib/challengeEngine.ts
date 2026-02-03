@@ -1,4 +1,4 @@
-import { db, type ChallengeProgress, type ChallengeTemplate, type Plan } from './db';
+import { db, type ChallengeProgress, type ChallengeTemplate } from './db';
 
 /**
  * Challenge Engine - Core logic for Challenge-Led Growth Engine
@@ -119,11 +119,26 @@ export async function getActiveChallenge(userId: number): Promise<{
  */
 export async function startChallenge(
   userId: number,
-  challengeTemplateId: number,
+  challengeTemplateId: number | string,
   planId: number,
   startDate: Date = new Date()
 ): Promise<ChallengeProgress> {
   try {
+    let resolvedTemplateId: number | null =
+      typeof challengeTemplateId === 'number' ? challengeTemplateId : null;
+
+    if (typeof challengeTemplateId === 'string') {
+      const template = await db.challengeTemplates.where('slug').equals(challengeTemplateId).first();
+      if (!template?.id) {
+        throw new Error(`Challenge template not found for slug: ${challengeTemplateId}`);
+      }
+      resolvedTemplateId = template.id;
+    }
+
+    if (!resolvedTemplateId) {
+      throw new Error('Challenge template id is required to start a challenge');
+    }
+
     // Deactivate any existing active challenges
     const existingActive = await db.challengeProgress
       .where('[userId+status]')
@@ -140,7 +155,7 @@ export async function startChallenge(
     // Create new challenge progress
     const progressId = await db.challengeProgress.add({
       userId,
-      challengeTemplateId,
+      challengeTemplateId: resolvedTemplateId,
       planId,
       startDate,
       currentDay: 1,
@@ -150,6 +165,16 @@ export async function startChallenge(
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+
+    try {
+      await db.plans.update(planId, {
+        isChallenge: true,
+        challengeTemplateId: resolvedTemplateId,
+        updatedAt: new Date(),
+      });
+    } catch (planUpdateError) {
+      console.warn('[challengeEngine] Failed to tag plan as challenge:', planUpdateError);
+    }
 
     const progress = await db.challengeProgress.get(progressId);
     if (!progress) throw new Error('Failed to create challenge progress');

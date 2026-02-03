@@ -39,7 +39,7 @@ export function NextChallengeRecommendation({
         <p className="text-gray-700 mb-4">{template.description}</p>
 
         <div className="bg-white rounded-lg p-4 mb-4 border border-purple-100">
-          <h4 className="text-sm font-semibold text-purple-700 mb-2">What You'll Achieve</h4>
+          <h4 className="text-sm font-semibold text-purple-700 mb-2">What You&apos;ll Achieve</h4>
           <p className="text-sm text-gray-700">{template.promise}</p>
         </div>
 

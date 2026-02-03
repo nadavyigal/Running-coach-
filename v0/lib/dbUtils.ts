@@ -2,7 +2,6 @@ import { db, isDatabaseAvailable, safeDbOperation, getDatabase, resetDatabaseIns
 import type {
   ActiveRecordingSession,
   ChallengeProgress,
-  ChallengeTemplate,
   ChatMessage as ChatMessageEntity,
   CoachingFeedback,
   CoachingInteraction,

@@ -179,8 +179,8 @@ const ChatScreen = dynamic(
     )
   }
 )
-const BetaLandingScreen = dynamic(
-  () => import("@/components/beta-landing-screen").then(m => ({ default: m.BetaLandingScreen })),
+const ProfessionalLandingScreen = dynamic(
+  () => import("@/components/professional-landing-screen").then(m => ({ default: m.ProfessionalLandingScreen })),
   {
     ssr: false,
     loading: () => <div className="p-6 flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div></div>
@@ -390,8 +390,16 @@ export default function RunSmartApp() {
 
           // Check if beta signup has been completed
           const betaSignupEmail = localStorage.getItem('beta_signup_email');
-          if (betaSignupEmail) {
-            logger.log('[app:init:beta] ✅ Beta signup already completed:', betaSignupEmail);
+          const betaSignupComplete = localStorage.getItem('beta_signup_complete') === 'true';
+          const preselectedChallenge = localStorage.getItem('preselectedChallenge');
+          const hasBetaSignup = Boolean(betaSignupEmail || betaSignupComplete || preselectedChallenge);
+
+          if (hasBetaSignup) {
+            logger.log('[app:init:beta] ✅ Beta signup already completed:', {
+              email: betaSignupEmail,
+              betaSignupComplete,
+              preselectedChallenge
+            });
             setIsBetaSignupComplete(true);
           } else {
             logger.log('[app:init:beta] ⚠️ Beta signup not completed yet');
@@ -716,11 +724,11 @@ export default function RunSmartApp() {
 
   const renderScreen = () => {
     try {
-      // Show beta landing screen if beta signup not completed
+      // Show professional landing screen if beta signup not completed
       if (!isBetaSignupComplete) {
-        logger.log('🎯 Rendering beta landing screen - isBetaSignupComplete:', isBetaSignupComplete);
+        logger.log('🎯 Rendering professional landing screen - isBetaSignupComplete:', isBetaSignupComplete);
         return (
-          <BetaLandingScreen onContinue={handleBetaSignupComplete} />
+          <ProfessionalLandingScreen onContinue={handleBetaSignupComplete} />
         )
       }
 

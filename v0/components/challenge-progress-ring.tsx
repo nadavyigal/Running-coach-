@@ -54,7 +54,7 @@ export function ChallengeProgressRing({
         {showDetails && (
           <>
             <div className="bg-white rounded-lg p-4 mb-4 border border-emerald-100">
-              <h4 className="text-sm font-semibold text-emerald-700 mb-1">Today's Focus</h4>
+              <h4 className="text-sm font-semibold text-emerald-700 mb-1">Today&apos;s Focus</h4>
               <p className="text-sm text-gray-700">{dayTheme}</p>
             </div>
 

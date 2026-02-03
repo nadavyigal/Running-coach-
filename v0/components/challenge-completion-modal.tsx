@@ -98,17 +98,17 @@ export function ChallengeCompletionModal({
                   <h3 className="font-bold text-lg text-gray-900 mb-2">You Did It!</h3>
                   <p className="text-gray-700 leading-relaxed">
                     {completedTemplate.promise} Over the past {completedTemplate.durationDays} days,
-                    you proved to yourself that consistency wins. This isn't just about running
-                    anymore—it's about who you're becoming.
+                    you proved to yourself that consistency wins. This isn&apos;t just about running
+                    anymore—it&apos;s about who you&apos;re becoming.
                   </p>
                 </CardContent>
               </Card>
 
               {/* Identity Shift */}
               <div className="text-center space-y-2 py-4">
-                <p className="text-lg text-gray-600">You're not someone who</p>
+                <p className="text-lg text-gray-600">You&apos;re not someone who</p>
                 <p className="text-2xl font-bold text-emerald-600">tries to run</p>
-                <p className="text-lg text-gray-600">You're a</p>
+                <p className="text-lg text-gray-600">You&apos;re a</p>
                 <p className="text-3xl font-bold text-gray-900">Runner</p>
               </div>
 
@@ -187,7 +187,7 @@ export function ChallengeCompletionModal({
 
                 {/* Promise */}
                 <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg p-6 border border-emerald-200">
-                  <h4 className="font-bold text-gray-900 mb-2">What You'll Achieve</h4>
+                  <h4 className="font-bold text-gray-900 mb-2">What You&apos;ll Achieve</h4>
                   <p className="text-gray-700">{nextChallenge.promise}</p>
                 </div>
 
@@ -214,3 +214,5 @@ export function ChallengeCompletionModal({
     </Dialog>
   );
 }
+
+

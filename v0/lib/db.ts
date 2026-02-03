@@ -1360,7 +1360,7 @@ export class RunSmartDB extends Dexie {
 
     this.version(5).stores({
       activeRecordingSessions: '++id, userId, status, startedAt, lastCheckpointAt, [userId+status]',
-    }).upgrade(async (trans) => {
+    }).upgrade(async (_trans) => {
       console.log('🔄 Upgrading database to version 5: Adding active recording sessions table');
       console.log('✓ Database upgrade complete: Active recording sessions table added');
     });
@@ -1368,7 +1368,7 @@ export class RunSmartDB extends Dexie {
     this.version(6).stores({
       challengeTemplates: '++id, slug, category, difficulty, durationDays, isActive, isFeatured, sortOrder, createdAt, [category+difficulty], [isActive+isFeatured], [isActive+sortOrder]',
       challengeProgress: '++id, userId, challengeTemplateId, planId, status, currentDay, createdAt, [userId+status], [userId+challengeTemplateId], [planId+status]',
-    }).upgrade(async (trans) => {
+    }).upgrade(async (_trans) => {
       console.log('🔄 Upgrading database to version 6: Adding challenge tables for Challenge-Led Growth Engine');
       console.log('✓ Database upgrade complete: Challenge tables added');
     });

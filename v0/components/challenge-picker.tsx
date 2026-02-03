@@ -16,21 +16,28 @@ import {
 
 export interface ChallengePickerProps {
   onChallengeSelected: (template: ChallengeTemplate) => void;
+  onSelectionChange?: (template: ChallengeTemplate | null) => void;
   onSkip?: () => void;
   showSkipButton?: boolean;
   showFeaturedOnly?: boolean;
+  selectedTemplate?: ChallengeTemplate | null;
   className?: string;
 }
 
 export function ChallengePicker({
   onChallengeSelected,
+  onSelectionChange,
   onSkip,
   showSkipButton = false,
   showFeaturedOnly = false,
+  selectedTemplate: selectedTemplateProp,
   className = '',
 }: ChallengePickerProps) {
+  const hasControlledSelection = selectedTemplateProp !== undefined;
   const [templates, setTemplates] = useState<ChallengeTemplate[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<ChallengeTemplate | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<ChallengeTemplate | null>(
+    selectedTemplateProp ?? null
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
@@ -53,8 +60,20 @@ export function ChallengePicker({
     loadTemplates();
   }, [showFeaturedOnly]);
 
+  useEffect(() => {
+    if (!hasControlledSelection) return;
+    if (!selectedTemplateProp) {
+      setSelectedTemplate(null);
+      return;
+    }
+
+    const matched = templates.find(t => t.slug === selectedTemplateProp.slug);
+    setSelectedTemplate(matched ?? selectedTemplateProp);
+  }, [hasControlledSelection, selectedTemplateProp, templates]);
+
   const handleSelect = (template: ChallengeTemplate) => {
     setSelectedTemplate(template);
+    onSelectionChange?.(template);
   };
 
   const handleContinue = () => {

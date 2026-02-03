@@ -21,7 +21,6 @@ import { useBetaSignupCount } from "@/lib/hooks/useBetaSignupCount";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@supabase/supabase-js";
-import { cn } from "@/lib/utils";
 
 interface BetaLandingScreenProps {
   onContinue?: () => void;
@@ -479,7 +478,7 @@ export function BetaLandingScreen({
         <div className="space-y-3">
           <h1 className="text-3xl font-bold">Welcome to RunSmart! 🎉</h1>
           <p className="text-white/70 text-lg">
-            You're all set. Let's create your personalized running plan...
+            You&apos;re all set. Let&apos;s create your personalized running plan...
           </p>
         </div>
         <div className="flex justify-center pt-4">

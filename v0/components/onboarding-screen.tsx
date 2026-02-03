@@ -16,7 +16,6 @@ import {
   TrendingUp,
 } from "lucide-react"
 import Image from "next/image"
-import { Bebas_Neue, Manrope } from "next/font/google"
 import { dbUtils, setReferenceRace } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -36,6 +35,7 @@ import { UserPrivacySettings } from "@/components/privacy-dashboard"
 import { cn } from "@/lib/utils"
 import { ChallengePicker } from "@/components/challenge-picker"
 import type { ChallengeTemplate } from "@/lib/db"
+import { getChallengeTemplateBySlug } from "@/lib/challengeTemplates"
 
 type Weekday = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
 
@@ -61,18 +61,6 @@ const DISTANCE_CHIPS = [
 const WHEEL_ITEM_HEIGHT = 48
 const WHEEL_VISIBLE_ITEMS = 5
 const WHEEL_CENTER_OFFSET = Math.floor(WHEEL_VISIBLE_ITEMS / 2)
-
-const bebas = Bebas_Neue({
-  subsets: ["latin"],
-  weight: "400",
-  variable: "--font-bebas",
-})
-
-const manrope = Manrope({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-manrope",
-})
 
 function clampNumber(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -455,6 +443,17 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [selectedChallenge, setSelectedChallenge] = useState<ChallengeTemplate | null>(null)
   const { toast } = useToast()
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const storedSlug = window.localStorage.getItem('preselectedChallenge')
+    if (!storedSlug) return
+
+    const template = getChallengeTemplateBySlug(storedSlug)
+    if (template) {
+      setSelectedChallenge(template)
+    }
+  }, [])
+
   const defaultRaceSeconds = useMemo(
     () => getDefaultRaceTimeSeconds(referenceRaceDistance),
     [referenceRaceDistance]
@@ -667,20 +666,24 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         console.log('✅ Atomic commit complete:', { userId, planId })
 
         // If a challenge was selected, start the challenge
-        if (selectedChallenge) {
-          try {
-            console.log('🏆 Starting challenge:', selectedChallenge.name)
-            const { startChallenge } = await import('@/lib/challengeEngine')
-            await startChallenge(userId, selectedChallenge.slug, planId)
-            console.log('✅ Challenge started successfully')
-          } catch (challengeError) {
-            console.warn('⚠️ Failed to start challenge:', challengeError)
-            // Non-critical error, continue with onboarding
+          if (selectedChallenge) {
+            try {
+              console.log('🏆 Starting challenge:', selectedChallenge.name)
+              const { startChallenge } = await import('@/lib/challengeEngine')
+              await startChallenge(userId, selectedChallenge.slug, planId)
+              console.log('✅ Challenge started successfully')
+            } catch (challengeError) {
+              console.warn('⚠️ Failed to start challenge:', challengeError)
+              // Non-critical error, continue with onboarding
+            }
           }
-        }
 
-        // Save reference race data for pace zone calculations
-        if (referenceRaceTimeSeconds > 0) {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('preselectedChallenge')
+          }
+
+          // Save reference race data for pace zone calculations
+          if (referenceRaceTimeSeconds > 0) {
           try {
             await setReferenceRace(userId, referenceRaceDistance, referenceRaceTimeSeconds)
             console.log('✅ Reference race saved for VDOT calculation')
@@ -701,6 +704,22 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               const controller = new AbortController();
               const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
+              const challengePayload = selectedChallenge ? {
+                slug: selectedChallenge.slug,
+                name: selectedChallenge.name,
+                category: selectedChallenge.category,
+                difficulty: selectedChallenge.difficulty,
+                durationDays: selectedChallenge.durationDays,
+                workoutPattern: selectedChallenge.workoutPattern,
+                coachTone: selectedChallenge.coachTone,
+                targetAudience: selectedChallenge.targetAudience,
+                promise: selectedChallenge.promise,
+              } : undefined
+
+              const totalWeeks = selectedChallenge
+                ? Math.max(1, Math.ceil(selectedChallenge.durationDays / 7))
+                : undefined
+
               const planResponse = await fetch('/api/generate-plan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -712,7 +731,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                     preferredTimes: formData.selectedTimes,
                     age: formData.age,
                     averageWeeklyKm: formData.averageWeeklyKm ?? undefined
-                  }
+                  },
+                  challenge: challengePayload,
+                  totalWeeks,
+                  planType: selectedChallenge ? 'challenge' : undefined
                 }),
                 signal: controller.signal
               });
@@ -1264,6 +1286,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
             <ChallengePicker
               onChallengeSelected={setSelectedChallenge}
+              onSelectionChange={setSelectedChallenge}
+              selectedTemplate={selectedChallenge}
               onSkip={() => setSelectedChallenge(null)}
               showSkipButton={false}
               showFeaturedOnly={true}

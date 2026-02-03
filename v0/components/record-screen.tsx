@@ -2156,7 +2156,7 @@ export function RecordScreen() {
               <CardContent className="p-3">
                 <p className="text-xs text-gray-600 flex items-center gap-1">
                   <Info className="h-3 w-3" />
-                  Keep screen on for best GPS accuracy. Mobile browsers don't support background GPS tracking.
+                  Keep screen on for best GPS accuracy. Mobile browsers don&apos;t support background GPS tracking.
                 </p>
               </CardContent>
             </Card>

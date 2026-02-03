@@ -8,8 +8,8 @@ let DOMPurifyInstance: typeof import('isomorphic-dompurify').default | null = nu
 
 async function getDOMPurify() {
   if (!DOMPurifyInstance) {
-    const module = await import('isomorphic-dompurify');
-    DOMPurifyInstance = module.default;
+    const dompurifyModule = await import('isomorphic-dompurify');
+    DOMPurifyInstance = dompurifyModule.default;
   }
   return DOMPurifyInstance;
 }

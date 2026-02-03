@@ -1,6 +1,5 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useToast } from '@/hooks/use-toast'
 
 // 1 second of silence
 const SILENT_AUDIO_URL = 'data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBIAAAABAAEAQB8AAEAfAAABAAgAAABmYWN0BAAAAAAAAABkYXRhAAAAAA=='
@@ -19,8 +18,6 @@ export function useWakeLock({
     const [isActive, setIsActive] = useState(false)
     const wakeLockRef = useRef<WakeLockSentinel | null>(null)
     const audioRef = useRef<HTMLAudioElement | null>(null)
-    const { toast } = useToast()
-
     const requestWakeLock = useCallback(async () => {
         if (isActive) return
 
@@ -46,7 +43,7 @@ export function useWakeLock({
                 if (!audioRef.current) {
                     audioRef.current = new Audio(SILENT_AUDIO_URL)
                     audioRef.current.loop = true
-                    // @ts-ignore
+                    // @ts-expect-error - playsInline is supported in browsers but not typed on HTMLAudioElement
                     audioRef.current.playsInline = true
                 }
 

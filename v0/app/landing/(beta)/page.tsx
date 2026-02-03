@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-
-import LandingBetaClient from "./landing-client";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Run-Smart AI | Early Access Beta",
@@ -34,5 +33,5 @@ export const metadata: Metadata = {
 };
 
 export default function LandingPage() {
-  return <LandingBetaClient />;
+  redirect("/");
 }
