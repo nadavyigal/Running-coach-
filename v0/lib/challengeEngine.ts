@@ -1,5 +1,4 @@
 import { db, type ChallengeProgress, type ChallengeTemplate, type Plan } from './db';
-import { getChallengeTemplateBySlug, getNextChallengeRecommendation } from './challengeTemplates';
 
 /**
  * Challenge Engine - Core logic for Challenge-Led Growth Engine

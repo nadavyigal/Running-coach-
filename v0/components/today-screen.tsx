@@ -63,6 +63,11 @@ import { useAuth } from "@/lib/auth-context"
 import { SyncStatusIndicator } from "@/components/sync-status-indicator"
 import { useBetaSignupCount } from "@/lib/hooks/useBetaSignupCount"
 import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
+import { ChallengeProgressRing } from "@/components/challenge-progress-ring"
+import { DailyChallengePrompt } from "@/components/daily-challenge-prompt"
+import { getActiveChallenge, getDailyChallengeData } from "@/lib/challengeEngine"
+import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db"
+import type { DailyChallengeData } from "@/lib/challengeEngine"
 
 export function TodayScreen() {
   // Get shared data from context
@@ -98,6 +103,8 @@ export function TodayScreen() {
   const [showRescheduleModal, setShowRescheduleModal] = useState(false)
   const [showDateWorkoutModal, setShowDateWorkoutModal] = useState(false)
   const [selectedDateWorkout, setSelectedDateWorkout] = useState<any>(null)
+  const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate } | null>(null)
+  const [dailyChallengeData, setDailyChallengeData] = useState<DailyChallengeData | null>(null)
   const [workoutToDelete, setWorkoutToDelete] = useState<number | null>(null)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(new Date())
   const { toast } = useToast()
@@ -236,6 +243,41 @@ export function TodayScreen() {
     }
 
     initializeLocalData()
+  }, [userId])
+
+  // Load active challenge data
+  useEffect(() => {
+    const loadChallengeData = async () => {
+      if (!userId) {
+        setActiveChallenge(null)
+        setDailyChallengeData(null)
+        return
+      }
+
+      try {
+        const challenge = await getActiveChallenge(userId)
+
+        if (challenge) {
+          setActiveChallenge(challenge)
+
+          // Get daily challenge data for today
+          const dailyData = getDailyChallengeData(
+            challenge.progress,
+            challenge.template
+          )
+          setDailyChallengeData(dailyData)
+        } else {
+          setActiveChallenge(null)
+          setDailyChallengeData(null)
+        }
+      } catch (error) {
+        console.error("Error loading challenge data:", error)
+        setActiveChallenge(null)
+        setDailyChallengeData(null)
+      }
+    }
+
+    loadChallengeData()
   }, [userId])
 
   useEffect(() => {
@@ -563,6 +605,19 @@ export function TodayScreen() {
           <WeeklyRecapNotificationBanner
             onViewRecap={handleViewRecapFromNotification}
             onDismiss={() => setShowWeeklyRecapNotification(false)}
+          />
+        </div>
+      )}
+      {activeChallenge && dailyChallengeData && (
+        <div className="px-4 space-y-4">
+          <ChallengeProgressRing
+            data={dailyChallengeData}
+            challengeName={activeChallenge.template.name}
+            showDetails={true}
+          />
+          <DailyChallengePrompt
+            template={activeChallenge.template}
+            timing="before"
           />
         </div>
       )}

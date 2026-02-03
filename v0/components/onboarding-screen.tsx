@@ -34,6 +34,8 @@ import { onboardingManager } from "@/lib/onboardingManager"
 import OnboardingErrorBoundary from "@/components/onboarding-error-boundary"
 import { UserPrivacySettings } from "@/components/privacy-dashboard"
 import { cn } from "@/lib/utils"
+import { ChallengePicker } from "@/components/challenge-picker"
+import type { ChallengeTemplate } from "@/lib/db"
 
 type Weekday = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
 
@@ -399,6 +401,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       gdpr: false,
       push: false,
     });
+    setSelectedChallenge(null);
     setIsGeneratingPlan(false);
     toast({
       title: "Onboarding Restarted",
@@ -449,6 +452,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     exportData: false,
     deleteData: false,
   })
+  const [selectedChallenge, setSelectedChallenge] = useState<ChallengeTemplate | null>(null)
   const { toast } = useToast()
 
   const defaultRaceSeconds = useMemo(
@@ -464,7 +468,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     setReferenceRaceSeconds(defaultRaceSeconds % 60)
   }, [defaultRaceSeconds, timeSeeded])
 
-  const totalSteps = 7
+  const totalSteps = 8
   const progressPercent = Math.round(((currentStep - 1) / (totalSteps - 1)) * 100)
 
   const nextStep = () => {
@@ -500,6 +504,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           return daysPerWeek >= 2 && Boolean(longRunDay)
         case 7:
           return privacyAccepted
+        case 8:
+          return true // Challenge selection is optional
         default:
           return true
       }
@@ -521,6 +527,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             return { field: 'schedule', message: 'Select your training days and long run day' }
           case 7:
             return { field: 'privacy', message: 'Please accept the privacy policy to continue' }
+          case 8:
+            return { field: 'challenge', message: 'Select a challenge or skip to continue' }
           default:
             return { field: 'unknown', message: 'Validation failed' }
         }
@@ -552,6 +560,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         return "Select your training days and long run day"
       case 7:
         return "Please accept the privacy policy to continue"
+      case 8:
+        return "Select a challenge or skip to continue"
       default:
         return "Please complete all required fields"
     }
@@ -655,6 +665,19 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           planPreferences: formData.planPreferences as any
         }, { artificialDelayMs: 300 })
         console.log('✅ Atomic commit complete:', { userId, planId })
+
+        // If a challenge was selected, start the challenge
+        if (selectedChallenge) {
+          try {
+            console.log('🏆 Starting challenge:', selectedChallenge.name)
+            const { startChallenge } = await import('@/lib/challengeEngine')
+            await startChallenge(userId, selectedChallenge.slug, planId)
+            console.log('✅ Challenge started successfully')
+          } catch (challengeError) {
+            console.warn('⚠️ Failed to start challenge:', challengeError)
+            // Non-critical error, continue with onboarding
+          }
+        }
 
         // Save reference race data for pace zone calculations
         if (referenceRaceTimeSeconds > 0) {
@@ -1213,9 +1236,46 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 className="mt-1 h-5 w-5 rounded border-white/30 bg-white/10 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
               />
               <label htmlFor="privacy-policy" className="text-sm text-white/80 leading-relaxed cursor-pointer select-none">
-                I have read and agree to the <a href="/privacy" target="_blank" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium" onClick={(e) => e.stopPropagation()}>Privacy Policy</a>. I understand that my running data is stored locally on my device.
+                I have read and agree to the{' '}
+                <a
+                  href="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Privacy Policy
+                </a>
+                . I understand that my running data is stored locally on my device.
               </label>
             </div>
+          </div>
+        )
+
+      case 8:
+        return (
+          <div className="pt-2 space-y-6">
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold leading-tight">Start with a Challenge?</h2>
+              <p className="text-white/60 text-sm">
+                Jump-start your running journey with a structured challenge, or skip to build your own plan.
+              </p>
+            </div>
+
+            <ChallengePicker
+              onChallengeSelected={setSelectedChallenge}
+              onSkip={() => setSelectedChallenge(null)}
+              showSkipButton={false}
+              showFeaturedOnly={true}
+              className="mt-4"
+            />
+
+            {selectedChallenge && (
+              <div className="flex items-center gap-2 text-sm text-emerald-200 bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-2xl">
+                <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                Challenge selected: {selectedChallenge.name}
+              </div>
+            )}
           </div>
         )
       default:

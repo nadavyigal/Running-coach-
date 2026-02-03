@@ -42,11 +42,14 @@ import {
 import { AddShoesModal } from "@/components/add-shoes-modal"
 import { ReminderSettings } from "@/components/reminder-settings"
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { BadgeCabinet } from "@/components/badge-cabinet";
 import { dbUtils } from "@/lib/dbUtils";
 import { DATABASE } from "@/lib/constants";
 import { useData } from "@/contexts/DataContext";
 import { useToast } from "@/components/ui/use-toast";
+import { getChallengeHistory } from "@/lib/challengeEngine";
+import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db";
 import { ShareBadgeModal } from "@/components/share-badge-modal";
 import { Share2, Users } from "lucide-react";
 import { JoinCohortModal } from "@/components/join-cohort-modal";
@@ -64,6 +67,8 @@ import { UserDataSettings } from "@/components/user-data-settings";
 import { RunSmartBrandMark } from "@/components/run-smart-brand-mark";
 
 export function ProfileScreen() {
+  const router = useRouter()
+
   // Get shared data from context
   const {
     user,
@@ -96,6 +101,8 @@ export function ProfileScreen() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [goalProgressMap, setGoalProgressMap] = useState<Map<number, GoalProgress>>(new Map())
   const [showMergeDialog, setShowMergeDialog] = useState(false)
+  const [challengeHistory, setChallengeHistory] = useState<Array<{ progress: ChallengeProgress; template: ChallengeTemplate }>>([])
+  const [isChallengesLoading, setIsChallengesLoading] = useState(false)
   const [mergeSourceGoal, setMergeSourceGoal] = useState<Goal | null>(null)
   const [isSwitchingPrimary, setIsSwitchingPrimary] = useState(false)
 
@@ -133,6 +140,29 @@ export function ProfileScreen() {
 
     loadGoalProgress()
   }, [goals])
+
+  // Load challenge history
+  useEffect(() => {
+    const loadChallengeHistory = async () => {
+      if (!userId) {
+        setChallengeHistory([])
+        return
+      }
+
+      setIsChallengesLoading(true)
+      try {
+        const history = await getChallengeHistory(userId)
+        setChallengeHistory(history)
+      } catch (error) {
+        console.error("Error loading challenge history:", error)
+        setChallengeHistory([])
+      } finally {
+        setIsChallengesLoading(false)
+      }
+    }
+
+    loadChallengeHistory()
+  }, [userId])
 
   // Helper to get progress for a goal (uses engine-calculated progress)
   const getGoalProgress = (goalId?: number): number => {
@@ -743,6 +773,70 @@ export function ProfileScreen() {
             )}
           </div>
 
+          {/* Challenge History */}
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold">Challenges</h2>
+            </div>
+
+            {isChallengesLoading ? (
+              <Card>
+                <CardContent className="p-8 flex flex-col items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-gray-700 mb-4" />
+                  <p className="text-gray-600">Loading challenges...</p>
+                </CardContent>
+              </Card>
+            ) : challengeHistory.length > 0 ? (
+              <div className="space-y-3">
+                {challengeHistory.map((challenge) => (
+                  <Card key={challenge.progress.id} className="border">
+                    <CardContent className="p-5 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Trophy className="h-4 w-4 text-amber-500" />
+                            <p className="text-xs font-semibold text-emerald-600">COMPLETED</p>
+                          </div>
+                          <h3 className="text-lg font-semibold text-gray-900">{challenge.template.name}</h3>
+                          <p className="text-sm text-gray-700">{challenge.template.tagline}</p>
+                        </div>
+                        <Badge variant="secondary" className="text-xs">
+                          {challenge.template.durationDays} days
+                        </Badge>
+                      </div>
+
+                      <div className="flex gap-4 text-sm text-gray-600">
+                        <div className="flex items-center gap-1">
+                          <Flame className="h-4 w-4 text-orange-500" />
+                          <span>{challenge.progress.streakDays}-day streak</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Trophy className="h-4 w-4 text-amber-500" />
+                          <span>{challenge.progress.totalDaysCompleted} runs completed</span>
+                        </div>
+                      </div>
+
+                      {challenge.progress.completedAt && (
+                        <p className="text-xs text-gray-500">
+                          Completed {new Date(challenge.progress.completedAt).toLocaleDateString()}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="p-5 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold">No challenges yet</h3>
+                    <p className="text-sm text-gray-600">Start a challenge to build consistency and reach your goals.</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
           {/* User Info */}
           <Card>
             <CardContent className="p-6">
@@ -1149,7 +1243,7 @@ export function ProfileScreen() {
                       goalSection.scrollIntoView({ behavior: 'smooth' });
                     }
                   } else if (setting.action === "privacy") {
-                    window.location.href = '/privacy';
+                    router.push('/privacy')
                   }
                   // Add other setting handlers here
                 };

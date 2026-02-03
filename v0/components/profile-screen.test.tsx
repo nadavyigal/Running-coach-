@@ -10,6 +10,17 @@ vi.mock('./badge-cabinet', () => ({
   ),
 }));
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: () => {},
+    replace: () => {},
+    prefetch: () => {},
+    back: () => {},
+    forward: () => {},
+    refresh: () => {},
+  }),
+}))
+
 // Mock dbUtils
 vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
