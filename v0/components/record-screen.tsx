@@ -396,9 +396,27 @@ export function RecordScreen() {
   } | null>(null)
   const [goldenRunError, setGoldenRunError] = useState<string | null>(null)
 
+  // Visibility and GPS health monitoring
+  const [isPageVisible, setIsPageVisible] = useState(true)
+  const [gpsGapWarningShown, setGpsGapWarningShown] = useState(false)
+  const lastGpsUpdateRef = useRef<number>(Date.now())
+
   const { requestWakeLock, releaseWakeLock } = useWakeLock({
     enableScreenLock: true,
-    enableAudioLock: true
+    enableAudioLock: true,
+    onVisibilityChange: (isVisible) => {
+      setIsPageVisible(isVisible)
+      if (!isVisible && isRunning && !isPaused) {
+        console.warn('[RecordScreen] Page hidden during run - GPS tracking should continue via audio')
+      } else if (isVisible && isRunning && !isPaused) {
+        console.log('[RecordScreen] Page visible again during run')
+        // Check for GPS gaps
+        const timeSinceLastUpdate = Date.now() - lastGpsUpdateRef.current
+        if (timeSinceLastUpdate > 30000) {
+          console.warn(`[RecordScreen] GPS gap detected: ${Math.round(timeSinceLastUpdate / 1000)}s since last update`)
+        }
+      }
+    }
   })
 
   useEffect(() => {
@@ -692,6 +710,39 @@ export function RecordScreen() {
     }
     return () => clearInterval(interval)
   }, [isRunning, isPaused])
+
+  // GPS gap detection during active run
+  useEffect(() => {
+    if (!isRunning || isPaused) {
+      return
+    }
+
+    const GPS_GAP_WARNING_THRESHOLD = 30000 // 30 seconds
+
+    const intervalId = setInterval(() => {
+      const timeSinceLastUpdate = Date.now() - lastGpsUpdateRef.current
+
+      if (timeSinceLastUpdate > GPS_GAP_WARNING_THRESHOLD && !gpsGapWarningShown) {
+        console.error(`[RecordScreen] GPS gap detected: ${Math.round(timeSinceLastUpdate / 1000)}s since last update`)
+        setGpsGapWarningShown(true)
+        toast({
+          title: "GPS Signal Lost",
+          description: `No GPS updates for ${Math.round(timeSinceLastUpdate / 1000)} seconds. Recording may be incomplete.`,
+          variant: "destructive",
+        })
+      } else if (timeSinceLastUpdate <= GPS_GAP_WARNING_THRESHOLD && gpsGapWarningShown) {
+        // GPS recovered
+        console.log('[RecordScreen] GPS signal recovered')
+        toast({
+          title: "GPS Recovered",
+          description: "GPS signal restored. Recording continues.",
+        })
+        setGpsGapWarningShown(false)
+      }
+    }, 5000) // Check every 5 seconds
+
+    return () => clearInterval(intervalId)
+  }, [isRunning, isPaused, gpsGapWarningShown, toast])
 
   useEffect(() => {
     if (!intervalPhases.length) {
@@ -1157,6 +1208,11 @@ export function RecordScreen() {
   }
 
   const handleGpsPoint = (point: GPSCoordinate, position: GeolocationPosition) => {
+    // Update GPS health monitoring
+    const now = Date.now()
+    lastGpsUpdateRef.current = now
+    setGpsGapWarningShown(false) // Reset warning when we receive a point
+
     setCurrentPosition(point)
     setGpsAccuracy(point.accuracy ?? 0)
     setLastGpsSpeedMps(typeof point.speed === 'number' ? point.speed : null)
@@ -2098,6 +2154,40 @@ export function RecordScreen() {
                     <p className="font-medium text-yellow-900">Acquiring GPS Signal...</p>
                     <p className="text-sm text-yellow-700">
                       Waiting for first GPS fix. This may take up to 30 seconds.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Screen Visibility Indicator */}
+          {isRunning && !isPageVisible && (
+            <Card className="border-blue-200 bg-blue-50 mt-4">
+              <CardContent className="p-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
+                  <p className="text-sm text-blue-900 font-medium">
+                    Recording in background
+                  </p>
+                </div>
+                <p className="text-xs text-blue-700 mt-1">
+                  Screen is off. GPS tracking continues via background audio.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* GPS Gap Warning */}
+          {isRunning && gpsGapWarningShown && (
+            <Card className="border-red-200 bg-red-50 mt-4">
+              <CardContent className="p-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                  <div>
+                    <p className="text-sm text-red-900 font-medium">GPS Signal Lost</p>
+                    <p className="text-xs text-red-700 mt-1">
+                      No GPS updates received. Check device settings and ensure location access.
                     </p>
                   </div>
                 </div>
