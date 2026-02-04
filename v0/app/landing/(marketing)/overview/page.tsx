@@ -92,7 +92,7 @@ export default function MarketingHomePage() {
 
       <section aria-label="Social proof" className="flex justify-center">
         <Badge variant="secondary" className="px-4 py-1.5 text-sm">
-          Join 200+ runners building their habit
+          Join our growing community of runners building their habit
         </Badge>
       </section>
 

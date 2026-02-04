@@ -69,7 +69,7 @@ export function useWakeLock({
                     // Critical mobile browser settings
                     // @ts-expect-error - playsInline is supported in browsers but not typed on HTMLAudioElement
                     audioRef.current.playsInline = true
-                    // @ts-ignore - webkitPlaysInline for older iOS versions
+                    // @ts-expect-error - webkitPlaysInline for older iOS versions
                     audioRef.current.webkitPlaysInline = true
 
                     // Prevent audio from being paused by system

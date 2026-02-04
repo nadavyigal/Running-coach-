@@ -176,7 +176,7 @@ export function BetaLandingScreen({
     }
   };
 
-  const handleSkip = () => {
+  const _handleSkip = () => {
     trackAnalyticsEvent("beta_signup_skipped", {
       source: "landing_page",
     });

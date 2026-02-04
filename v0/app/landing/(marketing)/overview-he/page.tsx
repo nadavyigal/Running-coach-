@@ -93,7 +93,7 @@ export default function MarketingHomePageHebrew() {
 
       <section aria-label="הוכחה חברתית" className="flex justify-center">
         <Badge variant="secondary" className="px-4 py-1.5 text-sm">
-          הצטרפו ל-200+ רצים שבונים את ההרגל שלהם
+          הצטרפו לקהילה הגדלה של רצים שבונים את ההרגל שלהם
         </Badge>
       </section>
 

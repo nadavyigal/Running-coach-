@@ -48,7 +48,7 @@ import { dbUtils } from "@/lib/dbUtils";
 import { DATABASE } from "@/lib/constants";
 import { useData } from "@/contexts/DataContext";
 import { useToast } from "@/components/ui/use-toast";
-import { getChallengeHistory } from "@/lib/challengeEngine";
+import { getChallengeHistory, getActiveChallenge, type DailyChallengeData } from "@/lib/challengeEngine";
 import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db";
 import { ShareBadgeModal } from "@/components/share-badge-modal";
 import { Share2, Users } from "lucide-react";
@@ -103,6 +103,7 @@ export function ProfileScreen() {
   const [showMergeDialog, setShowMergeDialog] = useState(false)
   const [challengeHistory, setChallengeHistory] = useState<Array<{ progress: ChallengeProgress; template: ChallengeTemplate }>>([])
   const [isChallengesLoading, setIsChallengesLoading] = useState(false)
+  const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate; dailyData: DailyChallengeData } | null>(null)
   const [mergeSourceGoal, setMergeSourceGoal] = useState<Goal | null>(null)
   const [isSwitchingPrimary, setIsSwitchingPrimary] = useState(false)
 
@@ -141,27 +142,36 @@ export function ProfileScreen() {
     loadGoalProgress()
   }, [goals])
 
-  // Load challenge history
+  // Load challenge history and active challenge
   useEffect(() => {
-    const loadChallengeHistory = async () => {
+    const loadChallengeData = async () => {
       if (!userId) {
         setChallengeHistory([])
+        setActiveChallenge(null)
         return
       }
 
       setIsChallengesLoading(true)
       try {
+        // Load active challenge
+        const active = await getActiveChallenge(userId)
+        setActiveChallenge(active)
+
+        // Load challenge history (filter out active challenge to avoid duplication)
         const history = await getChallengeHistory(userId)
-        setChallengeHistory(history)
+        // Only show completed/abandoned challenges in history
+        const filteredHistory = history.filter(ch => ch.progress.status !== 'active')
+        setChallengeHistory(filteredHistory)
       } catch (error) {
-        console.error("Error loading challenge history:", error)
+        console.error("Error loading challenge data:", error)
         setChallengeHistory([])
+        setActiveChallenge(null)
       } finally {
         setIsChallengesLoading(false)
       }
     }
 
-    loadChallengeHistory()
+    loadChallengeData()
   }, [userId])
 
   // Helper to get progress for a goal (uses engine-calculated progress)
@@ -773,7 +783,7 @@ export function ProfileScreen() {
             )}
           </div>
 
-          {/* Challenge History */}
+          {/* Challenges Section */}
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-bold">Challenges</h2>
@@ -786,54 +796,120 @@ export function ProfileScreen() {
                   <p className="text-gray-600">Loading challenges...</p>
                 </CardContent>
               </Card>
-            ) : challengeHistory.length > 0 ? (
+            ) : (
               <div className="space-y-3">
-                {challengeHistory.map((challenge) => (
-                  <Card key={challenge.progress.id} className="border">
-                    <CardContent className="p-5 space-y-3">
+                {/* Active Challenge */}
+                {activeChallenge && (
+                  <Card className="border-2 border-emerald-500 bg-gradient-to-r from-emerald-50 to-teal-50">
+                    <CardContent className="p-5 space-y-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <Trophy className="h-4 w-4 text-amber-500" />
-                            <p className="text-xs font-semibold text-emerald-600">COMPLETED</p>
+                            <Activity className="h-4 w-4 text-emerald-500" />
+                            <p className="text-xs font-semibold text-emerald-600">ACTIVE CHALLENGE</p>
                           </div>
-                          <h3 className="text-lg font-semibold text-gray-900">{challenge.template.name}</h3>
-                          <p className="text-sm text-gray-700">{challenge.template.tagline}</p>
+                          <h3 className="text-lg font-semibold text-gray-900">{activeChallenge.template.name}</h3>
+                          <p className="text-sm text-gray-700">{activeChallenge.template.tagline}</p>
                         </div>
-                        <Badge variant="secondary" className="text-xs">
-                          {challenge.template.durationDays} days
+                        <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700">
+                          Day {activeChallenge.dailyData.currentDay}/{activeChallenge.dailyData.totalDays}
                         </Badge>
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Progress</span>
+                          <span className="font-medium text-emerald-600">{activeChallenge.dailyData.progress}%</span>
+                        </div>
+                        <Progress value={activeChallenge.dailyData.progress} className="h-2" />
+                      </div>
+
+                      {/* Today's Theme */}
+                      <div className="bg-white/60 rounded-lg p-3">
+                        <p className="text-sm font-medium text-gray-800">{activeChallenge.dailyData.dayTheme}</p>
                       </div>
 
                       <div className="flex gap-4 text-sm text-gray-600">
                         <div className="flex items-center gap-1">
                           <Flame className="h-4 w-4 text-orange-500" />
-                          <span>{challenge.progress.streakDays}-day streak</span>
+                          <span>{activeChallenge.dailyData.streakDays}-day streak</span>
                         </div>
                         <div className="flex items-center gap-1">
-                          <Trophy className="h-4 w-4 text-amber-500" />
-                          <span>{challenge.progress.totalDaysCompleted} runs completed</span>
+                          <Clock className="h-4 w-4 text-blue-500" />
+                          <span>{activeChallenge.dailyData.daysRemaining} days left</span>
                         </div>
                       </div>
-
-                      {challenge.progress.completedAt && (
-                        <p className="text-xs text-gray-500">
-                          Completed {new Date(challenge.progress.completedAt).toLocaleDateString()}
-                        </p>
-                      )}
                     </CardContent>
                   </Card>
-                ))}
+                )}
+
+                {/* Completed/Abandoned Challenges */}
+                {challengeHistory.length > 0 ? (
+                  <>
+                    {activeChallenge && (
+                      <div className="flex items-center gap-2 pt-2">
+                        <History className="h-4 w-4 text-gray-500" />
+                        <span className="text-sm text-gray-600 font-medium">Past Challenges</span>
+                      </div>
+                    )}
+                    {challengeHistory.map((challenge) => (
+                      <Card key={challenge.progress.id} className="border">
+                        <CardContent className="p-5 space-y-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                {challenge.progress.status === 'completed' ? (
+                                  <>
+                                    <Trophy className="h-4 w-4 text-amber-500" />
+                                    <p className="text-xs font-semibold text-emerald-600">COMPLETED</p>
+                                  </>
+                                ) : (
+                                  <>
+                                    <AlertCircle className="h-4 w-4 text-gray-400" />
+                                    <p className="text-xs font-semibold text-gray-500">ENDED</p>
+                                  </>
+                                )}
+                              </div>
+                              <h3 className="text-lg font-semibold text-gray-900">{challenge.template.name}</h3>
+                              <p className="text-sm text-gray-700">{challenge.template.tagline}</p>
+                            </div>
+                            <Badge variant="secondary" className="text-xs">
+                              {challenge.template.durationDays} days
+                            </Badge>
+                          </div>
+
+                          <div className="flex gap-4 text-sm text-gray-600">
+                            <div className="flex items-center gap-1">
+                              <Flame className="h-4 w-4 text-orange-500" />
+                              <span>{challenge.progress.streakDays}-day streak</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Trophy className="h-4 w-4 text-amber-500" />
+                              <span>{challenge.progress.totalDaysCompleted} runs completed</span>
+                            </div>
+                          </div>
+
+                          {challenge.progress.completedAt && (
+                            <p className="text-xs text-gray-500">
+                              Completed {new Date(challenge.progress.completedAt).toLocaleDateString()}
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </>
+                ) : !activeChallenge && (
+                  <Card>
+                    <CardContent className="p-5 flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-semibold">No challenges yet</h3>
+                        <p className="text-sm text-gray-600">Start a challenge to build consistency and reach your goals.</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
-            ) : (
-              <Card>
-                <CardContent className="p-5 flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold">No challenges yet</h3>
-                    <p className="text-sm text-gray-600">Start a challenge to build consistency and reach your goals.</p>
-                  </div>
-                </CardContent>
-              </Card>
             )}
           </div>
 

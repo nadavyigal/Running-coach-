@@ -17,7 +17,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import Link from 'next/link';
-import { ChallengeCard } from './challenge-card';
+import { ChallengeCard, type ChallengeTemplateDisplay } from './challenge-card';
 import { useBetaSignupCount } from '@/lib/hooks/useBetaSignupCount';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 import { useToast } from '@/hooks/use-toast';
@@ -31,7 +31,8 @@ interface ProfessionalLandingScreenProps {
 
 export function ProfessionalLandingScreen({ onContinue: _onContinue }: ProfessionalLandingScreenProps) {
   const [email, setEmail] = useState('');
-  const [challenges, setChallenges] = useState<ChallengeTemplate[]>([]);
+  const [challenges, setChallenges] = useState<Omit<ChallengeTemplate, 'id' | 'createdAt' | 'updatedAt'>[]>([]);
+  const [_showChallenges, setShowChallenges] = useState(false);
   const betaSignups = useBetaSignupCount();
   const { toast } = useToast();
 
@@ -92,7 +93,7 @@ export function ProfessionalLandingScreen({ onContinue: _onContinue }: Professio
     }
   };
 
-  const handleChallengeClick = async (template: ChallengeTemplate) => {
+  const handleChallengeClick = async (template: ChallengeTemplateDisplay) => {
     trackCtaClick('Start This Challenge', 'challenge_card', { challenge: template.slug });
 
     // Save email if provided
@@ -147,7 +148,7 @@ export function ProfessionalLandingScreen({ onContinue: _onContinue }: Professio
     revealChallenges();
   };
 
-  const handleSkipFromSignup = () => {
+  const _handleSkipFromSignup = () => {
     trackCtaClick('Skip for now', 'beta_signup');
     revealChallenges();
   };
@@ -194,7 +195,7 @@ export function ProfessionalLandingScreen({ onContinue: _onContinue }: Professio
 
           {/* Subheading */}
           <p className="text-xl md:text-2xl text-gray-700 mb-8 max-w-2xl mx-auto leading-relaxed">
-            Join {betaSignups.loading ? '200+' : `${betaSignups.count}+`} runners getting fitter, faster with personalized AI coaching
+            Join our growing community of runners getting fitter, faster with personalized AI coaching
           </p>
 
           {/* Social Proof */}
@@ -209,7 +210,7 @@ export function ProfessionalLandingScreen({ onContinue: _onContinue }: Professio
             </Badge>
             <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300 px-4 py-2">
               <Award className="h-4 w-4 mr-2" />
-              {betaSignups.loading ? '...' : `${betaSignups.spotsRemaining} spots left`}
+              Limited spots available
             </Badge>
           </div>
 
@@ -441,11 +442,14 @@ export function ProfessionalLandingScreen({ onContinue: _onContinue }: Professio
                 Terms
               </Link>
               <a
-                href="mailto:firstname.lastname@runsmart-ai.com"
+                href="mailto:nadav.yigal@runsmart-ai.com"
                 className="text-gray-300 hover:text-white transition-colors"
               >
                 Contact
               </a>
+              <Link href="/landing/overview-he" className="text-gray-300 hover:text-white transition-colors flex items-center gap-1">
+                🌐 עברית
+              </Link>
             </div>
           </div>
 

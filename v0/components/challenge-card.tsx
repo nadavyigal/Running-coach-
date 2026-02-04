@@ -6,9 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Calendar, TrendingUp, Sparkles, Target } from 'lucide-react';
 import { type ChallengeTemplate } from '@/lib/db';
 
+// Allow templates without database-specific fields (id, createdAt, updatedAt)
+export type ChallengeTemplateDisplay = Omit<ChallengeTemplate, 'id' | 'createdAt' | 'updatedAt'> | ChallengeTemplate;
+
 export interface ChallengeCardProps {
-  template: ChallengeTemplate;
-  onSelect: (template: ChallengeTemplate) => void;
+  template: ChallengeTemplateDisplay;
+  onSelect: (template: ChallengeTemplateDisplay) => void;
   isSelected?: boolean;
   className?: string;
 }
