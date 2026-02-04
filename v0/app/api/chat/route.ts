@@ -178,5 +178,3 @@ export async function OPTIONS(req: Request): Promise<Response> {
     },
   });
 }
-
-export const chatHandler = POST;

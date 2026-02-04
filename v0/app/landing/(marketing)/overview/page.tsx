@@ -279,6 +279,13 @@ export default function MarketingHomePage() {
           </AccordionItem>
         </Accordion>
       </section>
+
+      {/* Language switcher */}
+      <section className="flex justify-center pb-8">
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/landing/overview-he">🌐 גרסה בעברית</Link>
+        </Button>
+      </section>
     </div>
   )
 }

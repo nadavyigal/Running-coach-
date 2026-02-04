@@ -59,6 +59,15 @@ export default function TermsPage() {
           </section>
 
           <section className="space-y-2">
+            <h2 className="text-base font-semibold text-foreground">Third-party integrations</h2>
+            <p>
+              Run-Smart AI may integrate with third-party services such as Garmin Connect. Your use of
+              these integrations is subject to the respective third party&apos;s terms of service. We are
+              not responsible for the availability or functionality of third-party services.
+            </p>
+          </section>
+
+          <section className="space-y-2">
             <h2 className="text-base font-semibold text-foreground">Limitation of liability</h2>
             <p>
               The beta is provided &quot;as is&quot; without warranties of any kind. To the fullest extent
@@ -70,8 +79,8 @@ export default function TermsPage() {
             <h2 className="text-base font-semibold text-foreground">Contact</h2>
             <p>
               Questions? Email us at{' '}
-              <a className="underline" href="mailto:firstname.lastname@runsmart-ai.com">
-                firstname.lastname@runsmart-ai.com
+              <a className="underline" href="mailto:nadav.yigal@runsmart-ai.com">
+                nadav.yigal@runsmart-ai.com
               </a>.
             </p>
           </section>

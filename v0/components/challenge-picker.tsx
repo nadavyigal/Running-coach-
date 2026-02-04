@@ -17,8 +17,6 @@ import {
 export interface ChallengePickerProps {
   onChallengeSelected: (template: ChallengeTemplate) => void;
   onSelectionChange?: (template: ChallengeTemplate | null) => void;
-  onSkip?: () => void;
-  showSkipButton?: boolean;
   showFeaturedOnly?: boolean;
   selectedTemplate?: ChallengeTemplate | null;
   className?: string;
@@ -27,8 +25,6 @@ export interface ChallengePickerProps {
 export function ChallengePicker({
   onChallengeSelected,
   onSelectionChange,
-  onSkip,
-  showSkipButton = false,
   showFeaturedOnly = false,
   selectedTemplate: selectedTemplateProp,
   className = '',
@@ -168,16 +164,6 @@ export function ChallengePicker({
 
       {/* Action Buttons */}
       <div className="flex flex-col sm:flex-row gap-3 justify-center items-center pt-4">
-        {showSkipButton && onSkip && (
-          <Button
-            variant="ghost"
-            onClick={onSkip}
-            className="text-gray-600"
-          >
-            Skip for now
-          </Button>
-        )}
-
         <Button
           onClick={handleContinue}
           disabled={!selectedTemplate}

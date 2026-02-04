@@ -278,13 +278,6 @@ export function ProfessionalLandingScreen({ onContinue: _onContinue }: Professio
               </Button>
             </div>
 
-            <button
-              onClick={handleSkipFromSignup}
-              className="w-full text-sm text-gray-500 hover:text-gray-700 transition-colors"
-            >
-              Skip for now →
-            </button>
-
             {/* Benefits */}
             <div className="mt-8 pt-8 border-t border-gray-200">
               <p className="text-sm font-semibold text-gray-700 mb-4">Beta Pioneer Benefits:</p>

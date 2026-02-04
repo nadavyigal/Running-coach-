@@ -1288,8 +1288,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               onChallengeSelected={setSelectedChallenge}
               onSelectionChange={setSelectedChallenge}
               selectedTemplate={selectedChallenge}
-              onSkip={() => setSelectedChallenge(null)}
-              showSkipButton={false}
               showFeaturedOnly={true}
               className="mt-4"
             />

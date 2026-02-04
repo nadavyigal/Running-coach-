@@ -314,13 +314,6 @@ export function BetaLandingScreen({
               Claim Your Beta Spot
             </Button>
 
-            <button
-              onClick={handleSkip}
-              className="w-full text-sm text-white/60 hover:text-white/90 transition-colors"
-            >
-              Skip for now
-            </button>
-
             {legalLinksMarkup}
           </div>
         </div>
