@@ -149,7 +149,7 @@ async function createBetaSignupWithAccount(
 
   try {
     // Step 1: Check if beta signup already exists
-    const { data: existingBeta, error: checkError } = await supabase
+    const { data: existingBeta } = await supabase
       .from('beta_signups')
       .select('id, auth_user_id')
       .eq('email', normalizedEmail)

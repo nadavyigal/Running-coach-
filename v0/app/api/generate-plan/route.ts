@@ -56,6 +56,17 @@ type PlanRequest = {
     age?: number;
     averageWeeklyKm?: number;
   };
+  challenge?: {
+    slug?: string;
+    name?: string;
+    category?: 'habit' | 'mindful' | 'performance' | 'recovery' | string;
+    difficulty?: 'beginner' | 'intermediate' | 'advanced' | string;
+    durationDays?: number;
+    workoutPattern?: string;
+    coachTone?: string;
+    targetAudience?: string;
+    promise?: string;
+  };
   userContext?: {
     userId?: number;
     goal?: 'habit' | 'distance' | 'speed';
@@ -128,6 +139,9 @@ function resolveTotalWeeks(body: PlanRequest) {
   if (typeof body.totalWeeks === 'number' && Number.isFinite(body.totalWeeks)) {
     return clampNumber(Math.round(body.totalWeeks), 1, 16);
   }
+  if (typeof body.challenge?.durationDays === 'number' && Number.isFinite(body.challenge.durationDays)) {
+    return clampNumber(Math.ceil(body.challenge.durationDays / 7), 1, 16);
+  }
   if (body.rookie_challenge) return 2;
   return 2;
 }
@@ -191,10 +205,14 @@ function normalizePlan(plan: PlanData): PlanData {
 function generateFallbackPlan(
   user: ReturnType<typeof resolveUser>,
   totalWeeks: number,
-  planPreferences?: PlanRequest['planPreferences']
+  planPreferences?: PlanRequest['planPreferences'],
+  challenge?: PlanRequest['challenge']
 ): PlanData {
   const daysPerWeek = resolveDaysPerWeek(user.daysPerWeek);
   const { trainingDays, longRunDay } = resolveTrainingDays(daysPerWeek, planPreferences);
+  const challengeCategory = challenge?.category;
+  const allowIntensity = challengeCategory === 'performance';
+  const mindfulFocus = challengeCategory === 'mindful';
 
   let baseDistance: number;
   if (typeof user.averageWeeklyKm === 'number' && user.averageWeeklyKm > 0) {
@@ -213,7 +231,7 @@ function generateFallbackPlan(
       const isLongRun = day === longRunDay;
       const type: PlanData['workouts'][number]['type'] = isLongRun
         ? 'long'
-        : week % 2 === 0 && trainingDays.length >= 3 && day === trainingDays[1]
+        : allowIntensity && week % 2 === 0 && trainingDays.length >= 3 && day === trainingDays[1]
           ? 'tempo'
           : 'easy';
 
@@ -223,6 +241,11 @@ function generateFallbackPlan(
           ? Math.round(distance * (DEFAULT_PACE_MIN_PER_KM - 0.5))
           : Math.round(distance * DEFAULT_PACE_MIN_PER_KM);
 
+      const mindfulNote = 'Keep a relaxed pace and focus on steady breathing.';
+      const easyNote = 'Keep a conversational pace.';
+      const longNote = 'Focus on steady effort, not speed.';
+      const tempoNote = 'Comfortably hard effort with controlled breathing.';
+
       workouts.push({
         week,
         day,
@@ -231,22 +254,27 @@ function generateFallbackPlan(
         duration: clampNumber(duration, 0, 300),
         notes:
           type === 'easy'
-            ? 'Keep a conversational pace.'
+            ? mindfulFocus
+              ? mindfulNote
+              : easyNote
             : type === 'long'
-              ? 'Focus on steady effort, not speed.'
-              : 'Comfortably hard effort with controlled breathing.',
+              ? longNote
+              : tempoNote,
       });
     }
   }
 
   return {
-    title:
-      user.goal === 'habit'
+    title: challenge?.name
+      ? `${challenge.name} Plan`
+      : user.goal === 'habit'
         ? 'Build Your Running Habit'
         : user.goal === 'distance'
           ? 'Increase Your Distance'
           : 'Improve Your Speed',
-    description: `A ${totalWeeks}-week plan for ${user.experience} runners focused on ${user.goal}.`,
+    description: challenge?.name
+      ? `A ${totalWeeks}-week plan aligned to the ${challenge.name} challenge for ${user.experience} runners.`
+      : `A ${totalWeeks}-week plan for ${user.experience} runners focused on ${user.goal}.`,
     totalWeeks,
     workouts,
   };
@@ -258,6 +286,7 @@ function buildPlanPrompt(
   planPreferences?: PlanRequest['planPreferences'],
   planType?: string,
   targetDistance?: string,
+  challenge?: PlanRequest['challenge'],
   advancedMetrics?: PersonalizationContext['advancedMetrics']
 ) {
   const sanitizedPlanType = planType ? sanitizeForPrompt(planType, 50) : '';
@@ -268,6 +297,18 @@ function buildPlanPrompt(
   const sanitizedDifficulty = planPreferences?.difficulty
     ? sanitizeForPrompt(planPreferences.difficulty, 50)
     : '';
+  const sanitizedChallengeName = challenge?.name ? sanitizeForPrompt(challenge.name, 80) : '';
+  const sanitizedChallengeSlug = challenge?.slug ? sanitizeForPrompt(challenge.slug, 60) : '';
+  const sanitizedChallengeCategory = challenge?.category ? sanitizeForPrompt(challenge.category, 30) : '';
+  const sanitizedChallengeDifficulty = challenge?.difficulty ? sanitizeForPrompt(challenge.difficulty, 30) : '';
+  const sanitizedChallengePattern = challenge?.workoutPattern
+    ? sanitizeForPrompt(challenge.workoutPattern, 220)
+    : '';
+  const sanitizedChallengeTone = challenge?.coachTone ? sanitizeForPrompt(challenge.coachTone, 30) : '';
+  const sanitizedChallengeAudience = challenge?.targetAudience
+    ? sanitizeForPrompt(challenge.targetAudience, 120)
+    : '';
+  const sanitizedChallengePromise = challenge?.promise ? sanitizeForPrompt(challenge.promise, 140) : '';
   const weeklyKmContext = user.averageWeeklyKm
     ? `- Current weekly volume: ${user.averageWeeklyKm}km/week (use as starting baseline)`
     : '';
@@ -304,6 +345,26 @@ Do not use generic paces when VDOT is available. Calculate specific paces.
 `
     : '';
 
+  const challengeContext = sanitizedChallengeName
+    ? `
+
+CHALLENGE CONTEXT:
+- Challenge: ${sanitizedChallengeName}${sanitizedChallengeSlug ? ` (${sanitizedChallengeSlug})` : ''}
+- Duration: ${typeof challenge?.durationDays === 'number' ? `${challenge.durationDays} days` : 'n/a'}
+- Category: ${sanitizedChallengeCategory || 'n/a'}
+- Difficulty: ${sanitizedChallengeDifficulty || 'n/a'}
+- Target audience: ${sanitizedChallengeAudience || 'n/a'}
+- Promise: ${sanitizedChallengePromise || 'n/a'}
+- Workout pattern: ${sanitizedChallengePattern || 'n/a'}
+- Coach tone: ${sanitizedChallengeTone || 'n/a'}
+
+INSTRUCTIONS:
+- Align workouts to the challenge workout pattern and tone.
+- Keep the plan length aligned to the challenge duration.
+- Preserve the user's experience level and weekly availability.
+`
+    : '';
+
   return `Create a running training plan. Return JSON only with this shape:
 {
   "title": "string",
@@ -325,6 +386,7 @@ ${sanitizedPlanType ? `- Plan type: ${sanitizedPlanType}` : ''}
 ${sanitizedTarget ? `- Target distance: ${sanitizedTarget}` : ''}
 ${sanitizedVolume ? `- Training volume: ${sanitizedVolume}` : ''}
 ${sanitizedDifficulty ? `- Difficulty: ${sanitizedDifficulty}` : ''}
+${challengeContext}
 
 Constraints:
 - totalWeeks must be ${totalWeeks}
@@ -382,7 +444,7 @@ export async function POST(req: Request) {
 
     const user = resolveUser(body);
     const totalWeeks = resolveTotalWeeks(body);
-    const fallbackPlan = generateFallbackPlan(user, totalWeeks, body.planPreferences);
+    const fallbackPlan = generateFallbackPlan(user, totalWeeks, body.planPreferences, body.challenge);
 
     let advancedMetrics: PersonalizationContext['advancedMetrics'] | undefined;
     if (body.userContext?.userId || body.userId) {
@@ -412,6 +474,7 @@ export async function POST(req: Request) {
       body.planPreferences,
       body.planType,
       body.targetDistance,
+      body.challenge,
       advancedMetrics
     );
 

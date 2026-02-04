@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -16,17 +16,33 @@ import {
   Award,
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useBetaSignupCount } from "@/lib/hooks/useBetaSignupCount";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@supabase/supabase-js";
-import { cn } from "@/lib/utils";
 
 interface BetaLandingScreenProps {
-  onContinue: () => void;
+  onContinue?: () => void;
+  showLegalLinks?: boolean;
+  legalLinks?: {
+    privacyHref?: string;
+    termsHref?: string;
+    contactEmail?: string;
+  };
 }
 
-export function BetaLandingScreen({ onContinue }: BetaLandingScreenProps) {
+const DEFAULT_LEGAL_LINKS = {
+  privacyHref: "/landing/privacy",
+  termsHref: "/landing/terms",
+  contactEmail: "firstname.lastname@runsmart-ai.com",
+};
+
+export function BetaLandingScreen({
+  onContinue,
+  showLegalLinks = false,
+  legalLinks,
+}: BetaLandingScreenProps) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -34,6 +50,16 @@ export function BetaLandingScreen({ onContinue }: BetaLandingScreenProps) {
   const [showForm, setShowForm] = useState(false);
   const betaSignups = useBetaSignupCount();
   const { toast } = useToast();
+  const mergedLegalLinks = useMemo(
+    () => ({ ...DEFAULT_LEGAL_LINKS, ...(legalLinks ?? {}) }),
+    [legalLinks]
+  );
+
+  const handleContinue = () => {
+    if (onContinue) {
+      onContinue();
+    }
+  };
 
   const handleBetaSignup = async () => {
     if (!email.trim()) {
@@ -74,7 +100,7 @@ export function BetaLandingScreen({ onContinue }: BetaLandingScreenProps) {
 
         setSignupComplete(true);
         setTimeout(() => {
-          onContinue();
+          handleContinue();
         }, 1500);
         return;
       }
@@ -122,7 +148,7 @@ export function BetaLandingScreen({ onContinue }: BetaLandingScreenProps) {
       setSignupComplete(true);
 
       setTimeout(() => {
-        onContinue();
+        handleContinue();
       }, 1500);
     } catch (error) {
       console.error("Beta signup error:", error);
@@ -143,7 +169,7 @@ export function BetaLandingScreen({ onContinue }: BetaLandingScreenProps) {
 
       setSignupComplete(true);
       setTimeout(() => {
-        onContinue();
+        handleContinue();
       }, 1500);
     } finally {
       setIsSubmitting(false);
@@ -154,8 +180,27 @@ export function BetaLandingScreen({ onContinue }: BetaLandingScreenProps) {
     trackAnalyticsEvent("beta_signup_skipped", {
       source: "landing_page",
     });
-    onContinue();
+    handleContinue();
   };
+
+  const legalLinksMarkup = showLegalLinks ? (
+    <div className="mt-6 text-center text-xs text-white/60 space-x-3">
+      <Link href={mergedLegalLinks.privacyHref} className="hover:text-white/80 transition-colors">
+        Privacy
+      </Link>
+      <span>|</span>
+      <Link href={mergedLegalLinks.termsHref} className="hover:text-white/80 transition-colors">
+        Terms
+      </Link>
+      <span>|</span>
+      <a
+        href={`mailto:${mergedLegalLinks.contactEmail}`}
+        className="hover:text-white/80 transition-colors"
+      >
+        {mergedLegalLinks.contactEmail}
+      </a>
+    </div>
+  ) : null;
 
   // Hero screen (like onboarding intro)
   if (!showForm && !signupComplete) {
@@ -269,12 +314,7 @@ export function BetaLandingScreen({ onContinue }: BetaLandingScreenProps) {
               Claim Your Beta Spot
             </Button>
 
-            <button
-              onClick={handleSkip}
-              className="w-full text-sm text-white/60 hover:text-white/90 transition-colors"
-            >
-              Skip for now
-            </button>
+            {legalLinksMarkup}
           </div>
         </div>
       </div>
@@ -410,6 +450,8 @@ export function BetaLandingScreen({ onContinue }: BetaLandingScreenProps) {
               No credit card required • Cancel anytime
             </p>
           </div>
+
+          {legalLinksMarkup}
         </div>
       </div>
     );
@@ -429,12 +471,13 @@ export function BetaLandingScreen({ onContinue }: BetaLandingScreenProps) {
         <div className="space-y-3">
           <h1 className="text-3xl font-bold">Welcome to RunSmart! 🎉</h1>
           <p className="text-white/70 text-lg">
-            You're all set. Let's create your personalized running plan...
+            You&apos;re all set. Let&apos;s create your personalized running plan...
           </p>
         </div>
         <div className="flex justify-center pt-4">
           <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
         </div>
+        {legalLinksMarkup}
       </div>
     </div>
   );

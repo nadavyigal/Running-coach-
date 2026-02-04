@@ -159,10 +159,10 @@ const normalizeStructured = (raw: unknown, exifDateIso?: string): NormalizedExtr
     notes: typeof record.notes === "string" ? record.notes : undefined,
     completedAtIso: dateIso,
     confidencePct: confidence ?? 50,
-    hasRouteMap: hasRouteMap ?? undefined,
-    routeType: routeType ?? undefined,
-    gpsCoordinates: gpsCoordinates ?? undefined,
-    mapImageDescription: mapImageDescription ?? undefined,
+    hasRouteMap: hasRouteMap === true ? true : hasRouteMap === false ? false : undefined,
+    routeType,
+    gpsCoordinates,
+    mapImageDescription,
   }
 }
 
@@ -379,8 +379,7 @@ export async function POST(req: Request) {
         maxOutputTokens: 800,
       })
 
-      const rawText = typeof ocrResult.text === "function" ? ocrResult.text() : ocrResult.text
-      ocrText = typeof rawText === "string" ? rawText : String(rawText ?? "")
+      ocrText = ocrResult.text ?? ""
       const parsedFromText = parseActivityFromText(ocrText)
       extracted = {
         type: extracted?.type || "run",

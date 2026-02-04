@@ -10,13 +10,17 @@ import { AddRunModal } from "@/components/add-run-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
 import { MonthlyCalendarView } from "@/components/monthly-calendar-view"
 import { PlanComplexityIndicator } from "@/components/plan-complexity-indicator"
-import { type Plan, type Workout, type Goal } from "@/lib/db"
+import { type Plan, type Workout, type Goal, type ChallengeProgress, type ChallengeTemplate } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { useData } from "@/contexts/DataContext"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { formatLocalizedDate } from "@/lib/timezone-utils"
 import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
+import { getActiveChallenge, getDailyChallengeData } from "@/lib/challengeEngine"
+import { NextChallengeRecommendation } from "@/components/next-challenge-recommendation"
+import { getNextChallengeRecommendation } from "@/lib/challengeTemplates"
+import { startChallenge } from "@/lib/challengeEngine"
 
 export function PlanScreen() {
   // Get shared data from context
@@ -33,6 +37,8 @@ export function PlanScreen() {
   const [plan, setPlan] = useState<Plan | null>(null)
   const [workouts, setWorkouts] = useState<Workout[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate } | null>(null)
+  const [recommendedChallenge, setRecommendedChallenge] = useState<ChallengeTemplate | null>(null)
   const { toast } = useToast()
 
   // Sync plan from context
@@ -42,8 +48,50 @@ export function PlanScreen() {
     }
   }, [contextPlan])
 
+  // Load active challenge
+  useEffect(() => {
+    const loadChallengeData = async () => {
+      if (!userId) {
+        setActiveChallenge(null)
+        setRecommendedChallenge(null)
+        return
+      }
+
+      try {
+        const challenge = await getActiveChallenge(userId)
+
+        if (challenge) {
+          setActiveChallenge(challenge)
+          setRecommendedChallenge(null)
+        } else {
+          // No active challenge, check if we should recommend one
+          setActiveChallenge(null)
+          // Get recommendation based on completed challenges
+          const recommendation = getNextChallengeRecommendation()
+          setRecommendedChallenge(recommendation)
+        }
+      } catch (error) {
+        console.error("Error loading challenge data:", error)
+        setActiveChallenge(null)
+        setRecommendedChallenge(null)
+      }
+    }
+
+    loadChallengeData()
+  }, [userId])
+
   // Calculate challenge day progress
   const calculateChallengeProgress = () => {
+    // If we have an active challenge, use its progress
+    if (activeChallenge) {
+      const dailyData = getDailyChallengeData(
+        activeChallenge.progress,
+        activeChallenge.template
+      )
+      return { currentDay: dailyData.currentDay, totalDays: dailyData.totalDays }
+    }
+
+    // Fallback to plan-based calculation
     if (!plan || !plan.startDate) {
       return { currentDay: 0, totalDays: 21 }
     }
@@ -61,6 +109,39 @@ export function PlanScreen() {
   }
 
   const challengeProgress = calculateChallengeProgress()
+
+  // Handle starting a new challenge
+  const handleStartChallenge = async (template: ChallengeTemplate) => {
+    if (!userId || !plan) {
+      toast({
+        title: "Cannot start challenge",
+        description: "Please complete onboarding first",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      await startChallenge(userId, template.slug, plan.id!)
+
+      // Reload challenge data
+      const challenge = await getActiveChallenge(userId)
+      setActiveChallenge(challenge)
+      setRecommendedChallenge(null)
+
+      toast({
+        title: "Challenge Started! 🎉",
+        description: `${template.name} challenge has begun`,
+      })
+    } catch (error) {
+      console.error("Error starting challenge:", error)
+      toast({
+        title: "Failed to start challenge",
+        description: "Please try again",
+        variant: "destructive",
+      })
+    }
+  }
 
   // Legacy helper for backward compatibility
   const goalProgressPercent = (goal?: Goal | null) => {
@@ -468,6 +549,14 @@ export function PlanScreen() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Challenge Recommendation */}
+      {!activeChallenge && recommendedChallenge && (
+        <NextChallengeRecommendation
+          template={recommendedChallenge}
+          onStartChallenge={handleStartChallenge}
+        />
       )}
 
       {/* View Toggle */}

@@ -16,7 +16,6 @@ import {
   TrendingUp,
 } from "lucide-react"
 import Image from "next/image"
-import { Bebas_Neue, Manrope } from "next/font/google"
 import { dbUtils, setReferenceRace } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -34,6 +33,9 @@ import { onboardingManager } from "@/lib/onboardingManager"
 import OnboardingErrorBoundary from "@/components/onboarding-error-boundary"
 import { UserPrivacySettings } from "@/components/privacy-dashboard"
 import { cn } from "@/lib/utils"
+import { ChallengePicker } from "@/components/challenge-picker"
+import type { ChallengeTemplate } from "@/lib/db"
+import { getChallengeTemplateBySlug } from "@/lib/challengeTemplates"
 
 type Weekday = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
 
@@ -59,18 +61,6 @@ const DISTANCE_CHIPS = [
 const WHEEL_ITEM_HEIGHT = 48
 const WHEEL_VISIBLE_ITEMS = 5
 const WHEEL_CENTER_OFFSET = Math.floor(WHEEL_VISIBLE_ITEMS / 2)
-
-const bebas = Bebas_Neue({
-  subsets: ["latin"],
-  weight: "400",
-  variable: "--font-bebas",
-})
-
-const manrope = Manrope({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-manrope",
-})
 
 function clampNumber(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -399,6 +389,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       gdpr: false,
       push: false,
     });
+    setSelectedChallenge(null);
     setIsGeneratingPlan(false);
     toast({
       title: "Onboarding Restarted",
@@ -449,7 +440,19 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     exportData: false,
     deleteData: false,
   })
+  const [selectedChallenge, setSelectedChallenge] = useState<ChallengeTemplate | null>(null)
   const { toast } = useToast()
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const storedSlug = window.localStorage.getItem('preselectedChallenge')
+    if (!storedSlug) return
+
+    const template = getChallengeTemplateBySlug(storedSlug)
+    if (template) {
+      setSelectedChallenge(template)
+    }
+  }, [])
 
   const defaultRaceSeconds = useMemo(
     () => getDefaultRaceTimeSeconds(referenceRaceDistance),
@@ -464,7 +467,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     setReferenceRaceSeconds(defaultRaceSeconds % 60)
   }, [defaultRaceSeconds, timeSeeded])
 
-  const totalSteps = 7
+  const totalSteps = 8
   const progressPercent = Math.round(((currentStep - 1) / (totalSteps - 1)) * 100)
 
   const nextStep = () => {
@@ -500,6 +503,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           return daysPerWeek >= 2 && Boolean(longRunDay)
         case 7:
           return privacyAccepted
+        case 8:
+          return true // Challenge selection is optional
         default:
           return true
       }
@@ -521,6 +526,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             return { field: 'schedule', message: 'Select your training days and long run day' }
           case 7:
             return { field: 'privacy', message: 'Please accept the privacy policy to continue' }
+          case 8:
+            return { field: 'challenge', message: 'Select a challenge or skip to continue' }
           default:
             return { field: 'unknown', message: 'Validation failed' }
         }
@@ -552,6 +559,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         return "Select your training days and long run day"
       case 7:
         return "Please accept the privacy policy to continue"
+      case 8:
+        return "Select a challenge or skip to continue"
       default:
         return "Please complete all required fields"
     }
@@ -656,8 +665,25 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         }, { artificialDelayMs: 300 })
         console.log('✅ Atomic commit complete:', { userId, planId })
 
-        // Save reference race data for pace zone calculations
-        if (referenceRaceTimeSeconds > 0) {
+        // If a challenge was selected, start the challenge
+          if (selectedChallenge) {
+            try {
+              console.log('🏆 Starting challenge:', selectedChallenge.name)
+              const { startChallenge } = await import('@/lib/challengeEngine')
+              await startChallenge(userId, selectedChallenge.slug, planId)
+              console.log('✅ Challenge started successfully')
+            } catch (challengeError) {
+              console.warn('⚠️ Failed to start challenge:', challengeError)
+              // Non-critical error, continue with onboarding
+            }
+          }
+
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('preselectedChallenge')
+          }
+
+          // Save reference race data for pace zone calculations
+          if (referenceRaceTimeSeconds > 0) {
           try {
             await setReferenceRace(userId, referenceRaceDistance, referenceRaceTimeSeconds)
             console.log('✅ Reference race saved for VDOT calculation')
@@ -678,6 +704,22 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               const controller = new AbortController();
               const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
+              const challengePayload = selectedChallenge ? {
+                slug: selectedChallenge.slug,
+                name: selectedChallenge.name,
+                category: selectedChallenge.category,
+                difficulty: selectedChallenge.difficulty,
+                durationDays: selectedChallenge.durationDays,
+                workoutPattern: selectedChallenge.workoutPattern,
+                coachTone: selectedChallenge.coachTone,
+                targetAudience: selectedChallenge.targetAudience,
+                promise: selectedChallenge.promise,
+              } : undefined
+
+              const totalWeeks = selectedChallenge
+                ? Math.max(1, Math.ceil(selectedChallenge.durationDays / 7))
+                : undefined
+
               const planResponse = await fetch('/api/generate-plan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -689,7 +731,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                     preferredTimes: formData.selectedTimes,
                     age: formData.age,
                     averageWeeklyKm: formData.averageWeeklyKm ?? undefined
-                  }
+                  },
+                  challenge: challengePayload,
+                  totalWeeks,
+                  planType: selectedChallenge ? 'challenge' : undefined
                 }),
                 signal: controller.signal
               });
@@ -1213,9 +1258,46 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 className="mt-1 h-5 w-5 rounded border-white/30 bg-white/10 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
               />
               <label htmlFor="privacy-policy" className="text-sm text-white/80 leading-relaxed cursor-pointer select-none">
-                I have read and agree to the <a href="/privacy" target="_blank" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium" onClick={(e) => e.stopPropagation()}>Privacy Policy</a>. I understand that my running data is stored locally on my device.
+                I have read and agree to the{' '}
+                <a
+                  href="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Privacy Policy
+                </a>
+                . I understand that my running data is stored locally on my device.
               </label>
             </div>
+          </div>
+        )
+
+      case 8:
+        return (
+          <div className="pt-2 space-y-6">
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold leading-tight">Start with a Challenge?</h2>
+              <p className="text-white/60 text-sm">
+                Jump-start your running journey with a structured challenge, or skip to build your own plan.
+              </p>
+            </div>
+
+            <ChallengePicker
+              onChallengeSelected={setSelectedChallenge}
+              onSelectionChange={setSelectedChallenge}
+              selectedTemplate={selectedChallenge}
+              showFeaturedOnly={true}
+              className="mt-4"
+            />
+
+            {selectedChallenge && (
+              <div className="flex items-center gap-2 text-sm text-emerald-200 bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-2xl">
+                <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                Challenge selected: {selectedChallenge.name}
+              </div>
+            )}
           </div>
         )
       default:

@@ -67,7 +67,7 @@ export function useWakeLock({
                     audioRef.current.loop = true
 
                     // Critical mobile browser settings
-                    // @ts-ignore - playsInline is a valid attribute for mobile Safari
+                    // @ts-expect-error - playsInline is supported in browsers but not typed on HTMLAudioElement
                     audioRef.current.playsInline = true
                     // @ts-ignore - webkitPlaysInline for older iOS versions
                     audioRef.current.webkitPlaysInline = true

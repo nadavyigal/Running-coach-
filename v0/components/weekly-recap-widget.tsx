@@ -86,7 +86,6 @@ export function WeeklyRecapWidget({
   );
   const maxDailyCount = Math.max(...dailyCounts, 1);
 
-  const expandClasses = expanded ? "rotate-180" : "";
   const containerHeight = expanded ? "max-h-[900px] opacity-100" : "max-h-0 opacity-0";
 
   const weekRange = recap
@@ -116,7 +115,7 @@ export function WeeklyRecapWidget({
             aria-expanded={expanded}
           >
             <div>
-              <p className="text-sm font-semibold text-gray-500">This Week's Progress 📊</p>
+              <p className="text-sm font-semibold text-gray-500">This Week&apos;s Progress 📊</p>
               <p className="text-lg font-semibold text-gray-900">
                 {loading ? (
                   <span className="flex items-center gap-2">
@@ -223,7 +222,7 @@ export function WeeklyRecapWidget({
                     </>
                   ) : (
                     <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600">
-                      No runs this week yet. Let's get moving! 🏃
+                      No runs this week yet. Let&apos;s get moving! 🏃
                     </div>
                   )}
                 </>
@@ -251,3 +250,4 @@ function BarLegend({ counts }: { counts: number[] }) {
     </div>
   );
 }
+

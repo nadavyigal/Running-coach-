@@ -12,9 +12,11 @@ import { ManualRunModal } from "@/components/manual-run-modal"
 import { AddActivityModal } from "@/components/add-activity-modal"
 import { RunMap } from "@/components/maps/RunMap"
 import { WorkoutCompletionModal } from "@/components/workout-completion-modal"
-import { type Run, type Workout, type User, type Route } from "@/lib/db"
+import { ChallengeCompletionModal } from "@/components/challenge-completion-modal"
+import { type Run, type Workout, type User, type Route, type ChallengeProgress, type ChallengeTemplate } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { trackAnalyticsEvent } from "@/lib/analytics"
+import { getActiveChallenge, updateChallengeOnWorkoutComplete } from "@/lib/challengeEngine"
 import { ENABLE_AUTO_PAUSE, ENABLE_VIBRATION_COACH, ENABLE_AUDIO_COACH } from "@/lib/featureFlags"
 import { recordRunWithSideEffects } from "@/lib/run-recording"
 import {
@@ -317,6 +319,8 @@ export function RecordScreen() {
   const [showManualModal, setShowManualModal] = useState(false)
   const [showAddActivityModal, setShowAddActivityModal] = useState(false)
   const [completionModalData, setCompletionModalData] = useState<CompletionModalData | null>(null)
+  const [challengeCompletionData, setChallengeCompletionData] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate } | null>(null)
+  const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate } | null>(null)
   const [currentWorkout, setCurrentWorkout] = useState<Workout | null>(null)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
@@ -446,6 +450,23 @@ export function RecordScreen() {
     return () => {
       cleanupCoachingCues()
     }
+  }, [])
+
+  // Load active challenge
+  useEffect(() => {
+    const loadChallenge = async () => {
+      const user = await dbUtils.getCurrentUser()
+      if (!user?.id) return
+
+      try {
+        const challenge = await getActiveChallenge(user.id)
+        setActiveChallenge(challenge)
+      } catch (error) {
+        console.error("Error loading challenge:", error)
+      }
+    }
+
+    loadChallenge()
   }, [])
 
   const logGps = (payload: Record<string, unknown>) => {
@@ -1798,6 +1819,30 @@ export function RecordScreen() {
         ...(typeof averageAccuracy === 'number' ? { averageAccuracy } : {}),
       })
 
+      // Update challenge progress if there's an active challenge
+      if (activeChallenge) {
+        try {
+          const result = await updateChallengeOnWorkoutComplete(
+            user.id,
+            activeChallenge.progress.id!
+          )
+
+          if (result.challengeCompleted) {
+            // Challenge completed! Show challenge completion modal
+            setChallengeCompletionData({
+              progress: result.progress,
+              template: activeChallenge.template,
+            })
+          }
+
+          // Reload active challenge data
+          const updatedChallenge = await getActiveChallenge(user.id)
+          setActiveChallenge(updatedChallenge)
+        } catch (error) {
+          console.error("Failed to update challenge progress:", error)
+        }
+      }
+
       if (matchedWorkout) {
         const modalPayload: CompletionModalData = {
           completedWorkout: matchedWorkout,
@@ -2201,7 +2246,7 @@ export function RecordScreen() {
               <CardContent className="p-3">
                 <p className="text-xs text-gray-600 flex items-center gap-1">
                   <Info className="h-3 w-3" />
-                  Keep screen on for best GPS accuracy. Mobile browsers don't support background GPS tracking.
+                  Keep screen on for best GPS accuracy. Mobile browsers don&apos;t support background GPS tracking.
                 </p>
               </CardContent>
             </Card>
@@ -2705,6 +2750,40 @@ export function RecordScreen() {
           onViewPlan={() => router.push('/plan')}
           completedWorkout={completionModalData.completedWorkout}
           nextWorkout={completionModalData.nextWorkout}
+        />
+      )}
+
+      {challengeCompletionData && (
+        <ChallengeCompletionModal
+          isOpen={Boolean(challengeCompletionData)}
+          onClose={() => setChallengeCompletionData(null)}
+          completedTemplate={challengeCompletionData.template}
+          progress={challengeCompletionData.progress}
+          onStartNextChallenge={async (template) => {
+            if (currentUser?.id) {
+              try {
+                const { startChallenge } = await import('@/lib/challengeEngine')
+                const activePlan = await dbUtils.getActivePlan(currentUser.id)
+                if (activePlan) {
+                  await startChallenge(currentUser.id, template.slug, activePlan.id!)
+                  const updatedChallenge = await getActiveChallenge(currentUser.id)
+                  setActiveChallenge(updatedChallenge)
+                  setChallengeCompletionData(null)
+                  toast({
+                    title: "New Challenge Started! 🎉",
+                    description: `${template.name} challenge has begun`,
+                  })
+                }
+              } catch (error) {
+                console.error("Error starting next challenge:", error)
+                toast({
+                  title: "Failed to start challenge",
+                  description: "Please try again from the Plan screen",
+                  variant: "destructive",
+                })
+              }
+            }
+          }}
         />
       )}
     </div>

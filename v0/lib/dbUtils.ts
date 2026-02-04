@@ -1,6 +1,7 @@
 import { db, isDatabaseAvailable, safeDbOperation, getDatabase, resetDatabaseInstance } from './db';
 import type {
   ActiveRecordingSession,
+  ChallengeProgress,
   ChatMessage as ChatMessageEntity,
   CoachingFeedback,
   CoachingInteraction,
@@ -4442,6 +4443,114 @@ export async function cleanupOldRecordingSessions(userId: number): Promise<numbe
 }
 
 // ============================================================================
+// CHALLENGE MANAGEMENT
+// ============================================================================
+
+/**
+ * Seed challenge templates into the database
+ */
+export async function seedChallengeTemplates(): Promise<void> {
+  return safeDbOperation(async () => {
+    const { CHALLENGE_TEMPLATES } = await import('./challengeTemplates');
+
+    for (const template of CHALLENGE_TEMPLATES) {
+      // Check if template already exists
+      const existing = await db.challengeTemplates
+        .where('slug')
+        .equals(template.slug)
+        .first();
+
+      if (!existing) {
+        await db.challengeTemplates.add({
+          ...template,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        console.log(`[dbUtils] Seeded challenge template: ${template.name}`);
+      }
+    }
+  }, 'seedChallengeTemplates');
+}
+
+/**
+ * Get a challenge template by ID
+ */
+export async function getChallengeTemplate(id: number) {
+  return safeDbOperation(async () => {
+    return await db.challengeTemplates.get(id);
+  }, 'getChallengeTemplate', null);
+}
+
+/**
+ * Get all challenge templates
+ */
+export async function getAllChallengeTemplates() {
+  return safeDbOperation(async () => {
+    return await db.challengeTemplates
+      .where('isActive')
+      .equals(1)
+      .sortBy('sortOrder');
+  }, 'getAllChallengeTemplates', []);
+}
+
+/**
+ * Get active challenges for a user
+ */
+export async function getActiveChallenges(userId: number) {
+  return safeDbOperation(async () => {
+    return await db.challengeProgress
+      .where('[userId+status]')
+      .equals([userId, 'active'])
+      .toArray();
+  }, 'getActiveChallenges', []);
+}
+
+/**
+ * Create new challenge progress
+ */
+export async function createChallengeProgress(data: Omit<ChallengeProgress, 'id' | 'createdAt' | 'updatedAt'>) {
+  return safeDbOperation(async () => {
+    const id = await db.challengeProgress.add({
+      ...data,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    triggerSync();
+    return id;
+  }, 'createChallengeProgress');
+}
+
+/**
+ * Update challenge progress
+ */
+export async function updateChallengeProgress(
+  id: number,
+  updates: Partial<ChallengeProgress>
+) {
+  return safeDbOperation(async () => {
+    await db.challengeProgress.update(id, {
+      ...updates,
+      updatedAt: new Date(),
+    });
+
+    triggerSync();
+  }, 'updateChallengeProgress');
+}
+
+/**
+ * Get challenge progress by plan ID
+ */
+export async function getChallengeProgressByPlan(planId: number) {
+  return safeDbOperation(async () => {
+    return await db.challengeProgress
+      .where('planId')
+      .equals(planId)
+      .first();
+  }, 'getChallengeProgressByPlan', null);
+}
+
+// ============================================================================
 // EXPORT ALL UTILITIES
 // ============================================================================
 
@@ -4612,8 +4721,17 @@ export const dbUtils = {
   // Onboarding & Recommendation Helpers
   isOnboardingComplete,
   hasMinimalDataForRecommendations,
-  getUserOnboardingStatus
+  getUserOnboardingStatus,
+
+  // Challenge Management
+  seedChallengeTemplates,
+  getChallengeTemplate,
+  getAllChallengeTemplates,
+  getActiveChallenges,
+  createChallengeProgress,
+  updateChallengeProgress,
+  getChallengeProgressByPlan,
 };
 
-export default dbUtils; 
+export default dbUtils;
 export { seedDemoRoutes } from './seedRoutes';

@@ -10,15 +10,11 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Get user's engagement data
-    const runs = await dbUtils.getRuns(user.id!);
-    const goals = await dbUtils.getGoals(user.id!);
-    const badges = await dbUtils.getBadges(user.id!);
-
-    // Calculate engagement metrics
-    const engagementScore = await engagementOptimizationService.calculateEngagementScore(user, runs, goals, badges);
-    const optimalTiming = await engagementOptimizationService.determineOptimalTiming(user, runs);
-    const motivationalTriggers = await engagementOptimizationService.generateMotivationalTriggers(user, runs, goals);
+    // Calculate engagement metrics using userId
+    const userId = user.id!;
+    const engagementScore = await engagementOptimizationService.calculateEngagementScore(userId);
+    const optimalTiming = await engagementOptimizationService.determineOptimalTiming(userId);
+    const motivationalTriggers = await engagementOptimizationService.generateMotivationalTriggers(userId);
 
     return NextResponse.json({
       engagementScore,

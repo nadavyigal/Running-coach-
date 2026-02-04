@@ -113,7 +113,7 @@ export default function DebugAuthPage() {
 
       <div className="bg-gray-900 text-green-400 p-4 rounded font-mono text-sm overflow-auto max-h-96">
         {results.length === 0 ? (
-          <p className="text-gray-500">Click "Run Diagnostic Tests" to start</p>
+          <p className="text-gray-500">Click &quot;Run Diagnostic Tests&quot; to start</p>
         ) : (
           results.map((r, i) => (
             <div key={i} className={r.includes('FAIL') ? 'text-red-400' : r.includes('WARN') ? 'text-yellow-400' : ''}>

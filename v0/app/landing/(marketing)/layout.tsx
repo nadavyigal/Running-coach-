@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/s
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://runsmart.ai')
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://www.runsmart-ai.com')
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -139,9 +139,17 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             <div className="space-y-3">
               <div className="text-sm font-semibold">Contact</div>
               <div className="grid gap-2 text-sm text-muted-foreground">
-                <div>Instagram: @runsmart.ai</div>
-                <div>Twitter/X: @runsmartcoach</div>
-                <div>Email: hello@runsmart.ai</div>
+                <div>
+                  <a className="underline hover:text-foreground" href="mailto:nadav.yigal@runsmart-ai.com">
+                    nadav.yigal@runsmart-ai.com
+                  </a>
+                </div>
+                <div>
+                  Website:{' '}
+                  <a className="underline hover:text-foreground" href="https://www.runsmart-ai.com" target="_blank" rel="noopener noreferrer">
+                    www.runsmart-ai.com
+                  </a>
+                </div>
               </div>
             </div>
           </div>

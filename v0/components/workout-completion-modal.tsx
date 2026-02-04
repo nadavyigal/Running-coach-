@@ -74,12 +74,11 @@ export function WorkoutCompletionModal({
   completedWorkout,
   nextWorkout,
 }: WorkoutCompletionModalProps) {
-  if (!ENABLE_COMPLETION_LOOP) return null
-
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [motivation, setMotivation] = useState(motivationalMessages[0])
 
   useEffect(() => {
+    if (!ENABLE_COMPLETION_LOOP) return
     if (!isOpen) {
       if (timerRef.current) {
         clearTimeout(timerRef.current)
@@ -99,6 +98,7 @@ export function WorkoutCompletionModal({
   }, [isOpen, onClose])
 
   useEffect(() => {
+    if (!ENABLE_COMPLETION_LOOP) return
     if (!isOpen) return
     setMotivation(
       motivationalMessages[Math.floor(Math.random() * motivationalMessages.length)]
@@ -111,7 +111,7 @@ export function WorkoutCompletionModal({
   }, [completedWorkout, isOpen])
 
   const confettiPieces = useMemo(() => {
-    if (!isOpen) return []
+    if (!ENABLE_COMPLETION_LOOP || !isOpen) return []
     return Array.from({ length: 28 }, (_, index) => ({
       id: index,
       color: confettiPalette[index % confettiPalette.length],
@@ -120,6 +120,8 @@ export function WorkoutCompletionModal({
       delay: Math.random() * 0.5,
     }))
   }, [isOpen])
+
+  if (!ENABLE_COMPLETION_LOOP) return null
 
   const plannedDistance = completedWorkout.distance
   const actualDistance =
@@ -253,7 +255,7 @@ export function WorkoutCompletionModal({
               <Card className="rounded-3xl border border-white/30 bg-white/10 shadow-2xl shadow-indigo-900/40">
                 <CardContent className="space-y-3">
                   <p className="text-xs uppercase tracking-wide text-white/70">
-                    What's Next?
+                    What&apos;s Next?
                   </p>
                   <p className="text-2xl font-semibold text-white">
                     {nextWorkout.day} · {typeLabels[nextWorkout.type] ?? 'Workout'} ·{' '}
