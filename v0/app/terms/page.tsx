@@ -66,10 +66,25 @@ export default function TermsPage() {
         <section>
           <h2 className="text-xl font-semibold mb-3">6. Third-Party Integrations</h2>
           <p>
-            Run-Smart AI may integrate with third-party services such as Garmin Connect. Your use of
-            these integrations is subject to the respective third party&apos;s terms of service. We are
-            not responsible for the availability or functionality of third-party services.
+            Run-Smart AI may integrate with third-party services such as Garmin Connect.
           </p>
+          <ul className="list-disc pl-5 mt-2 space-y-1">
+            <li>
+              You authorize Run-Smart AI to access your Garmin data via OAuth when you connect Garmin.
+            </li>
+            <li>
+              Your use of Garmin is subject to Garmin&apos;s own Terms of Service.
+            </li>
+            <li>
+              We are not responsible for the availability or functionality of third-party services.
+            </li>
+            <li>
+              You can disconnect Garmin at any time in Settings {'->'} Devices {'->'} Garmin {'->'} Disconnect.
+            </li>
+            <li>
+              You can request deletion of imported Garmin data from the app.
+            </li>
+          </ul>
         </section>
 
         <section>

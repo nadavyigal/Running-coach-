@@ -356,8 +356,7 @@ export function BetaLandingScreen({
               <li className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-400 flex-shrink-0 mt-0.5" />
                 <span>
-                  <strong className="text-white">50% lifetime discount</strong>{" "}
-                  - $4.99/mo forever
+                  <strong className="text-white">50% lifetime discount</strong>
                 </span>
               </li>
               <li className="flex items-start gap-3">

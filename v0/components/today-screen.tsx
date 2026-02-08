@@ -817,7 +817,7 @@ export function TodayScreen() {
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-emerald-300 flex-shrink-0">✓</span>
-                      <span>50% lifetime discount ($4.99/mo forever)</span>
+                      <span>50% lifetime discount</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-emerald-300 flex-shrink-0">✓</span>

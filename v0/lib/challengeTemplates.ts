@@ -150,6 +150,13 @@ export function getChallengeTemplateBySlug(slug: string): (typeof CHALLENGE_TEMP
 }
 
 /**
+ * Get all challenge slugs for static generation
+ */
+export function getAllChallengeSlugs(): string[] {
+  return CHALLENGE_TEMPLATES.map(template => template.slug);
+}
+
+/**
  * Get challenge templates by category
  */
 export function getChallengeTemplatesByCategory(category: ChallengeTemplate['category']): typeof CHALLENGE_TEMPLATES {

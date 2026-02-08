@@ -100,7 +100,35 @@ export default function PrivacyPolicy() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold mb-3">6. Your Rights</h2>
+          <h2 className="text-xl font-semibold mb-3">6. Garmin Connect Integration</h2>
+          <p>
+            If you choose to connect Garmin, we only access the data you authorize and only for coaching and analytics.
+          </p>
+          <ul className="list-disc pl-5 mt-2 space-y-1">
+            <li>
+              <strong>Data accessed:</strong> running activities, heart rate, and training metrics.
+            </li>
+            <li>
+              <strong>Purpose:</strong> import runs into RunSmart for coaching insights, recovery scores, and analytics.
+            </li>
+            <li>
+              <strong>Storage:</strong> imported activity data is stored locally on your device. OAuth tokens are encrypted
+              with AES-256-GCM before storage.
+            </li>
+            <li>
+              <strong>No resale or write-back:</strong> we do not sell Garmin data and we do not write data back to Garmin.
+            </li>
+            <li>
+              <strong>Disconnect:</strong> Settings {'->'} Devices {'->'} Garmin {'->'} Disconnect.
+            </li>
+            <li>
+              <strong>Delete:</strong> you can delete all imported Garmin data from the app.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-semibold mb-3">7. Your Rights</h2>
           <p>Since your data is stored locally, you have full control over it. You can:</p>
           <ul className="list-disc pl-5 mt-2 space-y-1">
             <li>
@@ -114,11 +142,11 @@ export default function PrivacyPolicy() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold mb-3">7. Contact Us</h2>
-            <p>
-              If you have any questions about this Privacy Policy, please contact us at
-              support@runsmart.app.
-            </p>
+          <h2 className="text-xl font-semibold mb-3">8. Contact Us</h2>
+          <p>
+            If you have any questions about this Privacy Policy, please contact us at
+            support@runsmart.app.
+          </p>
         </section>
       </div>
     </div>
