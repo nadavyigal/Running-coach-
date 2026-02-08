@@ -20,6 +20,8 @@ import {
   BarChart3,
   RefreshCw,
   TrendingUp,
+  TrendingDown,
+  Minus,
   Award,
   LogIn,
   LogOut,
@@ -32,7 +34,7 @@ import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
 import ModalErrorBoundary from "@/components/modal-error-boundary"
-import { type Workout, type Route, type Goal, resetDatabaseInstance } from "@/lib/db"
+import { type Workout, type Route, type Goal, type RecoveryScore, resetDatabaseInstance } from "@/lib/db"
 import { dbUtils, getUserPaceZones } from "@/lib/dbUtils"
 import { useData, useGoalProgress } from "@/contexts/DataContext"
 import { WorkoutPhasesDisplay } from "@/components/workout-phases-display"
@@ -68,6 +70,8 @@ import { DailyChallengePrompt } from "@/components/daily-challenge-prompt"
 import { getActiveChallenge, getDailyChallengeData } from "@/lib/challengeEngine"
 import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db"
 import type { DailyChallengeData } from "@/lib/challengeEngine"
+import { RecoveryEngine } from "@/lib/recoveryEngine"
+import { calculateCoachConfidence, type CoachConfidenceResult } from "@/lib/coach-confidence"
 
 export function TodayScreen() {
   // Get shared data from context
@@ -88,6 +92,11 @@ export function TodayScreen() {
   const [dailyTip, setDailyTip] = useState(
     "Focus on your breathing rhythm today. Try the 3:2 pattern - inhale for 3 steps, exhale for 2 steps. This will help you maintain a steady pace!",
   )
+
+  const [recoverySnapshot, setRecoverySnapshot] = useState<RecoveryScore | null>(null)
+  const [recoveryTrend, setRecoveryTrend] = useState<{ delta: number; direction: 'up' | 'down' | 'flat' } | null>(null)
+  const [coachConfidence, setCoachConfidence] = useState<CoachConfidenceResult | null>(null)
+  const [isLoadingRecovery, setIsLoadingRecovery] = useState(false)
 
   const [showWorkoutBreakdown, setShowWorkoutBreakdown] = useState(false)
   const [todaysWorkout, setTodaysWorkout] = useState<Workout | null>(null)
@@ -209,6 +218,20 @@ export function TodayScreen() {
     setDailyTip(tips.at(nextIndex) ?? tips[0] ?? dailyTip)
   }
 
+  const getRecoveryLabel = (score: number) => {
+    if (score >= 80) return 'Excellent'
+    if (score >= 65) return 'Good'
+    if (score >= 50) return 'Fair'
+    return 'Low'
+  }
+
+  const getRecoveryRecommendation = (score: number) => {
+    if (score >= 80) return 'Ready for quality training'
+    if (score >= 65) return 'Moderate training is OK'
+    if (score >= 50) return 'Take it easy today'
+    return 'Prioritize recovery'
+  }
+
   // Initialize local data (todaysWorkout and visibleWorkouts are screen-specific)
   useEffect(() => {
     const initializeLocalData = async () => {
@@ -278,6 +301,64 @@ export function TodayScreen() {
     }
 
     loadChallengeData()
+  }, [userId])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadRecoverySummary = async () => {
+      if (!userId) {
+        setRecoverySnapshot(null)
+        setCoachConfidence(null)
+        setRecoveryTrend(null)
+        return
+      }
+
+      try {
+        setIsLoadingRecovery(true)
+        const today = new Date()
+        let score = await RecoveryEngine.getRecoveryScore(userId, today)
+        if (!score) {
+          score = await RecoveryEngine.calculateRecoveryScore(userId, today)
+        }
+
+        const trends = await RecoveryEngine.getRecoveryTrends(userId, 7)
+        const sortedTrends = trends.slice().sort((a, b) => {
+          const aDate = (a.scoreDate ?? a.date ?? a.createdAt) as Date
+          const bDate = (b.scoreDate ?? b.date ?? b.createdAt) as Date
+          return bDate.getTime() - aDate.getTime()
+        })
+        const current = sortedTrends.at(0)
+        const previous = sortedTrends.at(1)
+        const delta = current && previous ? current.overallScore - previous.overallScore : 0
+        const direction = delta > 2 ? 'up' : delta < -2 ? 'down' : 'flat'
+
+        const confidence = await calculateCoachConfidence(userId, today)
+
+        if (!cancelled) {
+          setRecoverySnapshot(score)
+          setRecoveryTrend({ delta, direction })
+          setCoachConfidence(confidence)
+        }
+
+        void trackAnalyticsEvent('recovery_checked', {
+          recovery_score: score?.overallScore ?? null,
+          coach_confidence: confidence.confidence,
+        })
+      } catch (error) {
+        console.error('Failed to load recovery summary:', error)
+      } finally {
+        if (!cancelled) {
+          setIsLoadingRecovery(false)
+        }
+      }
+    }
+
+    void loadRecoverySummary()
+
+    return () => {
+      cancelled = true
+    }
   }, [userId])
 
   useEffect(() => {
@@ -580,6 +661,9 @@ export function TodayScreen() {
   const plannedRuns = weeklyStats.plannedWorkouts
   const consistency = weeklyStats.consistencyRate
   const streak = calculateStreak()
+  const recoveryScoreValue = recoverySnapshot?.overallScore ?? 50
+  const recoveryConfidenceValue = coachConfidence?.confidence ?? 0
+  const recoveryNextStep = coachConfidence?.nextSteps?.[0] ?? 'Complete your morning check-in'
 
   const handleRouteSelected = (route: Route) => {
     setSelectedRoute(route)
@@ -719,6 +803,62 @@ export function TodayScreen() {
           </Card>
         </div>
       </div>
+
+      {userId && (
+        <div className="px-4">
+          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-900 text-white shadow-[0_20px_60px_rgba(16,185,129,0.25)]">
+            <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-emerald-400/20 blur-3xl" />
+            <div className="absolute -left-20 bottom-0 h-44 w-44 rounded-full bg-teal-400/20 blur-3xl" />
+            <CardContent className="relative space-y-4 p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">Today&apos;s Recovery</p>
+                  <div className="mt-2 flex items-end gap-3">
+                    {isLoadingRecovery ? (
+                      <Loader2 className="h-8 w-8 animate-spin text-emerald-200" />
+                    ) : (
+                      <span className="text-5xl font-bold">{recoveryScoreValue}</span>
+                    )}
+                    <div className="flex items-center gap-1 text-sm text-emerald-100/80">
+                      {recoveryTrend?.direction === 'up' ? (
+                        <TrendingUp className="h-4 w-4" />
+                      ) : recoveryTrend?.direction === 'down' ? (
+                        <TrendingDown className="h-4 w-4" />
+                      ) : (
+                        <Minus className="h-4 w-4" />
+                      )}
+                      <span>
+                        {recoveryTrend?.delta
+                          ? `${Math.abs(Math.round(recoveryTrend.delta))} pts`
+                          : 'No change'}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-sm text-emerald-100/80">
+                    {getRecoveryRecommendation(recoveryScoreValue)}
+                  </p>
+                </div>
+                <Badge className="bg-white/10 text-emerald-100 border border-emerald-200/30">
+                  {getRecoveryLabel(recoveryScoreValue)}
+                </Badge>
+              </div>
+
+              <div className="rounded-xl bg-white/10 p-4">
+                <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-emerald-100/70">
+                  <span>Coach Confidence</span>
+                  <span className="text-sm font-semibold normal-case">{recoveryConfidenceValue}%</span>
+                </div>
+                <div className="mt-3">
+                  <Progress value={recoveryConfidenceValue} className="h-2 bg-white/20" />
+                </div>
+                <p className="mt-2 text-xs text-emerald-100/80">
+                  {recoveryNextStep}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Account Callout */}
       <div className="px-4">

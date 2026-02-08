@@ -44,6 +44,8 @@ export async function POST(request: NextRequest) {
       sorenessLevel,
       stressLevel,
       motivationLevel,
+      sleepHours,
+      sleepQuality,
       notes
     } = body;
     
@@ -70,6 +72,16 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    if (typeof sleepQuality === 'number' && !isValidScore(sleepQuality)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Sleep quality must be between 1 and 10'
+        },
+        { status: 400 }
+      );
+    }
     
     // Create wellness data object
     const wellnessData: Omit<SubjectiveWellness, 'id' | 'createdAt'> = {
@@ -85,6 +97,19 @@ export async function POST(request: NextRequest) {
     
     // Save wellness data
     const id = await RecoveryEngine.saveSubjectiveWellness(wellnessData);
+
+    if (typeof sleepHours === 'number' && sleepHours > 0) {
+      const resolvedSleepQuality = typeof sleepQuality === 'number' ? sleepQuality : 6;
+      const sleepEfficiency = Math.max(60, Math.min(95, Math.round(60 + resolvedSleepQuality * 3.5)));
+      await RecoveryEngine.saveSleepData({
+        userId,
+        deviceId: 'self_report',
+        sleepDate: new Date(date),
+        totalSleepTime: Math.round(sleepHours * 60),
+        sleepEfficiency,
+        sleepScore: Math.round((resolvedSleepQuality / 10) * 100),
+      });
+    }
     
     // Recalculate recovery score with new wellness data
     await RecoveryEngine.calculateRecoveryScore(userId, new Date(date));

@@ -6,6 +6,11 @@ export interface SleepData {
   userId: number;
   deviceId?: string;
   sleepDate: Date;
+  /** Legacy alias for sleepDate */
+  date?: Date;
+  bedTime?: Date;
+  sleepTime?: Date;
+  wakeTime?: Date;
   totalSleepTime: number; // minutes
   deepSleepTime?: number; // minutes
   lightSleepTime?: number; // minutes
@@ -13,7 +18,9 @@ export interface SleepData {
   sleepEfficiency: number; // percentage
   sleepLatency?: number; // minutes to fall asleep
   wakeCount?: number;
+  awakeDuration?: number;
   sleepScore?: number; // 0-100
+  sleepQualityScore?: number;
   sleepStages?: {
     deep: number;
     light: number;
@@ -43,7 +50,9 @@ export interface HRVMeasurement {
 export interface RecoveryScore {
   id?: number;
   userId: number;
-  scoreDate: Date;
+  scoreDate?: Date;
+  /** Legacy alias for scoreDate */
+  date?: Date;
   overallScore: number; // 0-100
   sleepScore: number; // 0-100
   hrvScore: number; // 0-100
@@ -61,15 +70,20 @@ export interface RecoveryScore {
 export interface SubjectiveWellness {
   id?: number;
   userId: number;
-  assessmentDate: Date;
-  energyLevel: number; // 1-10
-  mood: number; // 1-10
-  stressLevel: number; // 1-10
-  motivation: number; // 1-10
-  fatigue: number; // 1-10
-  soreness: number; // 1-10
-  sleepQuality: number; // 1-10
-  overallWellness: number; // 1-10
+  assessmentDate?: Date;
+  /** Legacy alias for assessmentDate */
+  date?: Date;
+  energyLevel?: number; // 1-10
+  moodScore?: number; // 1-10
+  sorenessLevel?: number; // 1-10
+  stressLevel?: number; // 1-10
+  motivationLevel?: number; // 1-10
+  mood?: number; // 1-10 (legacy)
+  motivation?: number; // 1-10 (legacy)
+  fatigue?: number; // 1-10 (legacy)
+  soreness?: number; // 1-10 (legacy)
+  sleepQuality?: number; // 1-10 (legacy)
+  overallWellness?: number; // 1-10 (legacy)
   notes?: string;
   factors?: {
     stress: string[];
@@ -854,6 +868,7 @@ export interface Run {
   distance: number; // in km
   duration: number; // in seconds
   pace?: number; // in seconds per km
+  rpe?: number;
   heartRate?: number;
   calories?: number;
   notes?: string;

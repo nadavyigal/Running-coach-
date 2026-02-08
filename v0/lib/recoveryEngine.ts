@@ -1,4 +1,10 @@
 import { db, SleepData, HRVMeasurement, RecoveryScore, SubjectiveWellness } from './db';
+import {
+  calculateBaselinePace,
+  estimatePaceEffort,
+  getEffortMultiplier,
+  normalizeRunPaceSecondsPerKm,
+} from './pace-effort-estimator';
 import { PersonalizationContext } from './personalizationContext';
 
 /**
@@ -51,6 +57,10 @@ export interface RecoveryFactors {
   trainingLoadImpact: number;
   /** Stress level indicator (0-100) from physiological and subjective data */
   stressLevel: number;
+  /** Behavioral adherence score (0-100) based on consistency */
+  behavioralScore?: number;
+  /** Weekly load increase percentage */
+  loadIncreasePct?: number;
 }
 
 /**
@@ -104,6 +114,9 @@ export class RecoveryEngine {
       const hrvData = await this.getHRVDataForDate(userId, date);
       const subjectiveData = await this.getSubjectiveWellnessForDate(userId, date);
       const trainingLoad = await this.calculateTrainingLoad(userId, date);
+      const loadIncreasePct = await this.calculateWeeklyLoadIncrease(userId, date);
+      const behavioralScore = await this.calculateBehavioralScore(userId, date);
+      const hasWearableSignals = await this.hasHeartRateData(userId, date);
       
       // Calculate individual scores
       const sleepScore = this.calculateSleepScore(sleepData, baseline);
@@ -112,6 +125,7 @@ export class RecoveryEngine {
       const subjectiveScore = this.calculateSubjectiveScore(subjectiveData);
       const trainingLoadImpact = this.calculateTrainingLoadImpact(trainingLoad);
       const stressLevel = this.calculateStressLevel(sleepData, hrvData, subjectiveData);
+      const phoneOnly = !hrvData && !hasWearableSignals;
       
       // Calculate overall score with weighted factors
       const overallScore = this.calculateOverallScore({
@@ -120,8 +134,10 @@ export class RecoveryEngine {
         restingHRScore,
         subjectiveWellness: subjectiveScore,
         trainingLoadImpact,
-        stressLevel
-      });
+        stressLevel,
+        behavioralScore,
+        ...(typeof loadIncreasePct === 'number' ? { loadIncreasePct } : {})
+      }, { phoneOnly });
       
       // Generate recommendations
       const recommendations = this.generateRecommendations({
@@ -130,7 +146,9 @@ export class RecoveryEngine {
         restingHRScore,
         subjectiveWellness: subjectiveScore,
         trainingLoadImpact,
-        stressLevel
+        stressLevel,
+        behavioralScore,
+        ...(typeof loadIncreasePct === 'number' ? { loadIncreasePct } : {})
       });
       
       // Calculate confidence based on data availability
@@ -139,6 +157,7 @@ export class RecoveryEngine {
       const recoveryScore: RecoveryScore = {
         userId,
         date,
+        scoreDate: date,
         overallScore,
         sleepScore,
         hrvScore,
@@ -315,11 +334,17 @@ export class RecoveryEngine {
     if (!subjectiveData) return 50; // Default score if no data
     
     // Convert 1-10 scales to 0-100 scores
-    const energyScore = (subjectiveData.energyLevel / 10) * 100;
-    const moodScore = (subjectiveData.moodScore / 10) * 100;
-    const sorenessScore = ((11 - subjectiveData.sorenessLevel) / 10) * 100; // Inverted
-    const stressScore = ((11 - subjectiveData.stressLevel) / 10) * 100; // Inverted
-    const motivationScore = (subjectiveData.motivationLevel / 10) * 100;
+    const energyLevel = subjectiveData.energyLevel ?? subjectiveData.overallWellness ?? 5;
+    const moodLevel = subjectiveData.moodScore ?? subjectiveData.mood ?? 5;
+    const sorenessLevel = subjectiveData.sorenessLevel ?? subjectiveData.soreness ?? 5;
+    const stressLevel = subjectiveData.stressLevel ?? 5;
+    const motivationLevel = subjectiveData.motivationLevel ?? subjectiveData.motivation ?? 5;
+
+    const energyScore = (energyLevel / 10) * 100;
+    const moodScore = (moodLevel / 10) * 100;
+    const sorenessScore = ((11 - sorenessLevel) / 10) * 100; // Inverted
+    const stressScore = ((11 - stressLevel) / 10) * 100; // Inverted
+    const motivationScore = (motivationLevel / 10) * 100;
     
     // Weight the factors
     const weightedScore = (
@@ -368,7 +393,9 @@ export class RecoveryEngine {
     
     // Subjective stress factor
     if (subjectiveData) {
-      stressFactors += (subjectiveData.stressLevel / 10) * 30;
+      const subjectiveStress =
+        typeof subjectiveData.stressLevel === 'number' ? subjectiveData.stressLevel : 5;
+      stressFactors += (subjectiveStress / 10) * 30;
       factorCount++;
     }
     
@@ -376,16 +403,34 @@ export class RecoveryEngine {
   }
   
   // Calculate overall recovery score with weighted factors
-  static calculateOverallScore(factors: RecoveryFactors): number {
+  static calculateOverallScore(
+    factors: RecoveryFactors,
+    options?: { phoneOnly?: boolean }
+  ): number {
     const {
       sleepQuality,
       hrvScore,
       restingHRScore,
       subjectiveWellness,
       trainingLoadImpact,
-      stressLevel
+      stressLevel,
+      behavioralScore
     } = factors;
-    
+
+    if (options?.phoneOnly) {
+      const trainingLoadScore = Math.max(0, Math.min(100, 100 + trainingLoadImpact));
+      const behaviorScore =
+        typeof behavioralScore === 'number' && Number.isFinite(behavioralScore)
+          ? behavioralScore
+          : 50;
+      const weightedScore =
+        subjectiveWellness * 0.4 +
+        trainingLoadScore * 0.25 +
+        sleepQuality * 0.25 +
+        behaviorScore * 0.10;
+      return Math.max(0, Math.min(100, Math.round(weightedScore)));
+    }
+
     // Weight the factors based on importance
     const weightedScore = (
       sleepQuality * 0.25 +
@@ -425,6 +470,16 @@ export class RecoveryEngine {
     
     if (factors.stressLevel > 70) {
       recommendations.push('High stress levels detected. Focus on stress management and recovery');
+    }
+
+    if (typeof factors.loadIncreasePct === 'number' && factors.loadIncreasePct > 10) {
+      recommendations.push(
+        `Your weekly volume increased by ${Math.round(factors.loadIncreasePct)}%. Consider an easier day to stay under the 10% rule`
+      );
+    }
+
+    if (typeof factors.behavioralScore === 'number' && factors.behavioralScore < 50) {
+      recommendations.push('Consistency dipped recently. Aim for one easy run to rebuild the habit');
     }
     
     // Add positive recommendations for good recovery based on average of key factors
@@ -492,7 +547,11 @@ export class RecoveryEngine {
     
     return await db.sleepData
       .where('userId').equals(userId)
-      .and(sleep => sleep.date >= startOfDay && sleep.date <= endOfDay)
+      .and((sleep) => {
+        const sleepDate = sleep.sleepDate ?? sleep.date;
+        if (!sleepDate) return false;
+        return sleepDate >= startOfDay && sleepDate <= endOfDay;
+      })
       .first();
   }
   
@@ -518,7 +577,11 @@ export class RecoveryEngine {
     
     return await db.subjectiveWellness
       .where('userId').equals(userId)
-      .and(wellness => wellness.date >= startOfDay && wellness.date <= endOfDay)
+      .and((wellness) => {
+        const wellnessDate = wellness.assessmentDate ?? wellness.date;
+        if (!wellnessDate) return false;
+        return wellnessDate >= startOfDay && wellnessDate <= endOfDay;
+      })
       .first();
   }
   
@@ -527,27 +590,126 @@ export class RecoveryEngine {
     // Get runs from the last 7 days to calculate acute training load
     const sevenDaysAgo = new Date(date);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const baselineStart = new Date(date);
+    baselineStart.setDate(baselineStart.getDate() - 28);
     
     const recentRuns = await db.runs
       .where('userId').equals(userId)
       .and(run => new Date(run.completedAt) >= sevenDaysAgo)
       .toArray();
+
+    const baselineRuns = await db.runs
+      .where('userId').equals(userId)
+      .and(run => new Date(run.completedAt) >= baselineStart)
+      .toArray();
+    const baselinePace = calculateBaselinePace(baselineRuns);
     
     // Simple training load calculation based on distance and duration
     let totalLoad = 0;
     for (const run of recentRuns) {
-      const intensity = run.distance * (run.duration / 3600); // Distance * hours
+      const paceSeconds = normalizeRunPaceSecondsPerKm(run);
+      const effort = baselinePace && paceSeconds
+        ? estimatePaceEffort(paceSeconds, baselinePace)
+        : 'moderate';
+      const effortMultiplier = getEffortMultiplier(effort);
+      const intensity = run.distance * (run.duration / 3600) * effortMultiplier; // Distance * hours * effort
       totalLoad += intensity;
     }
     
     return totalLoad;
   }
+
+  static async calculateWeeklyLoadIncrease(userId: number, date: Date): Promise<number | null> {
+    const endDate = new Date(date);
+    endDate.setHours(23, 59, 59, 999);
+    const currentStart = new Date(endDate);
+    currentStart.setDate(currentStart.getDate() - 7);
+    currentStart.setHours(0, 0, 0, 0);
+
+    const previousStart = new Date(currentStart);
+    previousStart.setDate(previousStart.getDate() - 7);
+    previousStart.setHours(0, 0, 0, 0);
+
+    const runs = await db.runs
+      .where('userId').equals(userId)
+      .and(run => {
+        const completedAt = new Date(run.completedAt);
+        return completedAt >= previousStart && completedAt <= endDate;
+      })
+      .toArray();
+
+    let currentTotal = 0;
+    let previousTotal = 0;
+    runs.forEach((run) => {
+      const completedAt = new Date(run.completedAt);
+      const distance = Number.isFinite(run.distance) ? run.distance : 0;
+      if (completedAt >= currentStart) {
+        currentTotal += distance;
+      } else {
+        previousTotal += distance;
+      }
+    });
+
+    if (!Number.isFinite(previousTotal) || previousTotal <= 0) {
+      return null;
+    }
+
+    return ((currentTotal - previousTotal) / previousTotal) * 100;
+  }
+
+  static async calculateBehavioralScore(userId: number, date: Date): Promise<number> {
+    const weekStart = new Date(date);
+    weekStart.setDate(weekStart.getDate() - 7);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const [user, runs, wellnessEntries] = await Promise.all([
+      db.users.get(userId),
+      db.runs.where('userId').equals(userId).and(run => new Date(run.completedAt) >= weekStart).toArray(),
+      db.subjectiveWellness.where('userId').equals(userId).and((wellness) => {
+        const wellnessDate = wellness.assessmentDate ?? wellness.date;
+        return wellnessDate ? wellnessDate >= weekStart : false;
+      }).toArray()
+    ]);
+
+    const targetDays = user?.daysPerWeek ?? 3;
+    const runCount = runs.length;
+    let adherenceScore = Math.round((runCount / Math.max(targetDays, 1)) * 100);
+    adherenceScore = Math.min(100, adherenceScore);
+
+    const motivationScores = wellnessEntries
+      .map((entry) => entry.motivationLevel ?? entry.motivation)
+      .filter((value): value is number => Number.isFinite(value));
+    const avgMotivation = motivationScores.length > 0
+      ? motivationScores.reduce((sum, value) => sum + value, 0) / motivationScores.length
+      : null;
+
+    if (avgMotivation !== null && avgMotivation < 5) {
+      adherenceScore = Math.max(0, adherenceScore - 10);
+    }
+
+    return adherenceScore;
+  }
+
+  static async hasHeartRateData(userId: number, date: Date): Promise<boolean> {
+    const since = new Date(date);
+    since.setDate(since.getDate() - 30);
+    const recentHrv = await db.hrvMeasurements
+      .where('userId').equals(userId)
+      .and(hrv => hrv.measurementDate >= since)
+      .limit(1)
+      .first();
+
+    return Boolean(recentHrv);
+  }
   
   // Save sleep data
   static async saveSleepData(sleepData: Omit<SleepData, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
     const now = new Date();
+    const resolvedSleepDate = sleepData.sleepDate ?? sleepData.date ?? now;
     return await db.sleepData.add({
       ...sleepData,
+      sleepDate: resolvedSleepDate,
+      date: sleepData.date ?? resolvedSleepDate,
       createdAt: now,
       updatedAt: now
     });
@@ -563,8 +725,11 @@ export class RecoveryEngine {
   
   // Save subjective wellness data
   static async saveSubjectiveWellness(wellnessData: Omit<SubjectiveWellness, 'id' | 'createdAt'>): Promise<number> {
+    const resolvedDate = wellnessData.assessmentDate ?? wellnessData.date ?? new Date();
     return await db.subjectiveWellness.add({
       ...wellnessData,
+      assessmentDate: resolvedDate,
+      date: wellnessData.date ?? resolvedDate,
       createdAt: new Date()
     });
   }
@@ -578,7 +743,11 @@ export class RecoveryEngine {
     
     return await db.recoveryScores
       .where('userId').equals(userId)
-      .and(score => score.date >= startOfDay && score.date <= endOfDay)
+      .and((score) => {
+        const scoreDate = score.scoreDate ?? score.date;
+        if (!scoreDate) return false;
+        return scoreDate >= startOfDay && scoreDate <= endOfDay;
+      })
       .first();
   }
   
@@ -589,9 +758,13 @@ export class RecoveryEngine {
 
     return await db.recoveryScores
       .where('userId').equals(userId)
-      .and(score => score.date >= startDate)
+      .and((score) => {
+        const scoreDate = score.scoreDate ?? score.date;
+        if (!scoreDate) return false;
+        return scoreDate >= startDate;
+      })
       .reverse()
-      .sortBy('date');
+      .sortBy('scoreDate');
   }
 
   /**

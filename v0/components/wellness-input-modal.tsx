@@ -24,6 +24,8 @@ interface WellnessData {
   sorenessLevel: number;
   stressLevel: number;
   motivationLevel: number;
+  sleepHours: number;
+  sleepQuality: number;
   notes?: string;
 }
 
@@ -41,6 +43,8 @@ export default function WellnessInputModal({
     sorenessLevel: 5,
     stressLevel: 5,
     motivationLevel: 5,
+    sleepHours: 7,
+    sleepQuality: 6,
     notes: ''
   });
 
@@ -208,6 +212,56 @@ export default function WellnessInputModal({
                   {wellnessData.motivationLevel}/10 - {getWellnessLabel(wellnessData.motivationLevel)}
                 </span>
                 <span className="text-xs text-gray-500">High</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Sleep Hours */}
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2">
+              <Heart className="w-4 h-4" />
+              <Label className="text-sm font-medium">Sleep Hours</Label>
+            </div>
+            <div className="space-y-2">
+              <Slider
+                value={[wellnessData.sleepHours]}
+                onValueChange={(value) => setWellnessData(prev => ({ ...prev, sleepHours: value[0] }))}
+                max={12}
+                min={3}
+                step={0.5}
+                className="w-full"
+              />
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500">3h</span>
+                <span className="font-medium text-gray-700">
+                  {wellnessData.sleepHours.toFixed(1)} hours
+                </span>
+                <span className="text-xs text-gray-500">12h</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Sleep Quality */}
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2">
+              <Brain className="w-4 h-4" />
+              <Label className="text-sm font-medium">Sleep Quality</Label>
+            </div>
+            <div className="space-y-2">
+              <Slider
+                value={[wellnessData.sleepQuality]}
+                onValueChange={(value) => setWellnessData(prev => ({ ...prev, sleepQuality: value[0] }))}
+                max={10}
+                min={1}
+                step={1}
+                className="w-full"
+              />
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500">Poor</span>
+                <span className={`font-medium ${getWellnessColor(wellnessData.sleepQuality)}`}>
+                  {wellnessData.sleepQuality}/10 - {getWellnessLabel(wellnessData.sleepQuality)}
+                </span>
+                <span className="text-xs text-gray-500">Great</span>
               </div>
             </div>
           </div>

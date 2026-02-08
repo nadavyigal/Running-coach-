@@ -10,6 +10,7 @@ import WellnessInputModal from './wellness-input-modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Calendar, TrendingUp, TrendingDown, Activity, Moon, Heart, Brain } from 'lucide-react';
 import { dbUtils } from '@/lib/dbUtils';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 interface RecoveryScore {
   id?: number;
@@ -134,6 +135,12 @@ export default function RecoveryDashboard() {
     return 'Poor';
   };
 
+  const clamp = (value: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, value));
+
+  const normalizeSleepEfficiency = (quality: number) =>
+    clamp(Math.round(60 + quality * 3.5), 60, 95);
+
   const handleWellnessSubmit = async (wellnessData: any) => {
     try {
       setLoading(true);
@@ -155,10 +162,34 @@ export default function RecoveryDashboard() {
         motivationLevel: wellnessData.motivationLevel,
       });
 
+      if (typeof wellnessData.sleepHours === 'number' && wellnessData.sleepHours > 0) {
+        const sleepQuality = typeof wellnessData.sleepQuality === 'number'
+          ? wellnessData.sleepQuality
+          : 6;
+        await dbUtils.saveSleepData({
+          userId: user.id,
+          deviceId: 'self_report',
+          sleepDate: new Date(wellnessData.date),
+          totalSleepTime: Math.round(wellnessData.sleepHours * 60),
+          sleepEfficiency: normalizeSleepEfficiency(sleepQuality),
+          sleepScore: Math.round((sleepQuality / 10) * 100),
+        });
+      }
+
       // Refresh the dashboard data
       await loadRecoveryData();
       
       console.log('Wellness data saved successfully:', wellnessId);
+
+      void trackAnalyticsEvent('morning_checkin_completed', {
+        sleep_hours: wellnessData.sleepHours,
+        sleep_quality: wellnessData.sleepQuality,
+        energy_level: wellnessData.energyLevel,
+        mood_score: wellnessData.moodScore,
+        soreness_level: wellnessData.sorenessLevel,
+        stress_level: wellnessData.stressLevel,
+        motivation_level: wellnessData.motivationLevel,
+      });
     } catch (error) {
       console.error('Failed to save wellness data:', error);
       setError('Failed to save wellness data');

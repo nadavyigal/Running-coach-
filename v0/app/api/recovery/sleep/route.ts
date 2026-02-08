@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
     const sleepData: Omit<SleepData, 'id' | 'createdAt' | 'updatedAt'> = {
       userId,
       deviceId,
+      sleepDate: new Date(date),
       date: new Date(date),
       bedTime: new Date(bedTime),
       sleepTime: new Date(sleepTime),

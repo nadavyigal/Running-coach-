@@ -2168,9 +2168,13 @@ export async function getStreakStats(userId: number): Promise<{
 export async function saveSleepData(sleepData: Omit<SleepData, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
   return safeDbOperation(async () => {
     if (!db) throw new Error('Database not available');
-    
+
+    const resolvedSleepDate =
+      sleepData.sleepDate ?? sleepData.date ?? new Date()
     const id = await db.sleepData.add({
       ...sleepData,
+      sleepDate: resolvedSleepDate,
+      date: sleepData.date ?? resolvedSleepDate,
       createdAt: new Date(),
       updatedAt: new Date()
     });
@@ -2218,9 +2222,13 @@ export async function saveRecoveryScore(recoveryData: Omit<RecoveryScore, 'id' |
 export async function saveSubjectiveWellness(wellnessData: Omit<SubjectiveWellness, 'id' | 'createdAt'>): Promise<number> {
   return safeDbOperation(async () => {
     if (!db) throw new Error('Database not available');
-    
+
+    const resolvedDate =
+      wellnessData.assessmentDate ?? wellnessData.date ?? new Date()
     const id = await db.subjectiveWellness.add({
       ...wellnessData,
+      assessmentDate: resolvedDate,
+      date: wellnessData.date ?? resolvedDate,
       createdAt: new Date()
     });
     console.log('✅ Subjective wellness saved successfully:', id);

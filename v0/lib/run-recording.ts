@@ -26,6 +26,7 @@ export type RecordRunWithSideEffectsInput = {
   paceSecondsPerKm?: number
   calories?: number
   notes?: string
+  rpe?: number
   gpsPath?: string
   gpsAccuracyData?: string
   route?: string
@@ -591,6 +592,7 @@ export async function recordRunWithSideEffects(
     ...(typeof input.endAccuracy === "number" ? { endAccuracy: input.endAccuracy } : {}),
     ...(typeof input.averageAccuracy === "number" ? { averageAccuracy: input.averageAccuracy } : {}),
     ...(typeof resolvedWorkoutId === "number" ? { workoutId: resolvedWorkoutId } : {}),
+    ...(typeof input.rpe === "number" ? { rpe: input.rpe } : {}),
     ...(input.importSource ? { importSource: input.importSource } : {}),
     ...(input.importMeta?.requestId ? { importRequestId: input.importMeta.requestId } : {}),
     ...(typeof input.importMeta?.confidence === "number" ? { importConfidencePct: input.importMeta.confidence } : {}),

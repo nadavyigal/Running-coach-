@@ -13,6 +13,7 @@ import { AddActivityModal } from "@/components/add-activity-modal"
 import { RunMap } from "@/components/maps/RunMap"
 import { WorkoutCompletionModal } from "@/components/workout-completion-modal"
 import { ChallengeCompletionModal } from "@/components/challenge-completion-modal"
+import { PostRunRpeModal } from "@/components/post-run-rpe-modal"
 import { type Run, type Workout, type User, type Route, type ChallengeProgress, type ChallengeTemplate } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { trackAnalyticsEvent } from "@/lib/analytics"
@@ -61,9 +62,10 @@ interface IntervalPhase {
   distance?: number // km
 }
 
-const AUTO_PAUSE_SPEED_MPS = 0.2
+const AUTO_PAUSE_SPEED_MPS = 0.5
 const AUTO_RESUME_SPEED_MPS = 1.0
-const AUTO_PAUSE_MIN_DURATION_MS = 10000
+const AUTO_PAUSE_MIN_DURATION_MS = 5000
+const GPS_MEDIAN_FILTER_WINDOW = 3
 const IS_TEST_ENV = process.env.NODE_ENV === 'test' || process.env.VITEST
 
 const INTERVAL_UNIT_PATTERN =
@@ -321,6 +323,8 @@ export function RecordScreen() {
   const [showAddActivityModal, setShowAddActivityModal] = useState(false)
   const [completionModalData, setCompletionModalData] = useState<CompletionModalData | null>(null)
   const [challengeCompletionData, setChallengeCompletionData] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate } | null>(null)
+  const [pendingRpeRunId, setPendingRpeRunId] = useState<number | null>(null)
+  const [showPostRunRpeModal, setShowPostRunRpeModal] = useState(false)
   const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate } | null>(null)
   const [currentWorkout, setCurrentWorkout] = useState<Workout | null>(null)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
@@ -347,6 +351,7 @@ export function RecordScreen() {
   const gpsWarmupPointsRef = useRef<GPSCoordinate[]>([])
   const gpsWarmupQualityRef = useRef(gpsWarmupQuality)
   const currentGPSAccuracyRef = useRef<GPSAccuracyData | null>(null)
+  const lastGpsQualityRef = useRef<GPSAccuracyData['locationQuality'] | null>(null)
   const GPS_WARMUP_DURATION_SECONDS = 10
   const GPS_MIN_SIGNAL_STRENGTH_TO_START = 60
 
@@ -361,13 +366,14 @@ export function RecordScreen() {
   const [gpsPath, setGpsPath] = useState<GPSCoordinate[]>([])
   const [currentPosition, setCurrentPosition] = useState<GPSCoordinate | null>(null)
   const gpsPathRef = useRef<GPSCoordinate[]>([])
+  const gpsMedianBufferRef = useRef<GPSCoordinate[]>([])
   const totalDistanceKmRef = useRef(0)
   const lastRecordedPointRef = useRef<GPSCoordinate | null>(null)
   const gpsMonitoringRef = useRef<GPSMonitoringService | null>(null)
   const acceptedPointCountRef = useRef(0)
   const rejectedPointCountRef = useRef(0)
   const rejectionReasonsRef = useRef<Record<GPSRejectReason, number>>({})
-  const GPS_MAX_ACCEPTABLE_ACCURACY_METERS = 120  // Increased from 80 to accept more points in poor conditions
+  const GPS_MAX_ACCEPTABLE_ACCURACY_METERS = 50
   const GPS_DEFAULT_ACCURACY_METERS = 50
   const GPS_MIN_TIME_DELTA_MS = 400  // Reduced from 700ms to 400ms to accept more frequent GPS updates
   const MAX_REASONABLE_SPEED_MPS = 12  // Increased from 9 to 12 m/s (from ~32 km/h to ~43 km/h) for sprints
@@ -476,6 +482,12 @@ export function RecordScreen() {
     loadChallenge()
   }, [])
 
+  useEffect(() => {
+    if (!pendingRpeRunId) return
+    if (completionModalData || challengeCompletionData) return
+    setShowPostRunRpeModal(true)
+  }, [pendingRpeRunId, completionModalData, challengeCompletionData])
+
   const logGps = (payload: Record<string, unknown>) => {
     if (!gpsDebugEnabled) return
     console.log('[GPS]', payload)
@@ -489,6 +501,41 @@ export function RecordScreen() {
   const round = (value: number, precision: number) => {
     const factor = Math.pow(10, precision)
     return Math.round(value * factor) / factor
+  }
+
+  const getMedian = (values: number[]) => {
+    if (!values.length) return 0
+    const sorted = [...values].sort((a, b) => a - b)
+    const mid = Math.floor(sorted.length / 2)
+    if (sorted.length % 2 === 0) {
+      return (sorted[mid - 1] + sorted[mid]) / 2
+    }
+    return sorted[mid]
+  }
+
+  const applyMedianFilter = (point: GPSCoordinate) => {
+    const accuracyValue =
+      typeof point.accuracy === 'number' && Number.isFinite(point.accuracy)
+        ? point.accuracy
+        : GPS_DEFAULT_ACCURACY_METERS
+    if (accuracyValue > GPS_MAX_ACCEPTABLE_ACCURACY_METERS) {
+      return point
+    }
+    const buffer = gpsMedianBufferRef.current
+    buffer.push(point)
+    if (buffer.length > GPS_MEDIAN_FILTER_WINDOW) {
+      buffer.shift()
+    }
+    if (buffer.length < GPS_MEDIAN_FILTER_WINDOW) {
+      return point
+    }
+    const medianLatitude = getMedian(buffer.map((item) => item.latitude))
+    const medianLongitude = getMedian(buffer.map((item) => item.longitude))
+    return {
+      ...point,
+      latitude: medianLatitude,
+      longitude: medianLongitude,
+    }
   }
 
   // Keep refs in sync for GPS callbacks fired outside React render timing.
@@ -1097,6 +1144,7 @@ export function RecordScreen() {
 
   const resetRunTrackingState = () => {
     gpsPathRef.current = []
+    gpsMedianBufferRef.current = []
     setGpsPath([])
     setCurrentPosition(null)
     setGpsAccuracy(0)
@@ -1104,6 +1152,7 @@ export function RecordScreen() {
     totalDistanceKmRef.current = 0
     lastRecordedPointRef.current = null
     gpsMonitoringRef.current = null
+    lastGpsQualityRef.current = null
     setCurrentGPSAccuracy(null)
     currentGPSAccuracyRef.current = null
     setGpsAccuracyHistory([])
@@ -1401,6 +1450,16 @@ export function RecordScreen() {
     currentGPSAccuracyRef.current = accuracyData
     setCurrentGPSAccuracy(accuracyData)
     setGpsAccuracyHistory((prev) => [...prev.slice(-99), accuracyData])
+    const previousQuality = lastGpsQualityRef.current
+    if (previousQuality && previousQuality !== accuracyData.locationQuality) {
+      void trackAnalyticsEvent('gps_quality_changed', {
+        previous_quality: previousQuality,
+        next_quality: accuracyData.locationQuality,
+        signal_strength: Math.round(accuracyData.signalStrength),
+        accuracy_radius: Math.round(accuracyData.accuracyRadius),
+      })
+    }
+    lastGpsQualityRef.current = accuracyData.locationQuality
     if (accuracyData.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START) {
       clearGpsWeakSignalPrompt()
     }
@@ -1438,7 +1497,8 @@ export function RecordScreen() {
     }
 
     if (isRunningRef.current && !isPausedRef.current) {
-      recordPointForActiveRun(point)
+      const filteredPoint = applyMedianFilter(point)
+      recordPointForActiveRun(filteredPoint)
     }
   }
 
@@ -2081,11 +2141,7 @@ export function RecordScreen() {
         }
       }
 
-      try {
-        window.dispatchEvent(new CustomEvent("navigate-to-run-report", { detail: { runId } }))
-      } catch {
-        router.push('/')
-      }
+      setPendingRpeRunId(runId)
     } catch (error) {
       console.error('Error saving run:', error)
       toast({
@@ -2094,6 +2150,49 @@ export function RecordScreen() {
         variant: "destructive"
       })
     }
+  }
+
+  const navigateToRunReport = (runId: number) => {
+    try {
+      window.dispatchEvent(new CustomEvent("navigate-to-run-report", { detail: { runId } }))
+    } catch {
+      router.push('/')
+    }
+  }
+
+  const finalizePostRunFlow = (runId: number) => {
+    setPendingRpeRunId(null)
+    setShowPostRunRpeModal(false)
+    navigateToRunReport(runId)
+  }
+
+  const handlePostRunRpeSubmit = async (rpe: number) => {
+    if (!pendingRpeRunId) return
+    try {
+      await dbUtils.updateRun(pendingRpeRunId, { rpe })
+      void trackAnalyticsEvent('rpe_submitted', {
+        run_id: pendingRpeRunId,
+        rpe,
+      })
+      toast({
+        title: "Effort saved",
+        description: `RPE ${rpe}/10 saved to your run.`,
+      })
+      finalizePostRunFlow(pendingRpeRunId)
+    } catch (error) {
+      console.error('Failed to save RPE:', error)
+      toast({
+        title: "Unable to save effort",
+        description: "We couldn't save your RPE. You can add it later in your run notes.",
+        variant: "destructive"
+      })
+      finalizePostRunFlow(pendingRpeRunId)
+    }
+  }
+
+  const handlePostRunRpeSkip = () => {
+    if (!pendingRpeRunId) return
+    finalizePostRunFlow(pendingRpeRunId)
   }
 
 
@@ -2421,7 +2520,8 @@ export function RecordScreen() {
           {currentGPSAccuracy ? (
             <GPSAccuracyIndicator
               accuracy={currentGPSAccuracy}
-              showTroubleshooting={true}
+              compact
+              showTroubleshooting={false}
             />
           ) : (
             <Card className="border-yellow-200 bg-yellow-50">
@@ -3000,6 +3100,19 @@ export function RecordScreen() {
           }}
           initialStep="upload"
           {...(currentWorkout?.id ? { workoutId: currentWorkout.id } : {})}
+        />
+      )}
+      {pendingRpeRunId !== null && (
+        <PostRunRpeModal
+          open={showPostRunRpeModal}
+          onOpenChange={(open) => {
+            setShowPostRunRpeModal(open)
+            if (!open) {
+              handlePostRunRpeSkip()
+            }
+          }}
+          onSubmit={handlePostRunRpeSubmit}
+          onSkip={handlePostRunRpeSkip}
         />
       )}
       {completionModalData && (
