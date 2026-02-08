@@ -28,22 +28,243 @@ interface ProfessionalLandingScreenProps {
   onExistingAccount?: () => void;
 }
 
+const COPY = {
+  en: {
+    existingAccount: 'I already have an account',
+    earlyAccessBadge: 'Early Access Beta',
+    earlyAccessDeadline: 'Early access available until March 1, 2026',
+    heroTitleTop: 'Your AI',
+    heroTitleHighlight: 'Running Coach',
+    heroSubtitle: 'Join our growing community of runners getting fitter, faster with personalized AI coaching',
+    socialProof: {
+      plans: 'AI-Powered Plans',
+      tracking: 'Real-Time Tracking',
+      spots: 'Limited spots available',
+    },
+    ctaPrimary: 'Get Started Free',
+    ctaExisting: 'I already have an account',
+    ctaSubtext: 'No credit card required • Cancel anytime',
+    betaSectionTitle: 'Get Early Access',
+    betaSectionSubtitle:
+      'Share your name and email for exclusive beta updates and a lifetime discount (email optional)',
+    placeholders: {
+      name: 'Your name',
+      email: 'you@example.com',
+    },
+    continue: 'Continue',
+    validation: {
+      nameRequiredTitle: 'Name required',
+      nameRequiredBody: 'Please enter your name to continue',
+      invalidEmailTitle: 'Invalid email',
+      invalidEmailBody: 'Please enter a valid email address',
+    },
+    benefitsTitle: 'Beta Pioneer Benefits:',
+    benefits: {
+      discount: '50% lifetime discount',
+      badge: 'Exclusive Beta Pioneer badge',
+      support: 'Priority support from the team',
+    },
+    challengesTitle: 'Guided Challenges to Kickstart Your Journey',
+    challengesSubtitle: 'Three focused 21-day programs to build confidence, consistency, and momentum.',
+    challenges: [
+      {
+        slug: 'start-running',
+        name: '21-Day Start Running',
+        blurb: 'Build a sustainable run habit from day one.',
+      },
+      {
+        slug: 'morning-ritual',
+        name: '21-Day Morning Guided Run',
+        blurb: 'Turn your mornings into a calm, consistent ritual.',
+      },
+      {
+        slug: 'plateau-breaker',
+        name: '21-Day Plateau Breaker',
+        blurb: 'Reignite progress with structured variety and smart intensity.',
+      },
+    ],
+    challengesMore: '...and more coming soon.',
+    challengesCta: 'Start Your Plan',
+    challengesLink: 'View challenge page',
+    featuresTitle: 'Everything You Need to Succeed',
+    featuresSubtitle: 'RunSmart combines AI coaching with real-time tracking to help you reach your running goals',
+    features: {
+      chat: {
+        title: 'Chat with AI Coach',
+        description:
+          'Get real-time advice, ask questions, and receive personalized coaching through natural conversation',
+      },
+      adaptive: {
+        title: 'Adaptive Training Plans',
+        description: 'Plans that evolve with you — automatically adjusting to your progress, feedback, and schedule',
+      },
+      recovery: {
+        title: 'Recovery & Injury Prevention',
+        description:
+          'Smart recovery tracking using sleep, HRV, and wellness data to keep you healthy and running strong',
+      },
+      goal: {
+        title: 'Goal-Based Training',
+        description: "Whether it's your first 5K or a marathon PR, train with purpose toward your specific goals",
+      },
+      race: {
+        title: 'Race Readiness',
+        description:
+          'Pacing strategies, taper plans, and race-day coaching so you show up prepared and confident',
+      },
+      challenges: {
+        title: 'Guided Challenges',
+        description:
+          '21-Day Start Running, Plateau Breaker, Morning Ritual — structured programs to build momentum',
+      },
+    },
+    footerTagline: 'Your AI Running Coach',
+    footerLinks: {
+      privacy: 'Privacy',
+      terms: 'Terms',
+      contact: 'Contact',
+    },
+  },
+  he: {
+    existingAccount: 'כבר יש לי חשבון',
+    earlyAccessBadge: 'גישה מוקדמת (בטא)',
+    earlyAccessDeadline: 'גישה מוקדמת זמינה עד 1 במרץ 2026',
+    heroTitleTop: 'מאמן הריצה שלך',
+    heroTitleHighlight: 'מבוסס בינה מלאכותית',
+    heroSubtitle: 'הצטרפו לקהילה של רצים שמתקדמים מהר יותר עם אימון אישי מבוסס AI',
+    socialProof: {
+      plans: 'תכניות אימון חכמות',
+      tracking: 'מעקב בזמן אמת',
+      spots: 'מספר מקומות מוגבל',
+    },
+    ctaPrimary: 'התחל בחינם',
+    ctaExisting: 'כבר יש לי חשבון',
+    ctaSubtext: 'ללא כרטיס אשראי • אפשר לבטל בכל עת',
+    betaSectionTitle: 'קבל גישה מוקדמת',
+    betaSectionSubtitle: 'שתפו שם ואימייל לקבלת עדכונים והטבת לכל החיים (אימייל אופציונלי)',
+    placeholders: {
+      name: 'השם שלך',
+      email: 'you@example.com',
+    },
+    continue: 'המשך',
+    validation: {
+      nameRequiredTitle: 'חסר שם',
+      nameRequiredBody: 'אנא הזן את שמך כדי להמשיך',
+      invalidEmailTitle: 'אימייל לא תקין',
+      invalidEmailBody: 'אנא הזן כתובת אימייל תקינה',
+    },
+    benefitsTitle: 'הטבות למצטרפי בטא:',
+    benefits: {
+      discount: '50% הנחה לכל החיים',
+      badge: 'תג Beta Pioneer ייחודי',
+      support: 'תמיכה בעדיפות מהצוות',
+    },
+    challengesTitle: 'אתגרים מודרכים ליצירת מומנטום',
+    challengesSubtitle: 'שלוש תכניות ממוקדות ל-21 ימים לבניית ביטחון והתמדה.',
+    challenges: [
+      {
+        slug: 'start-running',
+        name: '21 ימים להתחיל לרוץ',
+        blurb: 'לבנות הרגל ריצה יציב מהיום הראשון.',
+      },
+      {
+        slug: 'morning-ritual',
+        name: 'ריצה מודרכת של בוקר (21 ימים)',
+        blurb: 'להפוך את הבוקר לטקס רגוע ועקבי.',
+      },
+      {
+        slug: 'plateau-breaker',
+        name: 'שבירת פלטו (21 ימים)',
+        blurb: 'להצית מחדש התקדמות עם גיוון ועומס חכם.',
+      },
+    ],
+    challengesMore: 'ועוד בהמשך.',
+    challengesCta: 'התחל את התכנית שלך',
+    challengesLink: 'לדף האתגר',
+    featuresTitle: 'כל מה שצריך כדי להצליח',
+    featuresSubtitle: 'RunSmart משלב אימון AI עם מעקב בזמן אמת כדי להגיע ליעדי הריצה שלך',
+    features: {
+      chat: {
+        title: 'שיחה עם מאמן AI',
+        description: 'קבלו ייעוץ בזמן אמת, שאלו שאלות וקבלו אימון אישי בשיחה טבעית',
+      },
+      adaptive: {
+        title: 'תכניות אימון אדפטיביות',
+        description: 'תכניות שמתעדכנות לפי ההתקדמות, המשוב והלו״ז שלכם',
+      },
+      recovery: {
+        title: 'התאוששות ומניעת פציעות',
+        description: 'מעקב חכם אחר שינה, HRV ורווחה כללית כדי לשמור על בריאותכם',
+      },
+      goal: {
+        title: 'אימון לפי מטרה',
+        description: 'בין אם זה 5 ק״מ ראשון או שיא במרתון — מתאמנים עם מטרה',
+      },
+      race: {
+        title: 'מוכנות לתחרות',
+        description: 'אסטרטגיית קצב, טייפר ואימון ליום המרוץ כדי להגיע מוכנים',
+      },
+      challenges: {
+        title: 'אתגרים מודרכים',
+        description: '21 ימים להתחיל לרוץ, שבירת פלטו, ריצת בוקר — תוכניות לבניית מומנטום',
+      },
+    },
+    footerTagline: 'מאמן הריצה החכם שלך',
+    footerLinks: {
+      privacy: 'פרטיות',
+      terms: 'תנאים',
+      contact: 'יצירת קשר',
+    },
+  },
+} as const;
+
 export function ProfessionalLandingScreen({
   onContinue: _onContinue,
   onExistingAccount,
 }: ProfessionalLandingScreenProps) {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
+  const [language, setLanguage] = useState<'en' | 'he'>('en');
   const betaSignups = useBetaSignupCount();
   const { toast } = useToast();
+  const isHebrew = language === 'he';
+  const copy = isHebrew ? COPY.he : COPY.en;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const urlLang = params.get('lang');
+    const storedLang = localStorage.getItem('landing_lang');
+    const initial =
+      urlLang === 'he' || urlLang === 'en'
+        ? urlLang
+        : storedLang === 'he' || storedLang === 'en'
+          ? storedLang
+          : 'en';
+    setLanguage(initial as 'en' | 'he');
+    if (initial !== urlLang) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('lang', initial);
+      window.history.replaceState({}, '', url.toString());
+    }
     void trackAnalyticsEvent('page_viewed', {
       referrer_source: document.referrer || 'direct',
       page: 'professional_landing',
     });
   }, []);
+
+  const setLanguagePreference = (nextLanguage: 'en' | 'he') => {
+    setLanguage(nextLanguage);
+    if (typeof window === 'undefined') return;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('lang', nextLanguage);
+      window.history.replaceState({}, '', url.toString());
+      localStorage.setItem('landing_lang', nextLanguage);
+    } catch {
+      // ignore
+    }
+  };
 
   const trackCtaClick = (buttonText: string, buttonLocation: string, extra?: Record<string, unknown>) => {
     void trackAnalyticsEvent('cta_clicked', {
@@ -147,46 +368,45 @@ export function ProfessionalLandingScreen({
 
   const featureCards = [
     {
-      title: 'Chat with AI Coach',
-      description:
-        'Get real-time advice, ask questions, and receive personalized coaching through natural conversation',
+      title: copy.features.chat.title,
+      description: copy.features.chat.description,
       icon: MessageSquare,
       gradient: 'from-emerald-500 to-teal-500',
     },
     {
-      title: 'Adaptive Training Plans',
-      description: 'Plans that evolve with you — automatically adjusting to your progress, feedback, and schedule',
+      title: copy.features.adaptive.title,
+      description: copy.features.adaptive.description,
       icon: Calendar,
       gradient: 'from-blue-500 to-cyan-500',
     },
     {
-      title: 'Recovery & Injury Prevention',
-      description: 'Smart recovery tracking using sleep, HRV, and wellness data to keep you healthy and running strong',
+      title: copy.features.recovery.title,
+      description: copy.features.recovery.description,
       icon: Heart,
       gradient: 'from-rose-500 to-pink-500',
     },
     {
-      title: 'Goal-Based Training',
-      description: "Whether it's your first 5K or a marathon PR, train with purpose toward your specific goals",
+      title: copy.features.goal.title,
+      description: copy.features.goal.description,
       icon: Target,
       gradient: 'from-amber-500 to-orange-500',
     },
     {
-      title: 'Race Readiness',
-      description: 'Pacing strategies, taper plans, and race-day coaching so you show up prepared and confident',
+      title: copy.features.race.title,
+      description: copy.features.race.description,
       icon: Trophy,
       gradient: 'from-violet-500 to-indigo-500',
     },
     {
-      title: 'Guided Challenges',
-      description: '21-Day Start Running, Plateau Breaker, Morning Ritual — structured programs to build momentum',
+      title: copy.features.challenges.title,
+      description: copy.features.challenges.description,
       icon: Zap,
       gradient: 'from-emerald-600 to-lime-500',
     },
   ];
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white" dir={isHebrew ? 'rtl' : 'ltr'} lang={isHebrew ? 'he' : 'en'}>
       {/* Hero Section */}
       <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden">
         {/* Background */}
@@ -197,6 +417,35 @@ export function ProfessionalLandingScreen({
 
         {/* Content */}
         <div className="relative z-10 max-w-7xl mx-auto px-6 py-12 text-center">
+          <div className={`flex items-center justify-between mb-10 text-sm ${isHebrew ? 'flex-row-reverse' : ''}`}>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setLanguagePreference('en')}
+                className={`px-3 py-1 rounded-full border text-sm ${
+                  language === 'en' ? 'border-emerald-500 text-emerald-700' : 'border-gray-300 text-gray-500'
+                }`}
+              >
+                English
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguagePreference('he')}
+                className={`px-3 py-1 rounded-full border text-sm ${
+                  language === 'he' ? 'border-emerald-500 text-emerald-700' : 'border-gray-300 text-gray-500'
+                }`}
+              >
+                עברית
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={handleExistingAccount}
+              className="text-emerald-700 hover:text-emerald-800 font-medium"
+            >
+              {copy.existingAccount}
+            </button>
+          </div>
           {/* Logo */}
           <div className="flex justify-center mb-8">
             <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-white/80 backdrop-blur-sm border-2 border-emerald-200 shadow-xl">
@@ -212,41 +461,41 @@ export function ProfessionalLandingScreen({
           <div className="flex justify-center mb-6 flex-wrap gap-3">
             <Badge className="bg-emerald-500/20 text-emerald-700 border-emerald-300 px-4 py-2 text-sm font-medium">
               <Zap className="h-4 w-4 mr-2 fill-current" />
-              Early Access Beta
+              {copy.earlyAccessBadge}
             </Badge>
             <Badge className="bg-white/80 text-gray-700 border-gray-300 px-4 py-2 text-sm font-medium">
               <Clock className="h-4 w-4 mr-2" />
-              Early access available until March 1, 2026
+              {copy.earlyAccessDeadline}
             </Badge>
           </div>
 
           {/* Headline */}
           <h1 className="text-5xl md:text-7xl font-extrabold text-gray-900 mb-6 leading-tight tracking-tight">
-            Your AI
+            {copy.heroTitleTop}
             <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600">
-              Running Coach
+              {copy.heroTitleHighlight}
             </span>
           </h1>
 
           {/* Subheading */}
           <p className="text-xl md:text-2xl text-gray-700 mb-8 max-w-2xl mx-auto leading-relaxed">
-            Join our growing community of runners getting fitter, faster with personalized AI coaching
+            {copy.heroSubtitle}
           </p>
 
           {/* Social Proof */}
           <div className="flex items-center justify-center gap-3 mb-10 flex-wrap">
             <Badge variant="outline" className="bg-white/80 text-gray-700 border-gray-300 px-4 py-2">
               <Activity className="h-4 w-4 mr-2" />
-              AI-Powered Plans
+              {copy.socialProof.plans}
             </Badge>
             <Badge variant="outline" className="bg-white/80 text-gray-700 border-gray-300 px-4 py-2">
               <Target className="h-4 w-4 mr-2" />
-              Real-Time Tracking
+              {copy.socialProof.tracking}
             </Badge>
             <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300 px-4 py-2">
               <Award className="h-4 w-4 mr-2" />
-              Limited spots available
+              {copy.socialProof.spots}
             </Badge>
           </div>
 
@@ -257,13 +506,18 @@ export function ProfessionalLandingScreen({
               className="w-full h-14 text-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl transition-all duration-200"
               onClick={handleHeroCta}
             >
-              Get Started Free
+              {copy.ctaPrimary}
               <ChevronRight className="ml-2 h-5 w-5" />
             </Button>
 
-            <p className="text-sm text-gray-500">
-              No credit card required • Cancel anytime
-            </p>
+            <p className="text-sm text-gray-500">{copy.ctaSubtext}</p>
+            <button
+              type="button"
+              onClick={handleExistingAccount}
+              className="text-sm text-emerald-700 hover:text-emerald-800 font-medium"
+            >
+              {copy.ctaExisting}
+            </button>
           </div>
         </div>
       </section>
@@ -273,19 +527,15 @@ export function ProfessionalLandingScreen({
         <div className="max-w-3xl mx-auto px-6">
           <div className="bg-white rounded-3xl shadow-xl p-8 md:p-12 border border-emerald-100">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-900 mb-3">
-                Get Early Access
-              </h2>
-              <p className="text-gray-600">
-                Share your name and email for exclusive beta updates and a lifetime discount (email optional)
-              </p>
+              <h2 className="text-3xl font-bold text-gray-900 mb-3">{copy.betaSectionTitle}</h2>
+              <p className="text-gray-600">{copy.betaSectionSubtitle}</p>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3 mb-6">
               <div className="flex-1">
                 <Input
                   type="text"
-                  placeholder="Your name"
+                  placeholder={copy.placeholders.name}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="h-12 rounded-xl border-gray-300 text-base"
@@ -294,7 +544,7 @@ export function ProfessionalLandingScreen({
               <div className="flex-1">
                 <Input
                   type="email"
-                  placeholder="you@example.com"
+                  placeholder={copy.placeholders.email}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="h-12 rounded-xl border-gray-300 text-base"
@@ -305,16 +555,16 @@ export function ProfessionalLandingScreen({
                 onClick={() => {
                   if (!name.trim()) {
                     toast({
-                      title: 'Name required',
-                      description: 'Please enter your name to continue',
+                      title: copy.validation.nameRequiredTitle,
+                      description: copy.validation.nameRequiredBody,
                       variant: 'destructive',
                     });
                     return;
                   }
                   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
                     toast({
-                      title: 'Invalid email',
-                      description: 'Please enter a valid email address',
+                      title: copy.validation.invalidEmailTitle,
+                      description: copy.validation.invalidEmailBody,
                       variant: 'destructive',
                     });
                     return;
@@ -328,26 +578,28 @@ export function ProfessionalLandingScreen({
                 }}
                 className="h-12 px-8 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-semibold"
               >
-                Continue
+                {copy.continue}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
 
             {/* Benefits */}
             <div className="mt-8 pt-8 border-t border-gray-200">
-              <p className="text-sm font-semibold text-gray-700 mb-4">Beta Pioneer Benefits:</p>
+              <p className="text-sm font-semibold text-gray-700 mb-4">{copy.benefitsTitle}</p>
               <ul className="space-y-2 text-sm text-gray-600">
                 <li className="flex items-start gap-2">
                   <Trophy className="h-5 w-5 text-emerald-500 flex-shrink-0" />
-                  <span><strong>50% lifetime discount</strong></span>
+                  <span>
+                    <strong>{copy.benefits.discount}</strong>
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <Award className="h-5 w-5 text-emerald-500 flex-shrink-0" />
-                  <span>Exclusive Beta Pioneer badge</span>
+                  <span>{copy.benefits.badge}</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <Heart className="h-5 w-5 text-emerald-500 flex-shrink-0" />
-                  <span>Priority support from the team</span>
+                  <span>{copy.benefits.support}</span>
                 </li>
               </ul>
             </div>
@@ -359,34 +611,30 @@ export function ProfessionalLandingScreen({
       <section id="challenges-section" className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-10">
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-              Guided Challenges to Kickstart Your Journey
-            </h2>
-            <p className="text-lg text-gray-600 max-w-3xl mx-auto">
-              Three focused 21-day programs to build confidence, consistency, and momentum.
-            </p>
-            <button
-              type="button"
-              onClick={handleExistingAccount}
-              className="text-sm text-emerald-700 hover:text-emerald-800 font-medium"
-            >
-              I already have an account
-            </button>
+            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">{copy.challengesTitle}</h2>
+            <p className="text-lg text-gray-600 max-w-3xl mx-auto">{copy.challengesSubtitle}</p>
           </div>
 
           <div className="max-w-3xl mx-auto bg-gray-50 rounded-3xl p-8 border border-gray-200">
-            <ul className="space-y-3 text-lg text-gray-700">
-              <li>
-                <span className="font-semibold text-gray-900">21-Day Start Running</span> — Build a sustainable run habit from day one.
-              </li>
-              <li>
-                <span className="font-semibold text-gray-900">21-Day Morning Guided Run</span> — Turn your mornings into a calm, consistent ritual.
-              </li>
-              <li>
-                <span className="font-semibold text-gray-900">21-Day Plateau Breaker</span> — Reignite progress with structured variety and smart intensity.
-              </li>
+            <ul className="space-y-5 text-lg text-gray-700">
+              {copy.challenges.map((challenge) => (
+                <li key={challenge.slug} className="flex flex-col gap-1">
+                  <span className="font-semibold text-gray-900">
+                    <Link href={`/challenges/${challenge.slug}`} className="hover:text-emerald-700 transition-colors">
+                      {challenge.name}
+                    </Link>
+                  </span>
+                  <span className="text-gray-600">{challenge.blurb}</span>
+                  <Link
+                    href={`/challenges/${challenge.slug}`}
+                    className="text-sm text-emerald-700 hover:text-emerald-800 font-medium"
+                  >
+                    {copy.challengesLink}
+                  </Link>
+                </li>
+              ))}
             </ul>
-            <p className="mt-4 text-sm text-gray-500">...and more coming soon.</p>
+            <p className="mt-4 text-sm text-gray-500">{copy.challengesMore}</p>
 
             <div className="mt-8 text-center">
               <Button
@@ -394,7 +642,7 @@ export function ProfessionalLandingScreen({
                 onClick={handleGenericStart}
                 className="h-12 px-8 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-semibold"
               >
-                Start Your Plan
+                {copy.challengesCta}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
@@ -406,12 +654,8 @@ export function ProfessionalLandingScreen({
       <section className="py-20 bg-gradient-to-br from-gray-50 to-gray-100">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Everything You Need to Succeed
-            </h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              RunSmart combines AI coaching with real-time tracking to help you reach your running goals
-            </p>
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">{copy.featuresTitle}</h2>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">{copy.featuresSubtitle}</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -422,12 +666,8 @@ export function ProfessionalLandingScreen({
                   <div className={`h-14 w-14 bg-gradient-to-br ${feature.gradient} rounded-2xl flex items-center justify-center mb-6`}>
                     <Icon className="h-7 w-7 text-white" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-3">
-                    {feature.title}
-                  </h3>
-                  <p className="text-gray-600 leading-relaxed">
-                    {feature.description}
-                  </p>
+                  <h3 className="text-xl font-bold text-gray-900 mb-3">{feature.title}</h3>
+                  <p className="text-gray-600 leading-relaxed">{feature.description}</p>
                 </div>
               );
             })}
@@ -450,23 +690,23 @@ export function ProfessionalLandingScreen({
               </div>
               <div>
                 <p className="font-bold text-lg">RunSmart</p>
-                <p className="text-sm text-gray-400">Your AI Running Coach</p>
+                <p className="text-sm text-gray-400">{copy.footerTagline}</p>
               </div>
             </div>
 
             {/* Links */}
             <div className="flex items-center gap-6 text-sm">
               <Link href="/privacy" className="text-gray-300 hover:text-white transition-colors">
-                Privacy
+                {copy.footerLinks.privacy}
               </Link>
               <Link href="/terms" className="text-gray-300 hover:text-white transition-colors">
-                Terms
+                {copy.footerLinks.terms}
               </Link>
               <a
                 href="mailto:nadav.yigal@runsmart-ai.com"
                 className="text-gray-300 hover:text-white transition-colors"
               >
-                Contact
+                {copy.footerLinks.contact}
               </a>
             </div>
           </div>
