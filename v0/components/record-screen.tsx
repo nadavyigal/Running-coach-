@@ -339,8 +339,14 @@ export function RecordScreen() {
     signalStrength: number;
     canStart: boolean;
   }>({ bestAccuracy: null, currentAccuracy: null, signalStrength: 0, canStart: false })
+  const [gpsWeakSignalPrompt, setGpsWeakSignalPrompt] = useState<{
+    signalStrength: number;
+    accuracyRadius: number | null;
+  } | null>(null)
   const gpsWarmupTimerRef = useRef<NodeJS.Timeout | null>(null)
   const gpsWarmupPointsRef = useRef<GPSCoordinate[]>([])
+  const gpsWarmupQualityRef = useRef(gpsWarmupQuality)
+  const currentGPSAccuracyRef = useRef<GPSAccuracyData | null>(null)
   const GPS_WARMUP_DURATION_SECONDS = 10
   const GPS_MIN_SIGNAL_STRENGTH_TO_START = 60
 
@@ -494,6 +500,37 @@ export function RecordScreen() {
   const setAutoPauseStartTimeState = (next: number | null) => {
     autoPauseStartTimeRef.current = next
     setAutoPauseStartTime(next)
+  }
+
+  const setGpsWarmupQualityState = (
+    next:
+      | {
+          bestAccuracy: number | null
+          currentAccuracy: number | null
+          signalStrength: number
+          canStart: boolean
+        }
+      | ((
+          prev: {
+            bestAccuracy: number | null
+            currentAccuracy: number | null
+            signalStrength: number
+            canStart: boolean
+          }
+        ) => {
+          bestAccuracy: number | null
+          currentAccuracy: number | null
+          signalStrength: number
+          canStart: boolean
+        })
+  ) => {
+    const resolved = typeof next === 'function' ? next(gpsWarmupQualityRef.current) : next
+    gpsWarmupQualityRef.current = resolved
+    setGpsWarmupQuality(resolved)
+  }
+
+  const clearGpsWeakSignalPrompt = () => {
+    setGpsWeakSignalPrompt(null)
   }
 
   const incrementAutoPauseCount = () => {
@@ -1068,6 +1105,7 @@ export function RecordScreen() {
     lastRecordedPointRef.current = null
     gpsMonitoringRef.current = null
     setCurrentGPSAccuracy(null)
+    currentGPSAccuracyRef.current = null
     setGpsAccuracyHistory([])
     resetGpsDebugStats()
     resetAutoPauseState()
@@ -1360,8 +1398,12 @@ export function RecordScreen() {
     const gpsService = gpsMonitoringRef.current ?? new GPSMonitoringService()
     gpsMonitoringRef.current = gpsService
     const accuracyData = gpsService.calculateAccuracyMetrics(position)
+    currentGPSAccuracyRef.current = accuracyData
     setCurrentGPSAccuracy(accuracyData)
     setGpsAccuracyHistory((prev) => [...prev.slice(-99), accuracyData])
+    if (accuracyData.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START) {
+      clearGpsWeakSignalPrompt()
+    }
 
     logGps({
       event: 'watch',
@@ -1379,7 +1421,7 @@ export function RecordScreen() {
       const currentAccuracy = point.accuracy ?? 999
       const assessment = gpsService.assessGPSQuality(currentAccuracy)
 
-      setGpsWarmupQuality(prev => {
+      setGpsWarmupQualityState(prev => {
         const bestAccuracy = prev.bestAccuracy === null ? currentAccuracy :
           Math.min(prev.bestAccuracy, currentAccuracy)
 
@@ -1528,12 +1570,13 @@ export function RecordScreen() {
     setIsGpsWarmingUp(true)
     setGpsWarmupCountdown(GPS_WARMUP_DURATION_SECONDS)
     gpsWarmupPointsRef.current = []
-    setGpsWarmupQuality({
+    setGpsWarmupQualityState({
       bestAccuracy: null,
       currentAccuracy: null,
       signalStrength: 0,
       canStart: false
     })
+    clearGpsWeakSignalPrompt()
 
     // Start GPS tracking in background to collect warmup data
     setIsInitializingGps(true)
@@ -1571,28 +1614,34 @@ export function RecordScreen() {
   const finishGpsWarmup = () => {
     setIsGpsWarmingUp(false)
 
-    // Evaluate GPS quality after warmup
-    const quality = gpsWarmupQuality
+    // Evaluate GPS quality after warmup using the latest readings
+    const quality = gpsWarmupQualityRef.current
+    const latestAccuracy = currentGPSAccuracyRef.current
+    const signalStrength =
+      typeof latestAccuracy?.signalStrength === 'number'
+        ? latestAccuracy.signalStrength
+        : quality.signalStrength
+    const accuracyRadius =
+      typeof latestAccuracy?.accuracyRadius === 'number'
+        ? latestAccuracy.accuracyRadius
+        : quality.currentAccuracy
 
-    if (!quality.canStart || quality.signalStrength < GPS_MIN_SIGNAL_STRENGTH_TO_START) {
-      // GPS quality is poor - show toast with option to proceed or wait
-      // The GPS accuracy indicator will automatically show detailed info
-      toast({
-        title: "GPS Signal Quality",
-        description: `Signal: ${quality.signalStrength}%. You can start anyway or wait for better signal.`,
-        action: (
-          <ToastAction altText="Start Anyway" onClick={() => proceedWithRun()}>
-            Start Anyway
-          </ToastAction>
-        )
+    if (!quality.canStart || signalStrength < GPS_MIN_SIGNAL_STRENGTH_TO_START) {
+      // Keep GPS tracking active so user can monitor signal improvement.
+      // Show a persistent prompt instead of a toast to avoid conflicting numbers.
+      setGpsWeakSignalPrompt({
+        signalStrength,
+        accuracyRadius: typeof accuracyRadius === 'number' ? accuracyRadius : null
       })
-
-      // Keep GPS tracking active so user can monitor signal improvement
-      // The GPSAccuracyIndicator component will display all details automatically
-    } else {
-      // GPS quality is good, proceed with run
-      proceedWithRun()
+      return
     }
+
+    // GPS quality is good, proceed with run
+    clearGpsWeakSignalPrompt()
+    toast({
+      title: "GPS is good - starting now."
+    })
+    proceedWithRun()
   }
 
   const cancelGpsWarmup = () => {
@@ -1603,6 +1652,7 @@ export function RecordScreen() {
     setIsGpsWarmingUp(false)
     stopTracking()
     gpsWarmupPointsRef.current = []
+    clearGpsWeakSignalPrompt()
     toast({
       title: "Warmup Cancelled",
       description: "GPS warmup cancelled. Tap Start Run when ready."
@@ -1610,6 +1660,7 @@ export function RecordScreen() {
   }
 
   const proceedWithRun = async () => {
+    clearGpsWeakSignalPrompt()
     // Initialize coaching cues on user gesture (required for iOS Safari audio)
     // This ensures both vibration and audio are properly detected and enabled
     if (ENABLE_AUDIO_COACH || ENABLE_VIBRATION_COACH) {
@@ -1732,6 +1783,7 @@ export function RecordScreen() {
       totalDistanceKmRef.current = 0
       lastRecordedPointRef.current = null
       setCurrentGPSAccuracy(null) // Will be updated by next GPS point
+      currentGPSAccuracyRef.current = null
       setGpsAccuracyHistory([])
       resetGpsDebugStats()
       resetAutoPauseState()
@@ -2102,6 +2154,18 @@ export function RecordScreen() {
         : `Next: ${nextPhaseLabel}`
     : ''
 
+  const showWeakSignalPrompt =
+    !isRunning &&
+    !isGpsWarmingUp &&
+    isGpsTracking &&
+    currentGPSAccuracy !== null &&
+    currentGPSAccuracy.signalStrength < GPS_MIN_SIGNAL_STRENGTH_TO_START
+
+  const weakSignalStrength =
+    gpsWeakSignalPrompt?.signalStrength ?? currentGPSAccuracy?.signalStrength ?? 0
+  const weakAccuracyRadius =
+    gpsWeakSignalPrompt?.accuracyRadius ?? currentGPSAccuracy?.accuracyRadius ?? null
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 space-y-4">
       {/* GPS Warmup Countdown Overlay */}
@@ -2375,6 +2439,44 @@ export function RecordScreen() {
             </Card>
           )}
 
+          {showWeakSignalPrompt && (
+            <Card className="border-yellow-200 bg-yellow-50 mt-3">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-5 w-5 text-yellow-700 mt-0.5" />
+                  <div className="space-y-2 flex-1">
+                    <p className="font-medium text-yellow-900">
+                      GPS signal is still weak
+                    </p>
+                    <p className="text-sm text-yellow-800">
+                      Signal: {Math.round(weakSignalStrength)}%
+                      {typeof weakAccuracyRadius === 'number'
+                        ? ` • Accuracy: ±${Math.round(weakAccuracyRadius)}m`
+                        : ''}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-yellow-400 text-yellow-900 hover:bg-yellow-100"
+                        onClick={() => startGpsWarmup()}
+                      >
+                        Keep Warming
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-yellow-600 hover:bg-yellow-700"
+                        onClick={() => proceedWithRun()}
+                      >
+                        Start Anyway
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Screen Visibility Indicator */}
           {isRunning && !isPageVisible && (
             <Card className="border-blue-200 bg-blue-50 mt-4">
@@ -2626,18 +2728,6 @@ export function RecordScreen() {
                           `Start Run (${currentGPSAccuracy.signalStrength}% GPS)` :
                           'Start Run'}
                   </Button>
-                  {/* Show "Start Anyway" button if GPS is tracking but run hasn't started (post-warmup with poor signal) */}
-                  {!isInitializingGps && !isGpsWarmingUp && isGpsTracking && gpsAccuracy > 0 && (
-                    <Button
-                      onClick={proceedWithRun}
-                      size="lg"
-                      variant="outline"
-                      className="border-orange-500 text-orange-600 hover:bg-orange-50"
-                    >
-                      <AlertTriangle className="h-5 w-5 mr-2" />
-                      Start Anyway
-                    </Button>
-                  )}
                 </>
               ) : (
                 <>
