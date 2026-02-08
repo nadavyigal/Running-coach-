@@ -25,9 +25,13 @@ import { createClient } from '@supabase/supabase-js';
 
 interface ProfessionalLandingScreenProps {
   onContinue?: () => void;
+  onExistingAccount?: () => void;
 }
 
-export function ProfessionalLandingScreen({ onContinue: _onContinue }: ProfessionalLandingScreenProps) {
+export function ProfessionalLandingScreen({
+  onContinue: _onContinue,
+  onExistingAccount,
+}: ProfessionalLandingScreenProps) {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const betaSignups = useBetaSignupCount();
@@ -123,6 +127,22 @@ export function ProfessionalLandingScreen({ onContinue: _onContinue }: Professio
   const handleHeroCta = () => {
     trackCtaClick('Get Started Free', 'hero');
     revealChallenges();
+  };
+
+  const handleExistingAccount = () => {
+    trackCtaClick('I already have an account', 'hero');
+    try {
+      localStorage.setItem('beta_signup_complete', 'true');
+    } catch {
+      // ignore storage errors
+    }
+    if (onExistingAccount) {
+      onExistingAccount();
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      window.location.href = '/today';
+    }
   };
 
   const featureCards = [
@@ -345,6 +365,13 @@ export function ProfessionalLandingScreen({ onContinue: _onContinue }: Professio
             <p className="text-lg text-gray-600 max-w-3xl mx-auto">
               Three focused 21-day programs to build confidence, consistency, and momentum.
             </p>
+            <button
+              type="button"
+              onClick={handleExistingAccount}
+              className="text-sm text-emerald-700 hover:text-emerald-800 font-medium"
+            >
+              I already have an account
+            </button>
           </div>
 
           <div className="max-w-3xl mx-auto bg-gray-50 rounded-3xl p-8 border border-gray-200">

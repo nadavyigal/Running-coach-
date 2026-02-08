@@ -244,6 +244,7 @@ export default function RunSmartApp() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [incompleteRecording, setIncompleteRecording] = useState<ActiveRecordingSession | null>(null)
   const [showRecoveryModal, setShowRecoveryModal] = useState(false)
+  const isRootPath = mounted && typeof window !== 'undefined' && window.location.pathname === '/'
 
   // Ref to prevent double initialization in React Strict Mode
   const initRef = useRef(false)
@@ -620,6 +621,17 @@ export default function RunSmartApp() {
     logger.log('✅ [handleBetaSignupComplete] Moving to onboarding screen')
   }
 
+  const handleExistingAccount = () => {
+    try {
+      localStorage.setItem('beta_signup_complete', 'true')
+    } catch {
+      // ignore storage errors
+    }
+    if (typeof window !== 'undefined') {
+      window.location.href = '/today'
+    }
+  }
+
   const handleOnboardingComplete = (userData?: any) => {
     logger.log('✅ [handleOnboardingComplete] Starting navigation to Today screen...')
 
@@ -724,11 +736,23 @@ export default function RunSmartApp() {
 
   const renderScreen = () => {
     try {
+      if (isRootPath) {
+        logger.log('🏡 Rendering main landing screen on root path')
+        return (
+          <ProfessionalLandingScreen
+            onContinue={handleBetaSignupComplete}
+            onExistingAccount={handleExistingAccount}
+          />
+        )
+      }
       // Show professional landing screen if beta signup not completed
       if (!isBetaSignupComplete) {
         logger.log('🎯 Rendering professional landing screen - isBetaSignupComplete:', isBetaSignupComplete);
         return (
-          <ProfessionalLandingScreen onContinue={handleBetaSignupComplete} />
+          <ProfessionalLandingScreen
+            onContinue={handleBetaSignupComplete}
+            onExistingAccount={handleExistingAccount}
+          />
         )
       }
 
