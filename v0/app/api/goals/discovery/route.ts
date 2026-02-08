@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
-import { NextRequest, NextResponse } from 'next/server';
 import { rateLimiter, securityConfig } from '@/lib/security.config';
 import { securityMonitor } from '@/lib/security.monitoring';
 
