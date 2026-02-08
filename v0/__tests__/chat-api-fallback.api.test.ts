@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
-import { chatHandler } from '@/app/api/chat/route';
+import { POST } from '@/app/api/chat/route';
 
 describe('Chat API Fallback', () => {
   const originalKey = process.env.OPENAI_API_KEY;
@@ -23,7 +23,7 @@ describe('Chat API Fallback', () => {
       }),
     });
 
-    const response = await chatHandler(request as any);
+    const response = await POST(request as any);
     const data = await response.json();
 
     expect(response.status).toBe(503);
@@ -45,7 +45,7 @@ describe('Chat API Fallback', () => {
       }),
     });
 
-    const response = await chatHandler(request as any);
+    const response = await POST(request as any);
     const data = await response.json();
 
     expect(response.status).toBe(503);

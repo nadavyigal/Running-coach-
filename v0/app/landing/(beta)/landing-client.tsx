@@ -4,8 +4,8 @@ import { useRouter } from "next/navigation";
 import { BetaLandingScreen } from "@/components/beta-landing-screen";
 
 const LEGAL_LINKS = {
-  privacyHref: "/landing/privacy",
-  termsHref: "/landing/terms",
+  privacyHref: "/privacy",
+  termsHref: "/terms",
   contactEmail: "firstname.lastname@runsmart-ai.com",
 };
 

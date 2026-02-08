@@ -192,6 +192,9 @@ describe('OnboardingScreen', () => {
     fireEvent.click(screen.getByText(/Saturday/i));
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
 
-    expect(screen.getByRole('button', { name: /Complete setup/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/i have read and agree/i))
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+
+    expect(await screen.findByRole('button', { name: /Complete setup/i })).toBeInTheDocument()
   });
 }); 

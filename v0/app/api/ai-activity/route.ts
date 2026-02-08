@@ -150,7 +150,7 @@ const normalizeStructured = (raw: unknown, exifDateIso?: string): NormalizedExtr
     }
   }
 
-  return {
+  const normalized: NormalizedExtraction = {
     type: runType,
     distanceKm: typeof distanceKm === "number" ? distanceKm : undefined,
     durationSeconds: typeof durationSeconds === "number" ? durationSeconds : undefined,
@@ -159,11 +159,22 @@ const normalizeStructured = (raw: unknown, exifDateIso?: string): NormalizedExtr
     notes: typeof record.notes === "string" ? record.notes : undefined,
     completedAtIso: dateIso,
     confidencePct: confidence ?? 50,
-    hasRouteMap: hasRouteMap === true ? true : hasRouteMap === false ? false : undefined,
-    routeType,
-    gpsCoordinates,
-    mapImageDescription,
   }
+
+  if (typeof hasRouteMap === "boolean") {
+    normalized.hasRouteMap = hasRouteMap
+  }
+  if (typeof routeType === "string") {
+    normalized.routeType = routeType
+  }
+  if (gpsCoordinates) {
+    normalized.gpsCoordinates = gpsCoordinates
+  }
+  if (typeof mapImageDescription === "string") {
+    normalized.mapImageDescription = mapImageDescription
+  }
+
+  return normalized
 }
 
 const validateAndNormalizeExtracted = (extracted: {
@@ -379,7 +390,7 @@ export async function POST(req: Request) {
         maxOutputTokens: 800,
       })
 
-      ocrText = ocrResult.text ?? ""
+      ocrText = typeof ocrResult.text === "string" ? ocrResult.text : ""
       const parsedFromText = parseActivityFromText(ocrText)
       extracted = {
         type: extracted?.type || "run",
@@ -418,6 +429,23 @@ export async function POST(req: Request) {
           errorCode: "ai_missing_required_fields",
           missingFields,
           warningFields,
+          requestId,
+          meta: {
+            parserVersion: PARSER_VERSION,
+            model: PRIMARY_MODEL,
+            method,
+            preprocessing: preprocessed.steps,
+          },
+        },
+        { status: 422 },
+      )
+    }
+
+    if (!extracted) {
+      return NextResponse.json(
+        {
+          error: "Unable to extract activity data. Please try again with a clearer image.",
+          errorCode: "ai_extraction_failed",
           requestId,
           meta: {
             parserVersion: PARSER_VERSION,

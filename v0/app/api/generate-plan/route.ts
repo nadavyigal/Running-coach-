@@ -18,7 +18,10 @@ function getClientIP(request: Request): string {
   const headers = request.headers;
   const forwardedFor = headers.get('x-forwarded-for');
   const realIP = headers.get('x-real-ip');
-  if (forwardedFor) return forwardedFor.split(',')[0].trim();
+  if (forwardedFor) {
+    const first = forwardedFor.split(',')[0]?.trim();
+    if (first) return first;
+  }
   if (realIP) return realIP;
   return '127.0.0.1';
 }
@@ -403,7 +406,8 @@ export async function POST(req: Request) {
 
   // Rate limiting check (10 requests per minute for AI routes)
   const clientIP = getClientIP(req);
-  const rateLimitResult = await rateLimiter.check(clientIP, securityConfig.apiSecurity.chatRateLimit);
+  const rateLimitConfig = { ...securityConfig.rateLimit, ...securityConfig.apiSecurity.chatRateLimit };
+  const rateLimitResult = await rateLimiter.check(clientIP, rateLimitConfig);
 
   if (!rateLimitResult.success) {
     securityMonitor.trackSecurityEvent({

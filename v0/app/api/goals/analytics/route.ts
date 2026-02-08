@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { NextRequest, NextResponse } from 'next/server';
+import type { Goal } from '@/lib/db';
 import { dbUtils } from '@/lib/dbUtils';
 import { goalProgressEngine } from '@/lib/goalProgressEngine';
 import { logger } from '@/lib/logger';
@@ -10,7 +12,7 @@ const AnalyticsQuerySchema = z.object({
   userId: z.string().transform(Number),
   goalId: z.string().transform(Number).optional(),
   timeRange: z.enum(['7d', '30d', '90d', '1y', 'all']).default('30d'),
-  includeDetailed: z.string().transform(val => val === 'true').optional().default(false)
+  includeDetailed: z.coerce.boolean().optional().default(false)
 });
 
 export async function GET(request: NextRequest) {
@@ -46,9 +48,19 @@ export async function GET(request: NextRequest) {
     }
 
     // Get goals for analysis
-    let goals = params.goalId
-      ? [await dbUtils.getGoal(params.goalId)].filter(Boolean)
-      : await dbUtils.getUserGoals(params.userId);
+    let goals: Goal[] = [];
+    if (params.goalId) {
+      const goal = await dbUtils.getGoal(params.goalId);
+      if (!goal) {
+        return NextResponse.json(
+          { error: 'Goal not found' },
+          { status: 404 }
+        );
+      }
+      goals = [goal];
+    } else {
+      goals = await dbUtils.getUserGoals(params.userId);
+    }
 
     // Filter goals by date range
     goals = goals.filter(goal => new Date(goal.createdAt) >= startDate);
@@ -87,10 +99,10 @@ async function generateGoalAnalytics(
   const activeGoals = goals.filter(g => g.status === 'active').length;
   const completedGoals = goals.filter(g => g.status === 'completed').length;
   const pausedGoals = goals.filter(g => g.status === 'paused').length;
-  const abandonedGoals = goals.filter(g => g.status === 'abandoned').length;
+  const cancelledGoals = goals.filter(g => g.status === 'cancelled').length;
 
   // Calculate success rate
-  const finishedGoals = completedGoals + abandonedGoals;
+  const finishedGoals = completedGoals + cancelledGoals;
   const successRate = finishedGoals > 0 ? (completedGoals / finishedGoals) * 100 : 0;
 
   // Calculate average completion time
@@ -123,7 +135,6 @@ async function generateGoalAnalytics(
   // Goal performance analysis
   const goalPerformance = await Promise.all(
     goals.map(async (goal) => {
-      const _progress = await goalProgressEngine.calculateGoalProgress(goal.id!);
       const daysActive = Math.ceil((Date.now() - new Date(goal.createdAt).getTime()) / (1000 * 60 * 60 * 24));
       const progressRate = daysActive > 0 ? (goal.progressPercentage || 0) / daysActive : 0;
       const prediction = await goalProgressEngine.predictGoalCompletion(goal.id!);
@@ -153,7 +164,10 @@ async function generateGoalAnalytics(
     return acc;
   }, {} as Record<string, { goals: any[]; completed: number }>);
 
-  const categoryBreakdown = Object.entries(categoryGroups).map(([category, data]) => ({
+  const categoryEntries = Object.entries(categoryGroups) as Array<
+    [string, { goals: Goal[]; completed: number }]
+  >;
+  const categoryBreakdown = categoryEntries.map(([category, data]) => ({
     category,
     count: data.goals.length,
     successRate: data.goals.length > 0 ? (data.completed / data.goals.length) * 100 : 0,
@@ -167,7 +181,7 @@ async function generateGoalAnalytics(
   const insights = await generateInsights(goals, goalPerformance, categoryBreakdown);
 
   // Generate predictions
-  const predictions = await generatePredictions(userId, goals);
+  const predictions = await generatePredictions(goals);
 
   return {
     overview: {
@@ -175,7 +189,7 @@ async function generateGoalAnalytics(
       activeGoals,
       completedGoals,
       pausedGoals,
-      abandonedGoals,
+      cancelledGoals,
       averageCompletionTime: Math.round(averageCompletionTime),
       successRate: Math.round(successRate * 10) / 10,
       streak
@@ -246,9 +260,9 @@ async function generateMilestoneAnalytics(goals: any[], startDate: Date, endDate
       const milestones = await dbUtils.getGoalMilestones(goal.id!);
       const achievedInWeek = milestones.filter(m => 
         m.status === 'achieved' &&
-        m.achievedAt &&
-        new Date(m.achievedAt) >= weekStart &&
-        new Date(m.achievedAt) < weekEnd
+        m.achievedDate &&
+        new Date(m.achievedDate) >= weekStart &&
+        new Date(m.achievedDate) < weekEnd
       );
 
       totalMilestones += achievedInWeek.length;
@@ -346,7 +360,7 @@ async function generateInsights(goals: any[], goalPerformance: any[], categoryBr
   return insights;
 }
 
-async function generatePredictions(userId: number, goals: any[]) {
+async function generatePredictions(goals: any[]) {
   // Next milestone prediction
   let nextMilestone = null;
   let earliestDate = null;
@@ -354,11 +368,12 @@ async function generatePredictions(userId: number, goals: any[]) {
   for (const goal of goals.filter(g => g.status === 'active')) {
     const milestones = await dbUtils.getGoalMilestones(goal.id!);
     const nextMilestoneForGoal = milestones
-      .filter(m => m.status === 'active' || m.status === 'pending')
-      .sort((a, b) => a.sequenceOrder - b.sequenceOrder)[0];
+      .filter(m => m.status === 'pending')
+      .sort((a, b) => a.milestoneOrder - b.milestoneOrder)[0];
 
     if (nextMilestoneForGoal) {
       const progress = await goalProgressEngine.calculateGoalProgress(goal.id!);
+      const prediction = await goalProgressEngine.predictGoalCompletion(goal.id!);
       if (progress?.projectedCompletion) {
         const projectedDate = new Date(progress.projectedCompletion);
         if (!earliestDate || projectedDate < earliestDate) {
@@ -367,7 +382,7 @@ async function generatePredictions(userId: number, goals: any[]) {
             goalTitle: goal.title,
             milestoneTitle: nextMilestoneForGoal.title,
             estimatedDate: projectedDate.toISOString(),
-            confidence: progress.successProbability || 0.5
+            confidence: prediction?.probability || 0.5
           };
         }
       }

@@ -115,10 +115,10 @@ export default function PrivacyPolicy() {
 
         <section>
           <h2 className="text-xl font-semibold mb-3">7. Contact Us</h2>
-          <p>
-            If you have any questions about this Privacy Policy, please contact us at
-            firstname.lastname@runsmart-ai.com.
-          </p>
+            <p>
+              If you have any questions about this Privacy Policy, please contact us at
+              support@runsmart.app.
+            </p>
         </section>
       </div>
     </div>

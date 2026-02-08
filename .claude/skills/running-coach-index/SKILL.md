@@ -39,3 +39,25 @@ Defines the shared conventions, contracts, safety posture, and telemetry used by
 - `ai_insight_created`
 - `ai_safety_flag_raised`
 - `ai_user_feedback`
+
+## Agent Team (Swarm) Coordination
+RunSmart skills are designed to work in agent teams (Opus 4.6+). When running in
+a swarm, each teammate inherits all skills via CLAUDE.md and .claude/skills/.
+
+### Swarm-Aware Skills
+- **swarm-orchestrator**: Master patterns for spawning and coordinating teams
+- **dev-swarm**: Parallel development with architect/frontend/backend/QA roles
+- **marketing-swarm**: Multi-channel marketing campaigns with specialist agents
+- **ops-deploy**: Deployment and production operations
+- **growth-analytics**: Metrics, funnels, and experiment frameworks
+- **pwa-distribution**: App store optimization and distribution channels
+- **community-growth**: User acquisition and community building
+
+### Coordination Conventions
+1. Running coach domain skills (plan-generator, readiness-check, etc.) are used
+   by individual teammates — they don't need their own team.
+2. Swarm skills (dev-swarm, marketing-swarm) define team compositions and
+   task dependency patterns for multi-agent work.
+3. The swarm-orchestrator skill provides the master patterns that all other
+   swarm skills follow.
+4. All teammates respect safety guardrails from this index.

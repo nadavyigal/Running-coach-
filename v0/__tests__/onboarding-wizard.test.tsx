@@ -47,6 +47,7 @@ describe('OnboardingScreen - Atomic Finish', () => {
     fireEvent.click(screen.getByLabelText(/i have read and agree/i))
 
     // Finish
+    fireEvent.click(screen.getByRole('button', { name: /continue|next/i }))
     fireEvent.click(screen.getByRole('button', { name: /Complete Setup/i }))
 
     await waitFor(() => {
@@ -80,6 +81,7 @@ describe('OnboardingScreen - Atomic Finish', () => {
     // Accept privacy policy on final step
     fireEvent.click(screen.getByLabelText(/i have read and agree/i))
 
+    fireEvent.click(screen.getByRole('button', { name: /continue|next/i }))
     fireEvent.click(screen.getByRole('button', { name: /Complete Setup/i }))
 
     await waitFor(() => {

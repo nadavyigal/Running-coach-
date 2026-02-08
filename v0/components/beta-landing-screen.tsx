@@ -33,8 +33,8 @@ interface BetaLandingScreenProps {
 }
 
 const DEFAULT_LEGAL_LINKS = {
-  privacyHref: "/landing/privacy",
-  termsHref: "/landing/terms",
+  privacyHref: "/privacy",
+  termsHref: "/terms",
   contactEmail: "firstname.lastname@runsmart-ai.com",
 };
 

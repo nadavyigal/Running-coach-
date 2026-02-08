@@ -435,10 +435,10 @@ export function ProfessionalLandingScreen({ onContinue: _onContinue }: Professio
 
             {/* Links */}
             <div className="flex items-center gap-6 text-sm">
-              <Link href="/landing/privacy" className="text-gray-300 hover:text-white transition-colors">
+              <Link href="/privacy" className="text-gray-300 hover:text-white transition-colors">
                 Privacy
               </Link>
-              <Link href="/landing/terms" className="text-gray-300 hover:text-white transition-colors">
+              <Link href="/terms" className="text-gray-300 hover:text-white transition-colors">
                 Terms
               </Link>
               <a
@@ -447,9 +447,6 @@ export function ProfessionalLandingScreen({ onContinue: _onContinue }: Professio
               >
                 Contact
               </a>
-              <Link href="/landing/overview-he" className="text-gray-300 hover:text-white transition-colors flex items-center gap-1">
-                🌐 עברית
-              </Link>
             </div>
           </div>
 

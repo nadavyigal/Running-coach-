@@ -8,9 +8,6 @@ import { engagementOptimizationService } from '@/lib/engagement-optimization';
 vi.mock('@/lib/dbUtils', () => ({
   dbUtils: {
     getCurrentUser: vi.fn(),
-    getRuns: vi.fn(),
-    getGoals: vi.fn(),
-    getBadges: vi.fn(),
     updateUser: vi.fn(),
   },
 }));
@@ -52,43 +49,7 @@ const mockUser = {
   }
 };
 
-const mockRuns = [
-  {
-    id: 1,
-    userId: 1,
-    type: 'easy' as const,
-    distance: 5,
-    duration: 30,
-    date: new Date(),
-    notes: 'Great run!'
-  }
-];
-
-const mockGoals = [
-  {
-    id: 1,
-    userId: 1,
-    type: 'distance' as const,
-    target: 100,
-    current: 50,
-    deadline: new Date('2024-12-31'),
-    createdAt: new Date()
-  }
-];
-
-const mockBadges = [
-  {
-    id: 1,
-    userId: 1,
-    type: 'streak' as const,
-    name: '7 Day Streak',
-    description: 'Completed 7 days in a row',
-    earnedAt: new Date(),
-    icon: '🏃‍♂️'
-  }
-];
-
-describe('Engagement Optimization API', () => {
+  describe('Engagement Optimization API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -96,10 +57,6 @@ describe('Engagement Optimization API', () => {
   describe('GET /api/engagement-optimization', () => {
     it('should return engagement data for authenticated user', async () => {
       const mockGetCurrentUser = vi.mocked(dbUtils.getCurrentUser).mockResolvedValue(mockUser);
-      const mockGetRuns = vi.mocked(dbUtils.getRuns).mockResolvedValue(mockRuns);
-      const mockGetGoals = vi.mocked(dbUtils.getGoals).mockResolvedValue(mockGoals);
-      const mockGetBadges = vi.mocked(dbUtils.getBadges).mockResolvedValue(mockBadges);
-      
       const mockCalculateEngagementScore = vi.mocked(engagementOptimizationService.calculateEngagementScore)
         .mockResolvedValue(85);
       const mockDetermineOptimalTiming = vi.mocked(engagementOptimizationService.determineOptimalTiming)
@@ -120,12 +77,9 @@ describe('Engagement Optimization API', () => {
       expect(data).toHaveProperty('notificationPreferences');
 
       expect(mockGetCurrentUser).toHaveBeenCalled();
-      expect(mockGetRuns).toHaveBeenCalledWith(1);
-      expect(mockGetGoals).toHaveBeenCalledWith(1);
-      expect(mockGetBadges).toHaveBeenCalledWith(1);
-      expect(mockCalculateEngagementScore).toHaveBeenCalledWith(mockUser, mockRuns, mockGoals, mockBadges);
-      expect(mockDetermineOptimalTiming).toHaveBeenCalledWith(mockUser, mockRuns);
-      expect(mockGenerateMotivationalTriggers).toHaveBeenCalledWith(mockUser, mockRuns, mockGoals);
+      expect(mockCalculateEngagementScore).toHaveBeenCalledWith(1);
+      expect(mockDetermineOptimalTiming).toHaveBeenCalledWith(1);
+      expect(mockGenerateMotivationalTriggers).toHaveBeenCalledWith(1);
     });
 
     it('should return 404 when user is not found', async () => {

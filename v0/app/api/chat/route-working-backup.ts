@@ -92,7 +92,7 @@ async function chatHandler(req: ApiRequest) {
 
     // Sanitize the latest message content to prevent XSS
     const rawUserMessage = latestMessage?.content || '';
-    const userMessageContent = sanitizeChatMessage(rawUserMessage);
+    const userMessageContent = await sanitizeChatMessage(rawUserMessage);
 
     let userMessageStored = false;
     const persistUserMessage = async () => {

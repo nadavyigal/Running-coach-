@@ -25,12 +25,21 @@
       "Bash(cp:*)",
       "WebFetch(domain:github.com)",
       "Bash(NODE_ENV=production npm run build:*)",
+      "Bash(npx:*)",
+      "Bash(git:*)",
+      "Bash(gh:*)",
       "mcp__playwright__browser_navigate",
       "mcp__playwright__browser_click",
       "mcp__playwright__browser_snapshot",
-      "mcp__playwright__browser_type"
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_console_messages"
     ],
     "deny": []
+  },
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [

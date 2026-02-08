@@ -1,7 +1,8 @@
 # RunSmart Skills Installation Summary
 
-**Installation Date:** 2026-01-29
-**Total Skills Installed:** 180+
+**Last Updated:** 2026-02-08
+**Total Skills Installed:** 190+
+**Opus 4.6 Agent Teams:** Enabled
 
 ---
 
@@ -10,21 +11,60 @@
 | Category | Count | Location |
 |----------|-------|----------|
 | Running Coach (Domain) | 12 | `.claude/skills/running-coach-*` |
+| Agent Swarm & Operations | 7 | `.claude/skills/swarm-*`, `dev-swarm`, `ops-*`, `growth-*`, `pwa-*`, `community-*` |
 | Solo Founder Toolkit | 7 | `.claude/skills/solo-founder/` |
 | Marketing & Growth | 25 | `.claude/skills/marketing/` |
 | Development Agents | 101 | `.claude/skills/development/` |
 | Product & Design | 19 | `.claude/skills/product/` |
 | Creative & Documents | 16 | `.claude/skills/creative/` |
-| **Total** | **180** | |
+| **Total** | **187+** | |
 
 ---
 
-## Detailed Category Breakdown
+## NEW: Agent Teams (Swarm) Skills — Opus 4.6
 
-### 1. Running Coach Skills (12)
+These skills leverage Claude Code's experimental Agent Teams feature for parallel
+multi-agent workflows. Enabled via `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
+
+### Swarm Orchestration (7 skills)
+
+| Skill | Purpose | When to Use |
+|-------|---------|-------------|
+| **swarm-orchestrator** | Master coordination patterns | Any multi-agent task |
+| **dev-swarm** | Parallel dev (architect/frontend/backend/QA) | Multi-file features, epics |
+| **marketing-swarm** | Multi-channel campaigns | Product launches, content pushes |
+| **ops-deploy** | Deployment & production operations | Releases, incidents |
+| **growth-analytics** | Metrics, funnels, experiments | Analytics setup, growth optimization |
+| **pwa-distribution** | App store optimization & distribution | PWA install, Play Store, ASO |
+| **community-growth** | User acquisition & community | Growth strategy, referrals, Strava |
+
+### How Agent Teams Work
+1. **Team lead** (Opus 4.6): Plans, coordinates, synthesizes
+2. **Teammates** (Sonnet or Opus): Execute specialized tasks in parallel
+3. **Shared task list**: Tracks work with dependencies and status
+4. **Inter-agent messaging**: Teammates communicate directly
+
+### Quick Start
+```
+# Feature build with parallel agents
+"Create an agent team with architect, frontend, backend, and QA
+teammates to implement [feature]. Use dev-swarm patterns."
+
+# Marketing launch
+"Create an agent team for RunSmart launch campaign.
+Use marketing-swarm patterns with copy, SEO, social, and email specialists."
+
+# Bug investigation with competing hypotheses
+"Create an agent team to investigate [bug] from 3 different angles.
+Have them challenge each other's theories."
+```
+
+---
+
+## Running Coach Skills (12)
 **Purpose:** Domain-specific AI skills for running coaching
 
-- running-coach-index
+- running-coach-index (master catalog + shared contracts)
 - plan-generator, plan-adjuster
 - conversational-goal-discovery
 - readiness-check, workout-explainer
@@ -36,7 +76,7 @@
 
 ---
 
-### 2. Solo Founder Toolkit (7)
+## Solo Founder Toolkit (7)
 **Purpose:** Rapid decision-making and validation for solo founders
 
 **Commands:**
@@ -53,7 +93,7 @@
 
 ---
 
-### 3. Marketing & Growth (25)
+## Marketing & Growth (25)
 **Purpose:** CRO, SEO, content, and growth marketing
 
 **Conversion (6):**
@@ -79,7 +119,7 @@
 
 ---
 
-### 4. Development Agents (101)
+## Development Agents (101)
 **Purpose:** Specialized agents for all major technologies
 
 **Frontend:**
@@ -111,33 +151,27 @@
 
 ---
 
-### 5. Product & Design (19)
+## Product & Design (19)
 **Purpose:** Product management, UX research, project management
 
 **Product Team:**
-- product-manager-toolkit
-- product-strategist
-- agile-product-owner
-- ux-researcher-designer
+- product-manager-toolkit, product-strategist
+- agile-product-owner, ux-researcher-designer
 - ui-design-system
 
 **C-Level:**
-- ceo-advisor (2 variations)
-- cto-advisor
+- ceo-advisor (2 variations), cto-advisor
 
 **Project Management:**
-- Senior PM Expert
-- Scrum Master Expert
-- Jira Expert
-- Confluence Expert
-- Atlassian Administrator
-- Template Creator Expert
+- Senior PM Expert, Scrum Master Expert
+- Jira Expert, Confluence Expert
+- Atlassian Administrator, Template Creator Expert
 
 **Source:** https://github.com/alirezarezvani/claude-skills
 
 ---
 
-### 6. Creative & Documents (16)
+## Creative & Documents (16)
 **Purpose:** Official Anthropic skills for document creation and design
 
 **Documents:**
@@ -161,116 +195,64 @@
 
 ---
 
-## Quick Start Guide
+## Swarm Patterns Quick Reference
 
-### Testing Skills
+### When to Use Agent Teams vs Single Session
 
-```bash
-# List all available skills
-/skills
+| Scenario | Use | Why |
+|----------|-----|-----|
+| Fix a typo | Single session | No coordination benefit |
+| Add a component | Single session | One file, sequential |
+| Full feature (5+ files) | **dev-swarm** | Parallel specialists |
+| Multi-channel campaign | **marketing-swarm** | Independent channels |
+| Bug with unclear cause | **swarm-orchestrator** | Competing hypotheses |
+| Code review (thorough) | **swarm-orchestrator** | Multiple perspectives |
+| Production release | **ops-deploy** | Parallel verification |
+| Growth experiment | **growth-analytics** | Multiple channels |
 
-# Test solo founder skills
-/solo-feature-ideas
+### Cost Awareness
+- Agent teams use 3-5x tokens vs single session
+- Use Sonnet for implementation teammates (cost-efficient)
+- Reserve Opus 4.6 for lead + review roles
+- Single session is better for simple/sequential tasks
 
-# Test marketing skills
-/page-cro
+---
 
-# Ask Claude to use skills
-"What marketing skills do I have?"
-"Help me prioritize features using the solo founder framework"
-"Create a landing page for RunSmart"
-```
+## Configuration
 
-### Common Use Cases for RunSmart
+### Settings (`.claude/settings.local.json`)
+- Agent Teams: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+- Playwright browser automation enabled
+- Supabase MCP server enabled
+- Full git, npm, and build permissions
 
-#### 1. Feature Prioritization
-```
-/solo-feature-ideas
-```
-Gets you LIC-scored feature suggestions based on codebase analysis.
-
-#### 2. Landing Page Optimization
-```
-review my landing page at https://runsmartcoach.com
-```
-6 Conversion Pillars analysis with specific improvements.
-
-#### 3. Marketing Content
-```
-/copywriting "running coach app homepage"
-/email-sequence onboarding
-/social-content LinkedIn
-```
-
-#### 4. Product Planning
-```
-Use product-manager-toolkit to create PRD
-Use ux-researcher-designer for user personas
-```
-
-#### 5. Development
-```
-# Agents auto-invoke based on file context
-# Editing Next.js → nextjs-architect
-# React components → react-wizard
-# Supabase → supabase-specialist
-```
+### Model Strategy
+| Role | Recommended Model |
+|------|-------------------|
+| Team lead / architect | Opus 4.6 |
+| Code implementation | Sonnet |
+| Code review / QA | Opus 4.6 |
+| Research / exploration | Sonnet |
+| Marketing copy | Sonnet |
 
 ---
 
 ## Installation Sources
 
-All skills were installed from verified GitHub repositories:
+All skills were installed from verified sources:
 
-1. **Solo Founder:** ericvtheg/solo-founder-toolkit
-2. **Marketing:** coreyhaines31/marketingskills
-3. **Development:** lodetomasi/agents-claude-code
-4. **Product:** alirezarezvani/claude-skills
-5. **Creative:** anthropics/skills (Official)
-
----
-
-## Next Steps
-
-### Recommended Actions
-
-1. **Test Key Skills**
-   - Run `/solo-feature-ideas` to see feature prioritization
-   - Try `/page-cro` on RunSmart landing page
-   - Use `/copywriting` for marketing copy
-
-2. **Integrate into Workflow**
-   - Add `/solo-build-in-public-tweet` to git hooks
-   - Use marketing skills for beta signup campaigns
-   - Leverage product skills for roadmap planning
-
-3. **Expand Analytics & DevOps**
-   - Install Tinybird skills for analytics
-   - Add Sentry skills for git workflow
-   - Set up Vercel deployment skills
-
-### Documentation
-
-- **Full Catalog:** See `.claude/skills/README.md`
-- **Installation Plan:** See plan file
-- **Individual Skills:** Each skill has SKILL.md with detailed usage
+1. **Running Coach (Custom):** Project-specific domain skills
+2. **Swarm & Ops (Custom):** Opus 4.6 agent team patterns
+3. **Solo Founder:** ericvtheg/solo-founder-toolkit
+4. **Marketing:** coreyhaines31/marketingskills
+5. **Development:** lodetomasi/agents-claude-code
+6. **Product:** alirezarezvani/claude-skills
+7. **Creative:** anthropics/skills (Official)
 
 ---
 
 ## Version History
 
+- **v3.0** (2026-02-08): Added 7 swarm/ops skills, enabled Agent Teams for Opus 4.6
 - **v2.0** (2026-01-29): Major expansion to 180+ skills
 - **v1.0** (2026-01-23): Initial 12 running coach skills
-
----
-
-## Resources
-
-- [Awesome Claude Skills](https://github.com/VoltAgent/awesome-claude-skills) - 172+ curated skills
-- [Agent Skills Standard](https://agentskills.io) - Open standard specification
-- [Claude Code Docs](https://code.claude.com/docs/en/skills) - Official documentation
-- [Skills Marketplace](https://www.aitmpl.com/skills) - Professional templates
-
----
-
-**🎉 You now have a comprehensive AI cowork tailored for RunSmart development, marketing, and growth!**
