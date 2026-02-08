@@ -802,12 +802,16 @@ export default function RunSmartApp() {
       // Store recovery data in sessionStorage for RecordScreen to pick up
       sessionStorage.setItem('recording_recovery', JSON.stringify({
         sessionId: incompleteRecording.id,
+        userId: incompleteRecording.userId,
+        status: incompleteRecording.status,
+        startedAt: incompleteRecording.startedAt?.getTime?.() ?? Date.now(),
         gpsPath,
         lastRecordedPoint,
         distanceKm: incompleteRecording.distanceKm,
         elapsedRunMs: incompleteRecording.elapsedRunMs,
         workoutId: incompleteRecording.workoutId,
         routeId: incompleteRecording.routeId,
+        routeName: incompleteRecording.routeName,
         autoPauseCount: incompleteRecording.autoPauseCount,
         acceptedPointCount: incompleteRecording.acceptedPointCount,
         rejectedPointCount: incompleteRecording.rejectedPointCount,
@@ -825,11 +829,16 @@ export default function RunSmartApp() {
   };
 
   const handleDiscardRecording = async () => {
-    if (!incompleteRecording || !incompleteRecording.id) return;
+    if (!incompleteRecording) return;
 
     try {
       const checkpointService = new RecordingCheckpointService(incompleteRecording.userId);
       await checkpointService.clearCheckpoint(incompleteRecording.id);
+      try {
+        sessionStorage.removeItem('recording_recovery');
+      } catch {
+        // ignore
+      }
 
       logger.log('[app:recovery] ✅ Recording discarded successfully');
 

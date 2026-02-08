@@ -308,6 +308,7 @@ type CompletionModalData = {
 export function RecordScreen() {
   const [isRunning, setIsRunning] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
+  const [hasRecoveredRun, setHasRecoveredRun] = useState(false)
   const [autoPauseActive, setAutoPauseActive] = useState(false)
   const [autoPauseStartTime, setAutoPauseStartTime] = useState<number | null>(null)
   const [autoPauseCount, setAutoPauseCount] = useState(0)
@@ -632,6 +633,122 @@ export function RecordScreen() {
     }
   }, [])
 
+  // Recover prior recording state after user is loaded
+  useEffect(() => {
+    if (!currentUser) return
+    if (typeof window === 'undefined') return
+
+    let recoveryRaw: string | null = null
+    try {
+      recoveryRaw = sessionStorage.getItem('recording_recovery')
+    } catch {
+      return
+    }
+
+    if (!recoveryRaw) return
+
+    let recovery: any = null
+    try {
+      recovery = JSON.parse(recoveryRaw)
+    } catch (err) {
+      console.warn('[RecordScreen] Failed to parse recovery payload:', err)
+      sessionStorage.removeItem('recording_recovery')
+      return
+    }
+
+    if (recovery?.userId && recovery.userId !== currentUser.id) {
+      sessionStorage.removeItem('recording_recovery')
+      return
+    }
+
+    const gpsPath = Array.isArray(recovery?.gpsPath) ? recovery.gpsPath : []
+    const distanceKm = Number.isFinite(recovery?.distanceKm) ? recovery.distanceKm : 0
+    const elapsedRunMs = Number.isFinite(recovery?.elapsedRunMs) ? recovery.elapsedRunMs : 0
+    const durationSeconds = Math.max(0, Math.floor(elapsedRunMs / 1000))
+    const lastRecordedPoint =
+      recovery?.lastRecordedPoint ?? (gpsPath.length > 0 ? gpsPath[gpsPath.length - 1] : null)
+
+    gpsPathRef.current = gpsPath
+    setGpsPath(gpsPath)
+    totalDistanceKmRef.current = distanceKm
+    lastRecordedPointRef.current = lastRecordedPoint
+    elapsedRunMsRef.current = elapsedRunMs
+    startTimeRef.current = 0
+
+    setMetrics({
+      distance: distanceKm,
+      duration: durationSeconds,
+      pace: distanceKm > 0 ? durationSeconds / distanceKm : 0,
+      currentPace: 0,
+      currentSpeed: 0,
+      calories: estimateCalories(durationSeconds, distanceKm),
+    })
+
+    const nextAutoPauseCount = Number.isFinite(recovery?.autoPauseCount) ? recovery.autoPauseCount : 0
+    autoPauseCountRef.current = nextAutoPauseCount
+    setAutoPauseCount(nextAutoPauseCount)
+
+    const nextAccepted = Number.isFinite(recovery?.acceptedPointCount)
+      ? recovery.acceptedPointCount
+      : gpsPath.length
+    const nextRejected = Number.isFinite(recovery?.rejectedPointCount) ? recovery.rejectedPointCount : 0
+    acceptedPointCountRef.current = nextAccepted
+    rejectedPointCountRef.current = nextRejected
+    setGpsAcceptedCount(nextAccepted)
+    setGpsRejectedCount(nextRejected)
+    rejectionReasonsRef.current = {}
+    setGpsRejectReasons({})
+    setLastRejectReason(null)
+
+    setAutoPauseActive(false)
+    autoPauseActiveRef.current = false
+    setIsInitializingGps(false)
+
+    setIsRunning(true)
+    isRunningRef.current = true
+    setIsPaused(true)
+    isPausedRef.current = true
+    setHasRecoveredRun(true)
+
+    if (!checkpointServiceRef.current) {
+      checkpointServiceRef.current = new RecordingCheckpointService(currentUser.id)
+    }
+
+    if (typeof recovery?.sessionId === 'number') {
+      sessionIdRef.current = recovery.sessionId
+      checkpointServiceRef.current.setSessionId(recovery.sessionId)
+    }
+
+    const checkpoint: RecordingCheckpoint = {
+      sessionId: typeof recovery?.sessionId === 'number' ? recovery.sessionId : undefined,
+      userId: currentUser.id,
+      status: 'paused',
+      startedAt: Number.isFinite(recovery?.startedAt)
+        ? recovery.startedAt
+        : Date.now() - elapsedRunMs,
+      lastCheckpointAt: Date.now(),
+      distanceKm,
+      durationSeconds,
+      elapsedRunMs,
+      gpsPath,
+      lastRecordedPoint: lastRecordedPoint ?? undefined,
+      workoutId: recovery?.workoutId ?? undefined,
+      routeId: recovery?.routeId ?? undefined,
+      routeName: recovery?.routeName ?? undefined,
+      autoPauseCount: nextAutoPauseCount,
+      acceptedPointCount: nextAccepted,
+      rejectedPointCount: nextRejected,
+    }
+
+    checkpointServiceRef.current.saveToLocalStorage(checkpoint)
+    sessionStorage.removeItem('recording_recovery')
+
+    toast({
+      title: "Recovery Ready",
+      description: "Your previous run is loaded. Tap Resume to continue or Stop to discard.",
+    })
+  }, [currentUser, toast])
+
   // Lifecycle event handlers for checkpoint persistence
   useEffect(() => {
     if (!currentUser || !checkpointServiceRef.current) return
@@ -955,6 +1072,7 @@ export function RecordScreen() {
     resetGpsDebugStats()
     resetAutoPauseState()
     resetIntervalTimerState()
+    setHasRecoveredRun(false)
     setMetrics({
       distance: 0,
       duration: 0,
@@ -1764,9 +1882,18 @@ export function RecordScreen() {
         title: "Run Stopped",
         description: "Run stopped. No data to save.",
       })
+      if (checkpointServiceRef.current) {
+        try {
+          await checkpointServiceRef.current.clearCheckpoint(sessionIdRef.current)
+          sessionIdRef.current = undefined
+        } catch (err) {
+          console.error('[RecordScreen] Failed to clear checkpoint after empty run:', err)
+        }
+      }
     }
 
     void releaseWakeLock()
+    setHasRecoveredRun(false)
   }
 
   const saveRun = async (distance: number, duration: number) => {
@@ -2160,6 +2287,48 @@ export function RecordScreen() {
                 <Satellite className="h-4 w-4 mr-1" />
                 Warm Up GPS
               </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {hasRecoveredRun && isPaused && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-2">
+              <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+              <div>
+                <p className="font-medium text-blue-900">Recovered run ready</p>
+                <p className="text-sm text-blue-800">
+                  Tap Resume to continue, or Stop to discard this run.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!isRunning && !isGpsWarmingUp && (
+        <Card className="border-emerald-200 bg-emerald-50/70">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-sm font-semibold text-white">
+                1
+              </div>
+              <div className="space-y-1">
+                <p className="font-medium text-emerald-900">Start recording</p>
+                <p className="text-sm text-emerald-800">
+                  Tap Start Run. We&apos;ll warm up GPS for about 10 seconds, then begin tracking.
+                </p>
+                <p className="text-xs text-emerald-700">
+                  Tip: Keep your phone in open air for faster GPS lock.
+                </p>
+                {gpsPermission === 'denied' && (
+                  <p className="text-xs text-red-700">
+                    Location access is blocked. Enable it in Safari settings to record GPS runs.
+                  </p>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
