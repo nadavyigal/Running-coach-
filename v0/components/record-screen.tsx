@@ -139,6 +139,20 @@ const getAutoPauseWarmupThresholdMs = (
   return warmupThreshold
 }
 
+const getAccuracyTrend = (history: GPSAccuracyData[]) => {
+  if (history.length < 6) return 'unknown'
+  const recent = history.slice(-3)
+  const previous = history.slice(-6, -3)
+  const recentAvg =
+    recent.reduce((sum, item) => sum + (item.accuracyRadius ?? 0), 0) / recent.length
+  const previousAvg =
+    previous.reduce((sum, item) => sum + (item.accuracyRadius ?? 0), 0) / previous.length
+  const delta = recentAvg - previousAvg
+  if (delta > 5) return 'worsening'
+  if (delta < -5) return 'improving'
+  return 'stable'
+}
+
 const parseIntervalPhases = (notes?: string): IntervalPhase[] => {
   if (!notes) {
     return []
@@ -438,6 +452,8 @@ export function RecordScreen() {
   const [gpsGapWarningShown, setGpsGapWarningShown] = useState(false)
   const lastGpsUpdateRef = useRef<number>(Date.now())
   const [debugExpanded, setDebugExpanded] = useState(false)
+  const lastAccuracyRef = useRef<number | null>(null)
+  const lastAccuracySpikeAtRef = useRef<number>(0)
 
   const { requestWakeLock, releaseWakeLock } = useWakeLock({
     enableScreenLock: true,
@@ -1171,10 +1187,12 @@ export function RecordScreen() {
     setGpsPath([])
     setCurrentPosition(null)
     setGpsAccuracy(0)
-    setLastGpsSpeedMps(null)
-    totalDistanceKmRef.current = 0
-    lastRecordedPointRef.current = null
-    gpsMonitoringRef.current = null
+      setLastGpsSpeedMps(null)
+      totalDistanceKmRef.current = 0
+      lastRecordedPointRef.current = null
+      lastAccuracyRef.current = null
+      lastAccuracySpikeAtRef.current = 0
+      gpsMonitoringRef.current = null
     lastGpsQualityRef.current = null
     setCurrentGPSAccuracy(null)
     currentGPSAccuracyRef.current = null
@@ -1245,6 +1263,38 @@ export function RecordScreen() {
       typeof nextPoint.accuracy === 'number' && Number.isFinite(nextPoint.accuracy)
         ? nextPoint.accuracy
         : GPS_DEFAULT_ACCURACY_METERS
+
+    const previousAccuracy = lastAccuracyRef.current
+    if (
+      typeof previousAccuracy === 'number' &&
+      Number.isFinite(previousAccuracy) &&
+      previousAccuracy > 0 &&
+      accuracyValue > previousAccuracy * 10
+    ) {
+      lastRecordedPointRef.current = null
+      gpsMedianBufferRef.current = []
+      if (autoPauseEnabled) {
+        clearAutoPauseState()
+      }
+      const now = Date.now()
+      if (now - lastAccuracySpikeAtRef.current > 15000) {
+        toast({
+          title: "GPS Signal Lost",
+          description: "GPS accuracy spiked; distance tracking paused until signal recovers.",
+          variant: "destructive",
+        })
+        lastAccuracySpikeAtRef.current = now
+      }
+      logGps({
+        event: 'accuracy_spike',
+        previousAccuracy,
+        accuracy: accuracyValue,
+      })
+      lastAccuracyRef.current = accuracyValue
+      return
+    }
+
+    lastAccuracyRef.current = accuracyValue
 
     // Diagnostic logging for every GPS point received during active run
     console.log('[GPS DIAGNOSTIC] Point received:', {
@@ -1907,11 +1957,13 @@ export function RecordScreen() {
         setCoachingCueState(getCoachingCueState())
       }
 
-      // Reset only run-specific state (not GPS tracking!)
-      gpsPathRef.current = []
-      setGpsPath([])
-      totalDistanceKmRef.current = 0
-      lastRecordedPointRef.current = null
+        // Reset only run-specific state (not GPS tracking!)
+        gpsPathRef.current = []
+        setGpsPath([])
+        totalDistanceKmRef.current = 0
+        lastRecordedPointRef.current = null
+        lastAccuracyRef.current = null
+        lastAccuracySpikeAtRef.current = 0
       setCurrentGPSAccuracy(null) // Will be updated by next GPS point
       currentGPSAccuracyRef.current = null
       setGpsAccuracyHistory([])
@@ -2329,6 +2381,15 @@ export function RecordScreen() {
     gpsAcceptedCount + gpsRejectedCount > 0
       ? gpsRejectedCount / (gpsAcceptedCount + gpsRejectedCount)
       : 0
+  const accuracyTrend = getAccuracyTrend(gpsAccuracyHistory)
+  const satelliteProxyStatus =
+    accuracyTrend === 'worsening'
+      ? 'low'
+      : accuracyTrend === 'improving'
+        ? 'high'
+        : accuracyTrend === 'stable'
+          ? 'steady'
+          : 'unknown'
   const avgPaceFormatted = avgPaceSecondsPerKm > 0 ? formatPace(avgPaceSecondsPerKm) : '--:--'
   const gpsAccuracyStatusClass =
     gpsAccuracyValue === null
@@ -2353,6 +2414,14 @@ export function RecordScreen() {
       : rejectionRate > 0.15
         ? 'text-yellow-300'
         : 'text-emerald-300'
+  const satelliteProxyClass =
+    satelliteProxyStatus === 'low'
+      ? 'text-red-300'
+      : satelliteProxyStatus === 'high'
+        ? 'text-emerald-300'
+        : satelliteProxyStatus === 'steady'
+          ? 'text-yellow-300'
+          : 'text-gray-300'
   const intervalCoachEnabled = ENABLE_VIBRATION_COACH
   const intervalTimerVisible = intervalCoachEnabled && intervalPhases.length > 0
   const currentPhase = intervalPhases[currentPhaseIndex]
@@ -2388,7 +2457,8 @@ export function RecordScreen() {
     !isGpsWarmingUp &&
     isGpsTracking &&
     currentGPSAccuracy !== null &&
-    currentGPSAccuracy.signalStrength < GPS_MIN_SIGNAL_STRENGTH_TO_START
+    (currentGPSAccuracy.signalStrength < GPS_MIN_SIGNAL_STRENGTH_TO_START ||
+      satelliteProxyStatus === 'low')
 
   const weakSignalStrength =
     gpsWeakSignalPrompt?.signalStrength ?? currentGPSAccuracy?.signalStrength ?? 0
@@ -2678,12 +2748,17 @@ export function RecordScreen() {
                     <p className="font-medium text-yellow-900">
                       GPS signal is still weak
                     </p>
-                    <p className="text-sm text-yellow-800">
-                      Signal: {Math.round(weakSignalStrength)}%
-                      {typeof weakAccuracyRadius === 'number'
-                        ? ` • Accuracy: ±${Math.round(weakAccuracyRadius)}m`
-                        : ''}
-                    </p>
+                      <p className="text-sm text-yellow-800">
+                        Signal: {Math.round(weakSignalStrength)}%
+                        {typeof weakAccuracyRadius === 'number'
+                          ? ` • Accuracy: ±${Math.round(weakAccuracyRadius)}m`
+                          : ''}
+                      </p>
+                      {satelliteProxyStatus === 'low' && (
+                        <p className="text-xs text-yellow-800">
+                          Accuracy trend worsening — satellite signal likely dropping.
+                        </p>
+                      )}
                     <div className="flex gap-2">
                       <Button
                         size="sm"
@@ -3106,6 +3181,9 @@ export function RecordScreen() {
                     <div>speed: {lastGpsSpeedMps !== null ? `${lastGpsSpeedMps.toFixed(2)} m/s` : '--'}</div>
                     <div className={rejectionRateClass}>
                       accepted/rejected: {gpsAcceptedCount}/{gpsRejectedCount}
+                    </div>
+                    <div className={satelliteProxyClass}>
+                      satProxy: {satelliteProxyStatus}
                     </div>
                     <div>lastReject: {lastRejectReason ?? '--'}</div>
                     <div>rejectReasons: {rejectionSummary}</div>

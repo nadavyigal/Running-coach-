@@ -84,26 +84,44 @@ export class PerformanceMonitor {
 
   // Track page load performance
   trackPageLoad() {
-    if (typeof window === 'undefined' || !performance) return;
+    if (typeof window === 'undefined') return;
+    const perf = window.performance;
+    if (!perf || typeof perf.getEntriesByType !== 'function') return;
 
-    const entries = performance.getEntriesByType('navigation');
-    if (!Array.isArray(entries) || entries.length === 0) {
-      return;
+    let loadTime: number | null = null;
+    const entries = perf.getEntriesByType('navigation');
+    if (Array.isArray(entries) && entries.length > 0) {
+      const navigation = entries[0] as PerformanceNavigationTiming;
+      const fetchStart =
+        typeof navigation.fetchStart === 'number' ? navigation.fetchStart : (navigation as any).navigationStart;
+      const loadEventEnd =
+        typeof navigation.loadEventEnd === 'number' ? navigation.loadEventEnd : (navigation as any).loadEventEnd;
+      if (typeof fetchStart === 'number' && typeof loadEventEnd === 'number') {
+        loadTime = loadEventEnd - fetchStart;
+      }
     }
-    const navigation = entries[0] as PerformanceNavigationTiming;
-    if (navigation) {
-      const loadTime = navigation.loadEventEnd - navigation.fetchStart;
-      this.metrics.pageLoadTime = loadTime;
-      this.reportMetric('page_load_time', loadTime);
-      this.checkThreshold('pageLoadTime', loadTime);
+
+    if ((loadTime === null || !Number.isFinite(loadTime)) && (perf as any).timing) {
+      const timing = (perf as any).timing;
+      if (typeof timing.loadEventEnd === 'number' && typeof timing.fetchStart === 'number') {
+        loadTime = timing.loadEventEnd - timing.fetchStart;
+      }
     }
+
+    if (typeof loadTime !== 'number' || !Number.isFinite(loadTime)) return;
+
+    this.metrics.pageLoadTime = loadTime;
+    this.reportMetric('page_load_time', loadTime);
+    this.checkThreshold('pageLoadTime', loadTime);
   }
 
   // Track memory usage
   trackMemoryUsage() {
-    if (typeof window === 'undefined' || !('memory' in performance)) return;
+    if (typeof window === 'undefined') return;
+    const perf = window.performance as any;
+    if (!perf || !('memory' in perf)) return;
 
-    const memory = (performance as any).memory;
+    const memory = perf.memory;
     if (memory) {
       const memoryUsage = memory.usedJSHeapSize;
       this.metrics.memoryUsage = memoryUsage;

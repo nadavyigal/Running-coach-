@@ -390,7 +390,13 @@ export async function POST(req: Request) {
         maxOutputTokens: 800,
       })
 
-      ocrText = typeof ocrResult.text === "string" ? ocrResult.text : ""
+      const rawOcrText = ocrResult.text as unknown
+      ocrText =
+        typeof rawOcrText === "string"
+          ? rawOcrText
+          : typeof rawOcrText === "function"
+            ? String(rawOcrText())
+            : ""
       const parsedFromText = parseActivityFromText(ocrText)
       extracted = {
         type: extracted?.type || "run",
