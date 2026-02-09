@@ -67,7 +67,7 @@ describe("/api/ai-activity", () => {
   it("falls back to text transcription when structured is missing fields", async () => {
     generateObjectMock.mockResolvedValueOnce({ object: { confidence_pct: 40 } })
     generateTextMock.mockResolvedValueOnce({
-      text: () => "Distance 5.01 km\nTime 25:30\nAvg Pace 5:05 /km\nCalories 320 kcal\n",
+      text: "Distance 5.01 km\nTime 25:30\nAvg Pace 5:05 /km\nCalories 320 kcal\n",
     })
 
     const form = new FormData()

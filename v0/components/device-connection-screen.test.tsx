@@ -146,17 +146,17 @@ describe('DeviceConnectionScreen', () => {
       expect(screen.getByText('Connecting...')).toBeInTheDocument();
 
       await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith('/api/devices/connect', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: expect.any(String),
-        });
+        const call = (global.fetch as any).mock.calls.find((entry: any[]) => entry[0] === '/api/devices/connect');
+        expect(call).toBeTruthy();
       }, { timeout: 3000 });
 
       const fetchCall = (global.fetch as any).mock.calls.find((call: any[]) => call[0] === '/api/devices/connect');
-      const requestBody = JSON.parse(fetchCall?.[1]?.body ?? '{}');
+      const requestInit = fetchCall?.[1] ?? {};
+      const requestBody = JSON.parse(requestInit.body ?? '{}');
+      expect(requestInit.method).toBe('POST');
+      expect(requestInit.headers).toEqual({
+        'Content-Type': 'application/json',
+      });
       expect(requestBody).toMatchObject({
         userId: mockUserId,
         deviceType: 'apple_watch',
@@ -413,9 +413,9 @@ describe('DeviceConnectionScreen', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getAllByText('heart rate').length).toBeGreaterThan(0);
-        expect(screen.getAllByText('vo2 max').length).toBeGreaterThan(0);
-        expect(screen.getAllByText('running dynamics').length).toBeGreaterThan(0);
+        expect(screen.queryAllByText('heart rate').length).toBeGreaterThan(0);
+        expect(screen.queryAllByText('vo2 max').length).toBeGreaterThan(0);
+        expect(screen.queryAllByText('running dynamics').length).toBeGreaterThan(0);
       });
     });
   });

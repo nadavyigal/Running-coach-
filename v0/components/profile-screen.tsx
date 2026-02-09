@@ -42,6 +42,7 @@ import {
 import { AddShoesModal } from "@/components/add-shoes-modal"
 import { ReminderSettings } from "@/components/reminder-settings"
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { BadgeCabinet } from "@/components/badge-cabinet";
 import { dbUtils } from "@/lib/dbUtils";
@@ -65,6 +66,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Separator } from "@/components/ui/separator";
 import { UserDataSettings } from "@/components/user-data-settings";
 import { RunSmartBrandMark } from "@/components/run-smart-brand-mark";
+import { getActiveChallengeTemplates } from "@/lib/challengeTemplates";
+
+type ChallengeTemplateSeed = ReturnType<typeof getActiveChallengeTemplates>[number]
 
 export function ProfileScreen() {
   const router = useRouter()
@@ -106,6 +110,7 @@ export function ProfileScreen() {
   const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate; dailyData: DailyChallengeData } | null>(null)
   const [mergeSourceGoal, setMergeSourceGoal] = useState<Goal | null>(null)
   const [isSwitchingPrimary, setIsSwitchingPrimary] = useState(false)
+  const [joiningChallengeSlug, setJoiningChallengeSlug] = useState<string | null>(null)
 
   // Sync from context
   useEffect(() => {
@@ -173,6 +178,8 @@ export function ProfileScreen() {
 
     loadChallengeData()
   }, [userId])
+
+  const availableChallenges = getActiveChallengeTemplates()
 
   // Helper to get progress for a goal (uses engine-calculated progress)
   const getGoalProgress = (goalId?: number): number => {
@@ -274,6 +281,52 @@ export function ProfileScreen() {
     } finally {
       setShowMergeDialog(false)
       setMergeSourceGoal(null)
+    }
+  }
+
+  const handleJoinChallenge = async (template: ChallengeTemplateSeed) => {
+    if (!userId) return
+    if (activeChallenge?.template.slug === template.slug) {
+      toast({
+        title: "Already active",
+        description: "You're already in this challenge.",
+      })
+      return
+    }
+
+    const hadActive = Boolean(activeChallenge)
+    setJoiningChallengeSlug(template.slug)
+    try {
+      const activePlan = await dbUtils.ensureUserHasActivePlan(userId)
+      if (!activePlan?.id) {
+        throw new Error("No active plan found")
+      }
+
+      const { startChallenge } = await import("@/lib/challengeEngine")
+      await startChallenge(userId, template.slug, activePlan.id)
+
+      const active = await getActiveChallenge(userId)
+      setActiveChallenge(active)
+
+      const history = await getChallengeHistory(userId)
+      const filteredHistory = history.filter(ch => ch.progress.status !== 'active')
+      setChallengeHistory(filteredHistory)
+
+      toast({
+        title: "Challenge started",
+        description: hadActive
+          ? `${template.name} has begun. Your previous challenge is now in history.`
+          : `${template.name} has begun.`,
+      })
+    } catch (error) {
+      console.error("Failed to start challenge:", error)
+      toast({
+        title: "Failed to start challenge",
+        description: "Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setJoiningChallengeSlug(null)
     }
   }
 
@@ -908,6 +961,71 @@ export function ProfileScreen() {
                       </div>
                     </CardContent>
                   </Card>
+                )}
+
+                <div className="pt-2">
+                  <div className="flex items-center gap-2">
+                    <Target className="h-4 w-4 text-emerald-600" />
+                    <span className="text-sm text-gray-600 font-medium">Available Challenges</span>
+                  </div>
+                </div>
+
+                {availableChallenges.length === 0 ? (
+                  <Card>
+                    <CardContent className="p-5">
+                      <p className="text-sm text-gray-600">No challenges available right now.</p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="grid gap-3">
+                    {availableChallenges.map((template) => {
+                      const isActive = activeChallenge?.template.slug === template.slug
+                      const isJoining = joiningChallengeSlug === template.slug
+                      return (
+                        <Card key={template.slug} className="border">
+                          <CardContent className="p-5 space-y-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-gray-900">{template.name}</h3>
+                                <p className="text-sm text-gray-700">{template.tagline}</p>
+                              </div>
+                              <Badge variant="secondary" className="text-xs">
+                                {template.durationDays} days
+                              </Badge>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              <Badge variant="outline" className="text-xs capitalize">
+                                {template.difficulty}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs capitalize">
+                                {template.category}
+                              </Badge>
+                              {isActive && (
+                                <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700">
+                                  Active
+                                </Badge>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              <Button asChild variant="outline" size="sm" className="h-8">
+                                <Link href={`/challenges/${template.slug}`}>View details</Link>
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="h-8"
+                                onClick={() => handleJoinChallenge(template)}
+                                disabled={isJoining || isActive}
+                              >
+                                {isActive ? "Active" : isJoining ? "Joining..." : "Join challenge"}
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )
+                    })}
+                  </div>
                 )}
               </div>
             )}
