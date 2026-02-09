@@ -385,6 +385,9 @@ export function RecordScreen() {
   const autoPauseActiveRef = useRef(false)
   const autoPauseStartTimeRef = useRef<number | null>(null)
   const autoPauseCountRef = useRef(0)
+  const runStartTimeRef = useRef<number | null>(null)
+  const autoPauseResumeConfirmCountRef = useRef(0)
+  const AUTO_PAUSE_WARMUP_MS = 30000 // 30s grace period before auto-pause can trigger
 
   // Checkpoint service for recording persistence
   const checkpointServiceRef = useRef<RecordingCheckpointService | null>(null)
@@ -597,6 +600,7 @@ export function RecordScreen() {
     clearAutoPauseState()
     autoPauseCountRef.current = 0
     setAutoPauseCount(0)
+    autoPauseResumeConfirmCountRef.current = 0
   }
 
   const resetIntervalTimerState = (
@@ -1171,10 +1175,18 @@ export function RecordScreen() {
   }
 
   const normalizeGpsTimestamp = (timestamp: number, lastTimestamp: number | null) => {
+    const original = timestamp
     let resolved = Number.isFinite(timestamp) ? timestamp : Date.now()
     if (typeof lastTimestamp === 'number' && resolved <= lastTimestamp) {
       const now = Date.now()
       resolved = now > lastTimestamp ? now : lastTimestamp + GPS_MIN_TIME_DELTA_MS
+      console.warn('[GPS TIMESTAMP NORMALIZED]', {
+        original,
+        lastTimestamp,
+        resolved,
+        delta: resolved - lastTimestamp,
+        usedDateNow: now > lastTimestamp,
+      })
     }
     return resolved
   }
@@ -1204,6 +1216,20 @@ export function RecordScreen() {
       typeof nextPoint.accuracy === 'number' && Number.isFinite(nextPoint.accuracy)
         ? nextPoint.accuracy
         : GPS_DEFAULT_ACCURACY_METERS
+
+    // Diagnostic logging for every GPS point received during active run
+    console.log('[GPS DIAGNOSTIC] Point received:', {
+      timestamp: nextPoint.timestamp,
+      accuracy: accuracyValue,
+      lat: nextPoint.latitude?.toFixed(6),
+      lng: nextPoint.longitude?.toFixed(6),
+      hasLastPoint: !!lastPoint,
+      autoPauseActive: autoPauseActiveRef.current,
+      currentDistance: totalDistanceKmRef.current,
+      acceptedCount: acceptedPointCountRef.current,
+      rejectedCount: rejectedPointCountRef.current,
+    })
+
     if (accuracyValue > GPS_MAX_ACCEPTABLE_ACCURACY_METERS) {
       trackRejection('accuracy', {
         accuracy: accuracyValue,
@@ -1282,19 +1308,31 @@ export function RecordScreen() {
           3.0;                          // Very poor GPS: very relaxed jitter filter
 
     let isAutoPauseActive = autoPauseEnabled ? autoPauseActiveRef.current : false
+    // Grace period: don't trigger auto-pause in first 30s of run to avoid
+    // false activation during initial GPS acquisition / slow start.
+    const runDurationMs = Date.now() - (runStartTimeRef.current ?? Date.now())
+    const isInWarmupPeriod = runDurationMs < AUTO_PAUSE_WARMUP_MS
     if (autoPauseEnabled) {
       if (isAutoPauseActive) {
+        // Multi-point confirmation: require 2 consecutive fast points to resume
         if (
           segmentSpeedMps > AUTO_RESUME_SPEED_MPS &&
           segmentSpeedMps <= MAX_REASONABLE_SPEED_MPS
         ) {
-          clearAutoPauseState()
-          isAutoPauseActive = false
-          void trackAnalyticsEvent('auto_pause_resumed', {
-            pause_count: autoPauseCountRef.current,
-          })
+          autoPauseResumeConfirmCountRef.current += 1
+          if (autoPauseResumeConfirmCountRef.current >= 2) {
+            clearAutoPauseState()
+            autoPauseResumeConfirmCountRef.current = 0
+            isAutoPauseActive = false
+            void trackAnalyticsEvent('auto_pause_resumed', {
+              pause_count: autoPauseCountRef.current,
+              confirm_points: 2,
+            })
+          }
+        } else {
+          autoPauseResumeConfirmCountRef.current = 0
         }
-      } else {
+      } else if (!isInWarmupPeriod) {
         if (segmentSpeedMps < AUTO_PAUSE_SPEED_MPS) {
           const lowSpeedStart =
             autoPauseStartTimeRef.current ?? normalizedPoint.timestamp
@@ -1753,7 +1791,9 @@ export function RecordScreen() {
 
     // Actual run start
     startTimeRef.current = Date.now()
+    runStartTimeRef.current = Date.now()
     elapsedRunMsRef.current = 0
+    autoPauseResumeConfirmCountRef.current = 0
     setIsRunning(true)
     setIsPaused(false)
     isRunningRef.current = true
@@ -2042,6 +2082,17 @@ export function RecordScreen() {
       const gpsAccuracyData =
         gpsAccuracyHistory.length > 0 ? JSON.stringify(gpsAccuracyHistory) : undefined
 
+      // Build GPS metadata with rejection summary for diagnostics
+      const gpsMetadata = JSON.stringify({
+        acceptedPoints: acceptedPointCountRef.current,
+        rejectedPoints: rejectedPointCountRef.current,
+        rejectionReasons: rejectionReasonsRef.current,
+        autoPauseCount: autoPauseCountRef.current,
+        rejectionRate: acceptedPointCountRef.current + rejectedPointCountRef.current > 0
+          ? rejectedPointCountRef.current / (acceptedPointCountRef.current + rejectedPointCountRef.current)
+          : 0,
+      })
+
       const { runId, matchedWorkout, adaptationTriggered } = await recordRunWithSideEffects({
         userId: user.id,
         distanceKm: distance,
@@ -2056,7 +2107,18 @@ export function RecordScreen() {
         ...(typeof startAccuracy === 'number' ? { startAccuracy } : {}),
         ...(typeof endAccuracy === 'number' ? { endAccuracy } : {}),
         ...(typeof averageAccuracy === 'number' ? { averageAccuracy } : {}),
+        gpsMetadata,
       })
+
+      // Warn user if rejection rate is very high (> 80%)
+      const totalPoints = acceptedPointCountRef.current + rejectedPointCountRef.current
+      if (totalPoints > 0 && rejectedPointCountRef.current > totalPoints * 0.8) {
+        toast({
+          title: "GPS Quality Warning",
+          description: `${rejectedPointCountRef.current} of ${totalPoints} GPS points were rejected. Distance may be inaccurate.`,
+          variant: "default",
+        })
+      }
 
       // Update challenge progress if there's an active challenge
       if (activeChallenge) {
@@ -2926,6 +2988,9 @@ export function RecordScreen() {
                       ? `${(metrics.currentSpeed * 3.6).toFixed(1)}kmh`
                       : '--'}
                   </span>
+                  <span className={autoPauseActive ? 'text-red-400' : ''}>
+                    AP={autoPauseActive ? 'ON' : 'off'}
+                  </span>
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
                   <span>
@@ -2987,6 +3052,15 @@ export function RecordScreen() {
               <div>lastReject: {lastRejectReason ?? '--'}</div>
               <div>rejectReasons: {rejectionSummary}</div>
               <div>totalDistance: {Math.round(totalDistanceKmRef.current * 1000)}m</div>
+              <div className={autoPauseActive ? 'text-red-400 font-bold' : ''}>
+                autoPause: {autoPauseActive ? 'ACTIVE' : 'inactive'} (count: {autoPauseCount})
+              </div>
+              <div>
+                warmupGrace: {runStartTimeRef.current
+                  ? Date.now() - runStartTimeRef.current < AUTO_PAUSE_WARMUP_MS ? 'ACTIVE' : 'expired'
+                  : 'N/A'}
+              </div>
+              <div>resumeConfirm: {autoPauseResumeConfirmCountRef.current}/2</div>
               <div>
                 paceInputs: dist={metrics.distance.toFixed(3)}km dur={metrics.duration}s avg={avgPaceFormatted}/km
               </div>
