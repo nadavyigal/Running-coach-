@@ -2,7 +2,7 @@
 
 import Script from 'next/script'
 import { Analytics } from '@vercel/analytics/next'
-import { Inter } from 'next/font/google'
+import { Inter, Heebo } from 'next/font/google'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
 import { ReminderInit } from '@/components/reminder-init'
@@ -19,6 +19,13 @@ const inter = Inter({
   display: 'swap', // Use font-display: swap for better performance
   preload: true,
   variable: '--font-inter',
+})
+
+const heebo = Heebo({
+  subsets: ['hebrew'],
+  display: 'swap', // Use font-display: swap for better performance
+  preload: true,
+  variable: '--font-heebo',
 })
 
 const siteUrl =
@@ -78,7 +85,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${inter.variable} ${heebo.variable}`}>
       <head>
         <title>{defaultTitle}</title>
         <meta name="description" content={defaultDescription} />
