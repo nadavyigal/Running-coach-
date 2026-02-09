@@ -75,6 +75,86 @@ const normalizeDate = (value: unknown) => {
   return null
 }
 
+const LOCATION_COORD_PRECISION = 3
+
+const roundCoordinate = (value: number, precision: number = LOCATION_COORD_PRECISION) => {
+  const factor = Math.pow(10, precision)
+  return Math.round(value * factor) / factor
+}
+
+const extractRunStartCoordinates = (gpsPath?: string) => {
+  if (!gpsPath) return null
+  try {
+    const points = JSON.parse(gpsPath)
+    if (!Array.isArray(points) || points.length === 0) return null
+    const firstValid = points.find((point) => {
+      const lat = Number(point?.lat ?? point?.latitude)
+      const lng = Number(point?.lng ?? point?.longitude)
+      return Number.isFinite(lat) && Number.isFinite(lng)
+    })
+    if (!firstValid) return null
+    const lat = Number(firstValid.lat ?? firstValid.latitude)
+    const lng = Number(firstValid.lng ?? firstValid.longitude)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+    return { lat, lng }
+  } catch {
+    return null
+  }
+}
+
+const parseRejectionRate = (gpsMetadata?: string) => {
+  if (!gpsMetadata) return null
+  try {
+    const parsed = JSON.parse(gpsMetadata)
+    const accepted = Number(parsed?.acceptedPoints)
+    const rejected = Number(parsed?.rejectedPoints)
+    if (!Number.isFinite(accepted) || !Number.isFinite(rejected)) return null
+    const total = accepted + rejected
+    return total > 0 ? rejected / total : 0
+  } catch {
+    return null
+  }
+}
+
+const buildLocationLabel = (route: string | undefined, lat: number, lng: number) => {
+  if (route && route.trim().length > 0) {
+    return route.trim()
+  }
+  return `loc ${lat.toFixed(LOCATION_COORD_PRECISION)},${lng.toFixed(LOCATION_COORD_PRECISION)}`
+}
+
+const trackLocationQualityFromRun = async (
+  input: RecordRunWithSideEffectsInput,
+  completedAt: Date
+) => {
+  const coords = extractRunStartCoordinates(input.gpsPath)
+  if (!coords) return
+
+  const accuracy =
+    typeof input.averageAccuracy === "number" && Number.isFinite(input.averageAccuracy)
+      ? input.averageAccuracy
+      : null
+  const rejectionRate = parseRejectionRate(input.gpsMetadata)
+  if (accuracy === null || rejectionRate === null) return
+
+  const lat = roundCoordinate(coords.lat)
+  const lng = roundCoordinate(coords.lng)
+  const location = buildLocationLabel(input.route, lat, lng)
+
+  try {
+    await dbUtils.upsertLocationQuality({
+      location,
+      lat,
+      lng,
+      accuracy,
+      rejectionRate,
+      lastRun: completedAt,
+    })
+  } catch (error) {
+    console.warn("Failed to update location quality metrics", error)
+  }
+}
+
 const WORKOUT_DISTANCE_TOLERANCE = 0.2
 
 const isSameDayLocal = (a: Date, b: Date) => a.toDateString() === b.toDateString()
@@ -629,20 +709,22 @@ export async function recordRunWithSideEffects(
   }
   const adaptationTriggered = Boolean(adaptationReason)
 
-  try {
-    await updateGoalsFromRuns({
-      userId: input.userId,
-      measurementDate: completedAt,
-      contributingRunId: runId,
-      source: "run-save",
-    })
-  } catch (error) {
-    console.warn("Failed to update goal progress for run", error)
-  }
+    try {
+      await updateGoalsFromRuns({
+        userId: input.userId,
+        measurementDate: completedAt,
+        contributingRunId: runId,
+        source: "run-save",
+      })
+    } catch (error) {
+      console.warn("Failed to update goal progress for run", error)
+    }
 
-  try {
-    window.dispatchEvent(
-      new CustomEvent("run-saved", {
+    await trackLocationQualityFromRun(input, completedAt)
+
+    try {
+      window.dispatchEvent(
+        new CustomEvent("run-saved", {
         detail: {
           userId: input.userId,
           runId,

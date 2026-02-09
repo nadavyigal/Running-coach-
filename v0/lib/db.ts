@@ -894,6 +894,18 @@ export interface Run {
   updatedAt?: Date;
 }
 
+// Location-based GPS quality summary
+export interface LocationQuality {
+  id?: number;
+  location: string; // e.g., "home", "park", "track"
+  lat: number;
+  lng: number;
+  avgAccuracy: number;
+  avgRejectionRate: number;
+  runsRecorded: number;
+  lastRun: Date;
+}
+
 // Active recording sessions for checkpoint/recovery
 export interface ActiveRecordingSession {
   id?: number;
@@ -1114,10 +1126,11 @@ export interface Badge {
 // Database class
 export class RunSmartDB extends Dexie {
   users!: EntityTable<User, 'id'>;
-  plans!: EntityTable<Plan, 'id'>;
-  workouts!: EntityTable<Workout, 'id'>;
-  runs!: EntityTable<Run, 'id'>;
-  activeRecordingSessions!: EntityTable<ActiveRecordingSession, 'id'>;
+    plans!: EntityTable<Plan, 'id'>;
+    workouts!: EntityTable<Workout, 'id'>;
+    runs!: EntityTable<Run, 'id'>;
+    locationQuality!: EntityTable<LocationQuality, 'id'>;
+    activeRecordingSessions!: EntityTable<ActiveRecordingSession, 'id'>;
   shoes!: EntityTable<Shoe, 'id'>;
   chatMessages!: EntityTable<ChatMessage, 'id'>;
   badges!: EntityTable<Badge, 'id'>;
@@ -1387,6 +1400,13 @@ export class RunSmartDB extends Dexie {
     }).upgrade(async (_trans) => {
       console.log('🔄 Upgrading database to version 6: Adding challenge tables for Challenge-Led Growth Engine');
       console.log('✓ Database upgrade complete: Challenge tables added');
+    });
+
+    this.version(7).stores({
+      locationQuality: '++id, location, [lat+lng], lastRun, runsRecorded',
+    }).upgrade(async (_trans) => {
+      console.log('נ”„ Upgrading database to version 7: Adding location quality tracking');
+      console.log('ג“ Database upgrade complete: Location quality table added');
     });
 
   }

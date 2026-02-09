@@ -15,6 +15,7 @@ import type {
   GoalProgressHistory,
   GoalRecommendation,
   HRVMeasurement,
+  LocationQuality,
   Plan,
   RaceGoal,
   RecoveryScore,
@@ -1931,6 +1932,65 @@ export async function createRun(runData: Omit<Run, 'id' | 'createdAt'>): Promise
     await updateUserStreak(runData.userId);
   }
   return runId;
+}
+
+const LOCATION_COORD_PRECISION = 3;
+
+const roundCoordinate = (value: number, precision: number = LOCATION_COORD_PRECISION) => {
+  const factor = Math.pow(10, precision);
+  return Math.round(value * factor) / factor;
+};
+
+export type LocationQualityUpdateInput = {
+  location: string;
+  lat: number;
+  lng: number;
+  accuracy: number;
+  rejectionRate: number;
+  lastRun: Date;
+};
+
+export async function upsertLocationQuality(update: LocationQualityUpdateInput): Promise<void> {
+  return safeDbOperation(async () => {
+    if (!db) return;
+    const lat = roundCoordinate(update.lat);
+    const lng = roundCoordinate(update.lng);
+    const existing = await db.locationQuality.where('[lat+lng]').equals([lat, lng]).first();
+
+    if (existing) {
+      const existingRuns = Number.isFinite(existing.runsRecorded) ? existing.runsRecorded : 0;
+      const existingAvgAccuracy = Number.isFinite(existing.avgAccuracy) ? existing.avgAccuracy : 0;
+      const existingAvgRejectionRate = Number.isFinite(existing.avgRejectionRate)
+        ? existing.avgRejectionRate
+        : 0;
+      const nextRuns = existingRuns + 1;
+      const nextAvgAccuracy =
+        (existingAvgAccuracy * existingRuns + update.accuracy) / nextRuns;
+      const nextAvgRejectionRate =
+        (existingAvgRejectionRate * existingRuns + update.rejectionRate) / nextRuns;
+
+      await db.locationQuality.update(existing.id!, {
+        location: update.location,
+        lat,
+        lng,
+        avgAccuracy: nextAvgAccuracy,
+        avgRejectionRate: nextAvgRejectionRate,
+        runsRecorded: nextRuns,
+        lastRun: update.lastRun,
+      });
+      return;
+    }
+
+    await db.locationQuality.add({
+      location: update.location,
+      lat,
+      lng,
+      avgAccuracy: update.accuracy,
+      avgRejectionRate: update.rejectionRate,
+      runsRecorded: 1,
+      lastRun: update.lastRun,
+    } as LocationQuality);
+  }, 'upsertLocationQuality');
 }
 
 export async function getRunById(runId: number): Promise<Run | null> {
@@ -4675,6 +4735,7 @@ export const dbUtils = {
   // Run tracking
   recordRun,
   createRun,
+  upsertLocationQuality,
   getRunById,
   updateRun,
   getUserRuns,

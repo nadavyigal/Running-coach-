@@ -65,6 +65,9 @@ interface IntervalPhase {
 const AUTO_PAUSE_SPEED_MPS = 0.5
 const AUTO_RESUME_SPEED_MPS = 1.0
 const AUTO_PAUSE_MIN_DURATION_MS = 5000
+const AUTO_PAUSE_WARMUP_MS = 30000
+const AUTO_PAUSE_WARMUP_EXTENDED_MS = 45000
+const AUTO_PAUSE_WARMUP_MIN_MS = 15000
 const GPS_MEDIAN_FILTER_WINDOW = 3
 const IS_TEST_ENV = process.env.NODE_ENV === 'test' || process.env.VITEST
 
@@ -119,6 +122,21 @@ const parseIntervalMeasurement = (value: number, unit: string) => {
   }
 
   return null
+}
+
+const getAutoPauseWarmupThresholdMs = (
+  accuracyMeters: number | null,
+  runDurationMs: number
+) => {
+  let warmupThreshold = AUTO_PAUSE_WARMUP_MS
+  if (typeof accuracyMeters === 'number' && Number.isFinite(accuracyMeters)) {
+    if (accuracyMeters > 50 && runDurationMs < AUTO_PAUSE_WARMUP_EXTENDED_MS) {
+      warmupThreshold = AUTO_PAUSE_WARMUP_EXTENDED_MS
+    } else if (accuracyMeters < 20 && runDurationMs > AUTO_PAUSE_WARMUP_MIN_MS) {
+      warmupThreshold = AUTO_PAUSE_WARMUP_MIN_MS
+    }
+  }
+  return warmupThreshold
 }
 
 const parseIntervalPhases = (notes?: string): IntervalPhase[] => {
@@ -388,8 +406,6 @@ export function RecordScreen() {
   const autoPauseCountRef = useRef(0)
   const runStartTimeRef = useRef<number | null>(null)
   const autoPauseResumeConfirmCountRef = useRef(0)
-  const AUTO_PAUSE_WARMUP_MS = 30000 // 30s grace period before auto-pause can trigger
-
   // Checkpoint service for recording persistence
   const checkpointServiceRef = useRef<RecordingCheckpointService | null>(null)
   const checkpointFlushTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -421,6 +437,7 @@ export function RecordScreen() {
   const [isPageVisible, setIsPageVisible] = useState(true)
   const [gpsGapWarningShown, setGpsGapWarningShown] = useState(false)
   const lastGpsUpdateRef = useRef<number>(Date.now())
+  const [debugExpanded, setDebugExpanded] = useState(false)
 
   const { requestWakeLock, releaseWakeLock } = useWakeLock({
     enableScreenLock: true,
@@ -1322,8 +1339,9 @@ export function RecordScreen() {
     let isAutoPauseActive = autoPauseEnabled ? autoPauseActiveRef.current : false
     // Grace period: don't trigger auto-pause in first 30s of run to avoid
     // false activation during initial GPS acquisition / slow start.
-    const runDurationMs = Date.now() - (runStartTimeRef.current ?? Date.now())
-    const isInWarmupPeriod = runDurationMs < AUTO_PAUSE_WARMUP_MS
+      const runDurationMs = Date.now() - (runStartTimeRef.current ?? Date.now())
+      const warmupThresholdMs = getAutoPauseWarmupThresholdMs(accuracyValue, runDurationMs)
+      const isInWarmupPeriod = runDurationMs < warmupThresholdMs
     if (autoPauseEnabled) {
       if (isAutoPauseActive) {
         // Multi-point confirmation: require 2 consecutive fast points to resume
@@ -2283,8 +2301,17 @@ export function RecordScreen() {
   }
 
   const mapPath = !isRunning && debugPathOverride ? debugPathOverride : gpsPath
+  const runDurationMs =
+    typeof runStartTimeRef.current === 'number'
+      ? Date.now() - runStartTimeRef.current
+      : metrics.duration * 1000
+  const gpsAccuracyValue =
+    typeof gpsAccuracy === 'number' && Number.isFinite(gpsAccuracy) && gpsAccuracy > 0
+      ? gpsAccuracy
+      : null
+  const autoPauseWarmupThresholdMs = getAutoPauseWarmupThresholdMs(gpsAccuracyValue, runDurationMs)
   const isInWarmupPeriod =
-    autoPauseEnabled && isRunning && metrics.duration * 1000 < AUTO_PAUSE_WARMUP_MS
+    autoPauseEnabled && isRunning && runDurationMs < autoPauseWarmupThresholdMs
   const autoPauseDurationSeconds =
     autoPauseActive && autoPauseStartTime
       ? Math.max(0, Math.floor((Date.now() - autoPauseStartTime) / 1000))
@@ -2298,7 +2325,34 @@ export function RecordScreen() {
     Object.entries(gpsRejectReasons)
       .map(([reason, count]) => `${reason}:${count}`)
       .join(', ') || '--'
+  const rejectionRate =
+    gpsAcceptedCount + gpsRejectedCount > 0
+      ? gpsRejectedCount / (gpsAcceptedCount + gpsRejectedCount)
+      : 0
   const avgPaceFormatted = avgPaceSecondsPerKm > 0 ? formatPace(avgPaceSecondsPerKm) : '--:--'
+  const gpsAccuracyStatusClass =
+    gpsAccuracyValue === null
+      ? 'text-gray-300'
+      : gpsAccuracyValue > 50
+        ? 'text-red-300'
+        : gpsAccuracyValue > 20
+          ? 'text-yellow-300'
+          : 'text-emerald-300'
+  const gpsUpdateStatusClass =
+    typeof timeSinceLastGpsUpdateSec === 'number'
+      ? timeSinceLastGpsUpdateSec > 10
+        ? 'text-red-300'
+        : timeSinceLastGpsUpdateSec > 5
+          ? 'text-yellow-300'
+          : 'text-emerald-300'
+      : 'text-gray-300'
+  const autoPauseStatusClass = autoPauseActive ? 'text-red-300' : 'text-emerald-300'
+  const rejectionRateClass =
+    rejectionRate > 0.3
+      ? 'text-red-300'
+      : rejectionRate > 0.15
+        ? 'text-yellow-300'
+        : 'text-emerald-300'
   const intervalCoachEnabled = ENABLE_VIBRATION_COACH
   const intervalTimerVisible = intervalCoachEnabled && intervalPhases.length > 0
   const currentPhase = intervalPhases[currentPhaseIndex]
@@ -2994,143 +3048,140 @@ export function RecordScreen() {
                 </div>
               </div>
             )}
-            {gpsDebugEnabled && (
-              <div className="absolute bottom-2 left-2 right-2 rounded-md bg-black/70 text-white p-2 text-xs font-mono space-y-1">
-                <div className="flex flex-wrap gap-x-3 gap-y-1">
-                  <span>perm={gpsPermission}</span>
-                  <span>watchId={gpsWatchId ?? 'null'}</span>
-                  <span>cb={gpsWatchCallbackCount}</span>
-                  <span>acc={gpsAccuracy ? `${Math.round(gpsAccuracy)}m` : '--'}</span>
-                  <span>path={gpsPathRef.current.length}</span>
-                  <span>dist={Math.round((totalDistanceKmRef.current ?? 0) * 1000)}m</span>
-                  <span>
-                    spd=
-                    {Number.isFinite(metrics.currentSpeed)
-                      ? `${(metrics.currentSpeed * 3.6).toFixed(1)}kmh`
-                      : '--'}
-                  </span>
-                  <span className={autoPauseActive ? 'text-red-400' : ''}>
-                    AP={autoPauseActive ? 'ON' : 'off'}
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-x-3 gap-y-1">
-                  <span>
-                    last=
-                    {currentPosition
-                      ? `${currentPosition.latitude.toFixed(5)},${currentPosition.longitude.toFixed(5)}`
-                      : '--'}
-                  </span>
-                  <span>
-                    ts=
-                    {currentPosition?.timestamp
-                      ? new Date(currentPosition.timestamp).toLocaleTimeString()
-                      : '--'}
-                  </span>
-                  <span>
-                    since=
-                    {lastGpsUpdateAt ? `${Math.round((Date.now() - lastGpsUpdateAt) / 1000)}s` : '--'}
-                  </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {gpsDebugEnabled && (
+          <div className="fixed bottom-20 left-2 right-2 z-50 rounded-md bg-black/80 text-white p-2 shadow-lg">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm font-semibold">
+                {metrics.distance.toFixed(2)}km |{' '}
+                <span className={gpsAccuracyStatusClass}>
+                  {gpsAccuracyValue !== null ? `${Math.round(gpsAccuracyValue)}m` : '--'}
+                </span>{' '}
+                | <span className={autoPauseStatusClass}>{autoPauseActive ? '⏸️' : '▶️'}</span>
+              </div>
+              <button
+                type="button"
+                className="text-xs font-semibold"
+                onClick={() => setDebugExpanded((prev) => !prev)}
+                aria-label={debugExpanded ? 'Collapse debug panel' : 'Expand debug panel'}
+              >
+                {debugExpanded ? '▼' : '▶'}
+              </button>
+            </div>
+
+            {debugExpanded && (
+              <div className="mt-2 space-y-3 text-xs font-mono">
+                {debugPathOverride && !isRunning && (
+                  <div className="text-[10px] text-emerald-200">Golden route preview</div>
+                )}
+                <details open className="rounded-md bg-black/30 p-2">
+                  <summary className="cursor-pointer text-[11px] font-semibold">GPS</summary>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>permission: {gpsPermission}</div>
+                    <div>
+                      watch: {isGpsTracking ? 'started' : 'stopped'} (id: {gpsWatchId ?? 'null'})
+                    </div>
+                    <div>callbackCount: {gpsWatchCallbackCount}</div>
+                    <div className={gpsUpdateStatusClass}>
+                      lastUpdate: {timeSinceLastGpsUpdateSec ?? '--'}s
+                    </div>
+                    <div>
+                      lastPoint:{' '}
+                      {currentPosition
+                        ? `${currentPosition.latitude.toFixed(5)}, ${currentPosition.longitude.toFixed(5)}`
+                        : '--'}
+                    </div>
+                    <div>
+                      lastTimestamp:{' '}
+                      {currentPosition?.timestamp
+                        ? new Date(currentPosition.timestamp).toLocaleTimeString()
+                        : '--'}
+                    </div>
+                    <div className={gpsAccuracyStatusClass}>
+                      accuracy: {gpsAccuracyValue !== null ? `${Math.round(gpsAccuracyValue)}m` : '--'}
+                    </div>
+                    <div>speed: {lastGpsSpeedMps !== null ? `${lastGpsSpeedMps.toFixed(2)} m/s` : '--'}</div>
+                    <div className={rejectionRateClass}>
+                      accepted/rejected: {gpsAcceptedCount}/{gpsRejectedCount}
+                    </div>
+                    <div>lastReject: {lastRejectReason ?? '--'}</div>
+                    <div>rejectReasons: {rejectionSummary}</div>
+                    <div>totalDistance: {Math.round(totalDistanceKmRef.current * 1000)}m</div>
+                  </div>
+                </details>
+
+                <details open className="rounded-md bg-black/30 p-2">
+                  <summary className="cursor-pointer text-[11px] font-semibold">Auto-Pause</summary>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className={autoPauseStatusClass}>
+                      autoPause: {autoPauseActive ? 'ACTIVE' : 'inactive'} (count: {autoPauseCount})
+                    </div>
+                    <div>
+                      warmupGrace: {runStartTimeRef.current
+                        ? runDurationMs < autoPauseWarmupThresholdMs ? 'ACTIVE' : 'expired'
+                        : 'N/A'}
+                    </div>
+                    <div>resumeConfirm: {autoPauseResumeConfirmCountRef.current}/2</div>
+                  </div>
+                </details>
+
+                <details open className="rounded-md bg-black/30 p-2">
+                  <summary className="cursor-pointer text-[11px] font-semibold">Pace</summary>
+                  <div className="mt-2 space-y-1">
+                    <div>
+                      paceInputs: dist={metrics.distance.toFixed(3)}km dur={metrics.duration}s avg={avgPaceFormatted}/km
+                    </div>
+                    <div>
+                      currentPace: {metrics.currentPace > 0 ? formatPace(metrics.currentPace) : '--:--'}/km
+                    </div>
+                    <div>
+                      lastSegment:{' '}
+                      {lastSegmentStats
+                        ? `${Math.round(lastSegmentStats.distanceMeters)}m in ${Math.round(
+                          lastSegmentStats.timeDeltaMs / 1000
+                        )}s @ ${lastSegmentStats.speedMps.toFixed(2)} m/s`
+                        : '--'}
+                    </div>
+                  </div>
+                </details>
+
+                <div className="pt-3 border-t border-white/20 space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={loadGoldenRun}>
+                      Load Golden Run
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={clearGoldenRunPreview}
+                      disabled={!debugPathOverride}
+                    >
+                      Clear Preview
+                    </Button>
+                  </div>
+                  {goldenRunSummary && (
+                    <div className="space-y-1">
+                      <div>golden: {goldenRunSummary.name}</div>
+                      <div>
+                        distance: {goldenRunSummary.computedDistanceKm.toFixed(3)}km (expected{' '}
+                        {goldenRunSummary.expectedDistanceKm.toFixed(3)}km, delta{' '}
+                        {Math.round(goldenRunSummary.deltaMeters)}m)
+                      </div>
+                      <div>
+                        pace: {goldenRunSummary.computedPaceFormatted}/km
+                        {goldenRunSummary.expectedPace ? ` (expected ${goldenRunSummary.expectedPace})` : ''}
+                      </div>
+                    </div>
+                  )}
+                  {goldenRunError && <div className="text-red-300">{goldenRunError}</div>}
                 </div>
               </div>
             )}
           </div>
-        </CardContent>
-      </Card>
-
-      {gpsDebugEnabled && (
-        <Card className="border-dashed border-gray-300">
-          <CardContent className="p-4 space-y-3 text-xs font-mono">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">GPS Debug Panel</h3>
-              {debugPathOverride && !isRunning && (
-                <span className="text-[10px] text-green-700">Golden route preview</span>
-              )}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div>permission: {gpsPermission}</div>
-              <div>
-                watch: {isGpsTracking ? 'started' : 'stopped'} (id: {gpsWatchId ?? 'null'})
-              </div>
-              <div>callbackCount: {gpsWatchCallbackCount}</div>
-              <div>lastUpdate: {timeSinceLastGpsUpdateSec ?? '--'}s</div>
-              <div>
-                lastPoint:{' '}
-                {currentPosition
-                  ? `${currentPosition.latitude.toFixed(5)}, ${currentPosition.longitude.toFixed(5)}`
-                  : '--'}
-              </div>
-              <div>
-                lastTimestamp:{' '}
-                {currentPosition?.timestamp
-                  ? new Date(currentPosition.timestamp).toLocaleTimeString()
-                  : '--'}
-              </div>
-              <div>accuracy: {gpsAccuracy ? `${Math.round(gpsAccuracy)}m` : '--'}</div>
-              <div>speed: {lastGpsSpeedMps !== null ? `${lastGpsSpeedMps.toFixed(2)} m/s` : '--'}</div>
-              <div>
-                accepted/rejected: {gpsAcceptedCount}/{gpsRejectedCount}
-              </div>
-              <div>lastReject: {lastRejectReason ?? '--'}</div>
-              <div>rejectReasons: {rejectionSummary}</div>
-              <div>totalDistance: {Math.round(totalDistanceKmRef.current * 1000)}m</div>
-              <div className={autoPauseActive ? 'text-red-400 font-bold' : ''}>
-                autoPause: {autoPauseActive ? 'ACTIVE' : 'inactive'} (count: {autoPauseCount})
-              </div>
-              <div>
-                warmupGrace: {runStartTimeRef.current
-                  ? Date.now() - runStartTimeRef.current < AUTO_PAUSE_WARMUP_MS ? 'ACTIVE' : 'expired'
-                  : 'N/A'}
-              </div>
-              <div>resumeConfirm: {autoPauseResumeConfirmCountRef.current}/2</div>
-              <div>
-                paceInputs: dist={metrics.distance.toFixed(3)}km dur={metrics.duration}s avg={avgPaceFormatted}/km
-              </div>
-              <div>
-                currentPace: {metrics.currentPace > 0 ? formatPace(metrics.currentPace) : '--:--'}/km
-              </div>
-              <div>
-                lastSegment:{' '}
-                {lastSegmentStats
-                  ? `${Math.round(lastSegmentStats.distanceMeters)}m in ${Math.round(
-                    lastSegmentStats.timeDeltaMs / 1000
-                  )}s @ ${lastSegmentStats.speedMps.toFixed(2)} m/s`
-                  : '--'}
-              </div>
-            </div>
-
-            <div className="pt-3 border-t space-y-2">
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={loadGoldenRun}>
-                  Load Golden Run
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={clearGoldenRunPreview}
-                  disabled={!debugPathOverride}
-                >
-                  Clear Preview
-                </Button>
-              </div>
-              {goldenRunSummary && (
-                <div className="space-y-1">
-                  <div>golden: {goldenRunSummary.name}</div>
-                  <div>
-                    distance: {goldenRunSummary.computedDistanceKm.toFixed(3)}km (expected{' '}
-                    {goldenRunSummary.expectedDistanceKm.toFixed(3)}km, delta{' '}
-                    {Math.round(goldenRunSummary.deltaMeters)}m)
-                  </div>
-                  <div>
-                    pace: {goldenRunSummary.computedPaceFormatted}/km
-                    {goldenRunSummary.expectedPace ? ` (expected ${goldenRunSummary.expectedPace})` : ''}
-                  </div>
-                </div>
-              )}
-              {goldenRunError && <div className="text-red-600">{goldenRunError}</div>}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+        )}
 
       {/* Running Tips */}
       {isRunning && (
