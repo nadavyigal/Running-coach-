@@ -28,7 +28,7 @@ export function LanguageSwitcher({
             location: 'language_switcher',
           })
         }
-      } catch (e) {
+      } catch {
         // Silently fail if analytics not available
       }
     }

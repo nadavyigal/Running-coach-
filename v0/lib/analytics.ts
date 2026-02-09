@@ -10,6 +10,7 @@ type PosthogInstance = {
 declare global {
   interface Window {
     posthog?: PosthogInstance
+    gtag?: (...args: any[]) => void
   }
 }
 

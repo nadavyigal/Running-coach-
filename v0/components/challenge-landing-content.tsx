@@ -51,6 +51,7 @@ const UI_COPY = {
     noCreditCard: 'No credit card required',
     privacy: 'Privacy',
     terms: 'Terms',
+    coachingStyleDesc: 'coaching style with clear cues, steady encouragement, and practical next steps tailored to your progress.',
   },
   he: {
     joinFree: 'הצטרפות חינם',
@@ -72,6 +73,7 @@ const UI_COPY = {
     noCreditCard: 'ללא כרטיס אשראי',
     privacy: 'פרטיות',
     terms: 'תנאים',
+    coachingStyleDesc: 'סגנון אימון עם רמזים ברורים, עידוד קבוע וצעדים מעשיים המותאמים להתקדמותך.',
   },
 } as const;
 
@@ -162,7 +164,7 @@ export function ChallengeLandingContent({ template, initialLanguage = 'en' }: Ch
         location: 'challenge_landing',
         challenge_slug: template.slug,
       });
-    } catch (e) {
+    } catch {
       // ignore
     }
   };
@@ -409,9 +411,7 @@ export function ChallengeLandingContent({ template, initialLanguage = 'en' }: Ch
                 <h3 className="text-lg font-bold tracking-tight">{copy.yourAiCoach}</h3>
               </div>
               <p className="text-white/50 leading-relaxed">
-                A <span className="text-white/80 font-semibold">{formatCoachTone(displayTemplate.coachTone)}</span> coaching
-                style with clear cues, steady encouragement, and practical next steps tailored to
-                your progress.
+                A <span className="text-white/80 font-semibold">{formatCoachTone(displayTemplate.coachTone)}</span> {copy.coachingStyleDesc}
               </p>
             </div>
           </div>
