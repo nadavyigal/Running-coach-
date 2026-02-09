@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { LanguageSwitcher } from '@/components/language-switcher';
 import {
   Activity,
   ArrowRight,
@@ -129,21 +130,21 @@ const COPY = {
     existingAccount: 'כבר יש לי חשבון',
     earlyAccessBadge: 'גישה מוקדמת (בטא)',
     earlyAccessDeadline: 'גישה מוקדמת זמינה עד 1 במרץ 2026',
-    heroTitleTop: 'מאמן הריצה שלך',
-    heroTitleHighlight: 'מבוסס בינה מלאכותית',
-    heroSubtitle: 'הצטרפו לקהילה של רצים שמתקדמים מהר יותר עם אימון אישי מבוסס AI',
+    heroTitleTop: 'המאמן החכם שלך',
+    heroTitleHighlight: 'בלי שעון יקר',
+    heroSubtitle: 'אימון אישי מבוסס AI שמתאים לך — לא לשעון. הצטרפו לאלפי רצים בארץ שמתקדמים מהר יותר בלי לפגוע בכיס.',
     socialProof: {
-      plans: 'תכניות אימון חכמות',
-      tracking: 'מעקב בזמן אמת',
+      plans: 'תכניות חכמות ו־AI',
+      tracking: 'מעקב וניתוח בזמן אמת',
       spots: 'מספר מקומות מוגבל',
     },
-    ctaPrimary: 'התחל בחינם',
+    ctaPrimary: 'בואו נתחיל',
     ctaExisting: 'כבר יש לי חשבון',
-    ctaSubtext: 'ללא כרטיס אשראי • אפשר לבטל בכל עת',
-    betaSectionTitle: 'קבל גישה מוקדמת',
-    betaSectionSubtitle: 'שתפו שם ואימייל לקבלת עדכונים והטבת לכל החיים (אימייל אופציונלי)',
+    ctaSubtext: 'חינם לגמרי • ללא כרטיס אשראי • אפשר לבטל בכל עת',
+    betaSectionTitle: 'קבלו גישה מוקדמת + 50% הנחה לכל החיים',
+    betaSectionSubtitle: 'השאירו שם ואימייל וקבלו הטבות מיוחדות לחלוצים. (אימייל אופציונלי)',
     placeholders: {
-      name: 'השם שלך',
+      name: 'שמכם (חובה)',
       email: 'you@example.com',
     },
     continue: 'המשך',
@@ -153,66 +154,66 @@ const COPY = {
       invalidEmailTitle: 'אימייל לא תקין',
       invalidEmailBody: 'אנא הזן כתובת אימייל תקינה',
     },
-    benefitsTitle: 'הטבות למצטרפי בטא:',
+    benefitsTitle: 'למה להיות אחד מהחלוצים:',
     benefits: {
-      discount: '50% הנחה לכל החיים',
-      badge: 'תג Beta Pioneer ייחודי',
-      support: 'תמיכה בעדיפות מהצוות',
+      discount: '50% הנחה לכל החיים • לא לוותר',
+      badge: 'תג חלוץ בטא ייחודי',
+      support: 'קשר ישיר עם צוות הפיתוח',
     },
-    challengesTitle: 'אתגרים מודרכים ליצירת מומנטום',
-    challengesSubtitle: 'שלוש תכניות ממוקדות ל-21 ימים לבניית ביטחון והתמדה.',
+    challengesTitle: 'אתגרים של 21 ימים שישנו את הריצה שלכם',
+    challengesSubtitle: 'תוכניות ממוקדות שמבנות בטחון, עקביות והרגלים שנשארים.',
     challenges: [
       {
         slug: 'start-running',
         name: '21 ימים להתחיל לרוץ',
-        blurb: 'לבנות הרגל ריצה יציב מהיום הראשון.',
+        blurb: 'מאפס ל־30 דקות ריצה רצופה — בלי שיפוט, בלי ברירה.',
       },
       {
         slug: 'morning-ritual',
-        name: 'ריצה מודרכת של בוקר (21 ימים)',
-        blurb: 'להפוך את הבוקר לטקס רגוע ועקבי.',
+        name: 'ריצת בוקר מודרכת',
+        blurb: 'הפכו את הבוקר לטקס שלכם — רגוע, מרכז, חזק.',
       },
       {
         slug: 'plateau-breaker',
-        name: 'שבירת פלטו (21 ימים)',
-        blurb: 'להצית מחדש התקדמות עם גיוון ועומס חכם.',
+        name: 'פורצי פלטו',
+        blurb: 'תקועים באותה רמה? בואו נשבור את זה עם AI חכם.',
       },
     ],
-    challengesMore: 'ועוד בהמשך.',
-    challengesCta: 'התחל את התכנית שלך',
-    challengesLink: 'לדף האתגר',
-    featuresTitle: 'כל מה שצריך כדי להצליח',
-    featuresSubtitle: 'RunSmart משלב אימון AI עם מעקב בזמן אמת כדי להגיע ליעדי הריצה שלך',
+    challengesMore: 'ועוד אתגרים בהמשך.',
+    challengesCta: 'התחל אתגר',
+    challengesLink: 'לדף הפרטים',
+    featuresTitle: 'כל מה שצריך כדי להיות רץ טוב',
+    featuresSubtitle: 'מאמן AI שמתאים לך, מעקב של הכל, התעוררות כל בוקר עם תכנית שהוא מכן.',
     features: {
       chat: {
-        title: 'שיחה עם מאמן AI',
-        description: 'קבלו ייעוץ בזמן אמת, שאלו שאלות וקבלו אימון אישי בשיחה טבעית',
+        title: 'שיחה עם מאמן AI שלך',
+        description: 'שאלו אותו הכל — מהירות, תזונה, פציעות, לוח זמנים. הוא מכיר אתכם.',
       },
       adaptive: {
-        title: 'תכניות אימון אדפטיביות',
-        description: 'תכניות שמתעדכנות לפי ההתקדמות, המשוב והלו״ז שלכם',
+        title: 'תכנית שמתאימה לחייכם',
+        description: 'התכנית משתנה עם הרוח שלכם, עומס העבודה, השינה ותחושת הגוף.',
       },
       recovery: {
-        title: 'התאוששות ומניעת פציעות',
-        description: 'מעקב חכם אחר שינה, HRV ורווחה כללית כדי לשמור על בריאותכם',
+        title: 'התאוששות חכמה — בלי שעון',
+        description: 'מעקב אחרי שינה, פעילות, ורווחה כללית. בדיוק כמו Whoop, בלי ₪2000.',
       },
       goal: {
-        title: 'אימון לפי מטרה',
-        description: 'בין אם זה 5 ק״מ ראשון או שיא במרתון — מתאמנים עם מטרה',
+        title: 'אימון עם מטרה',
+        description: 'בין 5 ק״מ ראשון או שיא אישי — תלחמו ביעד שלכם עם תוכנית מדעית.',
       },
       race: {
-        title: 'מוכנות לתחרות',
-        description: 'אסטרטגיית קצב, טייפר ואימון ליום המרוץ כדי להגיע מוכנים',
+        title: 'מוכנות לתחרויות',
+        description: 'קצב חכם, טייפר, ואימון יום המרוץ. כל מה שצריך כדי לתפוס את הרצאה שלכם.',
       },
       challenges: {
-        title: 'אתגרים מודרכים',
-        description: '21 ימים להתחיל לרוץ, שבירת פלטו, ריצת בוקר — תוכניות לבניית מומנטום',
+        title: 'אתגרים מודרכים של 21 ימים',
+        description: 'להתחיל לרוץ, ריצת בוקר, שבירת פלטו — כל אחד מובנה כדי לתוך התקדמות.',
       },
     },
-    footerTagline: 'מאמן הריצה החכם שלך',
+    footerTagline: 'בנויה בארץ, למרצים בארץ',
     footerLinks: {
       privacy: 'פרטיות',
-      terms: 'תנאים',
+      terms: 'תנאי שימוש',
       contact: 'יצירת קשר',
     },
   },
@@ -418,26 +419,11 @@ export function ProfessionalLandingScreen({
         {/* Content */}
         <div className="relative z-10 max-w-7xl mx-auto px-6 py-12 text-center">
           <div className={`flex items-center justify-between mb-10 text-sm ${isHebrew ? 'flex-row-reverse' : ''}`}>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setLanguagePreference('en')}
-                className={`px-3 py-1 rounded-full border text-sm ${
-                  language === 'en' ? 'border-emerald-500 text-emerald-700' : 'border-gray-300 text-gray-500'
-                }`}
-              >
-                English
-              </button>
-              <button
-                type="button"
-                onClick={() => setLanguagePreference('he')}
-                className={`px-3 py-1 rounded-full border text-sm ${
-                  language === 'he' ? 'border-emerald-500 text-emerald-700' : 'border-gray-300 text-gray-500'
-                }`}
-              >
-                עברית
-              </button>
-            </div>
+            <LanguageSwitcher
+              language={language}
+              onChange={setLanguagePreference}
+              variant="default"
+            />
             <button
               type="button"
               onClick={handleExistingAccount}
