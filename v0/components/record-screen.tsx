@@ -372,11 +372,12 @@ export function RecordScreen() {
   const gpsMonitoringRef = useRef<GPSMonitoringService | null>(null)
   const acceptedPointCountRef = useRef(0)
   const rejectedPointCountRef = useRef(0)
+  const gpsQualityWarningShownRef = useRef(false)
   const rejectionReasonsRef = useRef<Record<GPSRejectReason, number>>({})
   const GPS_MAX_ACCEPTABLE_ACCURACY_METERS = 50
   const GPS_DEFAULT_ACCURACY_METERS = 50
   const GPS_MIN_TIME_DELTA_MS = 400  // Reduced from 700ms to 400ms to accept more frequent GPS updates
-  const MAX_REASONABLE_SPEED_MPS = 12  // Increased from 9 to 12 m/s (from ~32 km/h to ~43 km/h) for sprints
+  const MAX_REASONABLE_SPEED_MPS = 13.5  // Increased from 12 to 13.5 m/s (~48.6 km/h) for track sprints
   const MIN_DISTANCE_FOR_PACE_KM = 0.05
   const startTimeRef = useRef<number>(0)
   const elapsedRunMsRef = useRef<number>(0)
@@ -1138,6 +1139,7 @@ export function RecordScreen() {
   const resetGpsDebugStats = () => {
     acceptedPointCountRef.current = 0
     rejectedPointCountRef.current = 0
+    gpsQualityWarningShownRef.current = false
     rejectionReasonsRef.current = {}
     setGpsAcceptedCount(0)
     setGpsRejectedCount(0)
@@ -1201,6 +1203,16 @@ export function RecordScreen() {
     setGpsRejectedCount(rejectedPointCountRef.current)
     setGpsRejectReasons(nextReasons)
     setLastRejectReason(reason)
+    const totalPoints = gpsPathRef.current.length + rejectedPointCountRef.current
+    const rejectionRate = totalPoints > 10 ? rejectedPointCountRef.current / totalPoints : 0
+    if (rejectionRate > 0.3 && !gpsQualityWarningShownRef.current) {
+      gpsQualityWarningShownRef.current = true
+      toast({
+        title: "GPS Accuracy Poor",
+        description: "GPS accuracy poor - move to open area for better tracking.",
+        variant: "destructive",
+      })
+    }
     logGps({ event: 'reject', reason, ...details })
   }
 
@@ -2271,6 +2283,8 @@ export function RecordScreen() {
   }
 
   const mapPath = !isRunning && debugPathOverride ? debugPathOverride : gpsPath
+  const isInWarmupPeriod =
+    autoPauseEnabled && isRunning && metrics.duration * 1000 < AUTO_PAUSE_WARMUP_MS
   const autoPauseDurationSeconds =
     autoPauseActive && autoPauseStartTime
       ? Math.max(0, Math.floor((Date.now() - autoPauseStartTime) / 1000))
@@ -2654,6 +2668,13 @@ export function RecordScreen() {
                 </p>
               </CardContent>
             </Card>
+          )}
+
+          {isRunning && isInWarmupPeriod && (
+            <div className="mt-3 flex items-center gap-2 rounded-full bg-yellow-500/20 px-3 py-1 w-fit">
+              <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+              <span className="text-xs text-yellow-300">GPS Warmup (pause disabled)</span>
+            </div>
           )}
 
           {/* GPS Gap Warning */}

@@ -89,6 +89,16 @@ describe('RecordScreen GPS Distance Diagnostics', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
+    Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(undefined),
+    })
+
+    Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
+      configurable: true,
+      value: vi.fn(),
+    })
+
     Object.defineProperty(global.navigator, 'geolocation', {
       value: mockGeolocation,
       writable: true,
@@ -209,13 +219,13 @@ describe('RecordScreen GPS Distance Diagnostics', () => {
     await waitFor(() => expect(screen.getByText('0.00')).toBeInTheDocument())
   })
 
-  it('rejects GPS teleportation (speed > 12 m/s)', async () => {
+  it('rejects GPS teleportation (speed > 13.5 m/s)', async () => {
     mockPermissions.query.mockResolvedValue({ state: 'granted' })
 
     // Point 1 to Point 2: huge jump in 1 second = teleport
     mockGeolocation.watchPosition.mockImplementation((success: any) => {
       success(makePosition({ latitude: 40.71280, longitude: -74.006, accuracy: 5, timestamp: 1000 }))
-      // ~1.1km away in 1 second = ~1100 m/s (way over 12 m/s limit) - TELEPORT
+      // ~1.1km away in 1 second = ~1100 m/s (way over 13.5 m/s limit) - TELEPORT
       success(makePosition({ latitude: 40.72280, longitude: -74.006, accuracy: 5, timestamp: 2000 }))
       // Back near the first point with reasonable speed from point 1
       // ~5.5m from first point, 3s later = 1.8 m/s (reasonable)
@@ -233,6 +243,67 @@ describe('RecordScreen GPS Distance Diagnostics', () => {
     // Point 3 is 5.5m from point 1 = 0.01 km
     await waitFor(() => expect(screen.getByText('0.01')).toBeInTheDocument())
   })
+
+  it('handles GPS signal complete loss for 60 seconds', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const start = new Date('2020-01-01T00:00:00.000Z')
+    vi.setSystemTime(start)
+
+    mockPermissions.query.mockResolvedValue({ state: 'granted' })
+
+    let successCallback: ((position: any) => void) | null = null
+    mockGeolocation.watchPosition.mockImplementation((success: any) => {
+      successCallback = success
+      success(makePosition({
+        latitude: 40.71280,
+        longitude: -74.006,
+        accuracy: 5,
+        timestamp: start.getTime() + 1000,
+      }))
+      return 1
+    })
+
+    render(<RecordScreen />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start Run' }))
+      await Promise.resolve()
+    })
+
+    expect(mockGeolocation.watchPosition).toHaveBeenCalled()
+
+    await act(async () => {
+      successCallback?.(makePosition({
+        latitude: 40.71285,
+        longitude: -74.006,
+        accuracy: 5,
+        timestamp: start.getTime() + 2000,
+      }))
+    })
+
+    expect(screen.getByText('0.01')).toBeInTheDocument()
+
+    vi.setSystemTime(new Date(start.getTime() + 62000))
+    await new Promise((resolve) => setTimeout(resolve, 5500))
+
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'GPS Signal Lost' })
+    )
+
+    await act(async () => {
+      successCallback?.(makePosition({
+        latitude: 40.71290,
+        longitude: -74.006,
+        accuracy: 5,
+        timestamp: start.getTime() + 63000,
+      }))
+    })
+
+    const distanceLabel = screen.getByText('Distance (km)')
+    const distanceValue = distanceLabel.previousSibling as HTMLElement
+    const distanceNumber = parseFloat(distanceValue?.textContent || '0')
+    expect(distanceNumber).toBeLessThan(0.05)
+  }, 10000)
 
   it('saves run with gpsMetadata containing rejection summary', async () => {
     const start = new Date('2020-01-01T00:00:00.000Z')
