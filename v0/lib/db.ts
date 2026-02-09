@@ -888,6 +888,7 @@ export interface Run {
   importMethod?: string;
   importModel?: string;
   importParserVersion?: string;
+  gpsMetadata?: string; // JSON: rejection summary, accepted/rejected counts, auto-pause stats
   completedAt: Date;
   createdAt: Date;
   updatedAt?: Date;

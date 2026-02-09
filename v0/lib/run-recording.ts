@@ -37,6 +37,7 @@ export type RecordRunWithSideEffectsInput = {
   importSource?: Run["importSource"]
   importMeta?: RunImportMeta
   autoMatchWorkout?: boolean
+  gpsMetadata?: string
 }
 
 export type AdaptationReason = 'performance_below_target' | 'distance_not_met' | 'consecutive_misses'
@@ -599,6 +600,7 @@ export async function recordRunWithSideEffects(
     ...(input.importMeta?.method ? { importMethod: input.importMeta.method } : {}),
     ...(input.importMeta?.model ? { importModel: input.importMeta.model } : {}),
     ...(input.importMeta?.parserVersion ? { importParserVersion: input.importMeta.parserVersion } : {}),
+    ...(input.gpsMetadata ? { gpsMetadata: input.gpsMetadata } : {}),
     completedAt,
   }
 
