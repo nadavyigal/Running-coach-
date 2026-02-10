@@ -1,18 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { logger } from '@/lib/logger'
+import { createClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
-
-// Simple in-memory event store (in production, this would be a database)
-interface AnalyticsEvent {
-  eventName: string
-  userId?: string | number
-  properties?: Record<string, unknown>
-  timestamp: string
-}
-
-const eventStore: AnalyticsEvent[] = []
 
 const EventSchema = z.object({
   eventName: z.string(),
@@ -30,25 +21,26 @@ const QuerySchema = z.object({
 /**
  * POST: Record a new analytics event
  * Used by client-side analytics tracking to log user interactions
+ * Stores events in PostgreSQL via Supabase
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const data = EventSchema.parse(body)
 
-    const event = {
-      eventName: data.eventName,
-      userId: data.userId,
-      properties: data.properties,
+    const supabase = await createClient()
+
+    // Store in Supabase PostgreSQL
+    const { error } = await supabase.from('analytics_events').insert({
+      event_name: data.eventName,
+      user_id: data.userId?.toString() || null,
+      properties: data.properties || {},
       timestamp: new Date().toISOString(),
-    }
+    })
 
-    // Store in memory (replace with database in production)
-    eventStore.push(event)
-
-    // Keep only last 10000 events in memory
-    if (eventStore.length > 10000) {
-      eventStore.shift()
+    if (error) {
+      logger.error('[analytics/events] Supabase insert error:', error)
+      throw error
     }
 
     logger.debug('[analytics/events] Event recorded', {
@@ -56,7 +48,10 @@ export async function POST(request: NextRequest) {
       userId: data.userId,
     })
 
-    return NextResponse.json({ success: true, timestamp: event.timestamp })
+    return NextResponse.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+    })
   } catch (error) {
     logger.error('[analytics/events] POST error:', error)
 
@@ -67,7 +62,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({ error: 'Failed to record event' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Failed to record event' },
+      { status: 500 }
+    )
   }
 }
 
@@ -89,46 +87,58 @@ export async function GET(request: NextRequest) {
       eventName: searchParams.get('eventName'),
     })
 
-    // Calculate date range
+    const supabase = await createClient()
+    const startDate = new Date(Date.now() - params.days * 24 * 60 * 60 * 1000)
+
+    // Build query
+    let query = supabase
+      .from('analytics_events')
+      .select('*')
+      .gte('timestamp', startDate.toISOString())
+      .order('timestamp', { ascending: false })
+      .limit(params.limit)
+
+    if (params.userId) {
+      query = query.eq('user_id', params.userId.toString())
+    }
+
+    if (params.eventName) {
+      query = query.eq('event_name', params.eventName)
+    }
+
+    const { data: events, error } = await query
+
+    if (error) {
+      logger.error('[analytics/events] Supabase query error:', error)
+      throw error
+    }
+
     const now = new Date()
-    const startDate = new Date(now.getTime() - params.days * 24 * 60 * 60 * 1000)
 
-    // Filter events
-    let filtered = eventStore.filter((event) => {
-      const eventDate = new Date(event.timestamp)
-      if (eventDate < startDate) return false
+    // Calculate event counts
+    interface AnalyticsEventRecord {
+      event_name: string
+      [key: string]: unknown
+    }
 
-      if (params.userId && event.userId !== params.userId) return false
-
-      if (params.eventName && event.eventName !== params.eventName) return false
-
-      return true
-    })
-
-    // Sort by timestamp descending and limit results
-    filtered = filtered
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, params.limit)
-
-    logger.debug('[analytics/events] GET query', {
-      days: params.days,
-      limit: params.limit,
-      resultCount: filtered.length,
-    })
-
-    // Calculate basic metrics from filtered events
-    const eventCounts = filtered.reduce(
-      (acc, event) => {
-        acc[event.eventName] = (acc[event.eventName] || 0) + 1
+    const eventCounts = (events || []).reduce(
+      (acc, event: AnalyticsEventRecord) => {
+        acc[event.event_name] = (acc[event.event_name] || 0) + 1
         return acc
       },
       {} as Record<string, number>
     )
 
+    logger.debug('[analytics/events] GET query', {
+      days: params.days,
+      limit: params.limit,
+      resultCount: events?.length || 0,
+    })
+
     return NextResponse.json({
-      events: filtered,
+      events: events || [],
       eventCounts,
-      totalCount: filtered.length,
+      totalCount: events?.length || 0,
       queryParams: params,
       timestamp: now.toISOString(),
     })
@@ -142,7 +152,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({ error: 'Failed to fetch events' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Failed to fetch events' },
+      { status: 500 }
+    )
   }
 }
 
