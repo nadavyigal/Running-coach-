@@ -64,11 +64,51 @@ const config: Config = {
           border: 'hsl(var(--sidebar-border))',
           ring: 'hsl(var(--sidebar-ring))',
         },
+        // Bold Athletic Minimalism Colors
+        neon: {
+          cyan: 'hsl(var(--neon-cyan))',
+          yellow: 'hsl(var(--neon-yellow))',
+          pink: 'hsl(var(--neon-pink))',
+        },
+        athletic: {
+          black: 'hsl(var(--black))',
+          gray: {
+            900: 'hsl(var(--gray-900))',
+            800: 'hsl(var(--gray-800))',
+            700: 'hsl(var(--gray-700))',
+            100: 'hsl(var(--gray-100))',
+          },
+          white: 'hsl(var(--white))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+        'athletic-sm': 'var(--radius-sm)',
+        'athletic-md': 'var(--radius-md)',
+        'athletic-lg': 'var(--radius-lg)',
+        'athletic-xl': 'var(--radius-xl)',
+        'athletic-full': 'var(--radius-full)',
+      },
+      spacing: {
+        'xs': 'var(--space-xs)',
+        'sm': 'var(--space-sm)',
+        'md': 'var(--space-md)',
+        'lg': 'var(--space-lg)',
+        'xl': 'var(--space-xl)',
+        '2xl': 'var(--space-2xl)',
+        '3xl': 'var(--space-3xl)',
+      },
+      transitionTimingFunction: {
+        'smooth': 'var(--ease-smooth)',
+        'bounce': 'var(--ease-bounce)',
+        'snap': 'var(--ease-snap)',
+      },
+      transitionDuration: {
+        'fast': 'var(--duration-fast)',
+        'normal': 'var(--duration-normal)',
+        'slow': 'var(--duration-slow)',
       },
       keyframes: {
         'accordion-down': {
@@ -79,10 +119,25 @@ const config: Config = {
           from: { height: 'var(--radix-accordion-content-height)' },
           to: { height: '0' },
         },
+        'pulse-glow': {
+          '0%, 100%': { opacity: '1', transform: 'scale(1)' },
+          '50%': { opacity: '0.8', transform: 'scale(1.05)' },
+        },
+        'slide-in-right': {
+          'from': { transform: 'translateX(20px)', opacity: '0' },
+          'to': { transform: 'translateX(0)', opacity: '1' },
+        },
+        'morph': {
+          'from': { borderRadius: '1rem' },
+          'to': { borderRadius: '2rem' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'pulse-glow': 'pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'slide-in-right': 'slide-in-right 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards',
+        'morph': 'morph 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards',
       },
     },
   },
