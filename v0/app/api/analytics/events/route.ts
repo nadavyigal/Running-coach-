@@ -14,8 +14,8 @@ const EventSchema = z.object({
 const QuerySchema = z.object({
   days: z.coerce.number().optional().default(7),
   limit: z.coerce.number().optional().default(1000),
-  userId: z.union([z.string(), z.number()]).optional(),
-  eventName: z.string().optional(),
+  userId: z.union([z.string(), z.number()]).nullable().optional(),
+  eventName: z.string().nullable().optional(),
 })
 
 /**
