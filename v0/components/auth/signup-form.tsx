@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
 import { logger } from '@/lib/logger'
-import { trackAuthEvent } from '@/lib/analytics'
+import { trackSignupCompleted, setUserId } from '@/lib/analytics'
 
 type SignupFormProps = {
   onSuccess?: () => void
@@ -123,8 +123,16 @@ export function SignupForm({ onSwitchToLogin }: SignupFormProps) {
         }
       }
 
-      // Track signup event
-      await trackAuthEvent('signup')
+      // Track signup completion (Phase 1: Activation Funnel)
+      await trackSignupCompleted({
+        email: email.trim().toLowerCase(),
+        signupMethod: 'email',
+      })
+
+      // Set user ID for tracking (CRITICAL for funnel analysis)
+      if (data.user?.id) {
+        setUserId(data.user.id)
+      }
 
       // Show success message
       setSuccess(true)
