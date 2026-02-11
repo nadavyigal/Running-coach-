@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
+import dynamic from "next/dynamic"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Calendar, CalendarDays, TrendingUp, Plus, ChevronLeft, ChevronRight, MoreHorizontal, Loader2 } from "lucide-react"
-import { AddRunModal } from "@/components/add-run-modal"
-import { DateWorkoutModal } from "@/components/date-workout-modal"
 import { MonthlyCalendarView } from "@/components/monthly-calendar-view"
 import { PlanComplexityIndicator } from "@/components/plan-complexity-indicator"
 import { type Plan, type Workout, type Goal, type ChallengeProgress, type ChallengeTemplate } from "@/lib/db"
@@ -21,6 +20,15 @@ import { getActiveChallenge, getDailyChallengeData } from "@/lib/challengeEngine
 import { NextChallengeRecommendation } from "@/components/next-challenge-recommendation"
 import { getNextChallengeRecommendation } from "@/lib/challengeTemplates"
 import { startChallenge } from "@/lib/challengeEngine"
+
+const AddRunModal = dynamic(
+  () => import("@/components/add-run-modal").then((module) => ({ default: module.AddRunModal })),
+  { ssr: false, loading: () => null },
+)
+const DateWorkoutModal = dynamic(
+  () => import("@/components/date-workout-modal").then((module) => ({ default: module.DateWorkoutModal })),
+  { ssr: false, loading: () => null },
+)
 
 export function PlanScreen() {
   // Get shared data from context
@@ -80,8 +88,7 @@ export function PlanScreen() {
     loadChallengeData()
   }, [userId])
 
-  // Calculate challenge day progress
-  const calculateChallengeProgress = () => {
+  const challengeProgress = useMemo(() => {
     // If we have an active challenge, use its progress
     if (activeChallenge) {
       const dailyData = getDailyChallengeData(
@@ -106,9 +113,7 @@ export function PlanScreen() {
     const currentDay = Math.max(1, Math.min(daysDiff + 1, totalDays))
 
     return { currentDay, totalDays }
-  }
-
-  const challengeProgress = calculateChallengeProgress()
+  }, [activeChallenge, plan])
 
   // Handle starting a new challenge
   const handleStartChallenge = async (template: ChallengeTemplate) => {
@@ -627,14 +632,16 @@ export function PlanScreen() {
         />
       )}
 
-      <DateWorkoutModal
-        isOpen={showDateWorkoutModal}
-        onClose={() => {
-          setShowDateWorkoutModal(false)
-          setSelectedDateWorkout(null)
-        }}
-        workout={selectedDateWorkout}
-      />
+      {showDateWorkoutModal && (
+        <DateWorkoutModal
+          isOpen={showDateWorkoutModal}
+          onClose={() => {
+            setShowDateWorkoutModal(false)
+            setSelectedDateWorkout(null)
+          }}
+          workout={selectedDateWorkout}
+        />
+      )}
     </div>
   )
 }

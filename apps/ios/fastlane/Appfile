@@ -1,0 +1,10 @@
+# Fastlane Appfile for RunSmart iOS
+
+app_identifier("com.runsmart.ios") # The bundle identifier of your app
+apple_id("[[YOUR_APPLE_ID]]") # Your Apple Developer Portal email address
+
+# TODO: Update these values before deploying
+team_id("[[YOUR_TEAM_ID]]") # Developer Portal Team ID
+
+# For more information about the Appfile, see:
+# https://docs.fastlane.tools/advanced/#appfile

@@ -1,0 +1,6 @@
+# pnpm workspace configuration for RunSmart monorepo
+packages:
+  - 'packages/*'
+  - 'V0'
+  # Future iOS app will go in apps/ios
+  - 'apps/*'

@@ -356,7 +356,7 @@ export function ActivationFunnelDashboard() {
                 <AlertCircle className="h-4 w-4 text-yellow-600" />
                 <AlertDescription className="text-yellow-800">
                   <strong>⚠️ Plan → First Run:</strong> {(funnelData.firstRun.conversionRate * 100).toFixed(1)}% vs 50% target.
-                  Users have plans but aren't recording runs. Consider reminders.
+                  Users have plans but aren&apos;t recording runs. Consider reminders.
                 </AlertDescription>
               </Alert>
             )}

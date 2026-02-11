@@ -468,26 +468,42 @@ export function RecordScreen() {
   const [goldenRunError, setGoldenRunError] = useState<string | null>(null)
 
   // Visibility and GPS health monitoring
-  const [isPageVisible, setIsPageVisible] = useState(true)
   const [gpsGapWarningShown, setGpsGapWarningShown] = useState(false)
   const lastGpsUpdateRef = useRef<number>(Date.now())
   const [debugExpanded, setDebugExpanded] = useState(false)
   const lastAccuracyRef = useRef<number | null>(null)
   const lastAccuracySpikeAtRef = useRef<number>(0)
 
+  // Track when screen went off for gap reporting
+  const screenOffAtRef = useRef<number | null>(null)
+  const [screenOffGapSeconds, setScreenOffGapSeconds] = useState<number | null>(null)
+  // Dim mode: darkens screen to save battery (OLED) while keeping GPS active
+  const [isDimMode, setIsDimMode] = useState(false)
+
   const { requestWakeLock, releaseWakeLock } = useWakeLock({
-    enableScreenLock: true,
-    enableAudioLock: true,
     onVisibilityChange: (isVisible) => {
-      setIsPageVisible(isVisible)
-      if (!isVisible && isRunning && !isPaused) {
-        console.warn('[RecordScreen] Page hidden during run - GPS tracking should continue via audio')
-      } else if (isVisible && isRunning && !isPaused) {
-        console.log('[RecordScreen] Page visible again during run')
-        // Check for GPS gaps
-        const timeSinceLastUpdate = Date.now() - lastGpsUpdateRef.current
-        if (timeSinceLastUpdate > 30000) {
-          console.warn(`[RecordScreen] GPS gap detected: ${Math.round(timeSinceLastUpdate / 1000)}s since last update`)
+      if (!isVisible && isRunningRef.current && !isPausedRef.current) {
+        // Screen went off during active recording - GPS WILL STOP on mobile browsers
+        screenOffAtRef.current = Date.now()
+        console.warn('[RecordScreen] Screen off during run - GPS tracking STOPPED on mobile browsers')
+      } else if (isVisible && isRunningRef.current) {
+        // Screen came back on - check how long GPS was lost
+        if (screenOffAtRef.current) {
+          const gapMs = Date.now() - screenOffAtRef.current
+          const gapSeconds = Math.round(gapMs / 1000)
+          screenOffAtRef.current = null
+
+          if (gapSeconds > 5) {
+            setScreenOffGapSeconds(gapSeconds)
+            console.warn(`[RecordScreen] Screen was off for ${gapSeconds}s - GPS data lost for this period`)
+
+            toast({
+              title: "GPS Tracking Interrupted",
+              description: `Screen was off for ${gapSeconds >= 60 ? `${Math.round(gapSeconds / 60)} min` : `${gapSeconds}s`}. Distance during this period was NOT recorded. Keep screen on while running.`,
+              variant: "destructive",
+              duration: 8000,
+            })
+          }
         }
       }
     }
@@ -2853,19 +2869,27 @@ export function RecordScreen() {
             </Card>
           )}
 
-          {/* Screen Visibility Indicator */}
-          {isRunning && !isPageVisible && (
-            <Card className="border-blue-200 bg-blue-50 mt-4">
+          {/* Screen-off GPS gap warning */}
+          {isRunning && screenOffGapSeconds !== null && screenOffGapSeconds > 5 && (
+            <Card className="border-red-300 bg-red-50 mt-4">
               <CardContent className="p-3">
                 <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
-                  <p className="text-sm text-blue-900 font-medium">
-                    Recording in background
+                  <AlertTriangle className="h-4 w-4 text-red-600" />
+                  <p className="text-sm text-red-900 font-medium">
+                    GPS data lost for {screenOffGapSeconds >= 60 ? `${Math.round(screenOffGapSeconds / 60)} min` : `${screenOffGapSeconds}s`}
                   </p>
                 </div>
-                <p className="text-xs text-blue-700 mt-1">
-                  Screen is off. GPS tracking continues via background audio.
+                <p className="text-xs text-red-700 mt-1">
+                  Screen was off. Distance during this period was not recorded.
                 </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1 text-xs text-red-600 p-0 h-auto"
+                  onClick={() => setScreenOffGapSeconds(null)}
+                >
+                  Dismiss
+                </Button>
               </CardContent>
             </Card>
           )}
@@ -2896,12 +2920,19 @@ export function RecordScreen() {
 
           {/* Mobile GPS Warning */}
           {isRunning && (
-            <Card className="border-gray-200 bg-gray-50 mt-4">
+            <Card className="border-amber-300 bg-amber-50 mt-4">
               <CardContent className="p-3">
-                <p className="text-xs text-gray-600 flex items-center gap-1">
-                  <Info className="h-3 w-3" />
-                  Keep screen on for best GPS accuracy. Mobile browsers don&apos;t support background GPS tracking.
-                </p>
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm text-amber-900 font-semibold">
+                      Keep your screen ON while running
+                    </p>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      GPS tracking stops when the screen turns off. Lock your phone with the screen on, or lower brightness to save battery.
+                    </p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -3034,6 +3065,21 @@ export function RecordScreen() {
                 />
               </div>
             )}
+
+            {/* Battery Saver / Dim Mode Toggle */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-900">Battery Saver</p>
+                <p className="text-xs text-gray-600">
+                  Dims screen to save battery while keeping GPS active.
+                </p>
+              </div>
+              <Switch
+                checked={isDimMode}
+                onCheckedChange={setIsDimMode}
+                aria-label="Toggle battery saver dim mode"
+              />
+            </div>
 
             {/* iOS fallback notice when no cue method is enabled */}
             {coachingCueState.isIOS &&
@@ -3183,7 +3229,6 @@ export function RecordScreen() {
                       'TAP TO START'}
               </p>
             )}
-          </div>
 
             {/* Manual Entry Option */}
             {!isRunning && (
@@ -3492,6 +3537,27 @@ export function RecordScreen() {
             }
           }}
         />
+      )}
+      {/* Dim mode overlay - saves battery on OLED screens while keeping GPS active */}
+      {isRunning && isDimMode && (
+        <div
+          className="fixed inset-0 bg-black/85 z-50 flex flex-col items-center justify-center"
+          onClick={() => setIsDimMode(false)}
+        >
+          <div className="text-white/60 text-center space-y-4">
+            <p className="text-6xl font-mono font-bold text-white/80">
+              {metrics.distance.toFixed(2)}
+            </p>
+            <p className="text-lg text-white/50">km</p>
+            <p className="text-2xl font-mono text-white/60">
+              {formatTime(metrics.duration)}
+            </p>
+            <div className="mt-8 flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <p className="text-sm text-white/40">GPS active - tap to exit dim mode</p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

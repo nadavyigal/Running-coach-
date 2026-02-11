@@ -1,15 +1,11 @@
 'use client';
 
-	import { useState, useEffect, useRef } from "react"
-	import { flushSync } from "react-dom"
-	import dynamic from 'next/dynamic'
-	import { DATABASE } from '@/lib/constants'
-	import { logger } from '@/lib/logger';
-	import { WelcomeModal } from '@/components/auth/welcome-modal';
-	import { SyncService } from '@/lib/sync/sync-service';
-	import { useAuth } from '@/lib/auth-context';
-import { RunRecoveryModal } from '@/components/run-recovery-modal';
-import { RecordingCheckpointService } from '@/lib/recording-checkpoint';
+import { useState, useEffect, useRef } from "react"
+import { flushSync } from "react-dom"
+import dynamic from 'next/dynamic'
+import { DATABASE } from '@/lib/constants'
+import { logger } from '@/lib/logger';
+import { useAuth } from '@/lib/auth-context';
 import type { ActiveRecordingSession } from '@/lib/db';
 
 type MainScreen = 'today' | 'plan' | 'record' | 'chat' | 'profile' | 'run-report'
@@ -230,6 +226,14 @@ const ProfileScreen = dynamic(
 )
 const BottomNavigation = dynamic(() => import("@/components/bottom-navigation").then(m => ({ default: m.BottomNavigation })), { ssr: false })
 const OnboardingDebugPanel = dynamic(() => import("@/components/onboarding-debug-panel").then(m => ({ default: m.OnboardingDebugPanel })), { ssr: false })
+const WelcomeModal = dynamic(
+  () => import("@/components/auth/welcome-modal").then(m => ({ default: m.WelcomeModal })),
+  { ssr: false, loading: () => null }
+)
+const RunRecoveryModal = dynamic(
+  () => import("@/components/run-recovery-modal").then(m => ({ default: m.RunRecoveryModal })),
+  { ssr: false, loading: () => null }
+)
 
 export default function RunSmartApp() {
   const [mounted, setMounted] = useState(false) // Fix hydration by rendering only after mount
@@ -434,19 +438,27 @@ export default function RunSmartApp() {
           const user = await dbUtils.ensureUserReady();
           if (user) {
             logger.log(`[app:init:user] ✅ User ready: id=${user.id}, onboarding=${user.onboardingComplete}`);
-            if (user.id) {
-              try {
-                const { syncUserRunData } = await import("@/lib/run-recording");
-                const syncResult = await syncUserRunData(user.id);
-                logger.log("[app:init:sync] ✅ Run data synchronized", syncResult);
-              } catch (syncError) {
-                logger.warn("[app:init:sync] ⚠️ Failed to sync run data:", syncError);
+          if (user.id) {
+              const [syncResult, recoveryResult] = await Promise.allSettled([
+                (async () => {
+                  const { syncUserRunData } = await import("@/lib/run-recording");
+                  return syncUserRunData(user.id);
+                })(),
+                (async () => {
+                  const checkpointModule = await import('@/lib/recording-checkpoint');
+                  const checkpointService = new checkpointModule.RecordingCheckpointService(user.id);
+                  return checkpointService.getIncompleteSession(user.id);
+                })(),
+              ]);
+
+              if (syncResult.status === 'fulfilled') {
+                logger.log("[app:init:sync] ✅ Run data synchronized", syncResult.value);
+              } else {
+                logger.warn("[app:init:sync] ⚠️ Failed to sync run data:", syncResult.reason);
               }
 
-              // Check for incomplete recording session
-              try {
-                const checkpointService = new RecordingCheckpointService(user.id);
-                const incompleteSession = await checkpointService.getIncompleteSession(user.id);
+              if (recoveryResult.status === 'fulfilled') {
+                const incompleteSession = recoveryResult.value;
                 if (incompleteSession) {
                   logger.log("[app:init:recovery] ⚠️ Found incomplete recording session", {
                     sessionId: incompleteSession.id,
@@ -459,8 +471,8 @@ export default function RunSmartApp() {
                 } else {
                   logger.log("[app:init:recovery] ✅ No incomplete recording sessions found");
                 }
-              } catch (recoveryError) {
-                logger.warn("[app:init:recovery] ⚠️ Failed to check for incomplete recordings:", recoveryError);
+              } else {
+                logger.warn("[app:init:recovery] ⚠️ Failed to check for incomplete recordings:", recoveryResult.reason);
               }
             }
             if (user.onboardingComplete) {
@@ -520,14 +532,30 @@ export default function RunSmartApp() {
       return
     }
 
+    let active = true
+    let syncService: { startAutoSync: () => void; stopAutoSync: () => void } | null = null
+
     logger.log('[Sync] Starting auto-sync for authenticated user')
-    const syncService = SyncService.getInstance()
-    syncService.startAutoSync()
+    const startAutoSync = async () => {
+      try {
+        const syncModule = await import('@/lib/sync/sync-service')
+        if (!active) return
+        syncService = syncModule.SyncService.getInstance()
+        syncService.startAutoSync()
+      } catch (syncError) {
+        logger.warn('[Sync] Failed to start auto-sync:', syncError)
+      }
+    }
+
+    startAutoSync()
 
     // Cleanup: Stop auto-sync when component unmounts or user signs out
     return () => {
-      logger.log('[Sync] Stopping auto-sync')
-      syncService.stopAutoSync()
+      active = false
+      if (syncService) {
+        logger.log('[Sync] Stopping auto-sync')
+        syncService.stopAutoSync()
+      }
     }
   }, [mounted, user, profileId])
 
@@ -856,7 +884,8 @@ export default function RunSmartApp() {
     if (!incompleteRecording) return;
 
     try {
-      const checkpointService = new RecordingCheckpointService(incompleteRecording.userId);
+      const checkpointModule = await import('@/lib/recording-checkpoint');
+      const checkpointService = new checkpointModule.RecordingCheckpointService(incompleteRecording.userId);
       await checkpointService.clearCheckpoint(incompleteRecording.id);
       try {
         sessionStorage.removeItem('recording_recovery');
@@ -898,10 +927,12 @@ export default function RunSmartApp() {
       )}
 
       {/* Debug Panel - Access with Ctrl+Shift+D */}
-      <OnboardingDebugPanel
-        isOpen={showDebugPanel}
-        onClose={() => setShowDebugPanel(false)}
-      />
+      {showDebugPanel && (
+        <OnboardingDebugPanel
+          isOpen={showDebugPanel}
+          onClose={() => setShowDebugPanel(false)}
+        />
+      )}
     </div>
   )
 }

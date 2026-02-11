@@ -1,214 +1,161 @@
-
 import { useEffect, useRef, useState, useCallback } from 'react'
-
-// 1 second of silence
-const SILENT_AUDIO_URL = 'data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBIAAAABAAEAQB8AAEAfAAABAAgAAABmYWN0BAAAAAAAAABkYXRhAAAAAA=='
-
-// Keepalive interval: 30 seconds (helps prevent audio suspension on iOS)
-const AUDIO_KEEPALIVE_INTERVAL = 30_000
+import NoSleep from 'nosleep.js'
 
 export interface WakeLockOptions {
-    enableScreenLock?: boolean
-    enableAudioLock?: boolean
+    /** Called when lock status changes */
     onLockStatusChange?: (status: 'active' | 'inactive' | 'error') => void
+    /** Called when page visibility changes (screen on/off) */
     onVisibilityChange?: (isVisible: boolean) => void
 }
 
+/**
+ * useWakeLock - Prevents screen from auto-dimming during run recording.
+ *
+ * Strategy (layered, most → least reliable):
+ * 1. NoSleep.js (creates a hidden video element - most reliable on iOS Safari)
+ * 2. Screen Wake Lock API (native browser API - Chrome/Edge, partial Safari support)
+ *
+ * IMPORTANT: Neither approach can prevent MANUAL screen lock by user.
+ * When the user presses the power button, the browser suspends JavaScript
+ * and GPS tracking stops. The app MUST make this clear to the user.
+ */
 export function useWakeLock({
-    enableScreenLock = true,
-    enableAudioLock = true,
     onLockStatusChange,
     onVisibilityChange
 }: WakeLockOptions = {}) {
     const [isActive, setIsActive] = useState(false)
+    const isActiveRef = useRef(false)
+    const noSleepRef = useRef<NoSleep | null>(null)
     const wakeLockRef = useRef<WakeLockSentinel | null>(null)
-    const audioRef = useRef<HTMLAudioElement | null>(null)
-    const audioKeepaliveIntervalRef = useRef<NodeJS.Timeout | null>(null)
+    const visibilityHandlerRef = useRef<(() => void) | null>(null)
+
+    // Track callbacks in refs to avoid stale closures
+    const onLockStatusChangeRef = useRef(onLockStatusChange)
+    const onVisibilityChangeRef = useRef(onVisibilityChange)
+    useEffect(() => {
+        onLockStatusChangeRef.current = onLockStatusChange
+        onVisibilityChangeRef.current = onVisibilityChange
+    }, [onLockStatusChange, onVisibilityChange])
 
     const requestWakeLock = useCallback(async () => {
-        if (isActive) return
+        if (isActiveRef.current) return
 
+        let anyLockAcquired = false
+
+        // Layer 1: NoSleep.js (video-based - most reliable on iOS Safari)
         try {
-            // 1. Screen Wake Lock
-            if (enableScreenLock && 'wakeLock' in navigator) {
-                try {
-                    const lock = await navigator.wakeLock.request('screen')
-                    wakeLockRef.current = lock
-
-                    lock.addEventListener('release', () => {
-                        console.log('[WakeLock] Screen lock released')
-                        // Try to re-acquire if we're still supposed to be active
-                        if (isActive) {
-                            console.log('[WakeLock] Attempting to re-acquire released lock')
-                            setTimeout(async () => {
-                                if (isActive && 'wakeLock' in navigator) {
-                                    try {
-                                        const newLock = await navigator.wakeLock.request('screen')
-                                        wakeLockRef.current = newLock
-                                        console.log('[WakeLock] Screen lock re-acquired')
-                                    } catch (err) {
-                                        console.warn('[WakeLock] Failed to re-acquire:', err)
-                                    }
-                                }
-                            }, 1000)
-                        }
-                    })
-
-                    console.log('[WakeLock] Screen lock active')
-                } catch (err) {
-                    console.warn('[WakeLock] Failed to acquire screen lock:', err)
-                }
+            if (!noSleepRef.current) {
+                noSleepRef.current = new NoSleep()
             }
-
-            // 2. Audio Wake Lock (Silent Loop) - Enhanced for mobile browsers
-            if (enableAudioLock) {
-                if (!audioRef.current) {
-                    audioRef.current = new Audio(SILENT_AUDIO_URL)
-                    audioRef.current.loop = true
-
-                    // Critical mobile browser settings
-                    // @ts-expect-error - playsInline is supported in browsers but not typed on HTMLAudioElement
-                    audioRef.current.playsInline = true
-                    // @ts-expect-error - webkitPlaysInline for older iOS versions
-                    audioRef.current.webkitPlaysInline = true
-
-                    // Prevent audio from being paused by system
-                    audioRef.current.preservesPitch = false
-
-                    // Set volume to very low but not zero (iOS optimization)
-                    audioRef.current.volume = 0.01
-
-                    // Add event listeners for debugging
-                    audioRef.current.addEventListener('pause', () => {
-                        console.warn('[WakeLock] Audio paused unexpectedly')
-                        // Attempt to resume if we're still active
-                        if (isActive && audioRef.current && audioRef.current.paused) {
-                            console.log('[WakeLock] Attempting to resume audio')
-                            audioRef.current.play().catch(err => {
-                                console.error('[WakeLock] Failed to resume audio:', err)
-                            })
-                        }
-                    })
-
-                    audioRef.current.addEventListener('ended', () => {
-                        console.warn('[WakeLock] Audio ended unexpectedly (should loop)')
-                    })
-                }
-
-                try {
-                    await audioRef.current.play()
-                    console.log('[WakeLock] Audio lock active')
-
-                    // Start keepalive interval to ensure audio stays active
-                    if (audioKeepaliveIntervalRef.current) {
-                        clearInterval(audioKeepaliveIntervalRef.current)
-                    }
-                    audioKeepaliveIntervalRef.current = setInterval(() => {
-                        if (audioRef.current && audioRef.current.paused && isActive) {
-                            console.log('[WakeLock] Keepalive: restarting paused audio')
-                            audioRef.current.play().catch(err => {
-                                console.error('[WakeLock] Keepalive failed:', err)
-                            })
-                        }
-                    }, AUDIO_KEEPALIVE_INTERVAL)
-
-                } catch (err) {
-                    console.warn('[WakeLock] Failed to play silent audio:', err)
-                    console.warn('[WakeLock] Audio may not work until user interaction')
-                }
-            }
-
-            setIsActive(true)
-            onLockStatusChange?.('active')
-
+            await noSleepRef.current.enable()
+            anyLockAcquired = true
+            console.log('[WakeLock] NoSleep.js video lock active')
         } catch (err) {
-            console.error('[WakeLock] Error activating locks:', err)
-            onLockStatusChange?.('error')
+            console.warn('[WakeLock] NoSleep.js failed:', err)
         }
-    }, [enableScreenLock, enableAudioLock, isActive, onLockStatusChange])
+
+        // Layer 2: Screen Wake Lock API (native browser support)
+        if ('wakeLock' in navigator) {
+            try {
+                const lock = await navigator.wakeLock.request('screen')
+                wakeLockRef.current = lock
+
+                lock.addEventListener('release', () => {
+                    console.log('[WakeLock] Screen Wake Lock released by system')
+                    wakeLockRef.current = null
+                    // Re-acquire when page becomes visible again
+                    // (handled in visibility change listener)
+                })
+
+                anyLockAcquired = true
+                console.log('[WakeLock] Screen Wake Lock API active')
+            } catch (err) {
+                console.warn('[WakeLock] Screen Wake Lock API failed:', err)
+            }
+        }
+
+        if (anyLockAcquired) {
+            isActiveRef.current = true
+            setIsActive(true)
+            onLockStatusChangeRef.current?.('active')
+        } else {
+            console.error('[WakeLock] No wake lock mechanism available')
+            onLockStatusChangeRef.current?.('error')
+        }
+    }, [])
 
     const releaseWakeLock = useCallback(async () => {
-        if (!isActive) return
+        if (!isActiveRef.current) return
 
-        // 1. Clear keepalive interval
-        if (audioKeepaliveIntervalRef.current) {
-            clearInterval(audioKeepaliveIntervalRef.current)
-            audioKeepaliveIntervalRef.current = null
+        // Release NoSleep.js
+        if (noSleepRef.current) {
+            try {
+                noSleepRef.current.disable()
+                console.log('[WakeLock] NoSleep.js disabled')
+            } catch (err) {
+                console.warn('[WakeLock] NoSleep.js disable failed:', err)
+            }
         }
 
-        // 2. Release Screen Lock
+        // Release Screen Wake Lock
         if (wakeLockRef.current) {
             try {
                 await wakeLockRef.current.release()
                 wakeLockRef.current = null
+                console.log('[WakeLock] Screen Wake Lock released')
             } catch (err) {
-                console.warn('[WakeLock] Failed to release screen lock:', err)
+                console.warn('[WakeLock] Screen Wake Lock release failed:', err)
             }
         }
 
-        // 3. Stop Audio
-        if (audioRef.current) {
-            audioRef.current.pause()
-            audioRef.current.currentTime = 0
-        }
-
+        isActiveRef.current = false
         setIsActive(false)
-        onLockStatusChange?.('inactive')
-        console.log('[WakeLock] Released all locks')
-    }, [isActive, onLockStatusChange])
+        onLockStatusChangeRef.current?.('inactive')
+    }, [])
 
-    // Monitor visibility changes and re-acquire screen lock
+    // Monitor visibility changes and re-acquire wake lock
     useEffect(() => {
         const handleVisibilityChange = async () => {
             const isVisible = document.visibilityState === 'visible'
-            console.log('[WakeLock] Visibility changed:', isVisible ? 'visible' : 'hidden')
+            console.log('[WakeLock] Visibility:', isVisible ? 'visible' : 'hidden')
 
-            // Notify parent component of visibility change
-            onVisibilityChange?.(isVisible)
+            onVisibilityChangeRef.current?.(isVisible)
 
-            if (isVisible && isActive) {
-                // Page became visible - try to re-acquire screen lock if needed
-                if (enableScreenLock && 'wakeLock' in navigator && !wakeLockRef.current) {
+            if (isVisible && isActiveRef.current) {
+                // Page became visible again - re-acquire Screen Wake Lock
+                // (NoSleep.js video should auto-resume)
+                if ('wakeLock' in navigator && !wakeLockRef.current) {
                     try {
                         const lock = await navigator.wakeLock.request('screen')
                         wakeLockRef.current = lock
-                        console.log('[WakeLock] Screen lock re-acquired after visibility change')
+                        lock.addEventListener('release', () => {
+                            wakeLockRef.current = null
+                        })
+                        console.log('[WakeLock] Screen Wake Lock re-acquired')
                     } catch (err) {
                         console.warn('[WakeLock] Failed to re-acquire screen lock:', err)
                     }
                 }
-
-                // Ensure audio is still playing
-                if (enableAudioLock && audioRef.current && audioRef.current.paused) {
-                    console.log('[WakeLock] Restarting audio after becoming visible')
-                    try {
-                        await audioRef.current.play()
-                    } catch (err) {
-                        console.warn('[WakeLock] Failed to restart audio:', err)
-                    }
-                }
-            } else if (!isVisible && isActive) {
-                // Page became hidden - log warning but audio should continue
-                console.warn('[WakeLock] Page hidden - screen lock released, audio should continue')
             }
         }
 
+        visibilityHandlerRef.current = handleVisibilityChange
         document.addEventListener('visibilitychange', handleVisibilityChange)
         return () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange)
         }
-    }, [isActive, enableScreenLock, enableAudioLock, onVisibilityChange])
+    }, [])
 
     // Cleanup on unmount
     useEffect(() => {
         return () => {
-            // Clear keepalive interval
-            if (audioKeepaliveIntervalRef.current) {
-                clearInterval(audioKeepaliveIntervalRef.current)
+            if (isActiveRef.current) {
+                noSleepRef.current?.disable()
+                wakeLockRef.current?.release().catch(() => {})
+                isActiveRef.current = false
             }
-            releaseWakeLock()
         }
-    }, [releaseWakeLock])
+    }, [])
 
     return {
         isActive,

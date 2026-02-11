@@ -39,36 +39,68 @@ import {
   Pencil,
   Trophy,
 } from "lucide-react"
-import { AddShoesModal } from "@/components/add-shoes-modal"
 import { ReminderSettings } from "@/components/reminder-settings"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { BadgeCabinet } from "@/components/badge-cabinet";
 import { dbUtils } from "@/lib/dbUtils";
 import { DATABASE } from "@/lib/constants";
 import { useData } from "@/contexts/DataContext";
 import { useToast } from "@/components/ui/use-toast";
 import { getChallengeHistory, getActiveChallenge, type DailyChallengeData } from "@/lib/challengeEngine";
 import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db";
-import { ShareBadgeModal } from "@/components/share-badge-modal";
 import { Share2, Users } from "lucide-react";
-import { JoinCohortModal } from "@/components/join-cohort-modal";
-import { CommunityStatsWidget } from "@/components/community-stats-widget";
-import { CoachingInsightsWidget } from "@/components/coaching-insights-widget";
-import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
-import { PerformanceAnalyticsDashboard } from "@/components/performance-analytics-dashboard";
 import { Brain, Target, GitMerge, Star } from "lucide-react";
-import { PlanTemplateFlow } from "@/components/plan-template-flow";
 import { type Goal, type Run } from "@/lib/db";
-import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine";
+import type { GoalProgress } from "@/lib/goalProgressEngine";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { UserDataSettings } from "@/components/user-data-settings";
 import { RunSmartBrandMark } from "@/components/run-smart-brand-mark";
 import { getActiveChallengeTemplates } from "@/lib/challengeTemplates";
 
 type ChallengeTemplateSeed = ReturnType<typeof getActiveChallengeTemplates>[number]
+
+const AddShoesModal = dynamic(
+  () => import("@/components/add-shoes-modal").then((module) => ({ default: module.AddShoesModal })),
+  { ssr: false, loading: () => null },
+)
+const ShareBadgeModal = dynamic(
+  () => import("@/components/share-badge-modal").then((module) => ({ default: module.ShareBadgeModal })),
+  { ssr: false, loading: () => null },
+)
+const JoinCohortModal = dynamic(
+  () => import("@/components/join-cohort-modal").then((module) => ({ default: module.JoinCohortModal })),
+  { ssr: false, loading: () => null },
+)
+const CommunityStatsWidget = dynamic(
+  () => import("@/components/community-stats-widget").then((module) => ({ default: module.CommunityStatsWidget })),
+  { ssr: false, loading: () => null },
+)
+const CoachingInsightsWidget = dynamic(
+  () => import("@/components/coaching-insights-widget").then((module) => ({ default: module.CoachingInsightsWidget })),
+  { ssr: false, loading: () => null },
+)
+const CoachingPreferencesSettings = dynamic(
+  () => import("@/components/coaching-preferences-settings").then((module) => ({ default: module.CoachingPreferencesSettings })),
+  { ssr: false, loading: () => null },
+)
+const PerformanceAnalyticsDashboard = dynamic(
+  () => import("@/components/performance-analytics-dashboard").then((module) => ({ default: module.PerformanceAnalyticsDashboard })),
+  { ssr: false, loading: () => null },
+)
+const PlanTemplateFlow = dynamic(
+  () => import("@/components/plan-template-flow").then((module) => ({ default: module.PlanTemplateFlow })),
+  { ssr: false, loading: () => null },
+)
+const UserDataSettings = dynamic(
+  () => import("@/components/user-data-settings").then((module) => ({ default: module.UserDataSettings })),
+  { ssr: false, loading: () => null },
+)
+const BadgeCabinet = dynamic(
+  () => import("@/components/badge-cabinet").then((module) => ({ default: module.BadgeCabinet })),
+  { ssr: false, loading: () => null },
+)
 
 export function ProfileScreen() {
   const router = useRouter()
@@ -125,19 +157,27 @@ export function ProfileScreen() {
     const loadGoalProgress = async () => {
       if (goals.length === 0) return
 
+      const { GoalProgressEngine } = await import("@/lib/goalProgressEngine")
       const engine = new GoalProgressEngine()
       const progressMap = new Map<number, GoalProgress>()
 
-      for (const goal of goals) {
-        if (goal.id) {
-          try {
-            const progress = await engine.calculateGoalProgress(goal.id)
-            if (progress) {
-              progressMap.set(goal.id, progress)
-            }
-          } catch (err) {
-            console.error(`Error calculating progress for goal ${goal.id}:`, err)
+      const progressResults = await Promise.allSettled(
+        goals
+          .filter((goal) => goal.id)
+          .map(async (goal) => ({
+            goalId: goal.id as number,
+            progress: await engine.calculateGoalProgress(goal.id as number),
+          })),
+      )
+
+      for (const result of progressResults) {
+        if (result.status === "fulfilled") {
+          const { goalId, progress } = result.value
+          if (progress) {
+            progressMap.set(goalId, progress)
           }
+        } else {
+          console.error("Error calculating goal progress:", result.reason)
         }
       }
 
@@ -179,7 +219,7 @@ export function ProfileScreen() {
     loadChallengeData()
   }, [userId])
 
-  const availableChallenges = getActiveChallengeTemplates()
+  const availableChallenges = useMemo(() => getActiveChallengeTemplates(), [])
 
   // Helper to get progress for a goal (uses engine-calculated progress)
   const getGoalProgress = (goalId?: number): number => {
