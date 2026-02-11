@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import { useState, useEffect, useRef } from "react"
+import dynamic from "next/dynamic"
 import { flushSync } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,9 +23,7 @@ import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { useData } from "@/contexts/DataContext"
 import { trackChatMessageSent } from "@/lib/analytics"
-import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
-import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
-import { EnhancedAICoach, type AICoachResponse } from "@/components/enhanced-ai-coach"
+import type { AICoachResponse } from "@/components/enhanced-ai-coach"
 import type { ChatMessageDTO } from "@/lib/models/chat"
 
 interface ChatMessage {
@@ -50,6 +49,18 @@ const buildAuthHeaders = (userId?: number | null): HeadersInit => {
   }
 }
 
+const CoachingFeedbackModal = dynamic(
+  () => import("@/components/coaching-feedback-modal").then((module) => ({ default: module.CoachingFeedbackModal })),
+  { ssr: false, loading: () => null },
+)
+const CoachingPreferencesSettings = dynamic(
+  () => import("@/components/coaching-preferences-settings").then((module) => ({ default: module.CoachingPreferencesSettings })),
+  { ssr: false, loading: () => null },
+)
+const EnhancedAICoach = dynamic(
+  () => import("@/components/enhanced-ai-coach").then((module) => ({ default: module.EnhancedAICoach })),
+  { ssr: false, loading: () => null },
+)
 
 
 export function ChatScreen() {
@@ -64,14 +75,14 @@ export function ChatScreen() {
     refresh: refreshContext,
   } = useData()
 
-  const defaultWelcome: ChatMessage = {
-    id: `welcome-${Date.now()}`,
-    role: 'assistant',
-    content: `Hi there! I'm your AI running coach. I'm here to help you with training advice, motivation, and any running-related questions. How can I assist you today?`,
-    timestamp: new Date(),
-  }
-
-  const [messages, setMessages] = useState<ChatMessage[]>([defaultWelcome])
+  const [messages, setMessages] = useState<ChatMessage[]>(() => ([
+    {
+      id: `welcome-${Date.now()}`,
+      role: 'assistant',
+      content: `Hi there! I'm your AI running coach. I'm here to help you with training advice, motivation, and any running-related questions. How can I assist you today?`,
+      timestamp: new Date(),
+    },
+  ]))
   const [inputValue, setInputValue] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
@@ -674,18 +685,24 @@ export function ChatScreen() {
 
         <div className={`max-w-[80%] ${isUser ? 'order-first' : ''}`}>
           <div
-            className={`rounded-lg px-4 py-2 ${isUser
-                ? 'bg-primary text-primary-foreground ml-auto'
-                : 'bg-muted text-muted-foreground'
+            className={`rounded-2xl px-5 py-3 transition-all duration-300 ${isUser
+                ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg border-2 border-cyan-400/50 glow-cyan'
+                : 'bg-gradient-to-r from-purple-50 to-pink-50 text-gray-900 relative noise-overlay'
               }`}
           >
-            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+            <p className="text-sm whitespace-pre-wrap relative z-10">{message.content}</p>
 
             {/* Show adaptations for assistant messages */}
             {!isUser && message.adaptations && message.adaptations.length > 0 && (
-              <div className="mt-2 text-xs opacity-70">
-                <span className="font-medium">Adaptations: </span>
-                {message.adaptations.join(', ')}
+              <div className="mt-3 pt-3 border-t border-purple-200/50 text-xs text-purple-700 relative z-10">
+                <span className="font-semibold">Coaching Adaptations: </span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {message.adaptations.map((adaptation, idx) => (
+                    <Badge key={idx} variant="secondary" className="bg-purple-100 text-purple-700 text-xs">
+                      {adaptation}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -874,23 +891,28 @@ export function ChatScreen() {
         </div>
       )}
 
-      {/* Input */}
-      <div className="border-t bg-card p-4">
-        <form onSubmit={handleInputSubmit} className="flex gap-2">
+      {/* Input - Floating Bar with Backdrop Blur */}
+      <div className="sticky bottom-0 backdrop-blur-lg bg-white/80 border-t border-gray-200/50 p-4 shadow-lg">
+        <form onSubmit={handleInputSubmit} className="flex gap-3 items-center">
           <Input
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             placeholder="Ask your running coach anything..."
             disabled={isLoading}
-            className="flex-1"
+            className="flex-1 bg-gray-50 border-2 border-gray-200 rounded-2xl px-6 py-4 text-base
+                       focus:bg-white focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/20
+                       transition-all duration-200 placeholder:text-gray-400"
           />
           <Button
             type="submit"
             disabled={!inputValue.trim() || isLoading}
             size="icon"
             aria-label="Send message"
+            className="h-12 w-12 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500
+                       hover:from-cyan-600 hover:to-blue-600 shadow-lg hover:shadow-xl
+                       transition-all duration-300 hover:scale-105 active:scale-95"
           >
-            <Send className="h-4 w-4" />
+            <Send className="h-5 w-5" />
           </Button>
         </form>
       </div>

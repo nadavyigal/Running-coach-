@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import dynamic from "next/dynamic"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { RaceGoalModal } from "./race-goal-modal"
 import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
@@ -34,6 +34,11 @@ import {
 interface RaceGoalsScreenProps {
   userId: number
 }
+
+const RaceGoalModal = dynamic(
+  () => import("./race-goal-modal").then((module) => ({ default: module.RaceGoalModal })),
+  { ssr: false, loading: () => null },
+)
 
 const raceTypeIcons = {
   road: Route,
@@ -173,14 +178,17 @@ export function RaceGoalsScreen({ userId }: RaceGoalsScreenProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Race Goals</h2>
-          <p className="text-gray-600">Set and manage your race objectives</p>
+          <h2 className="text-heading-xl">Race Goals</h2>
+          <p className="text-gray-600 mt-1">Set and manage your race objectives</p>
         </div>
-        <Button onClick={() => setShowModal(true)}>
+        <Button
+          onClick={() => setShowModal(true)}
+          className="bg-gradient-energy hover:opacity-90 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+        >
           <Plus className="h-4 w-4 mr-2" />
           Add Goal
         </Button>
@@ -209,19 +217,39 @@ export function RaceGoalsScreen({ userId }: RaceGoalsScreenProps) {
             const daysUntil = getDaysUntilRace(goal.raceDate)
             const trainingWeeks = getTrainingWeeks(goal.raceDate)
             const priorityConfig = {
-              A: { label: "A Race", color: "bg-red-500 text-white", description: "Primary Goal" },
-              B: { label: "B Race", color: "bg-orange-500 text-white", description: "Secondary Goal" },
-              C: { label: "C Race", color: "bg-blue-500 text-white", description: "Tune-up Race" }
+              A: {
+                label: "A Race",
+                color: "bg-gradient-to-r from-red-600 to-orange-500 text-white",
+                borderColor: "border-l-4 border-red-600",
+                description: "Primary Goal"
+              },
+              B: {
+                label: "B Race",
+                color: "bg-gradient-to-r from-amber-500 to-yellow-400 text-white",
+                borderColor: "border-l-4 border-amber-500",
+                description: "Secondary Goal"
+              },
+              C: {
+                label: "C Race",
+                color: "bg-gradient-to-r from-blue-500 to-cyan-400 text-white",
+                borderColor: "border-l-4 border-blue-500",
+                description: "Tune-up Race"
+              }
             }[goal.priority]
 
             return (
-              <Card key={goal.id} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-3">
+              <Card key={goal.id} className={`hover:shadow-xl transition-all duration-300 hover:-translate-y-1 relative overflow-hidden ${priorityConfig.borderColor}`}>
+                {/* Large distance watermark */}
+                <span className="absolute top-4 right-4 text-[8rem] font-black text-gray-100 leading-none select-none pointer-events-none">
+                  {goal.distance}
+                </span>
+
+                <CardHeader className="pb-3 relative z-10">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3">
                       <div className="flex items-center gap-2">
-                        <RaceTypeIcon className="h-5 w-5 text-gray-600" />
-                        <Badge className={priorityConfig.color}>
+                        <RaceTypeIcon className="h-5 w-5 text-gray-700" />
+                        <Badge className={`${priorityConfig.color} shadow-md`}>
                           {priorityConfig.label}
                         </Badge>
                       </div>
@@ -268,16 +296,18 @@ export function RaceGoalsScreen({ userId }: RaceGoalsScreenProps) {
                     </DropdownMenu>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <CardContent className="relative z-10">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                     <div className="space-y-1">
-                      <div className="text-sm font-medium text-gray-600">Distance</div>
-                      <div className="text-lg font-bold">{goal.distance}km</div>
+                      <div className="text-label-sm text-gray-600">Distance</div>
+                      <div className="text-2xl font-black">{goal.distance}<span className="text-sm font-normal text-gray-500">km</span></div>
                     </div>
                     {goal.targetTime && (
                       <div className="space-y-1">
-                        <div className="text-sm font-medium text-gray-600">Target Time</div>
-                        <div className="text-lg font-bold">{formatTargetTime(goal.targetTime)}</div>
+                        <div className="text-label-sm text-gray-600">Target Time</div>
+                        <div className="text-2xl font-mono font-black tabular-nums tracking-tight">
+                          {formatTargetTime(goal.targetTime)}
+                        </div>
                       </div>
                     )}
                     <div className="space-y-1">
@@ -288,16 +318,15 @@ export function RaceGoalsScreen({ userId }: RaceGoalsScreenProps) {
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <div className="text-sm font-medium text-gray-600">
-                        {daysUntil > 0 ? 'Days Until' : 'Days Since'}
+                      <div className="text-label-sm text-gray-600">
+                        {daysUntil > 0 ? 'Countdown' : 'Completed'}
                       </div>
-                      <div className="text-lg font-bold">
+                      <div className="text-2xl font-black tabular-nums">
                         {Math.abs(daysUntil)}
-                        {daysUntil > 0 && trainingWeeks > 0 && (
-                          <span className="text-sm font-normal text-gray-600 ml-1">
-                            ({trainingWeeks} weeks)
-                          </span>
-                        )}
+                        <span className="text-gray-400 mx-1">/</span>
+                        <span className="text-label-lg text-gray-600">
+                          DAYS {daysUntil > 0 ? 'LEFT' : 'AGO'}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -318,11 +347,12 @@ export function RaceGoalsScreen({ userId }: RaceGoalsScreenProps) {
                     </div>
                   )}
 
-                  <div className="mt-4 flex gap-2">
+                  <div className="mt-6 flex gap-3">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => { setEditingGoal(goal); setShowModal(true); }}
+                      className="transition-all duration-200 hover:-translate-y-0.5"
                     >
                       <Edit className="h-4 w-4 mr-2" />
                       Edit
@@ -331,7 +361,7 @@ export function RaceGoalsScreen({ userId }: RaceGoalsScreenProps) {
                       variant="outline"
                       size="sm"
                       onClick={() => handleDeleteGoal(goal.id)}
-                      className="text-red-600 border-red-200 hover:bg-red-50"
+                      className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 transition-all duration-200 hover:-translate-y-0.5"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
                       Delete
@@ -339,7 +369,7 @@ export function RaceGoalsScreen({ userId }: RaceGoalsScreenProps) {
                     <Button
                       size="sm"
                       onClick={() => handleGeneratePlan(goal)}
-                      className="bg-green-600 hover:bg-green-700"
+                      className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95"
                     >
                       <Play className="h-4 w-4 mr-2" />
                       Generate Training Plan

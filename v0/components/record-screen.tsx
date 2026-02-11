@@ -1,19 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef } from "react"
+import dynamic from "next/dynamic"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
 import { ArrowLeft, Map, Play, Pause, Square, Volume2, Satellite, MapPin, AlertTriangle, Info, Loader2, Sparkles, CheckCircle } from "lucide-react"
-import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RouteSelectionWizard } from "@/components/route-selection-wizard"
-import { ManualRunModal } from "@/components/manual-run-modal"
-import { AddActivityModal } from "@/components/add-activity-modal"
 import { RunMap } from "@/components/maps/RunMap"
-import { WorkoutCompletionModal } from "@/components/workout-completion-modal"
-import { ChallengeCompletionModal } from "@/components/challenge-completion-modal"
-import { PostRunRpeModal } from "@/components/post-run-rpe-modal"
 import { type Run, type Workout, type User, type Route, type ChallengeProgress, type ChallengeTemplate } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { trackAnalyticsEvent } from "@/lib/analytics"
@@ -40,6 +35,31 @@ import { useGpsTracking, type GPSPoint } from "@/hooks/use-gps-tracking"
 import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
 import { useWakeLock } from "@/hooks/use-wake-lock"
 import { RecordingCheckpointService, type RecordingCheckpoint } from "@/lib/recording-checkpoint"
+
+const RouteSelectorModal = dynamic(
+  () => import("@/components/route-selector-modal").then((module) => ({ default: module.RouteSelectorModal })),
+  { ssr: false, loading: () => null },
+)
+const ManualRunModal = dynamic(
+  () => import("@/components/manual-run-modal").then((module) => ({ default: module.ManualRunModal })),
+  { ssr: false, loading: () => null },
+)
+const AddActivityModal = dynamic(
+  () => import("@/components/add-activity-modal").then((module) => ({ default: module.AddActivityModal })),
+  { ssr: false, loading: () => null },
+)
+const WorkoutCompletionModal = dynamic(
+  () => import("@/components/workout-completion-modal").then((module) => ({ default: module.WorkoutCompletionModal })),
+  { ssr: false, loading: () => null },
+)
+const ChallengeCompletionModal = dynamic(
+  () => import("@/components/challenge-completion-modal").then((module) => ({ default: module.ChallengeCompletionModal })),
+  { ssr: false, loading: () => null },
+)
+const PostRunRpeModal = dynamic(
+  () => import("@/components/post-run-rpe-modal").then((module) => ({ default: module.PostRunRpeModal })),
+  { ssr: false, loading: () => null },
+)
 
 type GPSCoordinate = GPSPoint
 
@@ -2714,23 +2734,74 @@ export function RecordScreen() {
         </Card>
       )}
 
-      {/* GPS Tracking Active - Show Full GPS Monitoring */}
+      {/* GPS Tracking Active - Show Signal Strength Bars */}
       {(isGpsTracking || isRunning) && !isInitializingGps && gpsPermission !== 'denied' && gpsPermission !== 'unsupported' && (
         <>
           {currentGPSAccuracy ? (
-            <GPSAccuracyIndicator
-              accuracy={currentGPSAccuracy}
-              compact
-              showTroubleshooting={false}
-            />
+            <Card className="border-0 bg-slate-900 text-white">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Satellite className={`h-5 w-5 ${
+                      currentGPSAccuracy.signalStrength >= 80 ? 'text-green-400' :
+                      currentGPSAccuracy.signalStrength >= 60 ? 'text-amber-400' :
+                      'text-red-400 animate-pulse'
+                    }`} />
+                    <span className="text-label-sm">GPS SIGNAL</span>
+                  </div>
+
+                  {/* Signal Strength Bars */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-0.5 items-end">
+                      {[1, 2, 3, 4, 5].map(bar => (
+                        <div
+                          key={bar}
+                          className={`w-1.5 rounded-full transition-all duration-300 ${
+                            bar <= Math.ceil(currentGPSAccuracy.signalStrength / 20)
+                              ? currentGPSAccuracy.signalStrength >= 80
+                                ? 'bg-green-400 glow-cyan'
+                                : currentGPSAccuracy.signalStrength >= 60
+                                ? 'bg-amber-400'
+                                : 'bg-red-400'
+                              : 'bg-gray-700'
+                          }`}
+                          style={{ height: `${bar * 4 + 4}px` }}
+                        />
+                      ))}
+                    </div>
+                    <span className={`text-sm font-bold tabular-nums ${
+                      currentGPSAccuracy.signalStrength >= 80 ? 'text-green-400' :
+                      currentGPSAccuracy.signalStrength >= 60 ? 'text-amber-400' :
+                      'text-red-400'
+                    }`}>
+                      {currentGPSAccuracy.signalStrength}%
+                    </span>
+                  </div>
+                </div>
+
+                {currentGPSAccuracy.accuracyRadius && (
+                  <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
+                    <span>Accuracy: ±{Math.round(currentGPSAccuracy.accuracyRadius)}m</span>
+                    <span className={`uppercase tracking-wide ${
+                      currentGPSAccuracy.quality === 'excellent' ? 'text-green-400' :
+                      currentGPSAccuracy.quality === 'good' ? 'text-cyan-400' :
+                      currentGPSAccuracy.quality === 'fair' ? 'text-amber-400' :
+                      'text-red-400'
+                    }`}>
+                      {currentGPSAccuracy.quality}
+                    </span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           ) : (
-            <Card className="border-yellow-200 bg-yellow-50">
+            <Card className="border-0 bg-amber-500/10 border-amber-500/30">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2">
-                  <Satellite className="h-5 w-5 text-yellow-600 animate-pulse" />
+                  <Satellite className="h-5 w-5 text-amber-400 animate-pulse" />
                   <div>
-                    <p className="font-medium text-yellow-900">Acquiring GPS Signal...</p>
-                    <p className="text-sm text-yellow-700">
+                    <p className="font-medium text-amber-200">Acquiring GPS Signal...</p>
+                    <p className="text-sm text-amber-300/80">
                       Waiting for first GPS fix. This may take up to 30 seconds.
                     </p>
                   </div>
@@ -2977,124 +3048,162 @@ export function RecordScreen() {
         </Card>
       )}
 
-      {/* Main Controls */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center space-y-6">
-            {/* Metrics Display */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-blue-600">
+      {/* Main Controls - Bold Athletic Minimalism */}
+      <Card className="border-0 shadow-2xl bg-slate-900 text-white overflow-hidden">
+        <CardContent className="p-8">
+          <div className="space-y-8">
+            {/* Giant Primary Metric - Distance */}
+            <div className="text-center">
+              <span className="text-label-sm text-cyan-400 glow-cyan">DISTANCE</span>
+              <div className="relative">
+                <span className="text-display-xl font-black tabular-nums block leading-none mt-2">
                   {metrics.distance.toFixed(2)}
-                </p>
-                <p className="text-sm text-gray-600">Distance (km)</p>
+                </span>
+                <span className="text-heading-lg text-gray-400 ml-2">KM</span>
               </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-green-600">
-                  {formatTime(metrics.duration)}
-                </p>
-                <p className="text-sm text-gray-600">Duration</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-purple-600">
-                  {formatPace(metrics.pace)}
-                </p>
-                <p className="text-sm text-gray-600">Pace (min/km)</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-orange-600">
-                  {Number.isFinite(metrics.currentSpeed) ? (metrics.currentSpeed * 3.6).toFixed(1) : '0.0'}
-                </p>
-                <p className="text-sm text-gray-600">Speed (km/h)</p>
-              </div>
-              {autoPauseEnabled && isRunning && (
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-orange-600">
-                    {autoPauseCount}
-                  </p>
-                  <p className="text-sm text-gray-600">Auto Pauses</p>
-                </div>
-              )}
             </div>
 
-            {/* Control Buttons */}
-            <div className="flex justify-center gap-4">
+            {/* Current Pace - Color Coded by Zone */}
+            <div className={`text-center p-6 rounded-3xl ${
+              metrics.currentPace === 0 || !Number.isFinite(metrics.currentPace)
+                ? 'bg-gray-800'
+                : metrics.currentPace < 300 // <5:00/km = hard
+                ? 'bg-gradient-to-r from-red-500 to-rose-600'
+                : metrics.currentPace < 360 // 5:00-6:00/km = moderate
+                ? 'bg-gradient-to-r from-amber-400 to-orange-500'
+                : 'bg-gradient-to-r from-lime-400 to-green-500' // >6:00/km = easy
+            }`}>
+              <span className="text-label-sm text-white/90">CURRENT PACE</span>
+              <div className="text-display-md font-black tabular-nums mt-2">
+                {metrics.currentPace > 0 && Number.isFinite(metrics.currentPace)
+                  ? formatPace(metrics.currentPace)
+                  : '--:--'}
+              </div>
+              <span className="text-xs text-white/80 mt-2 block uppercase tracking-wide">
+                {metrics.currentPace === 0 || !Number.isFinite(metrics.currentPace)
+                  ? 'No Data'
+                  : metrics.currentPace < 300
+                  ? 'Hard Effort'
+                  : metrics.currentPace < 360
+                  ? 'Moderate'
+                  : 'Easy Pace'}
+              </span>
+            </div>
+
+            {/* Time Elapsed */}
+            <div className="text-center">
+              <span className="text-label-sm text-gray-400">TIME ELAPSED</span>
+              <div className="text-display-lg font-mono font-black tabular-nums mt-2">
+                {formatTime(metrics.duration)}
+              </div>
+            </div>
+
+            {/* Secondary Metrics Grid */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-slate-800 rounded-2xl p-4 text-center">
+                <span className="text-label-sm text-gray-400">AVG PACE</span>
+                <div className="text-3xl font-black tabular-nums mt-2">
+                  {formatPace(metrics.pace)}
+                </div>
+              </div>
+              <div className="bg-slate-800 rounded-2xl p-4 text-center">
+                <span className="text-label-sm text-gray-400">SPEED</span>
+                <div className="text-3xl font-black tabular-nums mt-2">
+                  {Number.isFinite(metrics.currentSpeed) ? (metrics.currentSpeed * 3.6).toFixed(1) : '0.0'}
+                </div>
+                <span className="text-xs text-gray-400">km/h</span>
+              </div>
+            </div>
+
+            {autoPauseEnabled && isRunning && autoPauseCount > 0 && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3 text-center">
+                <span className="text-xs text-amber-300">Auto Pauses: {autoPauseCount}</span>
+              </div>
+            )}
+
+            {/* Circular Control Buttons */}
+            <div className="flex justify-center gap-6 pt-4">
               {!isRunning ? (
-                <>
-                  <Button
-                    onClick={startRun}
-                    size="lg"
-                    className="bg-green-600 hover:bg-green-700"
-                    disabled={gpsPermission === 'denied' || gpsPermission === 'unsupported' || isInitializingGps || isGpsWarmingUp}
-                  >
-                    {isInitializingGps || isGpsWarmingUp ? (
-                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                    ) : isGpsTracking && currentGPSAccuracy && currentGPSAccuracy.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START ? (
-                      <CheckCircle className="h-5 w-5 mr-2" />
-                    ) : (
-                      <Play className="h-5 w-5 mr-2" />
-                    )}
-                    {isInitializingGps ? 'Initializing GPS...' :
-                      isGpsWarmingUp ? 'Warming Up GPS...' :
-                        isGpsTracking && currentGPSAccuracy && currentGPSAccuracy.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START ?
-                          `Start Run (${currentGPSAccuracy.signalStrength}% GPS)` :
-                          'Start Run'}
-                  </Button>
-                </>
+                <Button
+                  onClick={startRun}
+                  className="h-32 w-32 rounded-full bg-gradient-to-r from-green-600 to-emerald-600
+                    shadow-2xl hover:shadow-3xl transition-all duration-300
+                    hover:scale-110 active:scale-95 glow-cyan border-0
+                    disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  disabled={gpsPermission === 'denied' || gpsPermission === 'unsupported' || isInitializingGps || isGpsWarmingUp}
+                >
+                  {isInitializingGps || isGpsWarmingUp ? (
+                    <Loader2 className="h-12 w-12 animate-spin text-white" />
+                  ) : isGpsTracking && currentGPSAccuracy && currentGPSAccuracy.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START ? (
+                    <CheckCircle className="h-12 w-12 text-white" />
+                  ) : (
+                    <Play className="h-12 w-12 text-white fill-white" />
+                  )}
+                </Button>
               ) : (
                 <>
                   {isPaused ? (
                     <Button
                       onClick={resumeRun}
-                      size="lg"
-                      className="bg-green-600 hover:bg-green-700"
+                      className="h-32 w-32 rounded-full bg-gradient-to-r from-green-600 to-emerald-600
+                        shadow-2xl hover:shadow-3xl transition-all duration-300
+                        hover:scale-110 active:scale-95 glow-cyan border-0"
                     >
-                      <Play className="h-5 w-5 mr-2" />
-                      Resume
+                      <Play className="h-12 w-12 text-white fill-white" />
                     </Button>
                   ) : (
                     <Button
                       onClick={pauseRun}
-                      size="lg"
-                      variant="outline"
+                      className="h-24 w-24 rounded-full border-4 border-amber-500
+                        bg-slate-800 hover:bg-slate-700 transition-all duration-300
+                        hover:scale-105 active:scale-95"
                     >
-                      <Pause className="h-5 w-5 mr-2" />
-                      Pause
+                      <Pause className="h-10 w-10 text-amber-400" />
                     </Button>
                   )}
                   <Button
                     onClick={stopRun}
-                    size="lg"
-                    variant="destructive"
+                    className="h-24 w-24 rounded-full border-4 border-red-600
+                      bg-slate-800 hover:bg-red-900/50 transition-all duration-300
+                      hover:scale-105 active:scale-95 relative overflow-hidden group"
                   >
-                    <Square className="h-5 w-5 mr-2" />
-                    Stop
+                    <Square className="h-10 w-10 text-red-500 fill-red-500" />
                   </Button>
                 </>
               )}
             </div>
 
-            {/* Manual Entry Option */}
+            {/* Status Text */}
             {!isRunning && (
-              <div className="pt-4 border-t space-y-2">
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowManualModal(true)}
-                  className="text-gray-600 w-full"
-                >
-                  <Volume2 className="h-4 w-4 mr-2" />
-                  Add Manual Run
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowAddActivityModal(true)}
-                  className="w-full"
-                >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Upload photo & use AI
-                </Button>
-              </div>
+              <p className="text-center text-label-sm text-gray-400">
+                {isInitializingGps ? 'INITIALIZING GPS...' :
+                  isGpsWarmingUp ? 'WARMING UP GPS...' :
+                    isGpsTracking && currentGPSAccuracy && currentGPSAccuracy.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START ?
+                      `GPS READY (${currentGPSAccuracy.signalStrength}%)` :
+                      'TAP TO START'}
+              </p>
             )}
+          {/* Manual Entry Option */}
+          {!isRunning && (
+            <div className="pt-4 border-t space-y-2">
+              <Button
+                variant="ghost"
+                onClick={() => setShowManualModal(true)}
+                className="text-gray-600 w-full"
+              >
+                <Volume2 className="h-4 w-4 mr-2" />
+                Add Manual Run
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowAddActivityModal(true)}
+                className="w-full"
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                Upload photo & use AI
+              </Button>
+            </div>
+          )}
           </div>
         </CardContent>
       </Card>
