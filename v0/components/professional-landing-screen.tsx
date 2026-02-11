@@ -11,7 +11,6 @@ import {
   ArrowRight,
   Award,
   Calendar,
-  ChevronRight,
   Clock,
   Heart,
   MessageSquare,

@@ -3183,29 +3183,27 @@ export function RecordScreen() {
                       'TAP TO START'}
               </p>
             )}
-          </div>
-
-            {/* Manual Entry Option */}
-            {!isRunning && (
-              <div className="pt-4 border-t space-y-2">
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowManualModal(true)}
-                  className="text-gray-600 w-full"
-                >
-                  <Volume2 className="h-4 w-4 mr-2" />
-                  Add Manual Run
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowAddActivityModal(true)}
-                  className="w-full"
-                >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Upload photo & use AI
-                </Button>
-              </div>
-            )}
+          {/* Manual Entry Option */}
+          {!isRunning && (
+            <div className="pt-4 border-t space-y-2">
+              <Button
+                variant="ghost"
+                onClick={() => setShowManualModal(true)}
+                className="text-gray-600 w-full"
+              >
+                <Volume2 className="h-4 w-4 mr-2" />
+                Add Manual Run
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowAddActivityModal(true)}
+                className="w-full"
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                Upload photo & use AI
+              </Button>
+            </div>
+          )}
           </div>
         </CardContent>
       </Card>
