@@ -2,12 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Precision Athlete Editorial typography system */
+/* Modern Athletic typography system */
 :root {
-  --font-display: "Newsreader";
-  --font-body: "Instrument Sans";
-  --font-hebrew-display: "Rubik";
-  --font-hebrew-body: "Varela Round";
+  --font-display: "Inter";
+  --font-body: "Inter";
+  --font-hebrew-display: "Heebo";
+  --font-hebrew-body: "Heebo";
 }
 
 body {
@@ -16,9 +16,9 @@ body {
 
 /* Display/Heading fonts for English */
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-display), Georgia, serif;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-family: var(--font-display), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 
 /* Hebrew language support with distinctive fonts */
@@ -69,7 +69,7 @@ h1, h2, h3, h4, h5, h6 {
   }
 
   .font-display {
-    font-family: var(--font-display), Georgia, serif;
+    font-family: var(--font-display), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
 
   [lang="he"] .font-display,

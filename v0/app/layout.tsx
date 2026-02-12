@@ -12,9 +12,9 @@ import { ServiceWorkerRegister } from '@/components/service-worker-register'
 import { DataProvider } from '@/contexts/DataContext'
 import { AuthProvider } from '@/lib/auth-context'
 
-// Precision Athlete Editorial typography system
-// English: Newsreader for display, Instrument Sans for body
-// Hebrew: Rubik for headers, Varela Round for body
+// Modern Athletic typography system
+// English: Inter for display and body
+// Hebrew: Heebo for display and body
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ??
@@ -87,7 +87,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Rubik:wght@400;500;700&family=Varela+Round&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Heebo:wght@400;500;600;700;800&display=swap"
           rel="stylesheet"
         />
         {/* Resource hints for external services */}
