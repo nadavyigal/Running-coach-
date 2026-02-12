@@ -706,85 +706,24 @@ export function ProfessionalLandingScreen({
             initial="hidden"
             whileInView="show"
             viewport={{ once: true, margin: "-100px" }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-8"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
           >
-            {/* Row 1: Chat (1 col) + Adaptive (2 cols) */}
-            <motion.div
-              variants={itemVariants}
-              className="md:col-span-1 bg-white rounded-3xl p-8 border border-border shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
-            >
-              <div className={`h-16 w-16 ${featureCards[0].tone} rounded-2xl flex items-center justify-center mb-6`}>
-                <MessageSquare className="h-7 w-7" />
-              </div>
-              <h3 className="text-xl font-semibold text-foreground mb-3 leading-tight">{featureCards[0].title}</h3>
-              <p className="text-base text-foreground/70 leading-relaxed">{featureCards[0].description}</p>
-            </motion.div>
-
-            <motion.div
-              variants={itemVariants}
-              className="md:col-span-2 bg-white rounded-3xl p-8 border border-border shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
-            >
-              <div className={`h-16 w-16 ${featureCards[1].tone} rounded-2xl flex items-center justify-center mb-6`}>
-                <Calendar className="h-7 w-7" />
-              </div>
-              <h3 className="text-xl font-semibold text-foreground mb-3 leading-tight">{featureCards[1].title}</h3>
-              <p className="text-base text-foreground/70 leading-relaxed">{featureCards[1].description}</p>
-            </motion.div>
-
-            {/* Row 2: Recovery (full width, giant icon) */}
-            <motion.div
-              variants={itemVariants}
-              className="md:col-span-3 bg-white rounded-3xl p-10 border border-border shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
-            >
-              <div className="flex flex-col md:flex-row items-center gap-8">
-                <div className={`h-24 w-24 ${featureCards[2].tone} rounded-3xl flex items-center justify-center flex-shrink-0`}>
-                  <Heart className="h-10 w-10" />
-                </div>
-                <div>
-                  <h3 className="text-2xl md:text-3xl font-semibold text-foreground mb-3 leading-tight">{featureCards[2].title}</h3>
-                  <p className="text-base md:text-lg text-foreground/70 leading-relaxed">{featureCards[2].description}</p>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Row 3: Goal (2 cols) + Race (1 col) */}
-            <motion.div
-              variants={itemVariants}
-              className="md:col-span-2 bg-white rounded-3xl p-8 border border-border shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
-            >
-              <div className={`h-16 w-16 ${featureCards[3].tone} rounded-2xl flex items-center justify-center mb-6`}>
-                <Target className="h-7 w-7" />
-              </div>
-              <h3 className="text-xl font-semibold text-foreground mb-3 leading-tight">{featureCards[3].title}</h3>
-              <p className="text-base text-foreground/70 leading-relaxed">{featureCards[3].description}</p>
-            </motion.div>
-
-            <motion.div
-              variants={itemVariants}
-              className="md:col-span-1 bg-white rounded-3xl p-8 border border-border shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
-            >
-              <div className={`h-16 w-16 ${featureCards[4].tone} rounded-2xl flex items-center justify-center mb-6`}>
-                <Trophy className="h-7 w-7" />
-              </div>
-              <h3 className="text-xl font-semibold text-foreground mb-3 leading-tight">{featureCards[4].title}</h3>
-              <p className="text-base text-foreground/70 leading-relaxed">{featureCards[4].description}</p>
-            </motion.div>
-
-            {/* Row 4: Challenges (full width) */}
-            <motion.div
-              variants={itemVariants}
-              className="md:col-span-3 bg-white rounded-3xl p-10 border border-border shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
-            >
-              <div className="flex flex-col md:flex-row items-center gap-8">
-                <div className={`h-24 w-24 ${featureCards[5].tone} rounded-3xl flex items-center justify-center flex-shrink-0`}>
-                  <Zap className="h-10 w-10" />
-                </div>
-                <div>
-                  <h3 className="text-2xl md:text-3xl font-semibold text-foreground mb-3 leading-tight">{featureCards[5].title}</h3>
-                  <p className="text-base md:text-lg text-foreground/70 leading-relaxed">{featureCards[5].description}</p>
-                </div>
-              </div>
-            </motion.div>
+            {featureCards.map((feature, index) => {
+              const Icon = feature.icon;
+              return (
+                <motion.div
+                  key={index}
+                  variants={itemVariants}
+                  className="bg-white rounded-3xl p-8 border border-border shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
+                >
+                  <div className={`h-16 w-16 ${feature.tone} rounded-2xl flex items-center justify-center mb-6`}>
+                    <Icon className="h-7 w-7" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-foreground mb-3 leading-tight">{feature.title}</h3>
+                  <p className="text-base text-foreground/70 leading-relaxed">{feature.description}</p>
+                </motion.div>
+              );
+            })}
           </motion.div>
         </div>
       </section>
