@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react"
-import dynamic from "next/dynamic"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -29,16 +28,28 @@ import {
   UserPlus,
   Users,
 } from "lucide-react"
+import { AddRunModal } from "@/components/add-run-modal"
+import { AddActivityModal } from "@/components/add-activity-modal"
+import { RouteSelectorModal } from "@/components/route-selector-modal"
+import { RescheduleModal } from "@/components/reschedule-modal"
+import { DateWorkoutModal } from "@/components/date-workout-modal"
 import ModalErrorBoundary from "@/components/modal-error-boundary"
 import { type Workout, type Route, type Goal, type RecoveryScore, resetDatabaseInstance } from "@/lib/db"
 import { dbUtils, getUserPaceZones } from "@/lib/dbUtils"
 import { useData, useGoalProgress } from "@/contexts/DataContext"
+import { WorkoutPhasesDisplay } from "@/components/workout-phases-display"
 import { generateStructuredWorkout, type StructuredWorkout } from "@/lib/workout-steps"
 import { getDefaultPaceZones } from "@/lib/pace-zones"
-import type { GoalProgress } from "@/lib/goalProgressEngine"
+import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine"
 import { useToast } from "@/hooks/use-toast"
 import { markRecapNotificationShown, shouldShowWeeklyRecapNotification } from "@/lib/weekly-recap-scheduler"
 import { trackAnalyticsEvent } from "@/lib/analytics"
+import { CommunityStatsWidget } from "@/components/community-stats-widget"
+import { GoalRecommendations } from "@/components/goal-recommendations"
+import { HabitAnalyticsWidget } from "@/components/habit-analytics-widget"
+import { WeeklyRecapNotificationBanner } from "@/components/weekly-recap-notification-banner"
+import { WeeklyRecapWidget } from "@/components/weekly-recap-widget"
+import { AuthModal } from "@/components/auth/auth-modal"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,6 +62,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { ENABLE_WEEKLY_RECAP } from "@/lib/featureFlags"
 import { useAuth } from "@/lib/auth-context"
+import { SyncStatusIndicator } from "@/components/sync-status-indicator"
 import { useBetaSignupCount } from "@/lib/hooks/useBetaSignupCount"
 import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
 import { ChallengeProgressRing } from "@/components/challenge-progress-ring"
@@ -58,79 +70,8 @@ import { DailyChallengePrompt } from "@/components/daily-challenge-prompt"
 import { getActiveChallenge, getDailyChallengeData } from "@/lib/challengeEngine"
 import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db"
 import type { DailyChallengeData } from "@/lib/challengeEngine"
-import type { CoachConfidenceResult } from "@/lib/coach-confidence"
-
-const DAILY_TIPS = [
-  "Focus on your breathing rhythm today. Try the 3:2 pattern - inhale for 3 steps, exhale for 2 steps.",
-  "Remember to warm up with 5 minutes of walking before starting your run. This helps prevent injury.",
-  "Stay hydrated! Drink water throughout the day, not just during your run.",
-  "Listen to your body. If something feels wrong, it's okay to take a rest day. Recovery is part of training too.",
-  "Consistency beats intensity. Show up regularly, even if it's just a short run.",
-  "Track your progress! Celebrate small wins - every kilometer counts towards your goal.",
-]
-
-const WORKOUT_COLOR_MAP: Record<string, string> = {
-  easy: "bg-green-500",
-  tempo: "bg-orange-500",
-  intervals: "bg-pink-500",
-  long: "bg-blue-500",
-  rest: "bg-gray-400",
-  "time-trial": "bg-red-500",
-  hill: "bg-purple-500",
-}
-
-const AddRunModal = dynamic(
-  () => import("@/components/add-run-modal").then((module) => ({ default: module.AddRunModal })),
-  { ssr: false, loading: () => null },
-)
-const AddActivityModal = dynamic(
-  () => import("@/components/add-activity-modal").then((module) => ({ default: module.AddActivityModal })),
-  { ssr: false, loading: () => null },
-)
-const RouteSelectorModal = dynamic(
-  () => import("@/components/route-selector-modal").then((module) => ({ default: module.RouteSelectorModal })),
-  { ssr: false, loading: () => null },
-)
-const RescheduleModal = dynamic(
-  () => import("@/components/reschedule-modal").then((module) => ({ default: module.RescheduleModal })),
-  { ssr: false, loading: () => null },
-)
-const DateWorkoutModal = dynamic(
-  () => import("@/components/date-workout-modal").then((module) => ({ default: module.DateWorkoutModal })),
-  { ssr: false, loading: () => null },
-)
-const WorkoutPhasesDisplay = dynamic(
-  () => import("@/components/workout-phases-display").then((module) => ({ default: module.WorkoutPhasesDisplay })),
-  { ssr: false, loading: () => null },
-)
-const CommunityStatsWidget = dynamic(
-  () => import("@/components/community-stats-widget").then((module) => ({ default: module.CommunityStatsWidget })),
-  { ssr: false, loading: () => null },
-)
-const GoalRecommendations = dynamic(
-  () => import("@/components/goal-recommendations").then((module) => ({ default: module.GoalRecommendations })),
-  { ssr: false, loading: () => null },
-)
-const HabitAnalyticsWidget = dynamic(
-  () => import("@/components/habit-analytics-widget").then((module) => ({ default: module.HabitAnalyticsWidget })),
-  { ssr: false, loading: () => null },
-)
-const WeeklyRecapNotificationBanner = dynamic(
-  () => import("@/components/weekly-recap-notification-banner").then((module) => ({ default: module.WeeklyRecapNotificationBanner })),
-  { ssr: false, loading: () => null },
-)
-const WeeklyRecapWidget = dynamic(
-  () => import("@/components/weekly-recap-widget").then((module) => ({ default: module.WeeklyRecapWidget })),
-  { ssr: false, loading: () => null },
-)
-const AuthModal = dynamic(
-  () => import("@/components/auth/auth-modal").then((module) => ({ default: module.AuthModal })),
-  { ssr: false, loading: () => null },
-)
-const SyncStatusIndicator = dynamic(
-  () => import("@/components/sync-status-indicator").then((module) => ({ default: module.SyncStatusIndicator })),
-  { ssr: false, loading: () => null },
-)
+import { RecoveryEngine } from "@/lib/recoveryEngine"
+import { calculateCoachConfidence, type CoachConfidenceResult } from "@/lib/coach-confidence"
 
 export function TodayScreen() {
   // Get shared data from context
@@ -148,7 +89,9 @@ export function TodayScreen() {
 
   // Use centralized goal progress calculation
   const goalProgress = useGoalProgress(primaryGoal)
-  const [dailyTip, setDailyTip] = useState(() => DAILY_TIPS[0] ?? "Focus on your breathing rhythm today.")
+  const [dailyTip, setDailyTip] = useState(
+    "Focus on your breathing rhythm today. Try the 3:2 pattern - inhale for 3 steps, exhale for 2 steps. This will help you maintain a steady pace!",
+  )
 
   const [recoverySnapshot, setRecoverySnapshot] = useState<RecoveryScore | null>(null)
   const [recoveryTrend, setRecoveryTrend] = useState<{ delta: number; direction: 'up' | 'down' | 'flat' } | null>(null)
@@ -172,7 +115,7 @@ export function TodayScreen() {
   const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate } | null>(null)
   const [dailyChallengeData, setDailyChallengeData] = useState<DailyChallengeData | null>(null)
   const [workoutToDelete, setWorkoutToDelete] = useState<number | null>(null)
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(() => new Date())
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(new Date())
   const { toast } = useToast()
   const [showWeeklyRecapNotification, setShowWeeklyRecapNotification] = useState(false)
   const [recapOpenSignal, setRecapOpenSignal] = useState(0)
@@ -253,6 +196,15 @@ export function TodayScreen() {
     }
   }, [authUser, authLoading])
 
+  const tips = [
+    "Focus on your breathing rhythm today. Try the 3:2 pattern - inhale for 3 steps, exhale for 2 steps.",
+    "Remember to warm up with 5 minutes of walking before starting your run. This helps prevent injury.",
+    "Stay hydrated! Drink water throughout the day, not just during your run.",
+    "Listen to your body. If something feels wrong, it's okay to take a rest day. Recovery is part of training too.",
+    "Consistency beats intensity. Show up regularly, even if it's just a short run.",
+    "Track your progress! Celebrate small wins - every kilometer counts towards your goal.",
+  ]
+
   const getDaysRemaining = (goal?: Goal | null) => {
     if (!goal?.timeBound?.deadline) return null
     const deadline = new Date(goal.timeBound.deadline)
@@ -261,9 +213,9 @@ export function TodayScreen() {
   }
 
   const refreshTip = () => {
-    const currentIndex = DAILY_TIPS.indexOf(dailyTip)
-    const nextIndex = (currentIndex + 1) % DAILY_TIPS.length
-    setDailyTip(DAILY_TIPS.at(nextIndex) ?? DAILY_TIPS[0] ?? dailyTip)
+    const currentIndex = tips.indexOf(dailyTip)
+    const nextIndex = (currentIndex + 1) % tips.length
+    setDailyTip(tips.at(nextIndex) ?? tips[0] ?? dailyTip)
   }
 
   const getRecoveryLabel = (score: number) => {
@@ -365,20 +317,12 @@ export function TodayScreen() {
       try {
         setIsLoadingRecovery(true)
         const today = new Date()
-        const [{ RecoveryEngine }, { calculateCoachConfidence }] = await Promise.all([
-          import('@/lib/recoveryEngine'),
-          import('@/lib/coach-confidence'),
-        ])
-
         let score = await RecoveryEngine.getRecoveryScore(userId, today)
         if (!score) {
           score = await RecoveryEngine.calculateRecoveryScore(userId, today)
         }
 
-        const [trends, confidence] = await Promise.all([
-          RecoveryEngine.getRecoveryTrends(userId, 7),
-          calculateCoachConfidence(userId, today),
-        ])
+        const trends = await RecoveryEngine.getRecoveryTrends(userId, 7)
         const sortedTrends = trends.slice().sort((a, b) => {
           const aDate = (a.scoreDate ?? a.date ?? a.createdAt) as Date
           const bDate = (b.scoreDate ?? b.date ?? b.createdAt) as Date
@@ -388,6 +332,8 @@ export function TodayScreen() {
         const previous = sortedTrends.at(1)
         const delta = current && previous ? current.overallScore - previous.overallScore : 0
         const direction = delta > 2 ? 'up' : delta < -2 ? 'down' : 'flat'
+
+        const confidence = await calculateCoachConfidence(userId, today)
 
         if (!cancelled) {
           setRecoverySnapshot(score)
@@ -438,11 +384,8 @@ export function TodayScreen() {
       }
 
       try {
-        const [paceZonesResult, user] = await Promise.all([
-          getUserPaceZones(userId),
-          dbUtils.getCurrentUser(),
-        ])
-        let paceZones = paceZonesResult
+        // Get user's pace zones (from VDOT or defaults)
+        let paceZones = await getUserPaceZones(userId)
         console.log("[TodayScreen] Got pace zones:", paceZones ? "yes" : "null")
 
         if (!paceZones) {
@@ -452,6 +395,7 @@ export function TodayScreen() {
         }
 
         // Get user experience level for workout structure
+        const user = await dbUtils.getCurrentUser()
         const experience = user?.experience || 'intermediate'
 
         console.log("[TodayScreen] Generating structured workout:", {
@@ -488,7 +432,6 @@ export function TodayScreen() {
       }
 
       try {
-        const { GoalProgressEngine } = await import("@/lib/goalProgressEngine")
         const engine = new GoalProgressEngine()
         const progress = await engine.calculateGoalProgress(primaryGoal.id)
         setEngineGoalProgress(progress)
@@ -552,6 +495,17 @@ export function TodayScreen() {
     }
   }
 
+  // Calendar days
+  const workoutColorMap: { [key: string]: string } = {
+    easy: "bg-green-500",
+    tempo: "bg-orange-500",
+    intervals: "bg-pink-500",
+    long: "bg-blue-500",
+    rest: "bg-gray-400",
+    "time-trial": "bg-red-500",
+    hill: "bg-purple-500",
+  }
+
   const resolveWorkoutForDate = async (date: Date) => {
     const matchesDate = (workout: Workout) =>
       new Date(workout.scheduledDate).toDateString() === date.toDateString()
@@ -587,7 +541,7 @@ export function TodayScreen() {
       fullDate: date,
       isToday: date.toDateString() === new Date().toDateString(),
       hasWorkout: !!workout,
-      workoutColor: workout ? WORKOUT_COLOR_MAP[workout.type] : undefined,
+      workoutColor: workout ? workoutColorMap[workout.type] : undefined,
       workoutType: workout?.type,
     }
   })
@@ -605,7 +559,7 @@ export function TodayScreen() {
         type: workout.type,
         distance: `${workout.distance}km`,
         completed: workout.completed,
-        color: WORKOUT_COLOR_MAP[workout.type] || "bg-gray-500",
+        color: workoutColorMap[workout.type] || "bg-gray-500",
         date: workoutDate,
         dateString: workoutDate.toLocaleDateString("en-US", {
           weekday: "long",
@@ -665,11 +619,8 @@ export function TodayScreen() {
     }
   }
 
-  // Use stats from context for consistency
-  const totalRuns = weeklyStats.runsCompleted
-  const plannedRuns = weeklyStats.plannedWorkouts
-  const consistency = weeklyStats.consistencyRate
-  const streak = useMemo(() => {
+  // Calculate progress stats
+  const calculateStreak = () => {
     if (!weeklyWorkouts.length) return 0
     const sortedWorkouts = [...weeklyWorkouts]
       .filter((w) => w.completed && w.type !== "rest")
@@ -681,7 +632,7 @@ export function TodayScreen() {
 
     if (sortedWorkouts.length === 0) return 0
 
-    let count = 0
+    let streak = 0
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
@@ -696,14 +647,20 @@ export function TodayScreen() {
       )
 
       if (daysDiff === i) {
-        count++
+        streak++
       } else {
         break
       }
     }
 
-    return count
-  }, [weeklyWorkouts])
+    return streak
+  }
+
+  // Use stats from context for consistency
+  const totalRuns = weeklyStats.runsCompleted
+  const plannedRuns = weeklyStats.plannedWorkouts
+  const consistency = weeklyStats.consistencyRate
+  const streak = calculateStreak()
   const recoveryScoreValue = recoverySnapshot?.overallScore ?? 50
   const recoveryConfidenceValue = coachConfidence?.confidence ?? 0
   const recoveryNextStep = coachConfidence?.nextSteps?.[0] ?? 'Complete your morning check-in'
@@ -824,24 +781,24 @@ export function TodayScreen() {
           </div>
         </div>
 
-        {/* Streak & Weekly Progress */}
-        <div className="grid grid-cols-2 gap-4">
-          <Card className="border-0 bg-gradient-to-br from-orange-400 to-red-500 text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">
-            <CardContent className="p-5 text-center">
-              <Flame className="h-7 w-7 mx-auto mb-2 text-white/90" />
-              <div className="text-4xl font-black mb-1 leading-none">
+        {/* Streak & Challenge Progress */}
+        <div className="grid grid-cols-2 gap-3">
+          <Card className="border">
+            <CardContent className="p-4 text-center">
+              <Flame className="h-6 w-6 text-orange-500 mx-auto mb-2" />
+              <div className="text-3xl font-bold text-gray-900 mb-1">
                 {streak}
               </div>
-              <div className="text-label-sm text-white/90">DAY STREAK</div>
+              <div className="text-xs font-medium text-gray-600">Day Streak</div>
             </CardContent>
           </Card>
-          <Card className="border-0 bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">
-            <CardContent className="p-5 text-center">
-              <BarChart3 className="h-7 w-7 mx-auto mb-2 text-white/90" />
-              <div className="text-4xl font-black mb-1 leading-none">
+          <Card className="border">
+            <CardContent className="p-4 text-center">
+              <BarChart3 className="h-6 w-6 text-blue-500 mx-auto mb-2" />
+              <div className="text-3xl font-bold text-gray-900 mb-1">
                 {totalRuns}/{plannedRuns}
               </div>
-              <div className="text-label-sm text-white/90">THIS WEEK</div>
+              <div className="text-xs font-medium text-gray-600">This Week</div>
             </CardContent>
           </Card>
         </div>
@@ -849,120 +806,54 @@ export function TodayScreen() {
 
       {userId && (
         <div className="px-4">
-          <Card className="relative overflow-hidden border-0">
-            {/* Radial gradient background matching score color */}
-            <div
-              className={`absolute inset-0 ${
-                recoveryScoreValue >= 80
-                  ? 'bg-gradient-to-br from-emerald-400/20 to-teal-500/20'
-                  : recoveryScoreValue >= 65
-                  ? 'bg-gradient-to-br from-amber-400/20 to-orange-500/20'
-                  : 'bg-gradient-to-br from-rose-400/20 to-red-500/20'
-              }`}
-            />
-            <CardContent className="relative p-8">
-              {/* Giant Circular Progress Ring */}
-              <div className="flex flex-col items-center justify-center">
-                <div className="relative">
-                  {isLoadingRecovery ? (
-                    <div className="w-48 h-48 flex items-center justify-center">
-                      <Loader2 className="h-12 w-12 animate-spin text-gray-400" />
+          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-900 text-white shadow-[0_20px_60px_rgba(16,185,129,0.25)]">
+            <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-emerald-400/20 blur-3xl" />
+            <div className="absolute -left-20 bottom-0 h-44 w-44 rounded-full bg-teal-400/20 blur-3xl" />
+            <CardContent className="relative space-y-4 p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">Today&apos;s Recovery</p>
+                  <div className="mt-2 flex items-end gap-3">
+                    {isLoadingRecovery ? (
+                      <Loader2 className="h-8 w-8 animate-spin text-emerald-200" />
+                    ) : (
+                      <span className="text-5xl font-bold">{recoveryScoreValue}</span>
+                    )}
+                    <div className="flex items-center gap-1 text-sm text-emerald-100/80">
+                      {recoveryTrend?.direction === 'up' ? (
+                        <TrendingUp className="h-4 w-4" />
+                      ) : recoveryTrend?.direction === 'down' ? (
+                        <TrendingDown className="h-4 w-4" />
+                      ) : (
+                        <Minus className="h-4 w-4" />
+                      )}
+                      <span>
+                        {recoveryTrend?.delta
+                          ? `${Math.abs(Math.round(recoveryTrend.delta))} pts`
+                          : 'No change'}
+                      </span>
                     </div>
-                  ) : (
-                    <>
-                      <svg className="w-48 h-48 transform -rotate-90">
-                        {/* Background circle */}
-                        <circle
-                          cx="96"
-                          cy="96"
-                          r="88"
-                          className="stroke-gray-200"
-                          strokeWidth="16"
-                          fill="none"
-                        />
-                        {/* Progress circle */}
-                        <circle
-                          cx="96"
-                          cy="96"
-                          r="88"
-                          className={`transition-all duration-1000 ${
-                            recoveryScoreValue >= 80
-                              ? 'stroke-emerald-500'
-                              : recoveryScoreValue >= 65
-                              ? 'stroke-amber-500'
-                              : 'stroke-rose-500'
-                          }`}
-                          strokeWidth="16"
-                          fill="none"
-                          strokeDasharray={`${(recoveryScoreValue / 100) * 553} 553`}
-                          strokeLinecap="round"
-                        />
-                      </svg>
-
-                      {/* Score in center */}
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-display-lg font-black text-gray-900">
-                          {recoveryScoreValue}
-                        </span>
-                        <span className="text-label-sm text-gray-600 mt-1">RECOVERY</span>
-                        <div className="flex items-center gap-1 mt-2">
-                          {recoveryTrend?.direction === 'up' ? (
-                            <>
-                              <TrendingUp className="h-4 w-4 text-green-600" />
-                              <span className="text-xs font-semibold text-green-600">
-                                +{Math.abs(Math.round(recoveryTrend.delta))} pts
-                              </span>
-                            </>
-                          ) : recoveryTrend?.direction === 'down' ? (
-                            <>
-                              <TrendingDown className="h-4 w-4 text-red-600" />
-                              <span className="text-xs font-semibold text-red-600">
-                                {Math.round(recoveryTrend.delta)} pts
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-xs text-gray-500">No change</span>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Recovery Label & Recommendation */}
-                <div className="mt-6 text-center space-y-2">
-                  <Badge
-                    className={`${
-                      recoveryScoreValue >= 80
-                        ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
-                        : recoveryScoreValue >= 65
-                        ? 'bg-amber-100 text-amber-700 border-amber-300'
-                        : 'bg-rose-100 text-rose-700 border-rose-300'
-                    } text-xs font-semibold uppercase tracking-wide`}
-                  >
-                    {getRecoveryLabel(recoveryScoreValue)}
-                  </Badge>
-                  <p className="text-sm text-gray-700 font-medium">
+                  </div>
+                  <p className="mt-2 text-sm text-emerald-100/80">
                     {getRecoveryRecommendation(recoveryScoreValue)}
                   </p>
                 </div>
+                <Badge className="bg-white/10 text-emerald-100 border border-emerald-200/30">
+                  {getRecoveryLabel(recoveryScoreValue)}
+                </Badge>
+              </div>
 
-                {/* Coach Confidence Bar */}
-                <div className="mt-6 w-full max-w-xs">
-                  <div className="rounded-2xl bg-gray-50 border border-gray-200 p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-label-sm text-gray-600">COACH CONFIDENCE</span>
-                      <span className="text-sm font-bold text-gray-900">
-                        {recoveryConfidenceValue}%
-                      </span>
-                    </div>
-                    <Progress
-                      value={recoveryConfidenceValue}
-                      className="h-2 bg-gray-200"
-                    />
-                    <p className="mt-2 text-xs text-gray-600">{recoveryNextStep}</p>
-                  </div>
+              <div className="rounded-xl bg-white/10 p-4">
+                <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-emerald-100/70">
+                  <span>Coach Confidence</span>
+                  <span className="text-sm font-semibold normal-case">{recoveryConfidenceValue}%</span>
                 </div>
+                <div className="mt-3">
+                  <Progress value={recoveryConfidenceValue} className="h-2 bg-white/20" />
+                </div>
+                <p className="mt-2 text-xs text-emerald-100/80">
+                  {recoveryNextStep}
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -1135,235 +1026,185 @@ export function TodayScreen() {
         </Card>
       </div>
 
-      {/* Calendar Strip - Timeline Nodes */}
+      {/* Calendar Strip with Staggered Animations */}
       <div className="px-4 animate-in fade-in-0 slide-in-from-left duration-500 delay-200">
-        <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {calendarDays.map((day, index) => {
             const isSelected = day.fullDate.toDateString() === selectedCalendarDate.toDateString()
             return (
               <button
                 key={index}
-                className="flex-shrink-0 flex flex-col items-center min-w-[60px] group"
+                className={`flex-shrink-0 text-center p-3 rounded-xl min-w-[70px] transition-all duration-300 hover:scale-105 active:scale-95 ${isSelected
+                  ? "bg-blue-500 text-white shadow-lg scale-105"
+                  : "bg-white border border-gray-200 hover:shadow-md"
+                  }`}
                 style={{ animationDelay: `${200 + index * 50}ms` }}
                 onClick={() => handleDateClick(day)}
               >
-                {/* Timeline node */}
-                <div
-                  className={`w-14 h-14 rounded-full border-4 flex items-center justify-center
-                    transition-all duration-300 transform
-                    ${
-                      day.isToday
-                        ? 'bg-gradient-energy border-orange-500 scale-125 shadow-xl glow-yellow'
-                        : isSelected
-                        ? 'bg-gradient-focus border-purple-500 scale-110 shadow-lg'
-                        : 'bg-white border-gray-200 group-hover:border-gray-400 group-hover:scale-105'
-                    }`}
-                >
-                  <span
-                    className={`font-black text-lg ${
-                      day.isToday || isSelected ? 'text-white' : 'text-gray-900'
-                    }`}
-                  >
-                    {day.date}
-                  </span>
-                </div>
-
-                {/* Workout indicator */}
+                <div className="text-xs font-semibold mb-1">{day.day}</div>
+                <div className="text-2xl font-bold mb-1">{day.date}</div>
                 {day.hasWorkout && (
-                  <div
-                    className={`mt-2 w-2 h-2 rounded-full animate-pulse ${
-                      day.workoutColor?.replace('bg-', 'bg-') || 'bg-cyan-400 glow-cyan'
-                    }`}
-                  />
+                  <div className="flex justify-center">
+                    <div
+                      className={`w-2 h-2 rounded-full ${isSelected
+                        ? "bg-white"
+                        : day.workoutColor || "bg-green-500"
+                        }`}
+                    />
+                  </div>
                 )}
-
-                {/* Day name */}
-                <span
-                  className={`text-xs mt-1 font-medium uppercase tracking-wide ${
-                    day.isToday ? 'text-orange-600' : 'text-gray-600'
-                  }`}
-                >
-                  {day.day.slice(0, 3)}
-                </span>
               </button>
             )
           })}
         </div>
       </div>
 
-      {/* Today's Workout - Split Screen Layout */}
+      {/* Today's Workout */}
       <div className="px-4">
         {isLoadingWorkout ? (
           <Card className="h-64 flex items-center justify-center border">
             <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
           </Card>
         ) : todaysWorkout ? (
-          <Card className="overflow-hidden border-0 shadow-2xl">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
-              {/* Left: Workout Details with Gradient */}
-              <div className="relative p-8 bg-gradient-to-br from-indigo-600 via-purple-600 to-purple-700 text-white overflow-hidden">
-                {/* Background distance watermark */}
-                <span className="absolute bottom-4 left-4 text-[8rem] font-black text-white/10 leading-none select-none pointer-events-none">
-                  {todaysWorkout.distance || todaysWorkout.duration}
+          <Card className="border shadow-lg">
+            <CardHeader>
+              <div className="flex items-center gap-2 mb-3">
+                <Badge variant="secondary" className="uppercase tracking-wider">
+                  Today
+                </Badge>
+                <span className="text-sm text-gray-500">
+                  {todaysWorkout.scheduledDate
+                    ? new Date(todaysWorkout.scheduledDate).toLocaleDateString(
+                      "en-US",
+                      { month: "short", day: "numeric" }
+                    )
+                    : ""}
                 </span>
-
-                <div className="relative z-10 space-y-4">
-                  <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm">
-                    {todaysWorkout.scheduledDate
-                      ? new Date(todaysWorkout.scheduledDate).toLocaleDateString(
-                          "en-US",
-                          { month: "short", day: "numeric" }
-                        )
-                      : "TODAY"}
-                  </Badge>
-
-                  <h3 className="text-heading-lg text-white leading-tight">
-                    {todaysWorkout.type.charAt(0).toUpperCase() +
-                      todaysWorkout.type.slice(1)}{" "}
-                    Run
-                  </h3>
-
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <StretchHorizontal className="h-6 w-6 text-white/80" />
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-white/70">Distance</p>
-                        <p className="text-2xl font-black">
-                          {todaysWorkout.distance
-                            ? `${todaysWorkout.distance} km`
-                            : `${todaysWorkout.duration} min`}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <Clock className="h-6 w-6 text-white/80" />
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-white/70">
-                          Estimated Time
-                        </p>
-                        <p className="text-2xl font-black">
-                          {todaysWorkout.duration
-                            ? `${Math.max(20, todaysWorkout.duration - 5)}-${
-                                todaysWorkout.duration + 5
-                              }m`
-                            : `${Math.round(todaysWorkout.distance! * 5)}-${Math.round(
-                                todaysWorkout.distance! * 7
-                              )}m`}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* View Details Button */}
-                  <Button
-                    variant="ghost"
-                    className="text-white border-white/30 hover:bg-white/10 mt-4"
-                    onClick={() => setShowWorkoutBreakdown(!showWorkoutBreakdown)}
-                  >
-                    {showWorkoutBreakdown ? (
-                      <ChevronUp className="h-4 w-4 mr-2" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 mr-2" />
-                    )}
-                    Workout Phases
-                  </Button>
+              </div>
+              <CardTitle className="text-2xl font-bold mb-2 text-gray-900">
+                {todaysWorkout.type.charAt(0).toUpperCase() +
+                  todaysWorkout.type.slice(1)}{" "}
+                Run
+              </CardTitle>
+              <div className="flex items-center gap-4 text-gray-700">
+                <div className="flex items-center gap-2">
+                  <StretchHorizontal className="h-5 w-5" />
+                  <span className="font-semibold">
+                    {todaysWorkout.distance
+                      ? `${todaysWorkout.distance} km`
+                      : `${todaysWorkout.duration} min`}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="h-5 w-5" />
+                  <span className="font-semibold">
+                    {todaysWorkout.duration
+                      ? `${Math.max(20, todaysWorkout.duration - 5)}-${todaysWorkout.duration + 5
+                      }m`
+                      : `${Math.round(todaysWorkout.distance! * 5)}-${Math.round(
+                        todaysWorkout.distance! * 7
+                      )}m`}
+                  </span>
                 </div>
               </div>
+            </CardHeader>
 
-              {/* Right: Giant Start Button */}
-              <div className="p-8 flex flex-col items-center justify-center bg-gray-50 space-y-4">
+            <CardContent className="space-y-4">
+              {/* Quick Actions */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <Button
+                  variant="default"
+                  size="lg"
                   onClick={startRecordFlow}
-                  className="h-40 w-40 rounded-full bg-gradient-energy
-                    shadow-2xl hover:shadow-3xl transition-all duration-300
-                    hover:scale-110 active:scale-95 animate-pulse-glow border-0"
                 >
-                  <Play className="h-16 w-16 text-white fill-white" />
+                  <Play className="h-5 w-5 mr-2" />
+                  Start Run
                 </Button>
-                <p className="text-label-sm text-gray-600">TAP TO START</p>
-
-                {/* Secondary Actions */}
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="lg"
                   onClick={() => setShowRouteSelectorModal(true)}
-                  className="mt-2"
                 >
-                  <MapPin className="h-4 w-4 mr-2" />
+                  <MapPin className="h-5 w-5 mr-2" />
                   Select Route
                 </Button>
-
-                {selectedRoute && (
-                  <div className="mt-4 bg-white rounded-xl border border-gray-200 p-3 text-sm w-full">
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-purple-600" />
-                      <span className="font-semibold text-gray-900">
-                        {selectedRoute.name}
-                      </span>
-                    </div>
-                    {selectedRoute.distance && (
-                      <span className="text-xs text-gray-600 ml-6">
-                        {selectedRoute.distance} km
-                      </span>
-                    )}
-                  </div>
-                )}
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  onClick={() => setShowWorkoutBreakdown(!showWorkoutBreakdown)}
+                >
+                  {showWorkoutBreakdown ? (
+                    <ChevronUp className="h-5 w-5 mr-2" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 mr-2" />
+                  )}
+                  Details
+                </Button>
               </div>
-            </div>
 
-            {/* Workout Breakdown - Collapsible */}
-            {showWorkoutBreakdown && (
-              <div className="bg-white border-t border-gray-200 p-6 animate-in fade-in-0 slide-in-from-top-4 duration-300">
-                <h4 className="text-label-lg text-gray-700 mb-4">WORKOUT PHASES</h4>
-                {structuredWorkout ? (
-                  <WorkoutPhasesDisplay workout={structuredWorkout} />
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-gray-400" />
-                      <span className="text-sm text-gray-600">
-                        Warm-up: 5-10 min easy pace
-                      </span>
+              {/* Workout Breakdown - Garmin Style */}
+              {showWorkoutBreakdown && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3 animate-in fade-in-0 slide-in-from-top-4 duration-300">
+                  <h4 className="font-semibold text-sm uppercase tracking-wide text-gray-700">
+                    Workout Phases
+                  </h4>
+                  {structuredWorkout ? (
+                    <WorkoutPhasesDisplay workout={structuredWorkout} />
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-gray-400" />
+                        <span className="text-sm text-gray-600">Warm-up: 5-10 min easy pace</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-gray-800" />
+                        <span className="text-sm font-semibold text-gray-900">
+                          Main: {todaysWorkout.distance}km at target pace
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-gray-400" />
+                        <span className="text-sm text-gray-600">Cool-down: 5 min walk</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-purple-600" />
-                      <span className="text-sm font-semibold text-gray-900">
-                        Main: {todaysWorkout.distance}km at target pace
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-gray-400" />
-                      <span className="text-sm text-gray-600">Cool-down: 5 min walk</span>
-                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedRoute && (
+                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 text-sm flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4" />
+                    <span className="font-semibold">{selectedRoute.name}</span>
                   </div>
-                )}
-              </div>
-            )}
+                  {selectedRoute.distance && (
+                    <span className="text-white/80">{selectedRoute.distance} km</span>
+                  )}
+                </div>
+              )}
+            </CardContent>
           </Card>
         ) : (
-          <Card className="text-center py-12 border-0 shadow-xl">
+          <Card className="text-center py-12">
             <CardContent>
-              <div className="w-24 h-24 bg-gradient-recovery rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl">
-                <Award className="h-12 w-12 text-white" />
+              <div className="w-16 h-16 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center mx-auto mb-4">
+                <Award className="h-8 w-8 text-white" />
               </div>
-              <h3 className="text-heading-lg mb-3">Rest Day</h3>
-              <p className="text-gray-600 text-base max-w-sm mx-auto mb-6">
+              <h3 className="text-xl font-bold mb-2">Rest Day</h3>
+              <p className="text-gray-600 text-sm">
                 Recovery is just as important as training. Enjoy your rest!
               </p>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                <Button
-                  onClick={startRecordFlow}
-                  className="bg-gradient-energy hover:scale-105 transition-transform"
-                >
-                  <Play className="h-4 w-4 mr-2" />
+              <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <Button onClick={startRecordFlow} className="gap-2">
+                  <Play className="h-4 w-4" />
                   Record a Run
                 </Button>
                 <Button
                   variant="outline"
+                  className="gap-2"
                   onClick={() => setShowRouteSelectorModal(true)}
                 >
-                  <MapPin className="h-4 w-4 mr-2" />
+                  <MapPin className="h-4 w-4" />
                   Choose Route
                 </Button>
               </div>
@@ -1374,7 +1215,7 @@ export function TodayScreen() {
 
       {ENABLE_WEEKLY_RECAP && userId && (
         <div className="px-4 mt-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-450">
-          <WeeklyRecapWidget userId={userId} openRecapSignal={recapOpenSignal} />
+      <WeeklyRecapWidget userId={userId} openRecapSignal={recapOpenSignal} />
         </div>
       )}
 
@@ -1429,48 +1270,31 @@ export function TodayScreen() {
         </Card>
       </div>
 
-      {/* Progress Stats - Bento Grid Layout */}
-      <div className="px-4 grid grid-cols-3 gap-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-600">
-        {/* Streak - Double Width with Gradient */}
-        <div className="col-span-2 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-3xl p-6 text-white shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
-          <Flame className="h-8 w-8 mb-3 text-white/90" />
-          <span className="text-display-md font-black block leading-none">{streak}</span>
-          <span className="text-label-sm block mt-2 text-white/90">DAY STREAK</span>
-        </div>
-
-        {/* Weekly Runs */}
-        <div className="bg-white rounded-3xl p-6 border-2 border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-          <BarChart3 className="h-6 w-6 text-blue-500 mb-2" />
-          <span className="text-5xl font-black text-gray-900 block leading-none">
-            {totalRuns}
-          </span>
-          <span className="text-label-sm block mt-2 text-gray-600">THIS WEEK</span>
-        </div>
-
-        {/* Consistency */}
-        <div className="bg-white rounded-3xl p-6 border-2 border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-          <TrendingUp className="h-6 w-6 text-purple-500 mb-2" />
-          <span className="text-5xl font-black text-gray-900 block leading-none">
-            {consistency}%
-          </span>
-          <span className="text-label-sm block mt-2 text-gray-600">CONSISTENCY</span>
-        </div>
-
-        {/* Completed - Double Width */}
-        <div className="col-span-2 bg-white rounded-3xl p-6 border-2 border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-          <Award className="h-6 w-6 text-amber-500 mb-2" />
-          <div className="flex items-baseline gap-2">
-            <span className="text-5xl font-black text-gray-900 leading-none">
+      {/* Progress Stats - Bento Grid */}
+      <div className="px-4 grid grid-cols-3 gap-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-600">
+        <Card className="col-span-1 hover:-translate-y-1">
+          <CardContent className="p-4 text-center">
+            <TrendingUp className="h-5 w-5 text-primary mx-auto mb-2" />
+            <div className="text-2xl font-bold text-gray-900">{totalRuns}</div>
+            <div className="text-xs text-gray-600 mt-1">Runs</div>
+          </CardContent>
+        </Card>
+        <Card className="col-span-1 hover:-translate-y-1">
+          <CardContent className="p-4 text-center">
+            <BarChart3 className="h-5 w-5 text-accent mx-auto mb-2" />
+            <div className="text-2xl font-bold text-gray-900">{consistency}%</div>
+            <div className="text-xs text-gray-600 mt-1">Rate</div>
+          </CardContent>
+        </Card>
+        <Card className="col-span-1 hover:-translate-y-1">
+          <CardContent className="p-4 text-center">
+            <Award className="h-5 w-5 text-warning mx-auto mb-2" />
+            <div className="text-2xl font-bold text-gray-900">
               {weeklyWorkouts.filter((w) => w.completed).length}
-            </span>
-            <span className="text-3xl font-black text-gray-400 leading-none">
-              / {plannedRuns}
-            </span>
-          </div>
-          <span className="text-label-sm block mt-2 text-gray-600">
-            WORKOUTS COMPLETED
-          </span>
-        </div>
+            </div>
+            <div className="text-xs text-gray-600 mt-1">Done</div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Widgets Section - Stacked with Animations */}
@@ -1504,72 +1328,60 @@ export function TodayScreen() {
         )}
       </div>
 
-      {showAuthModal && (
-        <AuthModal
-          open={showAuthModal}
-          onOpenChange={setShowAuthModal}
-          defaultTab={authModalTab}
-        />
-      )}
+      <AuthModal
+        open={showAuthModal}
+        onOpenChange={setShowAuthModal}
+        defaultTab={authModalTab}
+      />
 
       {/* Modals - wrapped with error boundaries to prevent app crashes */}
-      {showAddRunModal && (
-        <ModalErrorBoundary modalName="Add Run" onClose={() => setShowAddRunModal(false)}>
-          <AddRunModal
-            open={showAddRunModal}
-            onOpenChange={setShowAddRunModal}
-            onRunAdded={refreshWorkouts}
-          />
-        </ModalErrorBoundary>
-      )}
+      <ModalErrorBoundary modalName="Add Run" onClose={() => setShowAddRunModal(false)}>
+        <AddRunModal
+          open={showAddRunModal}
+          onOpenChange={setShowAddRunModal}
+          onRunAdded={refreshWorkouts}
+        />
+      </ModalErrorBoundary>
 
-      {showAddActivityModal && (
-        <ModalErrorBoundary modalName="Add Activity" onClose={() => setShowAddActivityModal(false)}>
-          <AddActivityModal
-            open={showAddActivityModal}
-            onOpenChange={setShowAddActivityModal}
-            onActivityAdded={refreshWorkouts}
-          />
-        </ModalErrorBoundary>
-      )}
+      <ModalErrorBoundary modalName="Add Activity" onClose={() => setShowAddActivityModal(false)}>
+        <AddActivityModal
+          open={showAddActivityModal}
+          onOpenChange={setShowAddActivityModal}
+          onActivityAdded={refreshWorkouts}
+        />
+      </ModalErrorBoundary>
 
-      {showRouteSelectorModal && (
-        <ModalErrorBoundary modalName="Route Selector" onClose={() => setShowRouteSelectorModal(false)}>
-          <RouteSelectorModal
-            isOpen={showRouteSelectorModal}
-            onClose={() => setShowRouteSelectorModal(false)}
-            onRouteSelected={handleRouteSelected}
-          />
-        </ModalErrorBoundary>
-      )}
+      <ModalErrorBoundary modalName="Route Selector" onClose={() => setShowRouteSelectorModal(false)}>
+        <RouteSelectorModal
+          isOpen={showRouteSelectorModal}
+          onClose={() => setShowRouteSelectorModal(false)}
+          onRouteSelected={handleRouteSelected}
+        />
+      </ModalErrorBoundary>
 
-      {showRescheduleModal && (
-        <ModalErrorBoundary modalName="Reschedule" onClose={() => setShowRescheduleModal(false)}>
-          <RescheduleModal
-            isOpen={showRescheduleModal}
-            onClose={() => setShowRescheduleModal(false)}
-          />
-        </ModalErrorBoundary>
-      )}
+      <ModalErrorBoundary modalName="Reschedule" onClose={() => setShowRescheduleModal(false)}>
+        <RescheduleModal
+          isOpen={showRescheduleModal}
+          onClose={() => setShowRescheduleModal(false)}
+        />
+      </ModalErrorBoundary>
 
-      {showDateWorkoutModal && (
-        <ModalErrorBoundary
-          modalName="Date Workout"
+      <ModalErrorBoundary
+        modalName="Date Workout"
+        onClose={() => {
+          setShowDateWorkoutModal(false)
+          setSelectedDateWorkout(null)
+        }}
+      >
+        <DateWorkoutModal
+          isOpen={showDateWorkoutModal}
           onClose={() => {
             setShowDateWorkoutModal(false)
             setSelectedDateWorkout(null)
           }}
-        >
-          <DateWorkoutModal
-            isOpen={showDateWorkoutModal}
-            onClose={() => {
-              setShowDateWorkoutModal(false)
-              setSelectedDateWorkout(null)
-            }}
-            workout={selectedDateWorkout}
-          />
-        </ModalErrorBoundary>
-      )}
+          workout={selectedDateWorkout}
+        />
+      </ModalErrorBoundary>
       {/*
       Adaptive coaching removed from Today screen.
       (Coaching insights, recovery recommendations, and coaching preferences modal)

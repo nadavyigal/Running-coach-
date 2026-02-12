@@ -11,6 +11,7 @@ import {
   ArrowRight,
   Award,
   Calendar,
+  ChevronRight,
   Clock,
   Heart,
   MessageSquare,
@@ -423,136 +424,126 @@ export function ProfessionalLandingScreen({
 
   return (
     <div className="min-h-screen bg-white" dir={isHebrew ? 'rtl' : 'ltr'} lang={isHebrew ? 'he' : 'en'}>
-      {/* Hero Section - Diagonal Split */}
-      <section className="relative min-h-screen overflow-hidden">
-        {/* Language Switcher - Absolute positioned */}
-        <div className="absolute top-6 left-6 z-50">
-          <LanguageSwitcher
-            language={language}
-            onChange={setLanguagePreference}
-            variant="default"
+      {/* Hero Section */}
+      <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden">
+        {/* Background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
+          <div className="absolute inset-0 bg-[url('/images/runsmart-intro-bg.jpg')] bg-cover bg-center opacity-20" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/50 to-white" />
+          {/* Subtle noise texture for depth */}
+          <div
+            className="absolute inset-0 opacity-[0.015]"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+            }}
           />
-        </div>
-
-        <button
-          type="button"
-          onClick={handleExistingAccount}
-          className="absolute top-6 right-6 z-50 text-white/90 hover:text-white font-medium text-sm"
-        >
-          {copy.existingAccount}
-        </button>
-
-        {/* Left 60% - Gradient Background with Content */}
-        <div className="absolute inset-0 w-3/5 bg-gradient-to-br from-orange-500 via-rose-500 to-purple-600 flex items-center justify-center p-12">
-          <div className="relative z-10 max-w-2xl">
-            {/* Logo */}
-            <div className="flex justify-start mb-8">
-              <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-white/20 backdrop-blur-sm border-2 border-white/30 shadow-xl">
-                <img
-                  src="/images/runsmart-logo-1.png"
-                  alt="RunSmart"
-                  className="h-12 w-12 object-contain"
-                />
-              </div>
-            </div>
-
-            {/* Beta Badge */}
-            <div className="flex gap-3 mb-8 flex-wrap">
-              <Badge className="bg-white/20 text-white border-white/30 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-                <Zap className="h-4 w-4 mr-2 fill-current" />
-                {copy.earlyAccessBadge}
-              </Badge>
-              <Badge className="bg-white/20 text-white border-white/30 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-                <Clock className="h-4 w-4 mr-2" />
-                {copy.earlyAccessDeadline}
-              </Badge>
-            </div>
-
-            {/* Headline - GIANT text-display-xl (96px) */}
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="text-display-xl text-white mb-8 leading-none font-black"
-            >
-              {copy.heroTitleTop}
-              <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">
-                {copy.heroTitleHighlight}
-              </span>
-            </motion.h1>
-
-            {/* Subheading */}
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
-              className="text-2xl text-white/90 mb-10 leading-relaxed"
-            >
-              {copy.heroSubtitle}
-            </motion.p>
-
-            {/* Social Proof Badges */}
-            <div className="flex items-center gap-3 mb-12 flex-wrap">
-              <Badge className="bg-white/20 text-white border-white/30 px-4 py-2 backdrop-blur-sm">
-                <Activity className="h-4 w-4 mr-2" />
-                {copy.socialProof.plans}
-              </Badge>
-              <Badge className="bg-white/20 text-white border-white/30 px-4 py-2 backdrop-blur-sm">
-                <Target className="h-4 w-4 mr-2" />
-                {copy.socialProof.tracking}
-              </Badge>
-              <Badge className="bg-yellow-400/90 text-black border-yellow-300 px-4 py-2 font-bold">
-                <Award className="h-4 w-4 mr-2" />
-                {copy.socialProof.spots}
-              </Badge>
-            </div>
-
-            {/* Primary CTA - Neon Yellow, h-16 */}
-            <div className="flex flex-col items-start gap-4 max-w-md">
-              <Button
-                size="lg"
-                className="h-16 px-12 text-lg bg-gradient-to-r from-yellow-400 to-yellow-300 hover:from-yellow-300 hover:to-yellow-200 text-black font-black rounded-2xl shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105 uppercase tracking-wide"
-                onClick={handleHeroCta}
-              >
-                {copy.ctaPrimary}
-                <ArrowRight className="ml-3 h-6 w-6" />
-              </Button>
-
-              <p className="text-sm text-white/80">{copy.ctaSubtext}</p>
-            </div>
+          {/* Giant background text for visual interest */}
+          <div className="absolute top-1/2 right-0 -translate-y-1/2 translate-x-1/4 pointer-events-none select-none overflow-hidden">
+            <span className="text-[18rem] md:text-[28rem] font-black text-emerald-900/[0.03] leading-none tracking-tighter">
+              AI
+            </span>
           </div>
         </div>
 
-        {/* Right 40% - Black Background with Runner Placeholder */}
-        <div className="absolute right-0 top-0 bottom-0 w-2/5 bg-black flex items-center justify-center">
-          {/* Runner silhouette placeholder - using Activity icon as fallback */}
-          <div className="relative">
-            <div className="w-96 h-96 flex items-center justify-center">
-              <Activity className="w-64 h-64 text-cyan-400 opacity-20 animate-pulse-glow" />
-            </div>
-
-            {/* Motion lines */}
-            <div className="absolute -left-12 top-1/2 -translate-y-1/2 space-y-3">
-              {[...Array(5)].map((_, i) => (
-                <div
-                  key={i}
-                  className="h-1.5 bg-gradient-to-r from-cyan-400 to-transparent rounded-full animate-pulse"
-                  style={{
-                    width: `${(5 - i) * 40}px`,
-                    animationDelay: `${i * 0.1}s`,
-                  }}
-                />
-              ))}
+        {/* Content */}
+        <div className="relative z-10 max-w-7xl mx-auto px-6 py-12 text-center">
+          <div className={`flex items-center justify-between mb-10 text-sm ${isHebrew ? 'flex-row-reverse' : ''}`}>
+            <LanguageSwitcher
+              language={language}
+              onChange={setLanguagePreference}
+              variant="default"
+            />
+            <button
+              type="button"
+              onClick={handleExistingAccount}
+              className="text-emerald-700 hover:text-emerald-800 font-medium"
+            >
+              {copy.existingAccount}
+            </button>
+          </div>
+          {/* Logo */}
+          <div className="flex justify-center mb-8">
+            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-white/80 backdrop-blur-sm border-2 border-emerald-200 shadow-xl">
+              <img
+                src="/images/runsmart-logo-1.png"
+                alt="RunSmart"
+                className="h-12 w-12 object-contain"
+              />
             </div>
           </div>
-        </div>
 
-        {/* Diagonal SVG Divider */}
-        <div className="absolute inset-0 w-full h-full pointer-events-none">
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
-            <path d="M 60 0 L 100 0 L 100 100 L 40 100 Z" fill="black" />
-          </svg>
+          {/* Beta Badge */}
+          <div className="flex justify-center mb-6 flex-wrap gap-3">
+            <Badge className="bg-emerald-500/20 text-emerald-700 border-emerald-300 px-4 py-2 text-sm font-medium">
+              <Zap className="h-4 w-4 mr-2 fill-current" />
+              {copy.earlyAccessBadge}
+            </Badge>
+            <Badge className="bg-white/80 text-gray-700 border-gray-300 px-4 py-2 text-sm font-medium">
+              <Clock className="h-4 w-4 mr-2" />
+              {copy.earlyAccessDeadline}
+            </Badge>
+          </div>
+
+          {/* Headline with animation */}
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="text-5xl md:text-7xl font-extrabold text-gray-900 mb-6 leading-tight tracking-tight"
+          >
+            {copy.heroTitleTop}
+            <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600">
+              {copy.heroTitleHighlight}
+            </span>
+          </motion.h1>
+
+          {/* Subheading with animation */}
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+            className="text-xl md:text-2xl text-gray-700 mb-8 max-w-2xl mx-auto leading-relaxed"
+          >
+            {copy.heroSubtitle}
+          </motion.p>
+
+          {/* Social Proof */}
+          <div className="flex items-center justify-center gap-3 mb-10 flex-wrap">
+            <Badge variant="outline" className="bg-white/80 text-gray-700 border-gray-300 px-4 py-2">
+              <Activity className="h-4 w-4 mr-2" />
+              {copy.socialProof.plans}
+            </Badge>
+            <Badge variant="outline" className="bg-white/80 text-gray-700 border-gray-300 px-4 py-2">
+              <Target className="h-4 w-4 mr-2" />
+              {copy.socialProof.tracking}
+            </Badge>
+            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300 px-4 py-2">
+              <Award className="h-4 w-4 mr-2" />
+              {copy.socialProof.spots}
+            </Badge>
+          </div>
+
+          {/* Primary CTA */}
+          <div className="flex flex-col items-center gap-4 max-w-md mx-auto">
+            <Button
+              size="lg"
+              className="w-full h-14 text-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl transition-all duration-200"
+              onClick={handleHeroCta}
+            >
+              {copy.ctaPrimary}
+              <ChevronRight className="ml-2 h-5 w-5" />
+            </Button>
+
+            <p className="text-sm text-gray-500">{copy.ctaSubtext}</p>
+            <button
+              type="button"
+              onClick={handleExistingAccount}
+              className="text-sm text-emerald-700 hover:text-emerald-800 font-medium"
+            >
+              {copy.ctaExisting}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -572,7 +563,7 @@ export function ProfessionalLandingScreen({
                   placeholder={copy.placeholders.name}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="h-16 rounded-xl border-gray-300 text-lg"
+                  className="h-12 rounded-xl border-gray-300 text-base"
                 />
               </div>
               <div className="flex-1">
@@ -581,7 +572,7 @@ export function ProfessionalLandingScreen({
                   placeholder={copy.placeholders.email}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="h-16 rounded-xl border-gray-300 text-lg"
+                  className="h-12 rounded-xl border-gray-300 text-base"
                 />
               </div>
               <Button
@@ -610,7 +601,7 @@ export function ProfessionalLandingScreen({
                   }
                   revealChallenges();
                 }}
-                className="h-16 px-8 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-semibold"
+                className="h-12 px-8 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-semibold"
               >
                 {copy.continue}
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -704,122 +695,24 @@ export function ProfessionalLandingScreen({
             initial="hidden"
             whileInView="show"
             viewport={{ once: true, margin: "-100px" }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-8"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
           >
-            {/* Row 1: Chat (1 col) + Adaptive (2 cols) */}
-            <motion.div
-              variants={itemVariants}
-              className="md:col-span-1 bg-white rounded-3xl p-10 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
-            >
-              {/* Noise texture overlay */}
-              <div
-                className="absolute inset-0 opacity-[0.03] pointer-events-none"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-                }}
-              />
-              <div className={`h-32 w-32 bg-gradient-to-br ${featureCards[0].gradient} rounded-3xl flex items-center justify-center mb-8 shadow-lg`}>
-                <MessageSquare className="h-16 w-16 text-white" />
-              </div>
-              <h3 className="text-heading-lg font-bold text-gray-900 mb-4">{featureCards[0].title}</h3>
-              <p className="text-gray-600 text-lg leading-relaxed">{featureCards[0].description}</p>
-            </motion.div>
-
-            <motion.div
-              variants={itemVariants}
-              className="md:col-span-2 bg-white rounded-3xl p-10 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
-            >
-              <div
-                className="absolute inset-0 opacity-[0.03] pointer-events-none"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-                }}
-              />
-              <div className={`h-32 w-32 bg-gradient-to-br ${featureCards[1].gradient} rounded-3xl flex items-center justify-center mb-8 shadow-lg`}>
-                <Calendar className="h-16 w-16 text-white" />
-              </div>
-              <h3 className="text-heading-lg font-bold text-gray-900 mb-4">{featureCards[1].title}</h3>
-              <p className="text-gray-600 text-lg leading-relaxed">{featureCards[1].description}</p>
-            </motion.div>
-
-            {/* Row 2: Recovery (full width, giant icon) */}
-            <motion.div
-              variants={itemVariants}
-              className="md:col-span-3 bg-white rounded-3xl p-12 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
-            >
-              <div
-                className="absolute inset-0 opacity-[0.03] pointer-events-none"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-                }}
-              />
-              <div className="flex flex-col md:flex-row items-center gap-8">
-                <div className={`h-40 w-40 bg-gradient-to-br ${featureCards[2].gradient} rounded-3xl flex items-center justify-center shadow-2xl flex-shrink-0`}>
-                  <Heart className="h-20 w-20 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-display-md font-black text-gray-900 mb-4 leading-tight">{featureCards[2].title}</h3>
-                  <p className="text-gray-600 text-xl leading-relaxed">{featureCards[2].description}</p>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Row 3: Goal (2 cols) + Race (1 col) */}
-            <motion.div
-              variants={itemVariants}
-              className="md:col-span-2 bg-white rounded-3xl p-10 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
-            >
-              <div
-                className="absolute inset-0 opacity-[0.03] pointer-events-none"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-                }}
-              />
-              <div className={`h-32 w-32 bg-gradient-to-br ${featureCards[3].gradient} rounded-3xl flex items-center justify-center mb-8 shadow-lg`}>
-                <Target className="h-16 w-16 text-white" />
-              </div>
-              <h3 className="text-heading-lg font-bold text-gray-900 mb-4">{featureCards[3].title}</h3>
-              <p className="text-gray-600 text-lg leading-relaxed">{featureCards[3].description}</p>
-            </motion.div>
-
-            <motion.div
-              variants={itemVariants}
-              className="md:col-span-1 bg-white rounded-3xl p-10 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
-            >
-              <div
-                className="absolute inset-0 opacity-[0.03] pointer-events-none"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-                }}
-              />
-              <div className={`h-32 w-32 bg-gradient-to-br ${featureCards[4].gradient} rounded-3xl flex items-center justify-center mb-8 shadow-lg`}>
-                <Trophy className="h-16 w-16 text-white" />
-              </div>
-              <h3 className="text-heading-lg font-bold text-gray-900 mb-4">{featureCards[4].title}</h3>
-              <p className="text-gray-600 text-lg leading-relaxed">{featureCards[4].description}</p>
-            </motion.div>
-
-            {/* Row 4: Challenges (full width) */}
-            <motion.div
-              variants={itemVariants}
-              className="md:col-span-3 bg-white rounded-3xl p-12 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
-            >
-              <div
-                className="absolute inset-0 opacity-[0.03] pointer-events-none"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-                }}
-              />
-              <div className="flex flex-col md:flex-row items-center gap-8">
-                <div className={`h-40 w-40 bg-gradient-to-br ${featureCards[5].gradient} rounded-3xl flex items-center justify-center shadow-2xl flex-shrink-0`}>
-                  <Zap className="h-20 w-20 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-display-md font-black text-gray-900 mb-4 leading-tight">{featureCards[5].title}</h3>
-                  <p className="text-gray-600 text-xl leading-relaxed">{featureCards[5].description}</p>
-                </div>
-              </div>
-            </motion.div>
+            {featureCards.map((feature) => {
+              const Icon = feature.icon;
+              return (
+                <motion.div
+                  key={feature.title}
+                  variants={itemVariants}
+                  className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow"
+                >
+                  <div className={`h-14 w-14 bg-gradient-to-br ${feature.gradient} rounded-2xl flex items-center justify-center mb-6`}>
+                    <Icon className="h-7 w-7 text-white" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-3">{feature.title}</h3>
+                  <p className="text-gray-600 leading-relaxed">{feature.description}</p>
+                </motion.div>
+              );
+            })}
           </motion.div>
         </div>
       </section>
