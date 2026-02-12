@@ -1,0 +1,224 @@
+You are a senior product engineer + product manager working inside my running coach repo.
+
+Your task:
+Create a detailed Markdown product + engineering plan that specifies and breaks down the following 5 quick wins for my SmartRun application, so I can use it as the execution blueprint in Codex.
+
+Project links (context):
+- Live app: https://www.runsmart-ai.com/?screen=profile
+- Vercel deployment: https://vercel.com/nadavyigal-gmailcoms-projects/running-coach
+- GitHub repo: https://github.com/nadavyigal/Running-coach-.git
+
+Quick wins to specify in detail:
+1) GPS reliability + trust features (accuracy filtering, smoothing, auto-pause, quality indicator)
+2) Post-run “Run Report” (AI + visuals + share card)
+3) Audio coaching MVP (interval cues + pacing prompts)
+4) Streaks + weekly goal widget + weekly recap
+5) Plan → execution loop (“Today’s workout” + completion + light adaptation)
+
+RULES
+- DO NOT implement code changes yet (this step is only documentation + plan).
+- DO scan the repo first and reference REAL files, components, DB tables, and routes.
+- If something is missing, mark it clearly as “Missing / To Add” and propose the simplest addition.
+- Be specific, practical, and execution-ready (checklists, acceptance criteria, event names, etc.).
+
+STEP 0 — REPO SCAN (must do first)
+1) Inspect the current structure:
+   - Find the run recording screen/component (likely something like record-screen.tsx).
+   - Find GPS tracking logic (watchPosition usage, permission flow, cleanup).
+   - Find run storage model/table (runs), and any “runReport” field.
+   - Find AI endpoints/routes (OpenAI usage) related to insights, plans, or reports.
+   - Find any analytics setup (PostHog events or client).
+   - Find current UI screens: Record Run, Run History, Run Details, Plans (if exists), Profile.
+
+2) Write a short “Current State Summary” section in the doc:
+   - What exists today (features that already work)
+   - What is partially implemented
+   - Where the known pain is (GPS accuracy, missing report UX, etc.)
+   - The most relevant file paths you found
+
+OUTPUT REQUIREMENT
+Create ONE markdown file in the repo:
+
+/docs/quickwins/SMART_RUN_QUICK_WINS_EXECUTION_PLAN.md
+
+The file must include:
+
+# SMART RUN — 5 QUICK WINS EXECUTION PLAN
+
+## 1) Executive Summary
+- What we’re building (1 paragraph)
+- Why these 5 quick wins matter (1 paragraph)
+- What success looks like in 14 days (bullets)
+
+## 2) Benchmark-Inspired Product Principles (short)
+Include 6–10 principles like:
+- Trust before features (GPS accuracy first)
+- “Win in 10 minutes” onboarding
+- Plan → execute → analyze → adapt loop
+- Audio-first coaching as retention
+- Shareable moments
+
+## 3) Quick Wins Overview Table
+A table with columns:
+- Quick Win
+- User Value
+- Primary KPI
+- Effort (S/M/L)
+- Dependencies
+- Risk Level
+- Suggested Order
+
+## 4) Detailed Specs (repeat the following template for each quick win)
+
+For EACH quick win, include:
+
+### (A) Goal / Why it matters
+- 2–4 bullets
+
+### (B) User Stories
+- 3–6 user stories (runner-first)
+
+### (C) UX Requirements (very concrete)
+- What screens change
+- What new UI components appear
+- What states exist (loading/error/empty)
+- Copy text examples (short)
+
+### (D) Data + Logic Requirements
+- What data do we need during the run / after run
+- Calculations needed (pace, splits, smoothing, streak logic, etc.)
+- Edge cases & constraints
+
+### (E) Backend / API / DB changes (if needed)
+- New or updated fields
+- New API routes (if needed)
+- Contract example (JSON)
+- Must stay minimal
+
+### (F) Implementation Task Breakdown (engineer checklist)
+Provide a checklist with subtasks grouped by:
+- Frontend
+- Backend
+- Data/DB
+- AI prompts (if relevant)
+- Analytics
+Each subtask should be actionable, e.g. “Add `gps_quality_state` computed from accuracy rolling average”.
+
+### (G) Acceptance Criteria (testable)
+Provide 6–12 checks per quick win:
+- Functional checks
+- Performance checks
+- Reliability checks
+- Visual/UI checks
+
+### (H) Analytics / PostHog Events
+Define the exact event names and properties for each feature:
+Examples:
+- run_start
+- run_end
+- gps_quality_changed
+- auto_pause_triggered
+- report_generated
+- report_viewed
+- share_clicked
+- audio_prompt_played
+- streak_updated
+- weekly_recap_viewed
+- workout_started
+- workout_completed
+
+For each event, specify:
+- Trigger moment
+- Required properties
+- Why it matters
+
+### (I) Rollout Plan (feature flags)
+- Flag name
+- Who gets it first
+- How to verify safely
+
+### (J) Risks & Mitigations
+- 3–6 items per quick win
+
+### (K) Definition of Done
+- 4–6 bullets
+
+## 5) Execution Timeline (7–14 days)
+Provide a realistic roadmap that sequences the work:
+
+- Day 1–2: GPS reliability foundation
+- Day 3–4: Run Report MVP
+- Day 5: Share card
+- Day 6–7: Audio coaching MVP
+- Day 8–9: Streaks + weekly goal
+- Day 10–12: Plan → execution loop
+- Day 13–14: Hardening + QA + analytics review
+
+Include a “ship order” and why.
+
+## 6) QA Plan (must be strong)
+- Manual test cases
+- GPS simulation strategy
+- Comparison testing (Garmin vs SmartRun)
+- Regression checks for mobile browsers
+
+## 7) “Nice-to-have later” (do not scope creep)
+List 6–12 future items (e.g., Garmin structured workouts push, advanced VO2max estimation, etc.)
+
+CONTENT REQUIREMENTS PER QUICK WIN (VERY IMPORTANT)
+Below are the minimum details you must include for each quick win.
+
+--------------------------------------------------------------------
+QUICK WIN #1 — GPS RELIABILITY + TRUST FEATURES
+Must include:
+- GPS quality indicator logic (accuracy rolling avg)
+- Filtering & smoothing rules (drop points above threshold, median smoothing)
+- Auto-pause rules (speed threshold + time hysteresis)
+- Distance sanity validation
+- Cleanup bug checks (watchPosition clear)
+- UI: live distance/pace stability, “GPS Weak” warning
+
+--------------------------------------------------------------------
+QUICK WIN #2 — POST-RUN RUN REPORT (AI + VISUALS + SHARE CARD)
+Must include:
+- Report structure sections (summary, pacing, splits, insights, next step)
+- Minimum charts (pace over time, split table)
+- AI prompt outline (1 insight + 1 improvement + 1 next workout suggestion)
+- Where report is generated (client vs server) and stored (runs table runReport)
+- Share card design spec (IG story + square)
+
+--------------------------------------------------------------------
+QUICK WIN #3 — AUDIO COACHING MVP
+Must include:
+- TTS approach (web speech / fallback)
+- Cue types: pace correction + interval timer prompts
+- At least 3 workout presets (easy run, intervals, tempo)
+- Safety: do not spam prompts, cooldown time between prompts
+- UI toggles: enable/disable voice + volume/test button
+
+--------------------------------------------------------------------
+QUICK WIN #4 — STREAKS + WEEKLY GOALS + WEEKLY RECAP
+Must include:
+- Streak definition (consecutive weeks with ≥X runs)
+- Weekly goal tracking (target runs/week)
+- Recap delivery method (in-app banner + optional email later)
+- UI widget spec on Home/Profile
+- Metrics: retention, weekly active runners, streak continuation
+
+--------------------------------------------------------------------
+QUICK WIN #5 — PLAN → EXECUTION LOOP (“TODAY’S WORKOUT”)
+Must include:
+- “Today’s Workout” card requirements
+- Workout representation model (warmup/main/cooldown blocks)
+- Completion logic (auto-complete on run end)
+- Light adaptation logic (if missed workout → reschedule)
+- Minimal plan generation contract (even if AI-powered later)
+
+FINAL OUTPUT
+- Create the markdown file at:
+  /docs/quickwins/SMART_RUN_QUICK_WINS_EXECUTION_PLAN.md
+- Populate it with the full content per the structure above.
+- Use real repo file paths wherever possible.
+- If you need to assume something, label it clearly as Assumption.
+
+Now execute the repo scan, then write the markdown file.
