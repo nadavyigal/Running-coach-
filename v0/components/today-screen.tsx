@@ -792,55 +792,55 @@ export function TodayScreen() {
         </div>
       )}
       {/* Header */}
-      <div className="bg-white p-6 rounded-b-3xl shadow-sm">
-        <div className="flex justify-between items-start mb-4">
+      <div className="bg-white p-4 rounded-b-3xl shadow-sm">
+        <div className="flex justify-between items-start mb-3">
           <div>
-            <p className="text-sm text-foreground/70 mb-1">
+            <p className="text-xs text-foreground/70 mb-1">
               {new Date().toLocaleDateString("en-US", {
                 weekday: "long",
                 month: "long",
                 day: "numeric",
               })}
             </p>
-            <h1 className="text-3xl font-bold text-foreground">
+            <h1 className="text-2xl font-bold text-foreground">
               {plan?.title || "Your Training"}
             </h1>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-2 bg-blue-100 text-blue-800 px-4 py-2 rounded-full">
-              <Sun className="h-5 w-5" />
-              <span className="text-sm font-semibold">22°C</span>
+          <div className="flex flex-col items-end gap-1.5">
+            <div className="flex items-center gap-1.5 bg-blue-100 text-blue-800 px-3 py-1.5 rounded-full">
+              <Sun className="h-4 w-4" />
+              <span className="text-xs font-semibold">22°C</span>
             </div>
             <Button
               variant="ghost"
               size="sm"
               onClick={handleRestartOnboarding}
-              className="gap-1.5 text-xs text-foreground/60 hover:text-foreground/70"
+              className="gap-1 text-[10px] text-foreground/60 hover:text-foreground/70 h-auto py-1"
             >
-              <RefreshCw className="h-3 w-3" />
+              <RefreshCw className="h-2.5 w-2.5" />
               Reset
             </Button>
           </div>
         </div>
 
         {/* Streak & Weekly Progress */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           <Card className="border-0 bg-gradient-energy text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">
-            <CardContent className="p-5 text-center">
-              <Flame className="h-7 w-7 mx-auto mb-2 text-white/90" />
-              <div className="text-4xl font-black mb-1 leading-none">
+            <CardContent className="p-3 text-center">
+              <Flame className="h-5 w-5 mx-auto mb-1.5 text-white/90" />
+              <div className="text-3xl font-black mb-0.5 leading-none">
                 {streak}
               </div>
-              <div className="text-label-sm text-white/90">DAY STREAK</div>
+              <div className="text-[10px] uppercase tracking-wide text-white/90">DAY STREAK</div>
             </CardContent>
           </Card>
           <Card className="border-0 bg-gradient-focus text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">
-            <CardContent className="p-5 text-center">
-              <BarChart3 className="h-7 w-7 mx-auto mb-2 text-white/90" />
-              <div className="text-4xl font-black mb-1 leading-none">
+            <CardContent className="p-3 text-center">
+              <BarChart3 className="h-5 w-5 mx-auto mb-1.5 text-white/90" />
+              <div className="text-3xl font-black mb-0.5 leading-none">
                 {totalRuns}/{plannedRuns}
               </div>
-              <div className="text-label-sm text-white/90">THIS WEEK</div>
+              <div className="text-[10px] uppercase tracking-wide text-white/90">THIS WEEK</div>
             </CardContent>
           </Card>
         </div>
@@ -859,31 +859,31 @@ export function TodayScreen() {
                   : 'bg-rose-100/60'
               }`}
             />
-            <CardContent className="relative p-8">
+            <CardContent className="relative p-5">
               {/* Giant Circular Progress Ring */}
               <div className="flex flex-col items-center justify-center">
                 <div className="relative">
                   {isLoadingRecovery ? (
-                    <div className="w-48 h-48 flex items-center justify-center">
-                      <Loader2 className="h-12 w-12 animate-spin text-foreground/50" />
+                    <div className="w-36 h-36 flex items-center justify-center">
+                      <Loader2 className="h-10 w-10 animate-spin text-foreground/50" />
                     </div>
                   ) : (
                     <>
-                      <svg className="w-48 h-48 transform -rotate-90">
+                      <svg className="w-36 h-36 transform -rotate-90">
                         {/* Background circle */}
                         <circle
-                          cx="96"
-                          cy="96"
-                          r="88"
+                          cx="72"
+                          cy="72"
+                          r="64"
                           className="stroke-gray-200"
-                          strokeWidth="16"
+                          strokeWidth="12"
                           fill="none"
                         />
                         {/* Progress circle */}
                         <circle
-                          cx="96"
-                          cy="96"
-                          r="88"
+                          cx="72"
+                          cy="72"
+                          r="64"
                           className={`transition-all duration-1000 ${
                             recoveryScoreValue >= 80
                               ? 'stroke-primary'
@@ -891,36 +891,36 @@ export function TodayScreen() {
                               ? 'stroke-amber-500'
                               : 'stroke-rose-500'
                           }`}
-                          strokeWidth="16"
+                          strokeWidth="12"
                           fill="none"
-                          strokeDasharray={`${(recoveryScoreValue / 100) * 553} 553`}
+                          strokeDasharray={`${(recoveryScoreValue / 100) * 402} 402`}
                           strokeLinecap="round"
                         />
                       </svg>
 
                       {/* Score in center */}
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-display-lg font-black text-foreground">
+                        <span className="text-4xl font-black text-foreground">
                           {recoveryScoreValue}
                         </span>
-                        <span className="text-label-sm text-foreground/60 mt-1">RECOVERY</span>
-                        <div className="flex items-center gap-1 mt-2">
+                        <span className="text-[10px] uppercase tracking-wide text-foreground/60 mt-0.5">RECOVERY</span>
+                        <div className="flex items-center gap-1 mt-1.5">
                           {recoveryTrend?.direction === 'up' ? (
                             <>
-                              <TrendingUp className="h-4 w-4 text-primary" />
-                              <span className="text-xs font-semibold text-primary">
+                              <TrendingUp className="h-3 w-3 text-primary" />
+                              <span className="text-[10px] font-semibold text-primary">
                                 +{Math.abs(Math.round(recoveryTrend.delta))} pts
                               </span>
                             </>
                           ) : recoveryTrend?.direction === 'down' ? (
                             <>
-                              <TrendingDown className="h-4 w-4 text-red-600" />
-                              <span className="text-xs font-semibold text-red-600">
+                              <TrendingDown className="h-3 w-3 text-red-600" />
+                              <span className="text-[10px] font-semibold text-red-600">
                                 {Math.round(recoveryTrend.delta)} pts
                               </span>
                             </>
                           ) : (
-                            <span className="text-xs text-foreground/50">No change</span>
+                            <span className="text-[10px] text-foreground/50">No change</span>
                           )}
                         </div>
                       </div>
@@ -929,7 +929,7 @@ export function TodayScreen() {
                 </div>
 
                 {/* Recovery Label & Recommendation */}
-                <div className="mt-6 text-center space-y-2">
+                <div className="mt-4 text-center space-y-1">
                   <Badge
                     className={`${
                       recoveryScoreValue >= 80
@@ -937,29 +937,29 @@ export function TodayScreen() {
                         : recoveryScoreValue >= 65
                         ? 'bg-amber-100 text-amber-700 border-amber-300'
                         : 'bg-rose-100 text-rose-700 border-rose-300'
-                    } text-xs font-semibold uppercase tracking-wide`}
+                    } text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5`}
                   >
                     {getRecoveryLabel(recoveryScoreValue)}
                   </Badge>
-                  <p className="text-sm text-foreground/70 font-medium">
+                  <p className="text-xs text-foreground/70 font-medium">
                     {getRecoveryRecommendation(recoveryScoreValue)}
                   </p>
                 </div>
 
                 {/* Coach Confidence Bar */}
-                <div className="mt-6 w-full max-w-xs">
-                  <div className="rounded-2xl bg-[oklch(var(--surface-2))] border border-border p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-label-sm text-foreground/70">COACH CONFIDENCE</span>
-                      <span className="text-sm font-bold text-foreground">
+                <div className="mt-4 w-full max-w-xs">
+                  <div className="rounded-2xl bg-[oklch(var(--surface-2))] border border-border p-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] uppercase tracking-wide text-foreground/70">COACH CONFIDENCE</span>
+                      <span className="text-xs font-bold text-foreground">
                         {recoveryConfidenceValue}%
                       </span>
                     </div>
                     <Progress
                       value={recoveryConfidenceValue}
-                      className="h-2 bg-border/70"
+                      className="h-1.5 bg-border/70"
                     />
-                    <p className="mt-2 text-xs text-foreground/70">{recoveryNextStep}</p>
+                    <p className="mt-1.5 text-[10px] text-foreground/70">{recoveryNextStep}</p>
                   </div>
                 </div>
               </div>
@@ -1401,28 +1401,28 @@ export function TodayScreen() {
       {/* Coaching Tip with Gradient Background */}
       <div className="px-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-500">
         <Card className="relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary/20 to-accent/20 rounded-full blur-3xl" />
-          <CardContent className="p-6 relative z-10">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
-                <Zap className="h-6 w-6 text-white" />
+          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-primary/20 to-accent/20 rounded-full blur-3xl" />
+          <CardContent className="p-4 relative z-10">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                <Zap className="h-5 w-5 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="mb-1.5 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-foreground">Coach&apos;s Tip</h3>
+                    <h3 className="text-sm font-bold text-foreground">Coach&apos;s Tip</h3>
                     <RunSmartBrandMark compact size="sm" className="opacity-60" />
                   </div>
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={refreshTip}
-                    className="h-8 w-8"
+                    className="h-6 w-6"
                   >
-                    <RefreshCw className="h-3 w-3" />
+                    <RefreshCw className="h-2.5 w-2.5" />
                   </Button>
                 </div>
-                <p className="text-sm text-foreground/70 leading-relaxed">{dailyTip}</p>
+                <p className="text-xs text-foreground/70 leading-relaxed">{dailyTip}</p>
               </div>
             </div>
           </CardContent>
@@ -1430,44 +1430,44 @@ export function TodayScreen() {
       </div>
 
       {/* Progress Stats - Bento Grid Layout */}
-      <div className="px-4 grid grid-cols-3 gap-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-600">
+      <div className="px-4 grid grid-cols-3 gap-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-600">
         {/* Streak - Double Width with Gradient */}
-        <div className="col-span-2 bg-gradient-success rounded-3xl p-6 text-white shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
-          <Flame className="h-8 w-8 mb-3 text-white/90" />
-          <span className="text-display-md font-black block leading-none">{streak}</span>
-          <span className="text-label-sm block mt-2 text-white/90">DAY STREAK</span>
+        <div className="col-span-2 bg-gradient-success rounded-3xl p-4 text-white shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
+          <Flame className="h-6 w-6 mb-2 text-white/90" />
+          <span className="text-4xl font-black block leading-none">{streak}</span>
+          <span className="text-[10px] uppercase tracking-wide block mt-1.5 text-white/90">DAY STREAK</span>
         </div>
 
         {/* Weekly Runs */}
-        <div className="bg-white rounded-3xl p-6 border-2 border-border hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-          <BarChart3 className="h-6 w-6 text-blue-500 mb-2" />
-          <span className="text-5xl font-black text-foreground block leading-none">
+        <div className="bg-white rounded-3xl p-4 border-2 border-border hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+          <BarChart3 className="h-5 w-5 text-blue-500 mb-1.5" />
+          <span className="text-4xl font-black text-foreground block leading-none">
             {totalRuns}
           </span>
-          <span className="text-label-sm block mt-2 text-foreground/70">THIS WEEK</span>
+          <span className="text-[10px] uppercase tracking-wide block mt-1.5 text-foreground/70">THIS WEEK</span>
         </div>
 
         {/* Consistency */}
-        <div className="bg-white rounded-3xl p-6 border-2 border-border hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-          <TrendingUp className="h-6 w-6 text-purple-500 mb-2" />
-          <span className="text-5xl font-black text-foreground block leading-none">
+        <div className="bg-white rounded-3xl p-4 border-2 border-border hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+          <TrendingUp className="h-5 w-5 text-purple-500 mb-1.5" />
+          <span className="text-4xl font-black text-foreground block leading-none">
             {consistency}%
           </span>
-          <span className="text-label-sm block mt-2 text-foreground/70">CONSISTENCY</span>
+          <span className="text-[10px] uppercase tracking-wide block mt-1.5 text-foreground/70">CONSISTENCY</span>
         </div>
 
         {/* Completed - Double Width */}
-        <div className="col-span-2 bg-white rounded-3xl p-6 border-2 border-border hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-          <Award className="h-6 w-6 text-amber-500 mb-2" />
-          <div className="flex items-baseline gap-2">
-            <span className="text-5xl font-black text-foreground leading-none">
+        <div className="col-span-2 bg-white rounded-3xl p-4 border-2 border-border hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+          <Award className="h-5 w-5 text-amber-500 mb-1.5" />
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-4xl font-black text-foreground leading-none">
               {weeklyWorkouts.filter((w) => w.completed).length}
             </span>
-            <span className="text-3xl font-black text-foreground/50 leading-none">
+            <span className="text-2xl font-black text-foreground/50 leading-none">
               / {plannedRuns}
             </span>
           </div>
-          <span className="text-label-sm block mt-2 text-foreground/70">
+          <span className="text-[10px] uppercase tracking-wide block mt-1.5 text-foreground/70">
             WORKOUTS COMPLETED
           </span>
         </div>

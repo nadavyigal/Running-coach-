@@ -476,11 +476,11 @@ export function ProfessionalLandingScreen({
                 </Badge>
               </div>
 
-              <motion.h1 variants={itemVariants} className="text-display-xl text-foreground">
+              <motion.h1 variants={itemVariants} className="text-5xl md:text-6xl font-black text-foreground leading-tight">
                 {copy.heroTitleTop} <span className="text-primary">{copy.heroTitleHighlight}</span>
               </motion.h1>
 
-              <motion.p variants={itemVariants} className="text-lg text-foreground/70 leading-relaxed max-w-xl">
+              <motion.p variants={itemVariants} className="text-lg md:text-xl text-foreground/70 leading-relaxed max-w-xl">
                 {copy.heroSubtitle}
               </motion.p>
 
@@ -564,8 +564,8 @@ export function ProfessionalLandingScreen({
         <div className="max-w-3xl mx-auto px-6">
           <div className="bg-white/90 rounded-[32px] shadow-lg p-8 md:p-12 border border-border">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-foreground mb-3">{copy.betaSectionTitle}</h2>
-              <p className="text-foreground/70">{copy.betaSectionSubtitle}</p>
+              <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-3 leading-tight">{copy.betaSectionTitle}</h2>
+              <p className="text-base md:text-lg text-foreground/70">{copy.betaSectionSubtitle}</p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] items-end mb-6">
@@ -654,8 +654,8 @@ export function ProfessionalLandingScreen({
       <section id="challenges-section" className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-10">
-            <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-4">{copy.challengesTitle}</h2>
-            <p className="text-lg text-foreground/70 max-w-3xl mx-auto">{copy.challengesSubtitle}</p>
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4 leading-tight">{copy.challengesTitle}</h2>
+            <p className="text-base md:text-lg text-foreground/70 max-w-3xl mx-auto leading-relaxed">{copy.challengesSubtitle}</p>
           </div>
 
           <div className="max-w-3xl mx-auto bg-[oklch(var(--surface-2))] rounded-3xl p-8 border border-border">
@@ -697,8 +697,8 @@ export function ProfessionalLandingScreen({
       <section className="relative py-20 bg-[oklch(var(--surface-2))]">
         <div className="relative max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-foreground mb-4">{copy.featuresTitle}</h2>
-            <p className="text-lg text-foreground/70 max-w-2xl mx-auto">{copy.featuresSubtitle}</p>
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4 leading-tight">{copy.featuresTitle}</h2>
+            <p className="text-base md:text-lg text-foreground/70 max-w-2xl mx-auto leading-relaxed">{copy.featuresSubtitle}</p>
           </div>
 
           <motion.div
@@ -716,8 +716,8 @@ export function ProfessionalLandingScreen({
               <div className={`h-16 w-16 ${featureCards[0].tone} rounded-2xl flex items-center justify-center mb-6`}>
                 <MessageSquare className="h-7 w-7" />
               </div>
-              <h3 className="text-heading-lg font-semibold text-foreground mb-3">{featureCards[0].title}</h3>
-              <p className="text-foreground/70 leading-relaxed">{featureCards[0].description}</p>
+              <h3 className="text-xl font-semibold text-foreground mb-3 leading-tight">{featureCards[0].title}</h3>
+              <p className="text-base text-foreground/70 leading-relaxed">{featureCards[0].description}</p>
             </motion.div>
 
             <motion.div
@@ -727,8 +727,8 @@ export function ProfessionalLandingScreen({
               <div className={`h-16 w-16 ${featureCards[1].tone} rounded-2xl flex items-center justify-center mb-6`}>
                 <Calendar className="h-7 w-7" />
               </div>
-              <h3 className="text-heading-lg font-semibold text-foreground mb-3">{featureCards[1].title}</h3>
-              <p className="text-foreground/70 leading-relaxed">{featureCards[1].description}</p>
+              <h3 className="text-xl font-semibold text-foreground mb-3 leading-tight">{featureCards[1].title}</h3>
+              <p className="text-base text-foreground/70 leading-relaxed">{featureCards[1].description}</p>
             </motion.div>
 
             {/* Row 2: Recovery (full width, giant icon) */}
@@ -741,8 +741,8 @@ export function ProfessionalLandingScreen({
                   <Heart className="h-10 w-10" />
                 </div>
                 <div>
-                  <h3 className="text-display-md font-semibold text-foreground mb-3 leading-tight">{featureCards[2].title}</h3>
-                  <p className="text-foreground/70 text-lg leading-relaxed">{featureCards[2].description}</p>
+                  <h3 className="text-2xl md:text-3xl font-semibold text-foreground mb-3 leading-tight">{featureCards[2].title}</h3>
+                  <p className="text-base md:text-lg text-foreground/70 leading-relaxed">{featureCards[2].description}</p>
                 </div>
               </div>
             </motion.div>
@@ -755,8 +755,8 @@ export function ProfessionalLandingScreen({
               <div className={`h-16 w-16 ${featureCards[3].tone} rounded-2xl flex items-center justify-center mb-6`}>
                 <Target className="h-7 w-7" />
               </div>
-              <h3 className="text-heading-lg font-semibold text-foreground mb-3">{featureCards[3].title}</h3>
-              <p className="text-foreground/70 leading-relaxed">{featureCards[3].description}</p>
+              <h3 className="text-xl font-semibold text-foreground mb-3 leading-tight">{featureCards[3].title}</h3>
+              <p className="text-base text-foreground/70 leading-relaxed">{featureCards[3].description}</p>
             </motion.div>
 
             <motion.div
@@ -766,8 +766,8 @@ export function ProfessionalLandingScreen({
               <div className={`h-16 w-16 ${featureCards[4].tone} rounded-2xl flex items-center justify-center mb-6`}>
                 <Trophy className="h-7 w-7" />
               </div>
-              <h3 className="text-heading-lg font-semibold text-foreground mb-3">{featureCards[4].title}</h3>
-              <p className="text-foreground/70 leading-relaxed">{featureCards[4].description}</p>
+              <h3 className="text-xl font-semibold text-foreground mb-3 leading-tight">{featureCards[4].title}</h3>
+              <p className="text-base text-foreground/70 leading-relaxed">{featureCards[4].description}</p>
             </motion.div>
 
             {/* Row 4: Challenges (full width) */}
@@ -780,8 +780,8 @@ export function ProfessionalLandingScreen({
                   <Zap className="h-10 w-10" />
                 </div>
                 <div>
-                  <h3 className="text-display-md font-semibold text-foreground mb-3 leading-tight">{featureCards[5].title}</h3>
-                  <p className="text-foreground/70 text-lg leading-relaxed">{featureCards[5].description}</p>
+                  <h3 className="text-2xl md:text-3xl font-semibold text-foreground mb-3 leading-tight">{featureCards[5].title}</h3>
+                  <p className="text-base md:text-lg text-foreground/70 leading-relaxed">{featureCards[5].description}</p>
                 </div>
               </div>
             </motion.div>
