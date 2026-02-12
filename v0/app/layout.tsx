@@ -2,7 +2,7 @@
 
 import Script from 'next/script'
 import { Analytics } from '@vercel/analytics/next'
-import { DM_Serif_Display, Plus_Jakarta_Sans, Rubik, Varela_Round } from 'next/font/google'
+import { Inter, Heebo } from 'next/font/google'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
 import { ReminderInit } from '@/components/reminder-init'
@@ -13,38 +13,19 @@ import { ServiceWorkerRegister } from '@/components/service-worker-register'
 import { DataProvider } from '@/contexts/DataContext'
 import { AuthProvider } from '@/lib/auth-context'
 
-// Distinctive typography system - avoiding generic AI aesthetics
-// English: DM Serif Display for headers, Plus Jakarta Sans for body
-// Hebrew: Rubik for headers, Varela Round for body
-
-const dmSerifDisplay = DM_Serif_Display({
-  weight: '400',
+// Optimized font loading with next/font
+const inter = Inter({
   subsets: ['latin'],
-  display: 'swap',
+  display: 'swap', // Use font-display: swap for better performance
   preload: true,
-  variable: '--font-dm-serif',
+  variable: '--font-inter',
 })
 
-const plusJakartaSans = Plus_Jakarta_Sans({
-  subsets: ['latin'],
-  display: 'swap',
+const heebo = Heebo({
+  subsets: ['hebrew'],
+  display: 'swap', // Use font-display: swap for better performance
   preload: true,
-  variable: '--font-jakarta',
-})
-
-const rubik = Rubik({
-  subsets: ['hebrew', 'latin'],
-  display: 'swap',
-  preload: true,
-  variable: '--font-rubik',
-})
-
-const varelaRound = Varela_Round({
-  weight: '400',
-  subsets: ['hebrew', 'latin'],
-  display: 'swap',
-  preload: true,
-  variable: '--font-varela',
+  variable: '--font-heebo',
 })
 
 const siteUrl =
@@ -104,7 +85,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${dmSerifDisplay.variable} ${plusJakartaSans.variable} ${rubik.variable} ${varelaRound.variable}`}>
+    <html lang="en" className={`${inter.variable} ${heebo.variable}`}>
       <head>
         <title>{defaultTitle}</title>
         <meta name="description" content={defaultDescription} />
@@ -126,7 +107,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaOrgJsonLd) }}
         />
       </head>
-      <body className={plusJakartaSans.className}>
+      <body className={inter.className}>
         {/* Google Analytics */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-YBJKT7T4DE"

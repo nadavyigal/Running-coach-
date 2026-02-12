@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -368,21 +367,6 @@ export function ProfessionalLandingScreen({
     }
   };
 
-  // Animation variants for staggered reveals
-  const containerVariants = {
-    hidden: {},
-    show: {
-      transition: {
-        staggerChildren: 0.1,
-      },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.5 } },
-  };
-
   const featureCards = [
     {
       title: copy.features.chat.title,
@@ -430,19 +414,6 @@ export function ProfessionalLandingScreen({
         <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
           <div className="absolute inset-0 bg-[url('/images/runsmart-intro-bg.jpg')] bg-cover bg-center opacity-20" />
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/50 to-white" />
-          {/* Subtle noise texture for depth */}
-          <div
-            className="absolute inset-0 opacity-[0.015]"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-            }}
-          />
-          {/* Giant background text for visual interest */}
-          <div className="absolute top-1/2 right-0 -translate-y-1/2 translate-x-1/4 pointer-events-none select-none overflow-hidden">
-            <span className="text-[18rem] md:text-[28rem] font-black text-emerald-900/[0.03] leading-none tracking-tighter">
-              AI
-            </span>
-          </div>
         </div>
 
         {/* Content */}
@@ -484,29 +455,19 @@ export function ProfessionalLandingScreen({
             </Badge>
           </div>
 
-          {/* Headline with animation */}
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="text-5xl md:text-7xl font-extrabold text-gray-900 mb-6 leading-tight tracking-tight"
-          >
+          {/* Headline */}
+          <h1 className="text-5xl md:text-7xl font-extrabold text-gray-900 mb-6 leading-tight tracking-tight">
             {copy.heroTitleTop}
             <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600">
               {copy.heroTitleHighlight}
             </span>
-          </motion.h1>
+          </h1>
 
-          {/* Subheading with animation */}
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.4 }}
-            className="text-xl md:text-2xl text-gray-700 mb-8 max-w-2xl mx-auto leading-relaxed"
-          >
+          {/* Subheading */}
+          <p className="text-xl md:text-2xl text-gray-700 mb-8 max-w-2xl mx-auto leading-relaxed">
             {copy.heroSubtitle}
-          </motion.p>
+          </p>
 
           {/* Social Proof */}
           <div className="flex items-center justify-center gap-3 mb-10 flex-wrap">
@@ -676,44 +637,27 @@ export function ProfessionalLandingScreen({
       </section>
 
       {/* Features Section */}
-      <section className="relative py-20 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
-        {/* Subtle noise texture */}
-        <div
-          className="absolute inset-0 opacity-[0.02]"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-          }}
-        />
-        <div className="relative max-w-7xl mx-auto px-6">
+      <section className="py-20 bg-gradient-to-br from-gray-50 to-gray-100">
+        <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">{copy.featuresTitle}</h2>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">{copy.featuresSubtitle}</p>
           </div>
 
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, margin: "-100px" }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
-          >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {featureCards.map((feature) => {
               const Icon = feature.icon;
               return (
-                <motion.div
-                  key={feature.title}
-                  variants={itemVariants}
-                  className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow"
-                >
+                <div key={feature.title} className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow">
                   <div className={`h-14 w-14 bg-gradient-to-br ${feature.gradient} rounded-2xl flex items-center justify-center mb-6`}>
                     <Icon className="h-7 w-7 text-white" />
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-3">{feature.title}</h3>
                   <p className="text-gray-600 leading-relaxed">{feature.description}</p>
-                </motion.div>
+                </div>
               );
             })}
-          </motion.div>
+          </div>
         </div>
       </section>
 

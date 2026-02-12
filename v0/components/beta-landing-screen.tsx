@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { LanguageSwitcher } from "@/components/language-switcher";
 import {
   Users,
   Zap,
@@ -39,109 +38,6 @@ const DEFAULT_LEGAL_LINKS = {
   contactEmail: "firstname.lastname@runsmart-ai.com",
 };
 
-const COPY = {
-  en: {
-    earlyAccessBadge: 'Early Access Beta',
-    heroTitle: 'Your AI Running Coach',
-    heroSubtitle: 'runners getting fitter, faster with personalized AI coaching',
-    joinCount: 'Join',
-    valueProps: {
-      aiPlans: 'AI-Powered Plans',
-      tracking: 'Real-time Tracking',
-      recovery: 'Recovery Insights',
-      pioneer: 'Beta Pioneer',
-    },
-    runSmartTagline: 'Your AI Running Coach',
-    claimSpot: 'Claim Your Beta Spot',
-    joinBeta: 'Join the Beta',
-    earlyAccess: 'Get exclusive early access to RunSmart',
-    benefits: {
-      title: 'Beta Pioneer Benefits',
-      discount: '50% lifetime discount',
-      badge: 'Exclusive Beta Pioneer badge',
-      influence: 'Direct influence on future features',
-      support: 'Priority support from the team',
-    },
-    form: {
-      emailLabel: 'Email Address',
-      emailRequired: '(required)',
-      emailPlaceholder: 'you@example.com',
-      nameLabel: 'Name',
-      nameOptional: '(optional)',
-      namePlaceholder: 'Your name',
-      register: 'Complete Registration',
-      joining: 'Joining...',
-      back: '← Back',
-    },
-    trust: {
-      secure: '🔒 Your data is private and secure',
-      noCard: 'No credit card required • Cancel anytime',
-    },
-    welcome: {
-      title: 'Welcome to RunSmart! 🎉',
-      subtitle: "You're all set. Let's create your personalized running plan...",
-    },
-    validation: {
-      emailRequired: 'Email required',
-      emailRequiredDesc: 'Please enter your email to continue',
-      invalidEmail: 'Invalid email',
-      invalidEmailDesc: 'Please enter a valid email address',
-    },
-    privacy: 'Privacy',
-    terms: 'Terms',
-  },
-  he: {
-    earlyAccessBadge: 'גישה מוקדמת (בטא)',
-    heroTitle: 'המאמן החכם שלך לריצה',
-    heroSubtitle: 'רצים מתקדמים מהר יותר עם אימון AI אישי',
-    joinCount: 'הצטרפו ל',
-    valueProps: {
-      aiPlans: 'תוכניות AI חכמות',
-      tracking: 'מעקב בזמן אמת',
-      recovery: 'ניתוח התאוששות',
-      pioneer: 'חלוץ בטא',
-    },
-    runSmartTagline: 'המאמן החכם שלך לריצה',
-    claimSpot: 'תפסו את המקום שלכם',
-    joinBeta: 'הצטרפו לבטא',
-    earlyAccess: 'קבלו גישה מוקדמת בלעדית ל-RunSmart',
-    benefits: {
-      title: 'הטבות לחלוצי הבטא',
-      discount: '50% הנחה לכל החיים',
-      badge: 'תג חלוץ בטא ייחודי',
-      influence: 'השפעה ישירה על פיצ׳רים עתידיים',
-      support: 'תמיכה עדיפה מהצוות',
-    },
-    form: {
-      emailLabel: 'כתובת אימייל',
-      emailRequired: '(חובה)',
-      emailPlaceholder: 'you@example.com',
-      nameLabel: 'שם',
-      nameOptional: '(אופציונלי)',
-      namePlaceholder: 'השם שלכם',
-      register: 'השלמת רישום',
-      joining: 'מצטרפים...',
-      back: '→ חזרה',
-    },
-    trust: {
-      secure: '🔒 המידע שלכם פרטי ומאובטח',
-      noCard: 'ללא כרטיס אשראי • ניתן לבטל בכל עת',
-    },
-    welcome: {
-      title: '!ברוכים הבאים ל-RunSmart 🎉',
-      subtitle: 'הכל מוכן. בואו ניצור את תוכנית הריצה האישית שלכם...',
-    },
-    validation: {
-      emailRequired: 'נדרש אימייל',
-      emailRequiredDesc: 'אנא הזן את כתובת האימייל שלך כדי להמשיך',
-      invalidEmail: 'אימייל לא תקין',
-      invalidEmailDesc: 'אנא הזן כתובת אימייל תקינה',
-    },
-    privacy: 'פרטיות',
-    terms: 'תנאים',
-  },
-} as const;
-
 export function BetaLandingScreen({
   onContinue,
   showLegalLinks = false,
@@ -152,48 +48,12 @@ export function BetaLandingScreen({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [signupComplete, setSignupComplete] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [language, setLanguage] = useState<'en' | 'he'>('en');
   const betaSignups = useBetaSignupCount();
   const { toast } = useToast();
-  const isHebrew = language === 'he';
-  const copy = isHebrew ? COPY.he : COPY.en;
   const mergedLegalLinks = useMemo(
     () => ({ ...DEFAULT_LEGAL_LINKS, ...(legalLinks ?? {}) }),
     [legalLinks]
   );
-
-  // Load language preference from URL or localStorage
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const urlLang = params.get('lang');
-    const storedLang = localStorage.getItem('beta_landing_lang');
-    const initial =
-      urlLang === 'he' || urlLang === 'en'
-        ? urlLang
-        : storedLang === 'he' || storedLang === 'en'
-          ? storedLang
-          : 'en';
-    setLanguage(initial as 'en' | 'he');
-  }, []);
-
-  const setLanguagePreference = (nextLanguage: 'en' | 'he') => {
-    setLanguage(nextLanguage);
-    if (typeof window === 'undefined') return;
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.set('lang', nextLanguage);
-      window.history.replaceState({}, '', url.toString());
-      localStorage.setItem('beta_landing_lang', nextLanguage);
-      void trackAnalyticsEvent('language_changed', {
-        from: language,
-        to: nextLanguage,
-        location: 'beta_landing',
-      });
-    } catch {
-      // ignore
-    }
-  };
 
   const handleContinue = () => {
     if (onContinue) {
@@ -204,8 +64,8 @@ export function BetaLandingScreen({
   const handleBetaSignup = async () => {
     if (!email.trim()) {
       toast({
-        title: copy.validation.emailRequired,
-        description: copy.validation.emailRequiredDesc,
+        title: "Email required",
+        description: "Please enter your email to continue",
         variant: "destructive",
       });
       return;
@@ -213,8 +73,8 @@ export function BetaLandingScreen({
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       toast({
-        title: copy.validation.invalidEmail,
-        description: copy.validation.invalidEmailDesc,
+        title: "Invalid email",
+        description: "Please enter a valid email address",
         variant: "destructive",
       });
       return;
@@ -324,13 +184,13 @@ export function BetaLandingScreen({
   };
 
   const legalLinksMarkup = showLegalLinks ? (
-    <div className={`mt-6 text-center text-xs text-white/60 ${isHebrew ? 'space-x-reverse space-x-3' : 'space-x-3'}`}>
+    <div className="mt-6 text-center text-xs text-white/60 space-x-3">
       <Link href={mergedLegalLinks.privacyHref} className="hover:text-white/80 transition-colors">
-        {copy.privacy}
+        Privacy
       </Link>
       <span>|</span>
       <Link href={mergedLegalLinks.termsHref} className="hover:text-white/80 transition-colors">
-        {copy.terms}
+        Terms
       </Link>
       <span>|</span>
       <a
@@ -345,11 +205,7 @@ export function BetaLandingScreen({
   // Hero screen (like onboarding intro)
   if (!showForm && !signupComplete) {
     return (
-      <div
-        className="relative min-h-screen bg-[#1a1a1a] text-white flex flex-col"
-        dir={isHebrew ? 'rtl' : 'ltr'}
-        lang={isHebrew ? 'he' : 'en'}
-      >
+      <div className="relative min-h-screen bg-[#1a1a1a] text-white flex flex-col">
         {/* Full-screen Background Image */}
         <div className="absolute inset-0">
           <Image
@@ -361,54 +217,37 @@ export function BetaLandingScreen({
           />
           {/* Dark overlay for better text visibility */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/70" />
-          {/* Subtle noise texture for depth */}
-          <div
-            className="absolute inset-0 opacity-[0.015]"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-            }}
-          />
-          {/* Giant Beta symbol for visual interest */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none select-none">
-            <span className="text-[20rem] md:text-[32rem] font-black text-white/[0.02] leading-none tracking-tighter">
-              β
-            </span>
-          </div>
         </div>
 
         {/* Content */}
         <div className="relative z-10 flex-1 flex flex-col justify-between px-6 pb-6 pt-12">
-          {/* Top section - Language Switcher & Badge */}
-          <div className={`flex items-center justify-between pt-8 ${isHebrew ? 'flex-row-reverse' : ''}`}>
+          {/* Top section - Badge */}
+          <div className="flex justify-center pt-8">
             <Badge
               variant="secondary"
               className="bg-emerald-500/20 text-emerald-200 border-emerald-400/30 px-4 py-2"
             >
-              <Zap className={`h-4 w-4 ${isHebrew ? 'ml-2' : 'mr-2'} fill-current`} />
-              {copy.earlyAccessBadge}
+              <Zap className="h-4 w-4 mr-2 fill-current" />
+              Early Access Beta
             </Badge>
-            <LanguageSwitcher
-              language={language}
-              onChange={setLanguagePreference}
-              variant="dark"
-              className="text-xs"
-            />
           </div>
 
           {/* Middle section - Hero text */}
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center space-y-6 max-w-sm">
               <h1 className="text-5xl font-bold tracking-tight leading-tight">
-                {copy.heroTitle}
+                Your AI
+                <br />
+                Running Coach
               </h1>
               <p className="text-xl text-white/80 leading-relaxed">
-                {copy.joinCount} {betaSignups.loading ? "200+" : `${betaSignups.count}+`}{" "}
-                {copy.heroSubtitle}
+                Join {betaSignups.loading ? "200+" : `${betaSignups.count}+`}{" "}
+                runners getting fitter, faster with personalized AI coaching
               </p>
 
               {/* Social proof stats */}
-              <div className={`flex items-center justify-center gap-2 text-sm ${isHebrew ? 'flex-row-reverse' : ''}`}>
-                <div className={`flex items-center gap-2 text-emerald-300 ${isHebrew ? 'flex-row-reverse' : ''}`}>
+              <div className="flex items-center justify-center gap-2 text-sm">
+                <div className="flex items-center gap-2 text-emerald-300">
                   <Users className="h-4 w-4" />
                   <span className="font-medium">
                     {betaSignups.loading
@@ -433,19 +272,19 @@ export function BetaLandingScreen({
               <div className="grid grid-cols-2 gap-3 pt-4">
                 <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
                   <Trophy className="h-8 w-8 text-emerald-400 mb-2" />
-                  <p className="text-sm font-medium">{copy.valueProps.aiPlans}</p>
+                  <p className="text-sm font-medium">AI-Powered Plans</p>
                 </div>
                 <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
                   <BarChart3 className="h-8 w-8 text-blue-400 mb-2" />
-                  <p className="text-sm font-medium">{copy.valueProps.tracking}</p>
+                  <p className="text-sm font-medium">Real-time Tracking</p>
                 </div>
                 <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
                   <Heart className="h-8 w-8 text-purple-400 mb-2" />
-                  <p className="text-sm font-medium">{copy.valueProps.recovery}</p>
+                  <p className="text-sm font-medium">Recovery Insights</p>
                 </div>
                 <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
                   <Award className="h-8 w-8 text-orange-400 mb-2" />
-                  <p className="text-sm font-medium">{copy.valueProps.pioneer}</p>
+                  <p className="text-sm font-medium">Beta Pioneer</p>
                 </div>
               </div>
             </div>
@@ -463,7 +302,7 @@ export function BetaLandingScreen({
                 />
               </div>
               <h2 className="text-xl font-bold">RunSmart</h2>
-              <p className="text-sm text-white/60">{copy.runSmartTagline}</p>
+              <p className="text-sm text-white/60">Your AI Running Coach</p>
             </div>
 
             {/* CTA Button */}
@@ -471,8 +310,8 @@ export function BetaLandingScreen({
               className="w-full h-14 text-base bg-[#38bdf8] text-[#0a0a0a] hover:bg-[#4cc5f9] active:scale-[0.98] font-semibold rounded-2xl transition-all duration-200 shadow-lg"
               onClick={() => setShowForm(true)}
             >
-              <UserPlus className={`h-5 w-5 ${isHebrew ? 'ml-2' : 'mr-2'}`} />
-              {copy.claimSpot}
+              <UserPlus className="h-5 w-5 mr-2" />
+              Claim Your Beta Spot
             </Button>
 
             {legalLinksMarkup}
@@ -485,34 +324,13 @@ export function BetaLandingScreen({
   // Signup form screen
   if (showForm && !signupComplete) {
     return (
-      <div
-        className="relative min-h-screen bg-[#1a1a1a] text-white flex flex-col"
-        dir={isHebrew ? 'rtl' : 'ltr'}
-        lang={isHebrew ? 'he' : 'en'}
-      >
+      <div className="relative min-h-screen bg-[#1a1a1a] text-white flex flex-col">
         {/* Subtle background */}
         <div className="absolute inset-0 bg-gradient-to-b from-emerald-950/20 to-[#1a1a1a]" />
-        {/* Subtle noise texture */}
-        <div
-          className="absolute inset-0 opacity-[0.015]"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-          }}
-        />
 
         {/* Content */}
         <div className="relative z-10 flex-1 flex flex-col px-6 pb-6 pt-12">
-          {/* Header with Language Switcher */}
-          <div className={`flex items-center justify-between mb-4 ${isHebrew ? 'flex-row-reverse' : ''}`}>
-            <div className="flex-1" />
-            <LanguageSwitcher
-              language={language}
-              onChange={setLanguagePreference}
-              variant="dark"
-              className="text-xs"
-            />
-          </div>
-
+          {/* Header */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-950/80 backdrop-blur-sm border border-emerald-400/30 shadow-[0_0_24px_rgba(16,185,129,0.2)]">
@@ -523,35 +341,35 @@ export function BetaLandingScreen({
                 />
               </div>
             </div>
-            <h1 className="text-3xl font-bold mb-2">{copy.joinBeta}</h1>
+            <h1 className="text-3xl font-bold mb-2">Join the Beta</h1>
             <p className="text-white/70">
-              {copy.earlyAccess}
+              Get exclusive early access to RunSmart
             </p>
           </div>
 
           {/* Benefits card */}
           <div className="bg-gradient-to-br from-emerald-500/10 to-blue-500/10 backdrop-blur-sm rounded-3xl p-6 border border-white/10 mb-8">
             <h3 className="font-semibold text-lg mb-4">
-              {copy.benefits.title}
+              Beta Pioneer Benefits
             </h3>
             <ul className="space-y-3 text-sm text-white/80">
-              <li className={`flex items-start gap-3 ${isHebrew ? 'flex-row-reverse' : ''}`}>
+              <li className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-400 flex-shrink-0 mt-0.5" />
                 <span>
-                  <strong className="text-white">{copy.benefits.discount}</strong>
+                  <strong className="text-white">50% lifetime discount</strong>
                 </span>
               </li>
-              <li className={`flex items-start gap-3 ${isHebrew ? 'flex-row-reverse' : ''}`}>
+              <li className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-400 flex-shrink-0 mt-0.5" />
-                <span>{copy.benefits.badge}</span>
+                <span>Exclusive Beta Pioneer badge</span>
               </li>
-              <li className={`flex items-start gap-3 ${isHebrew ? 'flex-row-reverse' : ''}`}>
+              <li className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-400 flex-shrink-0 mt-0.5" />
-                <span>{copy.benefits.influence}</span>
+                <span>Direct influence on future features</span>
               </li>
-              <li className={`flex items-start gap-3 ${isHebrew ? 'flex-row-reverse' : ''}`}>
+              <li className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-400 flex-shrink-0 mt-0.5" />
-                <span>{copy.benefits.support}</span>
+                <span>Priority support from the team</span>
               </li>
             </ul>
           </div>
@@ -559,12 +377,12 @@ export function BetaLandingScreen({
           {/* Form */}
           <div className="flex-1 space-y-4">
             <div>
-              <label className={`text-sm font-medium text-white/90 mb-2 block ${isHebrew ? 'text-right' : ''}`}>
-                {copy.form.emailLabel} <span className="text-red-400">{copy.form.emailRequired}</span>
+              <label className="text-sm font-medium text-white/90 mb-2 block">
+                Email Address <span className="text-red-400">*</span>
               </label>
               <Input
                 type="email"
-                placeholder={copy.form.emailPlaceholder}
+                placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={isSubmitting}
@@ -577,12 +395,12 @@ export function BetaLandingScreen({
               />
             </div>
             <div>
-              <label className={`text-sm font-medium text-white/90 mb-2 block ${isHebrew ? 'text-right' : ''}`}>
-                {copy.form.nameLabel} {copy.form.nameOptional}
+              <label className="text-sm font-medium text-white/90 mb-2 block">
+                Name (optional)
               </label>
               <Input
                 type="text"
-                placeholder={copy.form.namePlaceholder}
+                placeholder="Your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 disabled={isSubmitting}
@@ -605,11 +423,11 @@ export function BetaLandingScreen({
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className={`h-5 w-5 ${isHebrew ? 'ml-2' : 'mr-2'} animate-spin`} />
-                  {copy.form.joining}
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Joining...
                 </>
               ) : (
-                copy.form.register
+                "Complete Registration"
               )}
             </Button>
 
@@ -618,17 +436,17 @@ export function BetaLandingScreen({
               className="w-full text-sm text-white/60 hover:text-white/90 transition-colors"
               disabled={isSubmitting}
             >
-              {copy.form.back}
+              ← Back
             </button>
           </div>
 
           {/* Trust */}
           <div className="text-center pt-4 space-y-1">
             <p className="text-xs text-white/50">
-              {copy.trust.secure}
+              🔒 Your data is private and secure
             </p>
             <p className="text-xs text-white/40">
-              {copy.trust.noCard}
+              No credit card required • Cancel anytime
             </p>
           </div>
 
@@ -640,19 +458,8 @@ export function BetaLandingScreen({
 
   // Success screen
   return (
-    <div
-      className="relative min-h-screen bg-[#1a1a1a] text-white flex items-center justify-center p-6"
-      dir={isHebrew ? 'rtl' : 'ltr'}
-      lang={isHebrew ? 'he' : 'en'}
-    >
+    <div className="relative min-h-screen bg-[#1a1a1a] text-white flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-gradient-to-b from-emerald-950/30 to-[#1a1a1a]" />
-      {/* Subtle noise texture */}
-      <div
-        className="absolute inset-0 opacity-[0.015]"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-        }}
-      />
 
       <div className="relative z-10 text-center space-y-6 max-w-sm">
         <div className="flex justify-center">
@@ -661,9 +468,9 @@ export function BetaLandingScreen({
           </div>
         </div>
         <div className="space-y-3">
-          <h1 className="text-3xl font-bold">{copy.welcome.title}</h1>
+          <h1 className="text-3xl font-bold">Welcome to RunSmart! 🎉</h1>
           <p className="text-white/70 text-lg">
-            {copy.welcome.subtitle}
+            You&apos;re all set. Let&apos;s create your personalized running plan...
           </p>
         </div>
         <div className="flex justify-center pt-4">

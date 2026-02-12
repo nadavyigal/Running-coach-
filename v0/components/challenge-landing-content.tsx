@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 import { LanguageSwitcher } from '@/components/language-switcher';
@@ -131,21 +130,6 @@ export function ChallengeLandingContent({ template, initialLanguage = 'en' }: Ch
   const [language, setLanguage] = useState<'en' | 'he'>(initialLanguage);
   const isHebrew = language === 'he';
   const copy = UI_COPY[language];
-
-  // Animation variants for staggered reveals
-  const containerVariants = {
-    hidden: {},
-    show: {
-      transition: {
-        staggerChildren: 0.08,
-      },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.4 } },
-  };
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -370,13 +354,7 @@ export function ChallengeLandingContent({ template, initialLanguage = 'en' }: Ch
             <p className="text-sm text-white/30 hidden md:block">{copy.moreDays}</p>
           </div>
 
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, margin: "-100px" }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3"
-          >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
             {previewThemes.map((themeText, index) => {
               const dayLabel = themeText.split(':')[0] ?? `Day ${index + 1}`;
               const dayContent = themeText.includes(':')
@@ -384,9 +362,8 @@ export function ChallengeLandingContent({ template, initialLanguage = 'en' }: Ch
                 : themeText;
 
               return (
-                <motion.div
+                <div
                   key={index}
-                  variants={itemVariants}
                   className="group relative rounded-2xl border border-white/5 bg-white/[0.02] p-5 hover:bg-white/[0.05] hover:border-white/10 transition-all duration-300"
                 >
                   {/* Day number */}
@@ -399,10 +376,10 @@ export function ChallengeLandingContent({ template, initialLanguage = 'en' }: Ch
                   <p className="text-sm text-white/60 leading-relaxed group-hover:text-white/80 transition-colors">
                     {dayContent}
                   </p>
-                </motion.div>
+                </div>
               );
             })}
-          </motion.div>
+          </div>
 
           <p className="text-sm text-white/30 mt-6 md:hidden">{copy.moreDaysShort}</p>
         </div>
