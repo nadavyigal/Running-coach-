@@ -148,11 +148,6 @@ export function RaceGoalsScreen({ userId }: RaceGoalsScreenProps) {
     return diffDays
   }
 
-  const getTrainingWeeks = (raceDate: Date) => {
-    const daysUntil = getDaysUntilRace(raceDate)
-    return Math.floor(daysUntil / 7)
-  }
-
   if (loading) {
     return (
       <div className="space-y-4">
@@ -215,7 +210,6 @@ export function RaceGoalsScreen({ userId }: RaceGoalsScreenProps) {
             const RaceTypeIcon = raceTypeIcons[goal.raceType as keyof typeof raceTypeIcons]
             const StatusIcon = statusIcons[goal.registrationStatus as keyof typeof statusIcons]
             const daysUntil = getDaysUntilRace(goal.raceDate)
-            const trainingWeeks = getTrainingWeeks(goal.raceDate)
             const priorityConfig = {
               A: {
                 label: "A Race",

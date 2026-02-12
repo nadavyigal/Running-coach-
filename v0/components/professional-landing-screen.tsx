@@ -52,6 +52,10 @@ const COPY = {
       name: 'Your name',
       email: 'you@example.com',
     },
+    labels: {
+      name: 'Name',
+      email: 'Email (optional)',
+    },
     continue: 'Continue',
     validation: {
       nameRequiredTitle: 'Name required',
@@ -146,6 +150,10 @@ const COPY = {
     placeholders: {
       name: 'שמכם (חובה)',
       email: 'you@example.com',
+    },
+    labels: {
+      name: 'שם',
+      email: 'אימייל (אופציונלי)',
     },
     continue: 'המשך',
     validation: {
@@ -372,14 +380,14 @@ export function ProfessionalLandingScreen({
     hidden: {},
     show: {
       transition: {
-        staggerChildren: 0.1,
+        staggerChildren: 0.08,
       },
     },
   };
 
   const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.5 } },
+    hidden: { opacity: 0, y: 24 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] } },
   };
 
   const featureCards = [
@@ -387,201 +395,202 @@ export function ProfessionalLandingScreen({
       title: copy.features.chat.title,
       description: copy.features.chat.description,
       icon: MessageSquare,
-      gradient: 'from-emerald-500 to-teal-500',
+      tone: 'bg-emerald-100 text-emerald-700',
     },
     {
       title: copy.features.adaptive.title,
       description: copy.features.adaptive.description,
       icon: Calendar,
-      gradient: 'from-blue-500 to-cyan-500',
+      tone: 'bg-sky-100 text-sky-700',
     },
     {
       title: copy.features.recovery.title,
       description: copy.features.recovery.description,
       icon: Heart,
-      gradient: 'from-rose-500 to-pink-500',
+      tone: 'bg-rose-100 text-rose-700',
     },
     {
       title: copy.features.goal.title,
       description: copy.features.goal.description,
       icon: Target,
-      gradient: 'from-amber-500 to-orange-500',
+      tone: 'bg-amber-100 text-amber-700',
     },
     {
       title: copy.features.race.title,
       description: copy.features.race.description,
       icon: Trophy,
-      gradient: 'from-violet-500 to-indigo-500',
+      tone: 'bg-indigo-100 text-indigo-700',
     },
     {
       title: copy.features.challenges.title,
       description: copy.features.challenges.description,
       icon: Zap,
-      gradient: 'from-emerald-600 to-lime-500',
+      tone: 'bg-lime-100 text-lime-700',
     },
   ];
 
   return (
-    <div className="min-h-screen bg-white" dir={isHebrew ? 'rtl' : 'ltr'} lang={isHebrew ? 'he' : 'en'}>
-      {/* Hero Section - Diagonal Split */}
-      <section className="relative min-h-screen overflow-hidden">
-        {/* Language Switcher - Absolute positioned */}
-        <div className="absolute top-6 left-6 z-50">
-          <LanguageSwitcher
-            language={language}
-            onChange={setLanguagePreference}
-            variant="default"
-          />
+    <div className="min-h-screen bg-background text-foreground" dir={isHebrew ? 'rtl' : 'ltr'} lang={isHebrew ? 'he' : 'en'}>
+      {/* Hero Section */}
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0">
+          <div className="absolute -top-28 right-[-10%] h-80 w-80 rounded-full bg-[oklch(90%_0.06_150)] blur-3xl opacity-70" />
+          <div className="absolute -bottom-36 left-[-10%] h-96 w-96 rounded-full bg-[oklch(88%_0.05_210)] blur-3xl opacity-60" />
+          <div className="absolute inset-0 noise-overlay opacity-[0.25]" />
         </div>
 
-        <button
-          type="button"
-          onClick={handleExistingAccount}
-          className="absolute top-6 right-6 z-50 text-white/90 hover:text-white font-medium text-sm"
-        >
-          {copy.existingAccount}
-        </button>
-
-        {/* Left 60% - Gradient Background with Content */}
-        <div className="absolute inset-0 w-3/5 bg-gradient-to-br from-orange-500 via-rose-500 to-purple-600 flex items-center justify-center p-12">
-          <div className="relative z-10 max-w-2xl">
-            {/* Logo */}
-            <div className="flex justify-start mb-8">
-              <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-white/20 backdrop-blur-sm border-2 border-white/30 shadow-xl">
-                <img
-                  src="/images/runsmart-logo-1.png"
-                  alt="RunSmart"
-                  className="h-12 w-12 object-contain"
-                />
+        <div className="relative mx-auto max-w-7xl px-6 pt-10 pb-16">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm border border-black/5">
+                <img src="/images/runsmart-logo-1.png" alt="RunSmart" className="h-7 w-7 object-contain" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold tracking-wide">RunSmart</div>
+                <div className="text-xs text-foreground/60">{copy.earlyAccessBadge}</div>
               </div>
             </div>
 
-            {/* Beta Badge */}
-            <div className="flex gap-3 mb-8 flex-wrap">
-              <Badge className="bg-white/20 text-white border-white/30 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-                <Zap className="h-4 w-4 mr-2 fill-current" />
-                {copy.earlyAccessBadge}
-              </Badge>
-              <Badge className="bg-white/20 text-white border-white/30 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-                <Clock className="h-4 w-4 mr-2" />
-                {copy.earlyAccessDeadline}
-              </Badge>
-            </div>
-
-            {/* Headline - GIANT text-display-xl (96px) */}
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="text-display-xl text-white mb-8 leading-none font-black"
-            >
-              {copy.heroTitleTop}
-              <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">
-                {copy.heroTitleHighlight}
-              </span>
-            </motion.h1>
-
-            {/* Subheading */}
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
-              className="text-2xl text-white/90 mb-10 leading-relaxed"
-            >
-              {copy.heroSubtitle}
-            </motion.p>
-
-            {/* Social Proof Badges */}
-            <div className="flex items-center gap-3 mb-12 flex-wrap">
-              <Badge className="bg-white/20 text-white border-white/30 px-4 py-2 backdrop-blur-sm">
-                <Activity className="h-4 w-4 mr-2" />
-                {copy.socialProof.plans}
-              </Badge>
-              <Badge className="bg-white/20 text-white border-white/30 px-4 py-2 backdrop-blur-sm">
-                <Target className="h-4 w-4 mr-2" />
-                {copy.socialProof.tracking}
-              </Badge>
-              <Badge className="bg-yellow-400/90 text-black border-yellow-300 px-4 py-2 font-bold">
-                <Award className="h-4 w-4 mr-2" />
-                {copy.socialProof.spots}
-              </Badge>
-            </div>
-
-            {/* Primary CTA - Neon Yellow, h-16 */}
-            <div className="flex flex-col items-start gap-4 max-w-md">
-              <Button
-                size="lg"
-                className="h-16 px-12 text-lg bg-gradient-to-r from-yellow-400 to-yellow-300 hover:from-yellow-300 hover:to-yellow-200 text-black font-black rounded-2xl shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105 uppercase tracking-wide"
-                onClick={handleHeroCta}
+            <div className="flex items-center gap-3">
+              <LanguageSwitcher language={language} onChange={setLanguagePreference} variant="default" />
+              <button
+                type="button"
+                onClick={handleExistingAccount}
+                className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
               >
-                {copy.ctaPrimary}
-                <ArrowRight className="ml-3 h-6 w-6" />
-              </Button>
-
-              <p className="text-sm text-white/80">{copy.ctaSubtext}</p>
+                {copy.existingAccount}
+              </button>
             </div>
           </div>
-        </div>
 
-        {/* Right 40% - Black Background with Runner Placeholder */}
-        <div className="absolute right-0 top-0 bottom-0 w-2/5 bg-black flex items-center justify-center">
-          {/* Runner silhouette placeholder - using Activity icon as fallback */}
-          <div className="relative">
-            <div className="w-96 h-96 flex items-center justify-center">
-              <Activity className="w-64 h-64 text-cyan-400 opacity-20 animate-pulse-glow" />
-            </div>
+          <div className="mt-12 grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]">
+            <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-8">
+              <div className="flex flex-wrap gap-2">
+                <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1">
+                  <Zap className="h-4 w-4 mr-2" />
+                  {copy.earlyAccessBadge}
+                </Badge>
+                <Badge className="bg-white/70 text-foreground border-border px-3 py-1">
+                  <Clock className="h-4 w-4 mr-2" />
+                  {copy.earlyAccessDeadline}
+                </Badge>
+              </div>
 
-            {/* Motion lines */}
-            <div className="absolute -left-12 top-1/2 -translate-y-1/2 space-y-3">
-              {[...Array(5)].map((_, i) => (
-                <div
-                  key={i}
-                  className="h-1.5 bg-gradient-to-r from-cyan-400 to-transparent rounded-full animate-pulse"
-                  style={{
-                    width: `${(5 - i) * 40}px`,
-                    animationDelay: `${i * 0.1}s`,
-                  }}
-                />
-              ))}
-            </div>
+              <motion.h1 variants={itemVariants} className="text-display-xl text-foreground">
+                {copy.heroTitleTop} <span className="text-primary">{copy.heroTitleHighlight}</span>
+              </motion.h1>
+
+              <motion.p variants={itemVariants} className="text-lg text-foreground/70 leading-relaxed max-w-xl">
+                {copy.heroSubtitle}
+              </motion.p>
+
+              <motion.div variants={itemVariants} className="flex flex-wrap items-center gap-3">
+                <Button
+                  size="lg"
+                  className="h-14 px-8 bg-primary text-primary-foreground rounded-full shadow-lg hover:shadow-xl transition-all duration-300"
+                  onClick={handleHeroCta}
+                >
+                  {copy.ctaPrimary}
+                  <ArrowRight className="ml-3 h-5 w-5" />
+                </Button>
+                <span className="text-sm text-foreground/60">{copy.ctaSubtext}</span>
+              </motion.div>
+
+              <motion.div variants={itemVariants} className="flex flex-wrap gap-3">
+                <div className="flex items-center gap-2 rounded-full border border-border bg-white/80 px-4 py-2 text-sm">
+                  <Activity className="h-4 w-4 text-primary" />
+                  {copy.socialProof.plans}
+                </div>
+                <div className="flex items-center gap-2 rounded-full border border-border bg-white/80 px-4 py-2 text-sm">
+                  <Target className="h-4 w-4 text-primary" />
+                  {copy.socialProof.tracking}
+                </div>
+                <div className="flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+                  <Award className="h-4 w-4" />
+                  {copy.socialProof.spots}
+                </div>
+              </motion.div>
+            </motion.div>
+
+            <motion.div variants={itemVariants} initial="hidden" animate="show" className="relative">
+              <div className="absolute -top-8 right-6 h-24 w-24 rounded-full bg-primary/15 blur-2xl" />
+              <div className="rounded-[32px] border border-border bg-white/80 backdrop-blur p-8 shadow-xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-foreground/50">Today</p>
+                    <p className="text-lg font-semibold">Tempo Progression</p>
+                  </div>
+                  <Badge className="bg-primary/10 text-primary border-primary/20">Personalized</Badge>
+                </div>
+
+                <div className="mt-6 space-y-4">
+                  <div className="rounded-2xl border border-border bg-[oklch(var(--surface-2))] p-4">
+                    <p className="text-xs text-foreground/50">Target distance</p>
+                    <p className="text-2xl font-semibold">6.2 km</p>
+                    <div className="mt-3 h-2 rounded-full bg-border/70">
+                      <div className="h-full w-2/3 rounded-full bg-primary" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-border bg-white p-4">
+                      <p className="text-xs text-foreground/50">Coach cue</p>
+                      <p className="text-sm font-semibold">Hold 6:05/km</p>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-white p-4">
+                      <p className="text-xs text-foreground/50">Recovery</p>
+                      <p className="text-sm font-semibold">Green zone</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex items-center gap-3 rounded-2xl border border-border bg-white p-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <MessageSquare className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-foreground/50">Coach message</p>
+                    <p className="text-sm font-medium">Short strides on the hills today.</p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
           </div>
-        </div>
-
-        {/* Diagonal SVG Divider */}
-        <div className="absolute inset-0 w-full h-full pointer-events-none">
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
-            <path d="M 60 0 L 100 0 L 100 100 L 40 100 Z" fill="black" />
-          </svg>
         </div>
       </section>
 
       {/* Optional Beta Signup Section */}
-      <section className="py-16 bg-gradient-to-br from-emerald-50 to-teal-50">
+      <section className="py-16 bg-[oklch(var(--surface-2))]">
         <div className="max-w-3xl mx-auto px-6">
-          <div className="bg-white rounded-3xl shadow-xl p-8 md:p-12 border border-emerald-100">
+          <div className="bg-white/90 rounded-[32px] shadow-lg p-8 md:p-12 border border-border">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-900 mb-3">{copy.betaSectionTitle}</h2>
-              <p className="text-gray-600">{copy.betaSectionSubtitle}</p>
+              <h2 className="text-3xl font-bold text-foreground mb-3">{copy.betaSectionTitle}</h2>
+              <p className="text-foreground/70">{copy.betaSectionSubtitle}</p>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 mb-6">
-              <div className="flex-1">
+            <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] items-end mb-6">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-foreground/60">
+                  {copy.labels.name}
+                </label>
                 <Input
                   type="text"
                   placeholder={copy.placeholders.name}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="h-16 rounded-xl border-gray-300 text-lg"
+                  className="h-14 rounded-2xl border-border text-base"
                 />
               </div>
-              <div className="flex-1">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-foreground/60">
+                  {copy.labels.email}
+                </label>
                 <Input
                   type="email"
                   placeholder={copy.placeholders.email}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="h-16 rounded-xl border-gray-300 text-lg"
+                  className="h-14 rounded-2xl border-border text-base"
                 />
               </div>
               <Button
@@ -610,7 +619,7 @@ export function ProfessionalLandingScreen({
                   }
                   revealChallenges();
                 }}
-                className="h-16 px-8 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-semibold"
+                className="h-14 px-6 bg-primary text-primary-foreground rounded-full font-semibold shadow-md hover:shadow-lg transition-all"
               >
                 {copy.continue}
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -618,21 +627,21 @@ export function ProfessionalLandingScreen({
             </div>
 
             {/* Benefits */}
-            <div className="mt-8 pt-8 border-t border-gray-200">
-              <p className="text-sm font-semibold text-gray-700 mb-4">{copy.benefitsTitle}</p>
-              <ul className="space-y-2 text-sm text-gray-600">
+            <div className="mt-8 pt-8 border-t border-border">
+              <p className="text-sm font-semibold text-foreground mb-4">{copy.benefitsTitle}</p>
+              <ul className="space-y-2 text-sm text-foreground/70">
                 <li className="flex items-start gap-2">
-                  <Trophy className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+                  <Trophy className="h-5 w-5 text-primary flex-shrink-0" />
                   <span>
                     <strong>{copy.benefits.discount}</strong>
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <Award className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+                  <Award className="h-5 w-5 text-primary flex-shrink-0" />
                   <span>{copy.benefits.badge}</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <Heart className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+                  <Heart className="h-5 w-5 text-primary flex-shrink-0" />
                   <span>{copy.benefits.support}</span>
                 </li>
               </ul>
@@ -645,36 +654,36 @@ export function ProfessionalLandingScreen({
       <section id="challenges-section" className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-10">
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">{copy.challengesTitle}</h2>
-            <p className="text-lg text-gray-600 max-w-3xl mx-auto">{copy.challengesSubtitle}</p>
+            <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-4">{copy.challengesTitle}</h2>
+            <p className="text-lg text-foreground/70 max-w-3xl mx-auto">{copy.challengesSubtitle}</p>
           </div>
 
-          <div className="max-w-3xl mx-auto bg-gray-50 rounded-3xl p-8 border border-gray-200">
-            <ul className="space-y-5 text-lg text-gray-700">
+          <div className="max-w-3xl mx-auto bg-[oklch(var(--surface-2))] rounded-3xl p-8 border border-border">
+            <ul className="space-y-5 text-lg text-foreground/80">
               {copy.challenges.map((challenge) => (
                 <li key={challenge.slug} className="flex flex-col gap-1">
-                  <span className="font-semibold text-gray-900">
-                    <Link href={`/challenges/${challenge.slug}`} className="hover:text-emerald-700 transition-colors">
+                  <span className="font-semibold text-foreground">
+                    <Link href={`/challenges/${challenge.slug}`} className="hover:text-primary transition-colors">
                       {challenge.name}
                     </Link>
                   </span>
-                  <span className="text-gray-600">{challenge.blurb}</span>
+                  <span className="text-foreground/70">{challenge.blurb}</span>
                   <Link
                     href={`/challenges/${challenge.slug}`}
-                    className="text-sm text-emerald-700 hover:text-emerald-800 font-medium"
+                    className="text-sm text-primary hover:text-primary/80 font-medium"
                   >
                     {copy.challengesLink}
                   </Link>
                 </li>
               ))}
             </ul>
-            <p className="mt-4 text-sm text-gray-500">{copy.challengesMore}</p>
+            <p className="mt-4 text-sm text-foreground/60">{copy.challengesMore}</p>
 
             <div className="mt-8 text-center">
               <Button
                 size="lg"
                 onClick={handleGenericStart}
-                className="h-12 px-8 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-semibold"
+                className="h-12 px-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full font-semibold shadow-md hover:shadow-lg transition-all"
               >
                 {copy.challengesCta}
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -685,18 +694,11 @@ export function ProfessionalLandingScreen({
       </section>
 
       {/* Features Section */}
-      <section className="relative py-20 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
-        {/* Subtle noise texture */}
-        <div
-          className="absolute inset-0 opacity-[0.02]"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-          }}
-        />
+      <section className="relative py-20 bg-[oklch(var(--surface-2))]">
         <div className="relative max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">{copy.featuresTitle}</h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">{copy.featuresSubtitle}</p>
+            <h2 className="text-4xl font-bold text-foreground mb-4">{copy.featuresTitle}</h2>
+            <p className="text-lg text-foreground/70 max-w-2xl mx-auto">{copy.featuresSubtitle}</p>
           </div>
 
           <motion.div
@@ -709,57 +711,38 @@ export function ProfessionalLandingScreen({
             {/* Row 1: Chat (1 col) + Adaptive (2 cols) */}
             <motion.div
               variants={itemVariants}
-              className="md:col-span-1 bg-white rounded-3xl p-10 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
+              className="md:col-span-1 bg-white rounded-3xl p-8 border border-border shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
             >
-              {/* Noise texture overlay */}
-              <div
-                className="absolute inset-0 opacity-[0.03] pointer-events-none"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-                }}
-              />
-              <div className={`h-32 w-32 bg-gradient-to-br ${featureCards[0].gradient} rounded-3xl flex items-center justify-center mb-8 shadow-lg`}>
-                <MessageSquare className="h-16 w-16 text-white" />
+              <div className={`h-16 w-16 ${featureCards[0].tone} rounded-2xl flex items-center justify-center mb-6`}>
+                <MessageSquare className="h-7 w-7" />
               </div>
-              <h3 className="text-heading-lg font-bold text-gray-900 mb-4">{featureCards[0].title}</h3>
-              <p className="text-gray-600 text-lg leading-relaxed">{featureCards[0].description}</p>
+              <h3 className="text-heading-lg font-semibold text-foreground mb-3">{featureCards[0].title}</h3>
+              <p className="text-foreground/70 leading-relaxed">{featureCards[0].description}</p>
             </motion.div>
 
             <motion.div
               variants={itemVariants}
-              className="md:col-span-2 bg-white rounded-3xl p-10 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
+              className="md:col-span-2 bg-white rounded-3xl p-8 border border-border shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
             >
-              <div
-                className="absolute inset-0 opacity-[0.03] pointer-events-none"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-                }}
-              />
-              <div className={`h-32 w-32 bg-gradient-to-br ${featureCards[1].gradient} rounded-3xl flex items-center justify-center mb-8 shadow-lg`}>
-                <Calendar className="h-16 w-16 text-white" />
+              <div className={`h-16 w-16 ${featureCards[1].tone} rounded-2xl flex items-center justify-center mb-6`}>
+                <Calendar className="h-7 w-7" />
               </div>
-              <h3 className="text-heading-lg font-bold text-gray-900 mb-4">{featureCards[1].title}</h3>
-              <p className="text-gray-600 text-lg leading-relaxed">{featureCards[1].description}</p>
+              <h3 className="text-heading-lg font-semibold text-foreground mb-3">{featureCards[1].title}</h3>
+              <p className="text-foreground/70 leading-relaxed">{featureCards[1].description}</p>
             </motion.div>
 
             {/* Row 2: Recovery (full width, giant icon) */}
             <motion.div
               variants={itemVariants}
-              className="md:col-span-3 bg-white rounded-3xl p-12 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
+              className="md:col-span-3 bg-white rounded-3xl p-10 border border-border shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
             >
-              <div
-                className="absolute inset-0 opacity-[0.03] pointer-events-none"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-                }}
-              />
               <div className="flex flex-col md:flex-row items-center gap-8">
-                <div className={`h-40 w-40 bg-gradient-to-br ${featureCards[2].gradient} rounded-3xl flex items-center justify-center shadow-2xl flex-shrink-0`}>
-                  <Heart className="h-20 w-20 text-white" />
+                <div className={`h-24 w-24 ${featureCards[2].tone} rounded-3xl flex items-center justify-center flex-shrink-0`}>
+                  <Heart className="h-10 w-10" />
                 </div>
                 <div>
-                  <h3 className="text-display-md font-black text-gray-900 mb-4 leading-tight">{featureCards[2].title}</h3>
-                  <p className="text-gray-600 text-xl leading-relaxed">{featureCards[2].description}</p>
+                  <h3 className="text-display-md font-semibold text-foreground mb-3 leading-tight">{featureCards[2].title}</h3>
+                  <p className="text-foreground/70 text-lg leading-relaxed">{featureCards[2].description}</p>
                 </div>
               </div>
             </motion.div>
@@ -767,56 +750,38 @@ export function ProfessionalLandingScreen({
             {/* Row 3: Goal (2 cols) + Race (1 col) */}
             <motion.div
               variants={itemVariants}
-              className="md:col-span-2 bg-white rounded-3xl p-10 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
+              className="md:col-span-2 bg-white rounded-3xl p-8 border border-border shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
             >
-              <div
-                className="absolute inset-0 opacity-[0.03] pointer-events-none"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-                }}
-              />
-              <div className={`h-32 w-32 bg-gradient-to-br ${featureCards[3].gradient} rounded-3xl flex items-center justify-center mb-8 shadow-lg`}>
-                <Target className="h-16 w-16 text-white" />
+              <div className={`h-16 w-16 ${featureCards[3].tone} rounded-2xl flex items-center justify-center mb-6`}>
+                <Target className="h-7 w-7" />
               </div>
-              <h3 className="text-heading-lg font-bold text-gray-900 mb-4">{featureCards[3].title}</h3>
-              <p className="text-gray-600 text-lg leading-relaxed">{featureCards[3].description}</p>
+              <h3 className="text-heading-lg font-semibold text-foreground mb-3">{featureCards[3].title}</h3>
+              <p className="text-foreground/70 leading-relaxed">{featureCards[3].description}</p>
             </motion.div>
 
             <motion.div
               variants={itemVariants}
-              className="md:col-span-1 bg-white rounded-3xl p-10 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
+              className="md:col-span-1 bg-white rounded-3xl p-8 border border-border shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
             >
-              <div
-                className="absolute inset-0 opacity-[0.03] pointer-events-none"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-                }}
-              />
-              <div className={`h-32 w-32 bg-gradient-to-br ${featureCards[4].gradient} rounded-3xl flex items-center justify-center mb-8 shadow-lg`}>
-                <Trophy className="h-16 w-16 text-white" />
+              <div className={`h-16 w-16 ${featureCards[4].tone} rounded-2xl flex items-center justify-center mb-6`}>
+                <Trophy className="h-7 w-7" />
               </div>
-              <h3 className="text-heading-lg font-bold text-gray-900 mb-4">{featureCards[4].title}</h3>
-              <p className="text-gray-600 text-lg leading-relaxed">{featureCards[4].description}</p>
+              <h3 className="text-heading-lg font-semibold text-foreground mb-3">{featureCards[4].title}</h3>
+              <p className="text-foreground/70 leading-relaxed">{featureCards[4].description}</p>
             </motion.div>
 
             {/* Row 4: Challenges (full width) */}
             <motion.div
               variants={itemVariants}
-              className="md:col-span-3 bg-white rounded-3xl p-12 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
+              className="md:col-span-3 bg-white rounded-3xl p-10 border border-border shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
             >
-              <div
-                className="absolute inset-0 opacity-[0.03] pointer-events-none"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-                }}
-              />
               <div className="flex flex-col md:flex-row items-center gap-8">
-                <div className={`h-40 w-40 bg-gradient-to-br ${featureCards[5].gradient} rounded-3xl flex items-center justify-center shadow-2xl flex-shrink-0`}>
-                  <Zap className="h-20 w-20 text-white" />
+                <div className={`h-24 w-24 ${featureCards[5].tone} rounded-3xl flex items-center justify-center flex-shrink-0`}>
+                  <Zap className="h-10 w-10" />
                 </div>
                 <div>
-                  <h3 className="text-display-md font-black text-gray-900 mb-4 leading-tight">{featureCards[5].title}</h3>
-                  <p className="text-gray-600 text-xl leading-relaxed">{featureCards[5].description}</p>
+                  <h3 className="text-display-md font-semibold text-foreground mb-3 leading-tight">{featureCards[5].title}</h3>
+                  <p className="text-foreground/70 text-lg leading-relaxed">{featureCards[5].description}</p>
                 </div>
               </div>
             </motion.div>
@@ -825,7 +790,7 @@ export function ProfessionalLandingScreen({
       </section>
 
       {/* Footer */}
-      <footer className="py-12 bg-gray-900 text-white">
+      <footer className="py-12 bg-[oklch(var(--black))] text-white">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             {/* Logo and tagline */}
@@ -839,28 +804,28 @@ export function ProfessionalLandingScreen({
               </div>
               <div>
                 <p className="font-bold text-lg">RunSmart</p>
-                <p className="text-sm text-gray-400">{copy.footerTagline}</p>
+                <p className="text-sm text-white/60">{copy.footerTagline}</p>
               </div>
             </div>
 
             {/* Links */}
             <div className="flex items-center gap-6 text-sm">
-              <Link href="/privacy" className="text-gray-300 hover:text-white transition-colors">
+              <Link href="/privacy" className="text-white/70 hover:text-white transition-colors">
                 {copy.footerLinks.privacy}
               </Link>
-              <Link href="/terms" className="text-gray-300 hover:text-white transition-colors">
+              <Link href="/terms" className="text-white/70 hover:text-white transition-colors">
                 {copy.footerLinks.terms}
               </Link>
               <a
                 href="mailto:nadav.yigal@runsmart-ai.com"
-                className="text-gray-300 hover:text-white transition-colors"
+                className="text-white/70 hover:text-white transition-colors"
               >
                 {copy.footerLinks.contact}
               </a>
             </div>
           </div>
 
-          <div className="mt-8 pt-8 border-t border-gray-800 text-center text-sm text-gray-400">
+          <div className="mt-8 pt-8 border-t border-white/10 text-center text-sm text-white/50">
             <p>© {new Date().getFullYear()} RunSmart. All rights reserved.</p>
           </div>
         </div>
@@ -868,3 +833,4 @@ export function ProfessionalLandingScreen({
     </div>
   );
 }
+

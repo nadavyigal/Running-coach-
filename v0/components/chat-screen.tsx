@@ -1,4 +1,4 @@
-Ôªø'use client';
+'use client';
 
 import { useState, useEffect, useRef } from "react"
 import dynamic from "next/dynamic"
@@ -150,7 +150,7 @@ export function ChatScreen() {
 
     try {
       setIsLoadingHistory(true)
-      console.log('üìö Loading chat history for user:', user.id)
+      console.log('?? Loading chat history for user:', user.id)
 
       const response = await fetch(`/api/chat?userId=${user.id}&conversationId=${conversationId}`, {
         headers: buildAuthHeaders(user?.id),
@@ -161,7 +161,7 @@ export function ChatScreen() {
 
       const data = await response.json() as { messages?: ChatMessageDTO[] }
       const existingMessages: ChatMessageDTO[] = Array.isArray(data.messages) ? data.messages : []
-      console.log(`üì® Loaded ${existingMessages.length} existing messages`)
+      console.log(`?? Loaded ${existingMessages.length} existing messages`)
 
       if (existingMessages.length > 0) {
         const chatMessages: ChatMessage[] = existingMessages.map((msg) => ({
@@ -173,7 +173,7 @@ export function ChatScreen() {
         }))
 
         setMessages((currentMessages) => (currentMessages.length > 1 ? currentMessages : chatMessages))
-        console.log('?¬£◊ï Chat history loaded successfully')
+        console.log('?£Â Chat history loaded successfully')
       } else {
         const welcomeMessage: ChatMessage = {
           id: `welcome-${Date.now()}`,
@@ -182,10 +182,10 @@ export function ChatScreen() {
           timestamp: new Date(),
         }
         setMessages((currentMessages) => (currentMessages.length > 1 ? currentMessages : [welcomeMessage]))
-        console.log('?∆í◊°◊õ No existing history, showing welcome message')
+        console.log('?ÉÒÎ No existing history, showing welcome message')
       }
     } catch (error) {
-      console.error('?¬•◊ú Failed to load chat history:', error)
+      console.error('?•Ï Failed to load chat history:', error)
       toast({
         title: "Chat History Error",
         description: "Failed to load previous messages. Starting fresh conversation.",
@@ -295,7 +295,7 @@ export function ChatScreen() {
         variant: "destructive",
         duration: 8000,
       })
-      console.error('‚ùå Chat error: User profile not available. User state:', user, 'Context user:', contextUser)
+      console.error('? Chat error: User profile not available. User state:', user, 'Context user:', contextUser)
       return
     }
 
@@ -473,7 +473,7 @@ export function ChatScreen() {
             });
             const { done, value } = readResult;
             if (done) {
-              console.log('?–à–µ Stream complete. Total updates:', updateCount);
+              console.log('??? Stream complete. Total updates:', updateCount);
               break
             }
 
@@ -686,19 +686,19 @@ export function ChatScreen() {
         <div className={`max-w-[80%] ${isUser ? 'order-first' : ''}`}>
           <div
             className={`rounded-2xl px-5 py-3 transition-all duration-300 ${isUser
-                ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg border-2 border-cyan-400/50 glow-cyan'
-                : 'bg-gradient-to-r from-purple-50 to-pink-50 text-gray-900 relative noise-overlay'
+                ? 'bg-primary text-primary-foreground shadow-md border border-primary/20'
+                : 'bg-white text-foreground border border-border'
               }`}
           >
             <p className="text-sm whitespace-pre-wrap relative z-10">{message.content}</p>
 
             {/* Show adaptations for assistant messages */}
             {!isUser && message.adaptations && message.adaptations.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-purple-200/50 text-xs text-purple-700 relative z-10">
+              <div className="mt-3 pt-3 border-t border-border/60 text-xs text-foreground/60 relative z-10">
                 <span className="font-semibold">Coaching Adaptations: </span>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {message.adaptations.map((adaptation, idx) => (
-                    <Badge key={idx} variant="secondary" className="bg-purple-100 text-purple-700 text-xs">
+                    <Badge key={idx} variant="secondary" className="bg-primary/10 text-primary text-xs">
                       {adaptation}
                     </Badge>
                   ))}
@@ -718,7 +718,7 @@ export function ChatScreen() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 w-6 p-0 text-green-600 hover:text-green-700"
+                  className="h-6 w-6 p-0 text-primary hover:text-primary/80"
                   onClick={() => handleFeedbackClick(message)}
                   title="This was helpful"
                 >
@@ -806,7 +806,7 @@ export function ChatScreen() {
         <div className="space-y-4">
           {isLoadingHistory && (
             <div className="flex justify-center items-center py-4" role="status" aria-label="Loading chat history">
-              <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2">
+              <div className="flex items-center gap-2 bg-[oklch(var(--surface-2))] rounded-lg px-4 py-2">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 <span className="text-sm text-muted-foreground">Loading chat history...</span>
               </div>
@@ -840,7 +840,7 @@ export function ChatScreen() {
           ))}
           {isLoading && (
             <div className="flex justify-start" role="status" aria-label="Loading">
-              <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2">
+              <div className="flex items-center gap-2 bg-[oklch(var(--surface-2))] rounded-lg px-4 py-2">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 <span className="text-sm text-muted-foreground">Coach is thinking...</span>
               </div>
@@ -863,11 +863,11 @@ export function ChatScreen() {
 
       {pendingUserDataUpdate && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md">
-          <Card className="shadow-lg border-blue-500 border-2">
+          <Card className="shadow-lg border-primary/40 border">
             <CardContent className="p-4 flex items-center gap-3">
               <div className="flex-1">
                 <p className="font-medium text-sm">{pendingUserDataUpdate.message}</p>
-                <p className="text-xs text-gray-600 mt-1">
+                <p className="text-xs text-foreground/70 mt-1">
                   Save to your training profile?
                 </p>
               </div>
@@ -892,24 +892,24 @@ export function ChatScreen() {
       )}
 
       {/* Input - Floating Bar with Backdrop Blur */}
-      <div className="sticky bottom-0 backdrop-blur-lg bg-white/80 border-t border-gray-200/50 p-4 shadow-lg">
+      <div className="sticky bottom-0 backdrop-blur-lg bg-white/85 border-t border-border p-4 shadow-lg">
         <form onSubmit={handleInputSubmit} className="flex gap-3 items-center">
           <Input
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             placeholder="Ask your running coach anything..."
             disabled={isLoading}
-            className="flex-1 bg-gray-50 border-2 border-gray-200 rounded-2xl px-6 py-4 text-base
-                       focus:bg-white focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/20
-                       transition-all duration-200 placeholder:text-gray-400"
+            className="flex-1 bg-[oklch(var(--surface-2))] border border-border rounded-2xl px-6 py-4 text-base
+                       focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/20
+                       transition-all duration-200 placeholder:text-foreground/50"
           />
           <Button
             type="submit"
             disabled={!inputValue.trim() || isLoading}
             size="icon"
             aria-label="Send message"
-            className="h-12 w-12 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500
-                       hover:from-cyan-600 hover:to-blue-600 shadow-lg hover:shadow-xl
+            className="h-12 w-12 rounded-full bg-primary
+                       hover:bg-primary/90 shadow-lg hover:shadow-xl
                        transition-all duration-300 hover:scale-105 active:scale-95"
           >
             <Send className="h-5 w-5" />
@@ -949,7 +949,7 @@ export function ChatScreen() {
                 size="sm"
                 onClick={() => setShowCoachingPreferences(false)}
               >
-                ?◊ß
+                ?˜
               </Button>
             </div>
             <div className="p-4">
@@ -965,3 +965,6 @@ export function ChatScreen() {
     </div>
   )
 }
+
+
+

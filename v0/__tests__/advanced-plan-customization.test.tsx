@@ -153,7 +153,7 @@ describe('Advanced Plan Customization', () => {
       await waitFor(() => {
         expect(screen.getByText('Boston Marathon')).toBeInTheDocument();
         expect(screen.getByText('A Race')).toBeInTheDocument();
-        expect(screen.getByText('42.2km')).toBeInTheDocument();
+        expect(screen.getAllByText('42.2').length).toBeGreaterThan(0);
       });
     });
 

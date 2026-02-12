@@ -28,7 +28,6 @@ import { ToastAction } from "@/components/ui/toast"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
-import { GPSAccuracyIndicator } from "@/components/gps-accuracy-indicator"
 import { GPSMonitoringService, type GPSAccuracyData } from "@/lib/gps-monitoring"
 import { calculateDistance, calculateWaypointDistance } from "@/lib/routeUtils"
 import { useGpsTracking, type GPSPoint } from "@/hooks/use-gps-tracking"
@@ -2413,35 +2412,35 @@ export function RecordScreen() {
   const avgPaceFormatted = avgPaceSecondsPerKm > 0 ? formatPace(avgPaceSecondsPerKm) : '--:--'
   const gpsAccuracyStatusClass =
     gpsAccuracyValue === null
-      ? 'text-gray-300'
+      ? 'text-foreground/40'
       : gpsAccuracyValue > 50
         ? 'text-red-300'
         : gpsAccuracyValue > 20
           ? 'text-yellow-300'
-          : 'text-emerald-300'
+          : 'text-primary/70'
   const gpsUpdateStatusClass =
     typeof timeSinceLastGpsUpdateSec === 'number'
       ? timeSinceLastGpsUpdateSec > 10
         ? 'text-red-300'
         : timeSinceLastGpsUpdateSec > 5
           ? 'text-yellow-300'
-          : 'text-emerald-300'
-      : 'text-gray-300'
-  const autoPauseStatusClass = autoPauseActive ? 'text-red-300' : 'text-emerald-300'
+          : 'text-primary/70'
+      : 'text-foreground/40'
+  const autoPauseStatusClass = autoPauseActive ? 'text-red-300' : 'text-primary/70'
   const rejectionRateClass =
     rejectionRate > 0.3
       ? 'text-red-300'
       : rejectionRate > 0.15
         ? 'text-yellow-300'
-        : 'text-emerald-300'
+        : 'text-primary/70'
   const satelliteProxyClass =
     satelliteProxyStatus === 'low'
       ? 'text-red-300'
       : satelliteProxyStatus === 'high'
-        ? 'text-emerald-300'
+        ? 'text-primary/70'
         : satelliteProxyStatus === 'steady'
           ? 'text-yellow-300'
-          : 'text-gray-300'
+          : 'text-foreground/40'
   const intervalCoachEnabled = ENABLE_VIBRATION_COACH
   const intervalTimerVisible = intervalCoachEnabled && intervalPhases.length > 0
   const currentPhase = intervalPhases[currentPhaseIndex]
@@ -2486,38 +2485,38 @@ export function RecordScreen() {
     gpsWeakSignalPrompt?.accuracyRadius ?? currentGPSAccuracy?.accuracyRadius ?? null
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 space-y-4">
+    <div className="min-h-screen bg-[oklch(var(--surface-2))] p-4 space-y-4">
       {/* GPS Warmup Countdown Overlay */}
       {isGpsWarmingUp && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <Card className="max-w-md w-full">
             <CardContent className="p-8 text-center space-y-6">
               <div className="flex justify-center">
-                <Satellite className="h-16 w-16 text-blue-500 animate-pulse" />
+                <Satellite className="h-16 w-16 text-primary animate-pulse" />
               </div>
 
               <div>
                 <h2 className="text-2xl font-bold mb-2">Acquiring GPS Signal</h2>
-                <p className="text-gray-600">
+                <p className="text-foreground/70">
                   Warming up GPS for accurate tracking...
                 </p>
               </div>
 
               {/* Countdown Timer */}
-              <div className="text-8xl font-bold text-blue-600">
+              <div className="text-8xl font-bold text-primary">
                 {gpsWarmupCountdown}
               </div>
 
               {/* GPS Quality Indicators */}
               <div className="space-y-3 text-left">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-gray-700">Signal Strength:</span>
+                  <span className="text-sm font-medium text-foreground/70">Signal Strength:</span>
                   <div className="flex items-center gap-2">
                     <Progress
                       value={gpsWarmupQuality.signalStrength}
                       className="w-32 h-2"
                     />
-                    <span className={`text-sm font-bold ${gpsWarmupQuality.signalStrength >= 75 ? 'text-green-600' :
+                    <span className={`text-sm font-bold ${gpsWarmupQuality.signalStrength >= 75 ? 'text-primary' :
                       gpsWarmupQuality.signalStrength >= 50 ? 'text-yellow-600' :
                         'text-red-600'
                       }`}>
@@ -2528,8 +2527,8 @@ export function RecordScreen() {
 
                 {gpsWarmupQuality.currentAccuracy !== null && (
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-700">Current Accuracy:</span>
-                    <span className={`text-sm font-bold ${gpsWarmupQuality.currentAccuracy <= 20 ? 'text-green-600' :
+                    <span className="text-sm font-medium text-foreground/70">Current Accuracy:</span>
+                    <span className={`text-sm font-bold ${gpsWarmupQuality.currentAccuracy <= 20 ? 'text-primary' :
                       gpsWarmupQuality.currentAccuracy <= 50 ? 'text-yellow-600' :
                         'text-red-600'
                       }`}>
@@ -2540,15 +2539,15 @@ export function RecordScreen() {
 
                 {gpsWarmupQuality.bestAccuracy !== null && (
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-700">Best Accuracy:</span>
-                    <span className="text-sm font-bold text-green-600">
+                    <span className="text-sm font-medium text-foreground/70">Best Accuracy:</span>
+                    <span className="text-sm font-bold text-primary">
                       ±{Math.round(gpsWarmupQuality.bestAccuracy)}m
                     </span>
                   </div>
                 )}
 
                 {gpsWarmupQuality.canStart && (
-                  <div className="flex items-center justify-center gap-2 text-green-600 bg-green-50 p-2 rounded">
+                  <div className="flex items-center justify-center gap-2 text-primary bg-primary/10 p-2 rounded">
                     <Sparkles className="h-4 w-4" />
                     <span className="text-sm font-medium">Ready to start!</span>
                   </div>
@@ -2564,7 +2563,7 @@ export function RecordScreen() {
                 Cancel
               </Button>
 
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-foreground/60">
                 For best results, wait for signal strength above 75%
               </p>
             </CardContent>
@@ -2608,12 +2607,12 @@ export function RecordScreen() {
 
       {/* Selected Route Display */}
       {selectedRoute && (
-        <Card className="bg-green-50 border-green-200">
+        <Card className="bg-primary/10 border-primary/20">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-medium text-green-900">{selectedRoute.name}</h3>
-                <p className="text-sm text-green-700">
+                <h3 className="font-medium text-foreground">{selectedRoute.name}</h3>
+                <p className="text-sm text-foreground/70">
                   {selectedRoute.distance}km • {selectedRoute.safetyScore}% safe • {selectedRoute.difficulty}
                 </p>
               </div>
@@ -2621,7 +2620,7 @@ export function RecordScreen() {
                 variant="outline"
                 size="sm"
                 onClick={() => setSelectedRoute(null)}
-                className="text-green-700 border-green-300"
+                className="text-foreground/70 border-primary/30"
               >
                 Clear
               </Button>
@@ -2632,14 +2631,14 @@ export function RecordScreen() {
 
       {/* GPS Status - Using New GPS Monitoring System */}
       {!isRunning && !isGpsTracking && !isInitializingGps && !isGpsWarmingUp && gpsPermission !== 'denied' && gpsPermission !== 'unsupported' && (
-        <Card className="border-blue-200 bg-blue-50">
+        <Card className="border-primary/20 bg-primary/10">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Satellite className="h-5 w-5 text-blue-500" />
+                <Satellite className="h-5 w-5 text-primary" />
                 <div>
-                  <p className="font-medium text-blue-900">GPS Ready</p>
-                  <p className="text-sm text-blue-700">
+                  <p className="font-medium text-foreground">GPS Ready</p>
+                  <p className="text-sm text-foreground/70">
                     GPS will activate when you start your run
                   </p>
                 </div>
@@ -2665,7 +2664,7 @@ export function RecordScreen() {
                     })
                   }
                 }}
-                className="text-blue-700 border-blue-300 hover:bg-blue-100"
+                className="text-foreground/70 border-primary/30 hover:bg-primary/10"
               >
                 <Satellite className="h-4 w-4 mr-1" />
                 Warm Up GPS
@@ -2676,13 +2675,13 @@ export function RecordScreen() {
       )}
 
       {hasRecoveredRun && isPaused && (
-        <Card className="border-blue-200 bg-blue-50">
+        <Card className="border-primary/20 bg-primary/10">
           <CardContent className="p-4">
             <div className="flex items-start gap-2">
-              <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+              <Info className="h-5 w-5 text-primary mt-0.5" />
               <div>
-                <p className="font-medium text-blue-900">Recovered run ready</p>
-                <p className="text-sm text-blue-800">
+                <p className="font-medium text-foreground">Recovered run ready</p>
+                <p className="text-sm text-foreground/80">
                   Tap Resume to continue, or Stop to discard this run.
                 </p>
               </div>
@@ -2692,18 +2691,18 @@ export function RecordScreen() {
       )}
 
       {!isRunning && !isGpsWarmingUp && (
-        <Card className="border-emerald-200 bg-emerald-50/70">
+        <Card className="border-primary/20 bg-primary/10">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-sm font-semibold text-white">
+              <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-white">
                 1
               </div>
               <div className="space-y-1">
-                <p className="font-medium text-emerald-900">Start recording</p>
-                <p className="text-sm text-emerald-800">
+                <p className="font-medium text-foreground">Start recording</p>
+                <p className="text-sm text-foreground/80">
                   Tap Start Run. We&apos;ll warm up GPS for about 10 seconds, then begin tracking.
                 </p>
-                <p className="text-xs text-emerald-700">
+                <p className="text-xs text-foreground/70">
                   Tip: Keep your phone in open air for faster GPS lock.
                 </p>
                 {gpsPermission === 'denied' && (
@@ -2719,13 +2718,13 @@ export function RecordScreen() {
 
       {/* GPS Initializing State */}
       {isInitializingGps && (
-        <Card className="border-blue-200 bg-blue-50">
+        <Card className="border-primary/20 bg-primary/10">
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
+              <Loader2 className="h-5 w-5 text-primary animate-spin" />
               <div>
-                <p className="font-medium text-blue-900">Initializing GPS...</p>
-                <p className="text-sm text-blue-700">
+                <p className="font-medium text-foreground">Initializing GPS...</p>
+                <p className="text-sm text-foreground/70">
                   Please allow location access when prompted
                 </p>
               </div>
@@ -2738,12 +2737,12 @@ export function RecordScreen() {
       {(isGpsTracking || isRunning) && !isInitializingGps && gpsPermission !== 'denied' && gpsPermission !== 'unsupported' && (
         <>
           {currentGPSAccuracy ? (
-            <Card className="border-0 bg-slate-900 text-white">
+            <Card className="border-0 bg-[oklch(18%_0.02_255)] text-white">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Satellite className={`h-5 w-5 ${
-                      currentGPSAccuracy.signalStrength >= 80 ? 'text-green-400' :
+                      currentGPSAccuracy.signalStrength >= 80 ? 'text-primary' :
                       currentGPSAccuracy.signalStrength >= 60 ? 'text-amber-400' :
                       'text-red-400 animate-pulse'
                     }`} />
@@ -2759,18 +2758,18 @@ export function RecordScreen() {
                           className={`w-1.5 rounded-full transition-all duration-300 ${
                             bar <= Math.ceil(currentGPSAccuracy.signalStrength / 20)
                               ? currentGPSAccuracy.signalStrength >= 80
-                                ? 'bg-green-400 glow-cyan'
+                                ? 'bg-primary'
                                 : currentGPSAccuracy.signalStrength >= 60
                                 ? 'bg-amber-400'
                                 : 'bg-red-400'
-                              : 'bg-gray-700'
+                              : 'bg-foreground/30'
                           }`}
                           style={{ height: `${bar * 4 + 4}px` }}
                         />
                       ))}
                     </div>
                     <span className={`text-sm font-bold tabular-nums ${
-                      currentGPSAccuracy.signalStrength >= 80 ? 'text-green-400' :
+                      currentGPSAccuracy.signalStrength >= 80 ? 'text-primary' :
                       currentGPSAccuracy.signalStrength >= 60 ? 'text-amber-400' :
                       'text-red-400'
                     }`}>
@@ -2780,11 +2779,11 @@ export function RecordScreen() {
                 </div>
 
                 {currentGPSAccuracy.accuracyRadius && (
-                  <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
+                  <div className="mt-2 flex items-center justify-between text-xs text-foreground/50">
                     <span>Accuracy: ±{Math.round(currentGPSAccuracy.accuracyRadius)}m</span>
                     <span className={`uppercase tracking-wide ${
-                      currentGPSAccuracy.quality === 'excellent' ? 'text-green-400' :
-                      currentGPSAccuracy.quality === 'good' ? 'text-cyan-400' :
+                      currentGPSAccuracy.quality === 'excellent' ? 'text-primary' :
+                      currentGPSAccuracy.quality === 'good' ? 'text-primary/70' :
                       currentGPSAccuracy.quality === 'fair' ? 'text-amber-400' :
                       'text-red-400'
                     }`}>
@@ -2855,15 +2854,15 @@ export function RecordScreen() {
 
           {/* Screen Visibility Indicator */}
           {isRunning && !isPageVisible && (
-            <Card className="border-blue-200 bg-blue-50 mt-4">
+            <Card className="border-primary/20 bg-primary/10 mt-4">
               <CardContent className="p-3">
                 <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
-                  <p className="text-sm text-blue-900 font-medium">
+                  <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                  <p className="text-sm text-foreground font-medium">
                     Recording in background
                   </p>
                 </div>
-                <p className="text-xs text-blue-700 mt-1">
+                <p className="text-xs text-foreground/70 mt-1">
                   Screen is off. GPS tracking continues via background audio.
                 </p>
               </CardContent>
@@ -2896,9 +2895,9 @@ export function RecordScreen() {
 
           {/* Mobile GPS Warning */}
           {isRunning && (
-            <Card className="border-gray-200 bg-gray-50 mt-4">
+            <Card className="border-border bg-[oklch(var(--surface-2))] mt-4">
               <CardContent className="p-3">
-                <p className="text-xs text-gray-600 flex items-center gap-1">
+                <p className="text-xs text-foreground/70 flex items-center gap-1">
                   <Info className="h-3 w-3" />
                   Keep screen on for best GPS accuracy. Mobile browsers don&apos;t support background GPS tracking.
                 </p>
@@ -2933,13 +2932,13 @@ export function RecordScreen() {
 
       {/* GPS Unsupported Warning */}
       {gpsPermission === 'unsupported' && (
-        <Card className="border-gray-200 bg-gray-50">
+        <Card className="border-border bg-[oklch(var(--surface-2))]">
           <CardContent className="p-4">
             <div className="flex items-start gap-2">
-              <Info className="h-5 w-5 text-gray-600 mt-0.5 flex-shrink-0" />
+              <Info className="h-5 w-5 text-foreground/70 mt-0.5 flex-shrink-0" />
               <div>
-                <p className="font-medium text-gray-800">GPS Unavailable</p>
-                <p className="text-sm text-gray-700 mt-1">
+                <p className="font-medium text-foreground/80">GPS Unavailable</p>
+                <p className="text-sm text-foreground/70 mt-1">
                   GPS is not available on this device or browser. You can still use the &quot;Add Manual Run&quot; option below.
                 </p>
               </div>
@@ -2968,21 +2967,21 @@ export function RecordScreen() {
       )}
 
       {intervalTimerVisible && (
-        <Card className="border-blue-200 bg-blue-50">
+        <Card className="border-primary/20 bg-primary/10">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-blue-700">Interval Timer</p>
-                <p className="text-base font-semibold text-blue-900">{intervalHeaderText}</p>
+                <p className="text-sm font-medium text-foreground/70">Interval Timer</p>
+                <p className="text-base font-semibold text-foreground">{intervalHeaderText}</p>
                 {phaseStatusText && (
-                  <p className="text-xs text-blue-700">{phaseStatusText}</p>
+                  <p className="text-xs text-foreground/70">{phaseStatusText}</p>
                 )}
               </div>
-              <span className="text-sm font-semibold text-blue-800">{phaseProgress}%</span>
+              <span className="text-sm font-semibold text-foreground/80">{phaseProgress}%</span>
             </div>
             <Progress value={phaseProgress} className="h-2" />
             {nextPhaseCountdown && (
-              <div className="flex items-center justify-between text-sm text-blue-800">
+              <div className="flex items-center justify-between text-sm text-foreground/80">
                 <span>Elapsed: {formatTime(phaseElapsedSeconds)}</span>
                 <span>{nextPhaseCountdown}</span>
               </div>
@@ -2995,16 +2994,16 @@ export function RecordScreen() {
         <Card>
           <CardContent className="p-4 space-y-3">
             <div>
-              <p className="font-medium text-gray-900">Run Settings</p>
-              <p className="text-sm text-gray-600">Customize cues for this run.</p>
+              <p className="font-medium text-foreground">Run Settings</p>
+              <p className="text-sm text-foreground/70">Customize cues for this run.</p>
             </div>
 
             {/* Vibration Toggle (hide on iOS where not supported) */}
             {ENABLE_VIBRATION_COACH && coachingCueState.vibrationSupported && (
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Vibration Cues</p>
-                  <p className="text-xs text-gray-600">
+                  <p className="text-sm font-medium text-foreground">Vibration Cues</p>
+                  <p className="text-xs text-foreground/70">
                     Enable haptic cues for interval changes.
                   </p>
                 </div>
@@ -3020,8 +3019,8 @@ export function RecordScreen() {
             {ENABLE_AUDIO_COACH && coachingCueState.audioSupported && (
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Audio Cues</p>
-                  <p className="text-xs text-gray-600">
+                  <p className="text-sm font-medium text-foreground">Audio Cues</p>
+                  <p className="text-xs text-foreground/70">
                     {coachingCueState.isIOS && !coachingCueState.vibrationSupported
                       ? 'Audio cues for interval changes (haptics unavailable on iOS).'
                       : 'Play sounds for interval changes.'}
@@ -3049,29 +3048,32 @@ export function RecordScreen() {
       )}
 
       {/* Main Controls - Bold Athletic Minimalism */}
-      <Card className="border-0 shadow-2xl bg-slate-900 text-white overflow-hidden">
+      <Card className="border-0 shadow-2xl bg-[oklch(18%_0.02_255)] text-white overflow-hidden">
         <CardContent className="p-8">
           <div className="space-y-8">
             {/* Giant Primary Metric - Distance */}
             <div className="text-center">
-              <span className="text-label-sm text-cyan-400 glow-cyan">DISTANCE</span>
+              <span className="text-label-sm text-primary/70 ">DISTANCE</span>
               <div className="relative">
-                <span className="text-display-xl font-black tabular-nums block leading-none mt-2">
-                  {metrics.distance.toFixed(2)}
-                </span>
-                <span className="text-heading-lg text-gray-400 ml-2">KM</span>
+                  <span
+                    className="text-display-xl font-black tabular-nums block leading-none mt-2"
+                    data-testid="record-distance"
+                  >
+                    {metrics.distance.toFixed(2)}
+                  </span>
+                <span className="text-heading-lg text-foreground/50 ml-2">KM</span>
               </div>
             </div>
 
             {/* Current Pace - Color Coded by Zone */}
             <div className={`text-center p-6 rounded-3xl ${
               metrics.currentPace === 0 || !Number.isFinite(metrics.currentPace)
-                ? 'bg-gray-800'
+                ? 'bg-[oklch(20%_0.02_255)]'
                 : metrics.currentPace < 300 // <5:00/km = hard
-                ? 'bg-gradient-to-r from-red-500 to-rose-600'
+                ? 'bg-gradient-energy'
                 : metrics.currentPace < 360 // 5:00-6:00/km = moderate
-                ? 'bg-gradient-to-r from-amber-400 to-orange-500'
-                : 'bg-gradient-to-r from-lime-400 to-green-500' // >6:00/km = easy
+                ? 'bg-amber-400'
+                : 'bg-primary' // >6:00/km = easy
             }`}>
               <span className="text-label-sm text-white/90">CURRENT PACE</span>
               <div className="text-display-md font-black tabular-nums mt-2">
@@ -3092,7 +3094,7 @@ export function RecordScreen() {
 
             {/* Time Elapsed */}
             <div className="text-center">
-              <span className="text-label-sm text-gray-400">TIME ELAPSED</span>
+              <span className="text-label-sm text-foreground/50">TIME ELAPSED</span>
               <div className="text-display-lg font-mono font-black tabular-nums mt-2">
                 {formatTime(metrics.duration)}
               </div>
@@ -3100,18 +3102,18 @@ export function RecordScreen() {
 
             {/* Secondary Metrics Grid */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-slate-800 rounded-2xl p-4 text-center">
-                <span className="text-label-sm text-gray-400">AVG PACE</span>
+              <div className="bg-[oklch(20%_0.02_255)] rounded-2xl p-4 text-center">
+                <span className="text-label-sm text-foreground/50">AVG PACE</span>
                 <div className="text-3xl font-black tabular-nums mt-2">
                   {formatPace(metrics.pace)}
                 </div>
               </div>
-              <div className="bg-slate-800 rounded-2xl p-4 text-center">
-                <span className="text-label-sm text-gray-400">SPEED</span>
+              <div className="bg-[oklch(20%_0.02_255)] rounded-2xl p-4 text-center">
+                <span className="text-label-sm text-foreground/50">SPEED</span>
                 <div className="text-3xl font-black tabular-nums mt-2">
                   {Number.isFinite(metrics.currentSpeed) ? (metrics.currentSpeed * 3.6).toFixed(1) : '0.0'}
                 </div>
-                <span className="text-xs text-gray-400">km/h</span>
+                <span className="text-xs text-foreground/50">km/h</span>
               </div>
             </div>
 
@@ -3126,9 +3128,10 @@ export function RecordScreen() {
               {!isRunning ? (
                 <Button
                   onClick={startRun}
-                  className="h-32 w-32 rounded-full bg-gradient-to-r from-green-600 to-emerald-600
+                  aria-label="Start Run"
+                  className="h-32 w-32 rounded-full bg-primary
                     shadow-2xl hover:shadow-3xl transition-all duration-300
-                    hover:scale-110 active:scale-95 glow-cyan border-0
+                    hover:scale-110 active:scale-95  border-0
                     disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                   disabled={gpsPermission === 'denied' || gpsPermission === 'unsupported' || isInitializingGps || isGpsWarmingUp}
                 >
@@ -3145,17 +3148,19 @@ export function RecordScreen() {
                   {isPaused ? (
                     <Button
                       onClick={resumeRun}
-                      className="h-32 w-32 rounded-full bg-gradient-to-r from-green-600 to-emerald-600
+                      aria-label="Resume Run"
+                      className="h-32 w-32 rounded-full bg-primary
                         shadow-2xl hover:shadow-3xl transition-all duration-300
-                        hover:scale-110 active:scale-95 glow-cyan border-0"
+                        hover:scale-110 active:scale-95  border-0"
                     >
                       <Play className="h-12 w-12 text-white fill-white" />
                     </Button>
                   ) : (
                     <Button
                       onClick={pauseRun}
+                      aria-label="Pause Run"
                       className="h-24 w-24 rounded-full border-4 border-amber-500
-                        bg-slate-800 hover:bg-slate-700 transition-all duration-300
+                        bg-[oklch(20%_0.02_255)] hover:bg-[oklch(24%_0.02_255)] transition-all duration-300
                         hover:scale-105 active:scale-95"
                     >
                       <Pause className="h-10 w-10 text-amber-400" />
@@ -3163,8 +3168,9 @@ export function RecordScreen() {
                   )}
                   <Button
                     onClick={stopRun}
+                    aria-label="End Run"
                     className="h-24 w-24 rounded-full border-4 border-red-600
-                      bg-slate-800 hover:bg-red-900/50 transition-all duration-300
+                      bg-[oklch(20%_0.02_255)] hover:bg-red-900/50 transition-all duration-300
                       hover:scale-105 active:scale-95 relative overflow-hidden group"
                   >
                     <Square className="h-10 w-10 text-red-500 fill-red-500" />
@@ -3175,7 +3181,7 @@ export function RecordScreen() {
 
             {/* Status Text */}
             {!isRunning && (
-              <p className="text-center text-label-sm text-gray-400">
+              <p className="text-center text-label-sm text-foreground/50">
                 {isInitializingGps ? 'INITIALIZING GPS...' :
                   isGpsWarmingUp ? 'WARMING UP GPS...' :
                     isGpsTracking && currentGPSAccuracy && currentGPSAccuracy.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START ?
@@ -3189,7 +3195,7 @@ export function RecordScreen() {
               <Button
                 variant="ghost"
                 onClick={() => setShowManualModal(true)}
-                className="text-gray-600 w-full"
+                className="text-foreground/70 w-full"
               >
                 <Volume2 className="h-4 w-4 mr-2" />
                 Add Manual Run
@@ -3225,8 +3231,8 @@ export function RecordScreen() {
             />
             {!isRunning && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/10 backdrop-blur-[1px]">
-                <div className="bg-white/90 dark:bg-slate-800/90 rounded-lg px-3 py-2 shadow">
-                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                <div className="bg-white/90 dark:bg-[oklch(20%_0.02_255)]/90 rounded-lg px-3 py-2 shadow">
+                  <p className="text-sm text-foreground/70 ">
                     Start a run to enable live GPS tracking
                   </p>
                 </div>
@@ -3259,7 +3265,7 @@ export function RecordScreen() {
             {debugExpanded && (
               <div className="mt-2 space-y-3 text-xs font-mono">
                 {debugPathOverride && !isRunning && (
-                  <div className="text-[10px] text-emerald-200">Golden route preview</div>
+                  <div className="text-[10px] text-primary/60">Golden route preview</div>
                 )}
                 <details open className="rounded-md bg-black/30 p-2">
                   <summary className="cursor-pointer text-[11px] font-semibold">GPS</summary>
@@ -3372,13 +3378,13 @@ export function RecordScreen() {
 
       {/* Running Tips */}
       {isRunning && (
-        <Card className="bg-blue-50 border-blue-200">
+        <Card className="bg-primary/10 border-primary/20">
           <CardContent className="p-4">
             <div className="text-center">
-              <h3 className="font-medium text-blue-900 mb-2">
+              <h3 className="font-medium text-foreground mb-2">
                 {isPaused ? 'Take your time! ⏸️' : 'Keep it up! 🏃‍♂️'}
               </h3>
-              <p className="text-sm text-blue-800">
+              <p className="text-sm text-foreground/80">
                 {isPaused
                   ? 'Resume when you\'re ready to continue.'
                   : 'Maintain a steady rhythm and focus on your breathing.'
@@ -3494,3 +3500,11 @@ export function RecordScreen() {
     </div>
   )
 }
+
+
+
+
+
+
+
+

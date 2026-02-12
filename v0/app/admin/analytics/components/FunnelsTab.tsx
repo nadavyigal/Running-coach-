@@ -270,7 +270,7 @@ export function FunnelsTab() {
               <p className="text-sm text-blue-800">
                 • {data.steps.length > 1 && data.steps[1].dropOff > 50 && (
                   <>
-                    <strong>High drop-off at Step 2:</strong> {data.steps[1].dropOff}% of users don't
+                    <strong>High drop-off at Step 2:</strong> {data.steps[1].dropOff}% of users do not
                     reach {data.steps[1].stepName}. Consider simplifying onboarding.
                   </>
                 )}

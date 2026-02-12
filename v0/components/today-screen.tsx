@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import dynamic from "next/dynamic"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -22,7 +22,6 @@ import {
   RefreshCw,
   TrendingUp,
   TrendingDown,
-  Minus,
   Award,
   LogIn,
   LogOut,
@@ -70,11 +69,11 @@ const DAILY_TIPS = [
 ]
 
 const WORKOUT_COLOR_MAP: Record<string, string> = {
-  easy: "bg-green-500",
+  easy: "bg-primary",
   tempo: "bg-orange-500",
   intervals: "bg-pink-500",
   long: "bg-blue-500",
-  rest: "bg-gray-400",
+  rest: "bg-border",
   "time-trial": "bg-red-500",
   hill: "bg-purple-500",
 }
@@ -605,7 +604,7 @@ export function TodayScreen() {
         type: workout.type,
         distance: `${workout.distance}km`,
         completed: workout.completed,
-        color: WORKOUT_COLOR_MAP[workout.type] || "bg-gray-500",
+        color: WORKOUT_COLOR_MAP[workout.type] || "bg-[oklch(var(--surface-2))]0",
         date: workoutDate,
         dateString: workoutDate.toLocaleDateString("en-US", {
           weekday: "long",
@@ -754,9 +753,9 @@ export function TodayScreen() {
             <CardContent className="p-4 space-y-2">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold text-emerald-600">Active Goal</p>
-                  <h3 className="text-lg font-bold text-gray-900">{primaryGoal.title}</h3>
-                  <p className="text-sm text-gray-700">{primaryGoal.description}</p>
+                  <p className="text-xs font-semibold text-primary">Active Goal</p>
+                  <h3 className="text-lg font-bold text-foreground">{primaryGoal.title}</h3>
+                  <p className="text-sm text-foreground/70">{primaryGoal.description}</p>
                 </div>
                 <div className="text-right">
                   {getDaysRemaining(primaryGoal) !== null && (
@@ -767,7 +766,7 @@ export function TodayScreen() {
                 </div>
               </div>
               <div>
-                <div className="flex justify-between text-xs text-gray-700 mb-1">
+                <div className="flex justify-between text-xs text-foreground/70 mb-1">
                   <span>Progress</span>
                   <div className="flex items-center gap-2">
                     <span>{Math.round(getGoalProgressPercent())}%</span>
@@ -775,7 +774,7 @@ export function TodayScreen() {
                       <Badge
                         variant="outline"
                         className={`text-xs capitalize ${
-                          getGoalTrajectory() === 'ahead' ? 'text-emerald-600 border-emerald-300' :
+                          getGoalTrajectory() === 'ahead' ? 'text-primary border-primary/30' :
                           getGoalTrajectory() === 'on_track' ? 'text-blue-600 border-blue-300' :
                           getGoalTrajectory() === 'behind' ? 'text-amber-600 border-amber-300' :
                           'text-red-600 border-red-300'
@@ -796,14 +795,14 @@ export function TodayScreen() {
       <div className="bg-white p-6 rounded-b-3xl shadow-sm">
         <div className="flex justify-between items-start mb-4">
           <div>
-            <p className="text-sm text-gray-600 mb-1">
+            <p className="text-sm text-foreground/70 mb-1">
               {new Date().toLocaleDateString("en-US", {
                 weekday: "long",
                 month: "long",
                 day: "numeric",
               })}
             </p>
-            <h1 className="text-3xl font-bold text-gray-900">
+            <h1 className="text-3xl font-bold text-foreground">
               {plan?.title || "Your Training"}
             </h1>
           </div>
@@ -816,7 +815,7 @@ export function TodayScreen() {
               variant="ghost"
               size="sm"
               onClick={handleRestartOnboarding}
-              className="gap-1.5 text-xs text-gray-500 hover:text-gray-700"
+              className="gap-1.5 text-xs text-foreground/60 hover:text-foreground/70"
             >
               <RefreshCw className="h-3 w-3" />
               Reset
@@ -826,7 +825,7 @@ export function TodayScreen() {
 
         {/* Streak & Weekly Progress */}
         <div className="grid grid-cols-2 gap-4">
-          <Card className="border-0 bg-gradient-to-br from-orange-400 to-red-500 text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">
+          <Card className="border-0 bg-gradient-energy text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">
             <CardContent className="p-5 text-center">
               <Flame className="h-7 w-7 mx-auto mb-2 text-white/90" />
               <div className="text-4xl font-black mb-1 leading-none">
@@ -835,7 +834,7 @@ export function TodayScreen() {
               <div className="text-label-sm text-white/90">DAY STREAK</div>
             </CardContent>
           </Card>
-          <Card className="border-0 bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">
+          <Card className="border-0 bg-gradient-focus text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">
             <CardContent className="p-5 text-center">
               <BarChart3 className="h-7 w-7 mx-auto mb-2 text-white/90" />
               <div className="text-4xl font-black mb-1 leading-none">
@@ -854,10 +853,10 @@ export function TodayScreen() {
             <div
               className={`absolute inset-0 ${
                 recoveryScoreValue >= 80
-                  ? 'bg-gradient-to-br from-emerald-400/20 to-teal-500/20'
+                  ? 'bg-primary/10'
                   : recoveryScoreValue >= 65
-                  ? 'bg-gradient-to-br from-amber-400/20 to-orange-500/20'
-                  : 'bg-gradient-to-br from-rose-400/20 to-red-500/20'
+                  ? 'bg-amber-100/60'
+                  : 'bg-rose-100/60'
               }`}
             />
             <CardContent className="relative p-8">
@@ -866,7 +865,7 @@ export function TodayScreen() {
                 <div className="relative">
                   {isLoadingRecovery ? (
                     <div className="w-48 h-48 flex items-center justify-center">
-                      <Loader2 className="h-12 w-12 animate-spin text-gray-400" />
+                      <Loader2 className="h-12 w-12 animate-spin text-foreground/50" />
                     </div>
                   ) : (
                     <>
@@ -887,7 +886,7 @@ export function TodayScreen() {
                           r="88"
                           className={`transition-all duration-1000 ${
                             recoveryScoreValue >= 80
-                              ? 'stroke-emerald-500'
+                              ? 'stroke-primary'
                               : recoveryScoreValue >= 65
                               ? 'stroke-amber-500'
                               : 'stroke-rose-500'
@@ -901,15 +900,15 @@ export function TodayScreen() {
 
                       {/* Score in center */}
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-display-lg font-black text-gray-900">
+                        <span className="text-display-lg font-black text-foreground">
                           {recoveryScoreValue}
                         </span>
-                        <span className="text-label-sm text-gray-600 mt-1">RECOVERY</span>
+                        <span className="text-label-sm text-foreground/60 mt-1">RECOVERY</span>
                         <div className="flex items-center gap-1 mt-2">
                           {recoveryTrend?.direction === 'up' ? (
                             <>
-                              <TrendingUp className="h-4 w-4 text-green-600" />
-                              <span className="text-xs font-semibold text-green-600">
+                              <TrendingUp className="h-4 w-4 text-primary" />
+                              <span className="text-xs font-semibold text-primary">
                                 +{Math.abs(Math.round(recoveryTrend.delta))} pts
                               </span>
                             </>
@@ -921,7 +920,7 @@ export function TodayScreen() {
                               </span>
                             </>
                           ) : (
-                            <span className="text-xs text-gray-500">No change</span>
+                            <span className="text-xs text-foreground/50">No change</span>
                           )}
                         </div>
                       </div>
@@ -934,7 +933,7 @@ export function TodayScreen() {
                   <Badge
                     className={`${
                       recoveryScoreValue >= 80
-                        ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                        ? 'bg-primary/10 text-primary border-primary/30'
                         : recoveryScoreValue >= 65
                         ? 'bg-amber-100 text-amber-700 border-amber-300'
                         : 'bg-rose-100 text-rose-700 border-rose-300'
@@ -942,25 +941,25 @@ export function TodayScreen() {
                   >
                     {getRecoveryLabel(recoveryScoreValue)}
                   </Badge>
-                  <p className="text-sm text-gray-700 font-medium">
+                  <p className="text-sm text-foreground/70 font-medium">
                     {getRecoveryRecommendation(recoveryScoreValue)}
                   </p>
                 </div>
 
                 {/* Coach Confidence Bar */}
                 <div className="mt-6 w-full max-w-xs">
-                  <div className="rounded-2xl bg-gray-50 border border-gray-200 p-4">
+                  <div className="rounded-2xl bg-[oklch(var(--surface-2))] border border-border p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-label-sm text-gray-600">COACH CONFIDENCE</span>
-                      <span className="text-sm font-bold text-gray-900">
+                      <span className="text-label-sm text-foreground/70">COACH CONFIDENCE</span>
+                      <span className="text-sm font-bold text-foreground">
                         {recoveryConfidenceValue}%
                       </span>
                     </div>
                     <Progress
                       value={recoveryConfidenceValue}
-                      className="h-2 bg-gray-200"
+                      className="h-2 bg-border/70"
                     />
-                    <p className="mt-2 text-xs text-gray-600">{recoveryNextStep}</p>
+                    <p className="mt-2 text-xs text-foreground/70">{recoveryNextStep}</p>
                   </div>
                 </div>
               </div>
@@ -971,13 +970,13 @@ export function TodayScreen() {
 
       {/* Account Callout */}
       <div className="px-4">
-        <Card className="relative overflow-hidden border border-emerald-500/20 bg-[#0b1512] text-white shadow-[0_20px_60px_rgba(16,185,129,0.25)]">
-          <div className="absolute -right-20 -top-16 h-48 w-48 rounded-full bg-emerald-400/20 blur-3xl" />
-          <div className="absolute -left-16 -bottom-20 h-52 w-52 rounded-full bg-teal-400/20 blur-3xl" />
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/60 to-transparent" />
+        <Card className="relative overflow-hidden border border-primary/20 bg-[oklch(18%_0.02_255)] text-white shadow-[0_20px_60px_rgba(64,200,170,0.25)]">
+          <div className="absolute -right-20 -top-16 h-48 w-48 rounded-full bg-primary/15 blur-3xl" />
+          <div className="absolute -left-16 -bottom-20 h-52 w-52 rounded-full bg-primary/10 blur-3xl" />
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
           <CardContent className="relative space-y-4 p-6">
             {authLoading || !authSnapshotChecked ? (
-              <div className="flex items-center gap-2 text-sm text-emerald-100/80">
+              <div className="flex items-center gap-2 text-sm text-white/70">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Checking account status...
               </div>
@@ -985,24 +984,24 @@ export function TodayScreen() {
               <>
                 <div className="flex items-start gap-4">
                   <div className="relative">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-400/15 p-1 shadow-[0_0_24px_rgba(16,185,129,0.45)]">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-primary/40 bg-primary/15 p-1 shadow-[0_0_24px_rgba(64,200,170,0.45)]">
                       <img src="/images/runsmart-logo-1.png" alt="RunSmart" className="h-full w-full object-contain" />
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">Account Active</p>
+                    <p className="text-xs uppercase tracking-[0.2em] text-white/60">Account Active</p>
                     <h3 className="text-2xl font-semibold">{registeredHeadline}</h3>
-                    <p className="text-sm text-emerald-100/80">
+                    <p className="text-sm text-white/80">
                       {registeredEmail ? `Signed in as ${registeredEmail}` : "You're signed in on this device."}
                     </p>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span className="text-xs text-emerald-100/70">Your runs are syncing across devices</span>
+                  <span className="text-xs text-white/70">Your runs are syncing across devices</span>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="border-emerald-300/40 bg-white/5 text-emerald-100 hover:bg-white/10"
+                    className="border-white/20 bg-white/5 text-white/80 hover:bg-white/10"
                     onClick={async () => {
                     try {
                       await signOut()
@@ -1037,7 +1036,7 @@ export function TodayScreen() {
                     Sign Out
                   </Button>
                 </div>
-                <div className="rounded-lg border border-emerald-400/30 bg-black/30 p-3">
+                <div className="rounded-lg border border-white/15 bg-black/30 p-3">
                   <SyncStatusIndicator />
                 </div>
               </>
@@ -1045,35 +1044,35 @@ export function TodayScreen() {
               <>
                 <div className="flex items-start gap-4">
                   <div className="relative">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-400/15 p-1 shadow-[0_0_24px_rgba(16,185,129,0.45)]">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-primary/15 p-1 shadow-[0_0_24px_rgba(64,200,170,0.45)]">
                       <img src="/images/runsmart-logo-1.png" alt="RunSmart" className="h-full w-full object-contain" />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">Early Access</p>
+                    <p className="text-xs uppercase tracking-[0.2em] text-white/60">Early Access</p>
                     <h3 className="text-2xl font-semibold">{accountHeadline}</h3>
-                    <div className="flex items-center gap-2 text-xs text-emerald-200/80">
+                    <div className="flex items-center gap-2 text-xs text-white/70">
                       <Users className="h-3 w-3" />
                       <span>200+ runners already registered</span>
                     </div>
                   </div>
                 </div>
                 <div className="space-y-3">
-                  <ul className="text-sm text-emerald-100/80 space-y-2">
+                  <ul className="text-sm text-white/80 space-y-2">
                     <li className="flex items-start gap-2">
-                      <span className="text-emerald-300 flex-shrink-0">✓</span>
+                      <span className="text-primary/80 flex-shrink-0">✓</span>
                       <span>AI coach tailored to your running level</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-emerald-300 flex-shrink-0">✓</span>
+                      <span className="text-primary/80 flex-shrink-0">✓</span>
                       <span>50% lifetime discount</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-emerald-300 flex-shrink-0">✓</span>
+                      <span className="text-primary/80 flex-shrink-0">✓</span>
                       <span>Exclusive Beta Pioneer badge</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-emerald-300 flex-shrink-0">✓</span>
+                      <span className="text-primary/80 flex-shrink-0">✓</span>
                       <span>Sync runs across all your devices</span>
                     </li>
                   </ul>
@@ -1091,7 +1090,7 @@ export function TodayScreen() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
-                    className="bg-emerald-300 text-emerald-950 hover:bg-emerald-200 font-semibold"
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
                     onClick={() => {
                       // Track early access CTA click
                       trackAnalyticsEvent('early_access_cta_clicked', {
@@ -1112,7 +1111,7 @@ export function TodayScreen() {
                   </Button>
                   <Button
                     variant="outline"
-                    className="border-emerald-300/40 bg-white/5 text-emerald-100 hover:bg-white/10"
+                    className="border-white/20 bg-white/5 text-white/80 hover:bg-white/10"
                     onClick={() => {
                       // Track login CTA click
                       trackAnalyticsEvent('early_access_cta_clicked', {
@@ -1156,12 +1155,12 @@ export function TodayScreen() {
                         ? 'bg-gradient-energy border-orange-500 scale-125 shadow-xl glow-yellow'
                         : isSelected
                         ? 'bg-gradient-focus border-purple-500 scale-110 shadow-lg'
-                        : 'bg-white border-gray-200 group-hover:border-gray-400 group-hover:scale-105'
+                        : 'bg-white border-border group-hover:border-foreground/30 group-hover:scale-105'
                     }`}
                 >
                   <span
                     className={`font-black text-lg ${
-                      day.isToday || isSelected ? 'text-white' : 'text-gray-900'
+                      day.isToday || isSelected ? 'text-white' : 'text-foreground'
                     }`}
                   >
                     {day.date}
@@ -1180,7 +1179,7 @@ export function TodayScreen() {
                 {/* Day name */}
                 <span
                   className={`text-xs mt-1 font-medium uppercase tracking-wide ${
-                    day.isToday ? 'text-orange-600' : 'text-gray-600'
+                    day.isToday ? 'text-orange-600' : 'text-foreground/70'
                   }`}
                 >
                   {day.day.slice(0, 3)}
@@ -1195,7 +1194,7 @@ export function TodayScreen() {
       <div className="px-4">
         {isLoadingWorkout ? (
           <Card className="h-64 flex items-center justify-center border">
-            <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+            <Loader2 className="h-8 w-8 animate-spin text-foreground/60" />
           </Card>
         ) : todaysWorkout ? (
           <Card className="overflow-hidden border-0 shadow-2xl">
@@ -1272,16 +1271,17 @@ export function TodayScreen() {
               </div>
 
               {/* Right: Giant Start Button */}
-              <div className="p-8 flex flex-col items-center justify-center bg-gray-50 space-y-4">
-                <Button
-                  onClick={startRecordFlow}
-                  className="h-40 w-40 rounded-full bg-gradient-energy
+              <div className="p-8 flex flex-col items-center justify-center bg-[oklch(var(--surface-2))] space-y-4">
+                  <Button
+                    onClick={startRecordFlow}
+                    aria-label="Start Run"
+                    className="h-40 w-40 rounded-full bg-gradient-energy
                     shadow-2xl hover:shadow-3xl transition-all duration-300
                     hover:scale-110 active:scale-95 animate-pulse-glow border-0"
                 >
                   <Play className="h-16 w-16 text-white fill-white" />
                 </Button>
-                <p className="text-label-sm text-gray-600">TAP TO START</p>
+                <p className="text-label-sm text-foreground/70">TAP TO START</p>
 
                 {/* Secondary Actions */}
                 <Button
@@ -1295,15 +1295,15 @@ export function TodayScreen() {
                 </Button>
 
                 {selectedRoute && (
-                  <div className="mt-4 bg-white rounded-xl border border-gray-200 p-3 text-sm w-full">
+                  <div className="mt-4 bg-white rounded-xl border border-border p-3 text-sm w-full">
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 text-purple-600" />
-                      <span className="font-semibold text-gray-900">
+                      <span className="font-semibold text-foreground">
                         {selectedRoute.name}
                       </span>
                     </div>
                     {selectedRoute.distance && (
-                      <span className="text-xs text-gray-600 ml-6">
+                      <span className="text-xs text-foreground/70 ml-6">
                         {selectedRoute.distance} km
                       </span>
                     )}
@@ -1314,27 +1314,27 @@ export function TodayScreen() {
 
             {/* Workout Breakdown - Collapsible */}
             {showWorkoutBreakdown && (
-              <div className="bg-white border-t border-gray-200 p-6 animate-in fade-in-0 slide-in-from-top-4 duration-300">
-                <h4 className="text-label-lg text-gray-700 mb-4">WORKOUT PHASES</h4>
+              <div className="bg-white border-t border-border p-6 animate-in fade-in-0 slide-in-from-top-4 duration-300">
+                <h4 className="text-label-lg text-foreground/70 mb-4">WORKOUT PHASES</h4>
                 {structuredWorkout ? (
                   <WorkoutPhasesDisplay workout={structuredWorkout} />
                 ) : (
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-gray-400" />
-                      <span className="text-sm text-gray-600">
+                      <div className="w-3 h-3 rounded-full bg-border" />
+                      <span className="text-sm text-foreground/70">
                         Warm-up: 5-10 min easy pace
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="w-3 h-3 rounded-full bg-purple-600" />
-                      <span className="text-sm font-semibold text-gray-900">
+                      <span className="text-sm font-semibold text-foreground">
                         Main: {todaysWorkout.distance}km at target pace
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-gray-400" />
-                      <span className="text-sm text-gray-600">Cool-down: 5 min walk</span>
+                      <div className="w-3 h-3 rounded-full bg-border" />
+                      <span className="text-sm text-foreground/70">Cool-down: 5 min walk</span>
                     </div>
                   </div>
                 )}
@@ -1348,7 +1348,7 @@ export function TodayScreen() {
                 <Award className="h-12 w-12 text-white" />
               </div>
               <h3 className="text-heading-lg mb-3">Rest Day</h3>
-              <p className="text-gray-600 text-base max-w-sm mx-auto mb-6">
+              <p className="text-foreground/70 text-base max-w-sm mx-auto mb-6">
                 Recovery is just as important as training. Enjoy your rest!
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -1410,7 +1410,7 @@ export function TodayScreen() {
               <div className="flex-1 min-w-0">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-gray-900">Coach&apos;s Tip</h3>
+                    <h3 className="font-bold text-foreground">Coach&apos;s Tip</h3>
                     <RunSmartBrandMark compact size="sm" className="opacity-60" />
                   </div>
                   <Button
@@ -1422,7 +1422,7 @@ export function TodayScreen() {
                     <RefreshCw className="h-3 w-3" />
                   </Button>
                 </div>
-                <p className="text-sm text-gray-700 leading-relaxed">{dailyTip}</p>
+                <p className="text-sm text-foreground/70 leading-relaxed">{dailyTip}</p>
               </div>
             </div>
           </CardContent>
@@ -1432,42 +1432,42 @@ export function TodayScreen() {
       {/* Progress Stats - Bento Grid Layout */}
       <div className="px-4 grid grid-cols-3 gap-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-600">
         {/* Streak - Double Width with Gradient */}
-        <div className="col-span-2 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-3xl p-6 text-white shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
+        <div className="col-span-2 bg-gradient-success rounded-3xl p-6 text-white shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
           <Flame className="h-8 w-8 mb-3 text-white/90" />
           <span className="text-display-md font-black block leading-none">{streak}</span>
           <span className="text-label-sm block mt-2 text-white/90">DAY STREAK</span>
         </div>
 
         {/* Weekly Runs */}
-        <div className="bg-white rounded-3xl p-6 border-2 border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+        <div className="bg-white rounded-3xl p-6 border-2 border-border hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
           <BarChart3 className="h-6 w-6 text-blue-500 mb-2" />
-          <span className="text-5xl font-black text-gray-900 block leading-none">
+          <span className="text-5xl font-black text-foreground block leading-none">
             {totalRuns}
           </span>
-          <span className="text-label-sm block mt-2 text-gray-600">THIS WEEK</span>
+          <span className="text-label-sm block mt-2 text-foreground/70">THIS WEEK</span>
         </div>
 
         {/* Consistency */}
-        <div className="bg-white rounded-3xl p-6 border-2 border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+        <div className="bg-white rounded-3xl p-6 border-2 border-border hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
           <TrendingUp className="h-6 w-6 text-purple-500 mb-2" />
-          <span className="text-5xl font-black text-gray-900 block leading-none">
+          <span className="text-5xl font-black text-foreground block leading-none">
             {consistency}%
           </span>
-          <span className="text-label-sm block mt-2 text-gray-600">CONSISTENCY</span>
+          <span className="text-label-sm block mt-2 text-foreground/70">CONSISTENCY</span>
         </div>
 
         {/* Completed - Double Width */}
-        <div className="col-span-2 bg-white rounded-3xl p-6 border-2 border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+        <div className="col-span-2 bg-white rounded-3xl p-6 border-2 border-border hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
           <Award className="h-6 w-6 text-amber-500 mb-2" />
           <div className="flex items-baseline gap-2">
-            <span className="text-5xl font-black text-gray-900 leading-none">
+            <span className="text-5xl font-black text-foreground leading-none">
               {weeklyWorkouts.filter((w) => w.completed).length}
             </span>
-            <span className="text-3xl font-black text-gray-400 leading-none">
+            <span className="text-3xl font-black text-foreground/50 leading-none">
               / {plannedRuns}
             </span>
           </div>
-          <span className="text-label-sm block mt-2 text-gray-600">
+          <span className="text-label-sm block mt-2 text-foreground/70">
             WORKOUTS COMPLETED
           </span>
         </div>
@@ -1642,3 +1642,5 @@ export function TodayScreen() {
     </div>
   )
 }
+
+

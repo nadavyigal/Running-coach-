@@ -22,7 +22,7 @@ export function BottomNavigation({ currentScreen, onScreenChange }: BottomNaviga
 
 	  return (
 	    <nav
-      className="fixed z-50 bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/90 backdrop-blur-lg border-t border-gray-200/50 shadow-xl shadow-black/5 px-6 py-3 animate-in slide-in-from-bottom duration-500"
+      className="fixed z-50 bottom-3 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-md bg-white/85 backdrop-blur-xl border border-border/70 shadow-[0_12px_30px_rgba(0,0,0,0.12)] px-5 py-3 rounded-3xl animate-in slide-in-from-bottom duration-500"
       aria-label="Main navigation"
     >
       <div className="flex justify-around items-center relative">
@@ -40,17 +40,17 @@ export function BottomNavigation({ currentScreen, onScreenChange }: BottomNaviga
               }}
               className={`relative flex flex-col items-center gap-1 h-auto transition-all duration-200 ${
                 item.isSpecial
-                  ? "bg-green-500 hover:bg-green-600 text-white rounded-full w-14 h-14 hover:scale-110 active:scale-95 shadow-lg p-0"
+                  ? "bg-primary hover:bg-primary/90 text-primary-foreground rounded-full w-14 h-14 hover:scale-105 active:scale-95 shadow-lg p-0"
                   : isActive
-                    ? "text-green-500 scale-110 py-2 px-3"
-                    : "text-gray-500 hover:text-gray-700 hover:scale-105 py-2 px-3"
+                    ? "text-primary scale-105 py-2 px-3"
+                    : "text-foreground/60 hover:text-foreground hover:scale-105 py-2 px-3"
               }`}
               style={{ animationDelay: `${index * 50}ms` }}
               aria-label={`Navigate to ${item.label}`}
               aria-current={isActive ? "page" : undefined}
             >
               {isActive && !item.isSpecial && (
-                <div className="absolute -top-1 w-1.5 h-1.5 rounded-full bg-green-500 animate-in zoom-in duration-200" />
+                <div className="absolute -top-1 w-1.5 h-1.5 rounded-full bg-primary animate-in zoom-in duration-200" />
               )}
               <item.icon className={`${item.isSpecial ? "h-7 w-7" : "h-5 w-5"}`} aria-hidden="true" />
               {!item.isSpecial && <span className="text-xs font-medium">{item.label}</span>}
@@ -60,7 +60,7 @@ export function BottomNavigation({ currentScreen, onScreenChange }: BottomNaviga
       </div>
 
       {/* Version indicator */}
-      <div className="absolute bottom-0.5 right-2 text-[8px] text-gray-300 select-none">
+      <div className="absolute bottom-0.5 right-2 text-[8px] text-foreground/30 select-none">
         {APP_VERSION}
       </div>
     </nav>

@@ -8,6 +8,8 @@ import { rateLimiter } from './lib/security.config';
 
 process.env.NODE_ENV = 'test';
 process.env.VITEST = 'true';
+process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://test.supabase.co';
+process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'test-anon-key';
 
 // Mock URL constructor for relative URLs in tests
 const OriginalURL = global.URL;
@@ -368,8 +370,9 @@ vi.mock("@/lib/analytics", () => ({
   trackReminderEvent: vi.fn().mockResolvedValue(undefined),
   trackPlanAdjustmentEvent: vi.fn().mockResolvedValue(undefined),
   trackFeedbackEvent: vi.fn().mockResolvedValue(undefined),
-  trackEngagementEvent: vi.fn().mockResolvedValue(undefined),
-  trackOnboardingEvent: vi.fn().mockResolvedValue(undefined),
+    trackEngagementEvent: vi.fn().mockResolvedValue(undefined),
+    trackOnboardingEvent: vi.fn().mockResolvedValue(undefined),
+    trackSyncEvent: vi.fn().mockResolvedValue(undefined),
   
   // Action-specific tracking functions
   trackPlanSessionCompleted: vi.fn().mockResolvedValue(undefined),

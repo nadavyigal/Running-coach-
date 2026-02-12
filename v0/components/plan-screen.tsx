@@ -171,13 +171,13 @@ export function PlanScreen() {
   }
 
   const workoutTypes = {
-    easy: { color: "bg-green-500", label: "Easy Run" },
+    easy: { color: "bg-primary", label: "Easy Run" },
     tempo: { color: "bg-orange-500", label: "Tempo" },
     intervals: { color: "bg-pink-500", label: "Intervals" },
     long: { color: "bg-blue-500", label: "Long Run" },
     "time-trial": { color: "bg-red-500", label: "Time Trial" },
     hill: { color: "bg-purple-500", label: "Hill Run" },
-    rest: { color: "bg-gray-400", label: "Rest Day" },
+    rest: { color: "bg-border", label: "Rest Day" },
   }
 
   // Load workouts when plan is available (plan and primaryGoal come from context)
@@ -275,7 +275,7 @@ export function PlanScreen() {
       type: workoutEntity.type,
       distance: `${workoutEntity.distance}km`,
       completed: workoutEntity.completed,
-      color: workoutTypes[workoutEntity.type as keyof typeof workoutTypes]?.color || "bg-gray-400",
+      color: workoutTypes[workoutEntity.type as keyof typeof workoutTypes]?.color || "bg-border",
       date: workoutDate,
       dateString: workoutDate.toLocaleDateString("en-US", {
         weekday: "long",
@@ -291,8 +291,8 @@ export function PlanScreen() {
     if (isLoading) {
       return (
         <div className="flex items-center justify-center py-12" role="status" aria-label="Loading">
-          <Loader2 className="h-8 w-8 animate-spin text-green-500" aria-hidden="true" />
-          <span className="ml-2 text-gray-600">Loading your training plan...</span>
+          <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
+          <span className="ml-2 text-foreground/70">Loading your training plan...</span>
         </div>
       )
     }
@@ -300,11 +300,11 @@ export function PlanScreen() {
     if (!plan || weeks.length === 0) {
       return (
         <div className="text-center py-12">
-          <div className="text-gray-500 mb-4">No training plan found</div>
-          <Button onClick={() => window.location.reload()} className="bg-green-500 hover:bg-green-600">
+          <div className="text-foreground/60 mb-4">No training plan found</div>
+          <Button onClick={() => window.location.reload()} className="bg-primary hover:bg-primary/90">
             Refresh
           </Button>
-          <div className="text-xs text-gray-400 mt-2">Check console logs for user/plan state details.</div>
+          <div className="text-xs text-foreground/50 mt-2">Check console logs for user/plan state details.</div>
         </div>
       )
     }
@@ -327,7 +327,7 @@ export function PlanScreen() {
             <div className="space-y-2">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-sm text-gray-600">{week.dates}</p>
+                  <p className="text-sm text-foreground/70">{week.dates}</p>
                   <h3 className="font-bold text-lg">{week.title}</h3>
                 </div>
                 <div className="flex gap-1">
@@ -335,13 +335,13 @@ export function PlanScreen() {
                     <div
                       key={i}
                       className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                        i < week.completed ? "bg-green-500 scale-110" : "bg-gray-300"
+                        i < week.completed ? "bg-primary scale-110" : "bg-border"
                       }`}
                     />
                   ))}
                 </div>
               </div>
-              <div className="flex gap-4 text-xs text-gray-600">
+              <div className="flex gap-4 text-xs text-foreground/70">
                 <span>Total Workouts: {week.total}</span>
                 <span>Distance: {week.distance}</span>
               </div>
@@ -352,13 +352,13 @@ export function PlanScreen() {
               <div
                 key={workoutIndex}
                 className={`flex items-center justify-between p-3 rounded-lg border transition-all duration-200 hover:scale-[1.02] ${
-                  workout.completed ? "bg-green-50 border-green-200" : "bg-gray-50 hover:bg-gray-100"
+                  workout.completed ? "bg-primary/10 border-primary/20" : "bg-[oklch(var(--surface-2))] hover:bg-[oklch(var(--surface-3))]"
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <div
                     className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                      workoutTypes[workout.type as keyof typeof workoutTypes]?.color || "bg-gray-400"
+                      workoutTypes[workout.type as keyof typeof workoutTypes]?.color || "bg-border"
                     }`}
                   />
                   <div className="text-sm font-medium">{workout.day}</div>
@@ -366,7 +366,7 @@ export function PlanScreen() {
                     <span className="font-medium">
                       {workoutTypes[workout.type as keyof typeof workoutTypes]?.label || workout.type}
                     </span>
-                    <span className="text-gray-600 ml-2">{workout.distance}</span>
+                    <span className="text-foreground/70 ml-2">{workout.distance}</span>
                   </div>
                 </div>
                 <Button
@@ -382,7 +382,7 @@ export function PlanScreen() {
             ))}
             <Button
               variant="ghost"
-              className="w-full justify-start text-gray-600 hover:bg-green-50 hover:text-green-600 transition-all duration-200"
+              className="w-full justify-start text-foreground/70 hover:bg-primary/10 hover:text-primary transition-all duration-200"
               onClick={() => setShowAddRunModal(true)}
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -396,7 +396,7 @@ export function PlanScreen() {
       <Card className="bg-blue-50 border-blue-200 hover:shadow-md transition-all duration-300">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 animate-pulse">
+            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center flex-shrink-0 animate-pulse">
               <span className="text-white text-sm">🤖</span>
             </div>
             <div className="flex-1">
@@ -414,7 +414,7 @@ export function PlanScreen() {
     <div className="space-y-6 animate-in fade-in-50 duration-300">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-bold">Your Improvement Journey</h2>
-        <select className="text-sm border rounded px-2 py-1 hover:border-green-500 transition-colors">
+        <select className="text-sm border rounded px-2 py-1 hover:border-primary transition-colors">
           <option>Last Month</option>
           <option>Last 3 Months</option>
           <option>Last 6 Months</option>
@@ -438,19 +438,19 @@ export function PlanScreen() {
                   </span>
                   <h3 className="font-medium">{item.metric}</h3>
                 </div>
-                <Badge variant="outline" className="bg-green-100 text-green-800 animate-pulse">
+                <Badge variant="outline" className="bg-primary/10 text-primary animate-pulse">
                   {item.improvement}
                 </Badge>
               </div>
               <div className="flex items-center justify-between mt-3 text-sm">
                 <div className="text-center">
-                  <p className="text-gray-600">30 days ago</p>
-                  <p className="font-bold text-gray-400">{item.before}</p>
+                  <p className="text-foreground/70">30 days ago</p>
+                  <p className="font-bold text-foreground/50">{item.before}</p>
                 </div>
-                <div className="text-green-500 animate-pulse">→</div>
+                <div className="text-primary animate-pulse">→</div>
                 <div className="text-center">
-                  <p className="text-gray-600">Now</p>
-                  <p className="font-bold text-green-600">{item.after}</p>
+                  <p className="text-foreground/70">Now</p>
+                  <p className="font-bold text-primary">{item.after}</p>
                 </div>
               </div>
             </CardContent>
@@ -472,7 +472,7 @@ export function PlanScreen() {
             <div
               key={index}
               className={`flex items-center gap-3 p-3 rounded-lg transition-all duration-300 hover:scale-[1.02] ${
-                achievement.unlocked ? "bg-yellow-50 border border-yellow-200" : "bg-gray-50"
+                achievement.unlocked ? "bg-yellow-50 border border-yellow-200" : "bg-[oklch(var(--surface-2))]"
               }`}
             >
               <div
@@ -482,8 +482,8 @@ export function PlanScreen() {
               </div>
               <div className="flex-1">
                 <h4 className="font-medium">{achievement.title}</h4>
-                <p className="text-sm text-gray-600">{achievement.desc}</p>
-                <p className="text-xs text-gray-500">{achievement.date || achievement.progress}</p>
+                <p className="text-sm text-foreground/70">{achievement.desc}</p>
+                <p className="text-xs text-foreground/60">{achievement.date || achievement.progress}</p>
               </div>
             </div>
           ))}
@@ -501,7 +501,7 @@ export function PlanScreen() {
             <RunSmartBrandMark compact size="sm" className="opacity-90" />
             <h1 className="text-2xl font-bold">Training Plan</h1>
           </div>
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-foreground/70">
             <span className="font-medium">{plan?.title || "21-Day Rookie Challenge"}</span>
             <span className="mx-2">•</span>
             <span>Day {challengeProgress.currentDay} of {challengeProgress.totalDays}</span>
@@ -510,7 +510,7 @@ export function PlanScreen() {
         <Button
           variant="outline"
           size="sm"
-          className="hover:scale-105 transition-transform hover:bg-green-50 bg-transparent"
+          className="hover:scale-105 transition-transform hover:bg-primary/10 bg-transparent"
           onClick={() => setShowAddRunModal(true)}
         >
           <Plus className="h-4 w-4" />
@@ -522,9 +522,9 @@ export function PlanScreen() {
           <CardContent className="p-4 space-y-2">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold text-emerald-600">Goal aligned</p>
-                <h3 className="text-lg font-bold text-gray-900">{primaryGoal.title}</h3>
-                <p className="text-sm text-gray-700">
+                <p className="text-xs font-semibold text-primary">Goal aligned</p>
+                <h3 className="text-lg font-bold text-foreground">{primaryGoal.title}</h3>
+                <p className="text-sm text-foreground/70">
                   This plan is designed to help you achieve your goal by{' '}
                   {(() => {
                     if (!primaryGoal.timeBound?.deadline) return 'the target date'
@@ -541,7 +541,7 @@ export function PlanScreen() {
               )}
             </div>
             <div>
-              <div className="flex justify-between text-xs text-gray-700 mb-1">
+              <div className="flex justify-between text-xs text-foreground/70 mb-1">
                 <span>Progress</span>
                 <span>{Math.round(goalProgressPercent(primaryGoal))}%</span>
               </div>
@@ -560,7 +560,7 @@ export function PlanScreen() {
       )}
 
       {/* View Toggle */}
-      <div className="flex bg-gray-100 rounded-lg p-1">
+      <div className="flex bg-[oklch(var(--surface-3))] rounded-lg p-1">
         {[
           { id: "monthly", icon: Calendar, label: "Monthly" },
           { id: "biweekly", icon: CalendarDays, label: "Biweekly" },
@@ -638,3 +638,4 @@ export function PlanScreen() {
     </div>
   )
 }
+
