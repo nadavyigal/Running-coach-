@@ -173,7 +173,7 @@ export function ChatScreen() {
         }))
 
         setMessages((currentMessages) => (currentMessages.length > 1 ? currentMessages : chatMessages))
-        console.log('?£å Chat history loaded successfully')
+        console.log('?Â£×• Chat history loaded successfully')
       } else {
         const welcomeMessage: ChatMessage = {
           id: `welcome-${Date.now()}`,
@@ -182,10 +182,10 @@ export function ChatScreen() {
           timestamp: new Date(),
         }
         setMessages((currentMessages) => (currentMessages.length > 1 ? currentMessages : [welcomeMessage]))
-        console.log('?ƒñë No existing history, showing welcome message')
+        console.log('?Æ’×¡×› No existing history, showing welcome message')
       }
     } catch (error) {
-      console.error('?¥ì Failed to load chat history:', error)
+      console.error('?Â¥×œ Failed to load chat history:', error)
       toast({
         title: "Chat History Error",
         description: "Failed to load previous messages. Starting fresh conversation.",
@@ -949,7 +949,7 @@ export function ChatScreen() {
                 size="sm"
                 onClick={() => setShowCoachingPreferences(false)}
               >
-                ?÷
+                ?×§
               </Button>
             </div>
             <div className="p-4">

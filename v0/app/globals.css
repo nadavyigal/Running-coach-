@@ -3,6 +3,13 @@
 @tailwind utilities;
 
 /* Precision Athlete Editorial typography system */
+:root {
+  --font-display: "Newsreader";
+  --font-body: "Instrument Sans";
+  --font-hebrew-display: "Rubik";
+  --font-hebrew-body: "Varela Round";
+}
+
 body {
   font-family: var(--font-body), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }

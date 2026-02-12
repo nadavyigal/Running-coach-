@@ -2,7 +2,6 @@
 
 import Script from 'next/script'
 import { Analytics } from '@vercel/analytics/next'
-import { Instrument_Sans, Newsreader, Rubik, Varela_Round } from 'next/font/google'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
 import { ReminderInit } from '@/components/reminder-init'
@@ -16,37 +15,6 @@ import { AuthProvider } from '@/lib/auth-context'
 // Precision Athlete Editorial typography system
 // English: Newsreader for display, Instrument Sans for body
 // Hebrew: Rubik for headers, Varela Round for body
-
-const newsreader = Newsreader({
-  subsets: ['latin'],
-  display: 'swap',
-  preload: true,
-  variable: '--font-display',
-  weight: ['400', '500', '600', '700'],
-})
-
-const instrumentSans = Instrument_Sans({
-  subsets: ['latin'],
-  display: 'swap',
-  preload: true,
-  variable: '--font-body',
-  weight: ['400', '500', '600', '700'],
-})
-
-const rubik = Rubik({
-  subsets: ['hebrew', 'latin'],
-  display: 'swap',
-  preload: true,
-  variable: '--font-hebrew-display',
-})
-
-const varelaRound = Varela_Round({
-  weight: '400',
-  subsets: ['hebrew', 'latin'],
-  display: 'swap',
-  preload: true,
-  variable: '--font-hebrew-body',
-})
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ??
@@ -105,7 +73,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${newsreader.variable} ${instrumentSans.variable} ${rubik.variable} ${varelaRound.variable}`}>
+    <html lang="en">
       <head>
         <title>{defaultTitle}</title>
         <meta name="description" content={defaultDescription} />
@@ -116,6 +84,12 @@ export default function RootLayout({
         <link rel="icon" type="image/png" sizes="512x512" href="/icon-512x512.png" />
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
         <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Rubik:wght@400;500;700&family=Varela+Round&display=swap"
+          rel="stylesheet"
+        />
         {/* Resource hints for external services */}
         <link rel="dns-prefetch" href="https://us.i.posthog.com" />
         <link rel="preconnect" href="https://us.i.posthog.com" crossOrigin="" />
@@ -127,7 +101,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaOrgJsonLd) }}
         />
       </head>
-      <body className={instrumentSans.className}>
+      <body>
         {/* Google Analytics */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-YBJKT7T4DE"
