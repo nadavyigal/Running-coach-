@@ -38,3 +38,8 @@ Thumbs.db
 *.tsbuildinfo
 .vercel
 .env*.local
+
+# GTM directory - exclude data files
+GTM/*.txt
+GTM/*.xlsx
+GTM/*.xls

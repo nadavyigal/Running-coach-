@@ -880,8 +880,10 @@ export default function RunSmartApp() {
 
   // Main app with wrapper and navigation
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50/30 to-cyan-50/30 max-w-md mx-auto relative">
-      <div className="pb-20">{renderScreen()}</div>
+    <div className="min-h-screen bg-background max-w-md mx-auto relative">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_oklch(96%_0.02_150),_transparent_55%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom,_oklch(94%_0.02_210),_transparent_55%)]" />
+      <div className="relative pb-20">{renderScreen()}</div>
       <BottomNavigation currentScreen={currentScreen} onScreenChange={setCurrentScreen} />
 
       {/* Welcome Modal for existing users */}

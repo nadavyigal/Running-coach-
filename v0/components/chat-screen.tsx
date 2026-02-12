@@ -1,6 +1,7 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useRef } from "react"
+import dynamic from "next/dynamic"
 import { flushSync } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,9 +23,7 @@ import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { useData } from "@/contexts/DataContext"
 import { trackChatMessageSent } from "@/lib/analytics"
-import { CoachingFeedbackModal } from "@/components/coaching-feedback-modal"
-import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings"
-import { EnhancedAICoach, type AICoachResponse } from "@/components/enhanced-ai-coach"
+import type { AICoachResponse } from "@/components/enhanced-ai-coach"
 import type { ChatMessageDTO } from "@/lib/models/chat"
 
 interface ChatMessage {
@@ -50,6 +49,18 @@ const buildAuthHeaders = (userId?: number | null): HeadersInit => {
   }
 }
 
+const CoachingFeedbackModal = dynamic(
+  () => import("@/components/coaching-feedback-modal").then((module) => ({ default: module.CoachingFeedbackModal })),
+  { ssr: false, loading: () => null },
+)
+const CoachingPreferencesSettings = dynamic(
+  () => import("@/components/coaching-preferences-settings").then((module) => ({ default: module.CoachingPreferencesSettings })),
+  { ssr: false, loading: () => null },
+)
+const EnhancedAICoach = dynamic(
+  () => import("@/components/enhanced-ai-coach").then((module) => ({ default: module.EnhancedAICoach })),
+  { ssr: false, loading: () => null },
+)
 
 
 export function ChatScreen() {
@@ -64,14 +75,14 @@ export function ChatScreen() {
     refresh: refreshContext,
   } = useData()
 
-  const defaultWelcome: ChatMessage = {
-    id: `welcome-${Date.now()}`,
-    role: 'assistant',
-    content: `Hi there! I'm your AI running coach. I'm here to help you with training advice, motivation, and any running-related questions. How can I assist you today?`,
-    timestamp: new Date(),
-  }
-
-  const [messages, setMessages] = useState<ChatMessage[]>([defaultWelcome])
+  const [messages, setMessages] = useState<ChatMessage[]>(() => ([
+    {
+      id: `welcome-${Date.now()}`,
+      role: 'assistant',
+      content: `Hi there! I'm your AI running coach. I'm here to help you with training advice, motivation, and any running-related questions. How can I assist you today?`,
+      timestamp: new Date(),
+    },
+  ]))
   const [inputValue, setInputValue] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
@@ -139,7 +150,7 @@ export function ChatScreen() {
 
     try {
       setIsLoadingHistory(true)
-      console.log('📚 Loading chat history for user:', user.id)
+      console.log('?? Loading chat history for user:', user.id)
 
       const response = await fetch(`/api/chat?userId=${user.id}&conversationId=${conversationId}`, {
         headers: buildAuthHeaders(user?.id),
@@ -150,7 +161,7 @@ export function ChatScreen() {
 
       const data = await response.json() as { messages?: ChatMessageDTO[] }
       const existingMessages: ChatMessageDTO[] = Array.isArray(data.messages) ? data.messages : []
-      console.log(`📨 Loaded ${existingMessages.length} existing messages`)
+      console.log(`?? Loaded ${existingMessages.length} existing messages`)
 
       if (existingMessages.length > 0) {
         const chatMessages: ChatMessage[] = existingMessages.map((msg) => ({
@@ -284,7 +295,7 @@ export function ChatScreen() {
         variant: "destructive",
         duration: 8000,
       })
-      console.error('❌ Chat error: User profile not available. User state:', user, 'Context user:', contextUser)
+      console.error('? Chat error: User profile not available. User state:', user, 'Context user:', contextUser)
       return
     }
 
@@ -462,7 +473,7 @@ export function ChatScreen() {
             });
             const { done, value } = readResult;
             if (done) {
-              console.log('?Је Stream complete. Total updates:', updateCount);
+              console.log('??? Stream complete. Total updates:', updateCount);
               break
             }
 
@@ -674,18 +685,24 @@ export function ChatScreen() {
 
         <div className={`max-w-[80%] ${isUser ? 'order-first' : ''}`}>
           <div
-            className={`rounded-lg px-4 py-2 ${isUser
-                ? 'bg-primary text-primary-foreground ml-auto'
-                : 'bg-muted text-muted-foreground'
+            className={`rounded-2xl px-5 py-3 transition-all duration-300 ${isUser
+                ? 'bg-primary text-primary-foreground shadow-md border border-primary/20'
+                : 'bg-white text-foreground border border-border'
               }`}
           >
-            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+            <p className="text-sm whitespace-pre-wrap relative z-10">{message.content}</p>
 
             {/* Show adaptations for assistant messages */}
             {!isUser && message.adaptations && message.adaptations.length > 0 && (
-              <div className="mt-2 text-xs opacity-70">
-                <span className="font-medium">Adaptations: </span>
-                {message.adaptations.join(', ')}
+              <div className="mt-3 pt-3 border-t border-border/60 text-xs text-foreground/60 relative z-10">
+                <span className="font-semibold">Coaching Adaptations: </span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {message.adaptations.map((adaptation, idx) => (
+                    <Badge key={idx} variant="secondary" className="bg-primary/10 text-primary text-xs">
+                      {adaptation}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -701,7 +718,7 @@ export function ChatScreen() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 w-6 p-0 text-green-600 hover:text-green-700"
+                  className="h-6 w-6 p-0 text-primary hover:text-primary/80"
                   onClick={() => handleFeedbackClick(message)}
                   title="This was helpful"
                 >
@@ -789,7 +806,7 @@ export function ChatScreen() {
         <div className="space-y-4">
           {isLoadingHistory && (
             <div className="flex justify-center items-center py-4" role="status" aria-label="Loading chat history">
-              <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2">
+              <div className="flex items-center gap-2 bg-[oklch(var(--surface-2))] rounded-lg px-4 py-2">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 <span className="text-sm text-muted-foreground">Loading chat history...</span>
               </div>
@@ -823,7 +840,7 @@ export function ChatScreen() {
           ))}
           {isLoading && (
             <div className="flex justify-start" role="status" aria-label="Loading">
-              <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2">
+              <div className="flex items-center gap-2 bg-[oklch(var(--surface-2))] rounded-lg px-4 py-2">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 <span className="text-sm text-muted-foreground">Coach is thinking...</span>
               </div>
@@ -846,11 +863,11 @@ export function ChatScreen() {
 
       {pendingUserDataUpdate && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md">
-          <Card className="shadow-lg border-blue-500 border-2">
+          <Card className="shadow-lg border-primary/40 border">
             <CardContent className="p-4 flex items-center gap-3">
               <div className="flex-1">
                 <p className="font-medium text-sm">{pendingUserDataUpdate.message}</p>
-                <p className="text-xs text-gray-600 mt-1">
+                <p className="text-xs text-foreground/70 mt-1">
                   Save to your training profile?
                 </p>
               </div>
@@ -874,23 +891,28 @@ export function ChatScreen() {
         </div>
       )}
 
-      {/* Input */}
-      <div className="border-t bg-card p-4">
-        <form onSubmit={handleInputSubmit} className="flex gap-2">
+      {/* Input - Floating Bar with Backdrop Blur */}
+      <div className="sticky bottom-0 backdrop-blur-lg bg-white/85 border-t border-border p-4 shadow-lg">
+        <form onSubmit={handleInputSubmit} className="flex gap-3 items-center">
           <Input
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             placeholder="Ask your running coach anything..."
             disabled={isLoading}
-            className="flex-1"
+            className="flex-1 bg-[oklch(var(--surface-2))] border border-border rounded-2xl px-6 py-4 text-base
+                       focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/20
+                       transition-all duration-200 placeholder:text-foreground/50"
           />
           <Button
             type="submit"
             disabled={!inputValue.trim() || isLoading}
             size="icon"
             aria-label="Send message"
+            className="h-12 w-12 rounded-full bg-primary
+                       hover:bg-primary/90 shadow-lg hover:shadow-xl
+                       transition-all duration-300 hover:scale-105 active:scale-95"
           >
-            <Send className="h-4 w-4" />
+            <Send className="h-5 w-5" />
           </Button>
         </form>
       </div>
@@ -943,3 +965,6 @@ export function ChatScreen() {
     </div>
   )
 }
+
+
+

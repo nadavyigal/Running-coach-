@@ -299,8 +299,7 @@ describe('RecordScreen GPS Distance Diagnostics', () => {
       }))
     })
 
-    const distanceLabel = screen.getByText('Distance (km)')
-    const distanceValue = distanceLabel.previousSibling as HTMLElement
+    const distanceValue = screen.getByTestId('record-distance')
     const distanceNumber = parseFloat(distanceValue?.textContent || '0')
     expect(distanceNumber).toBeLessThan(0.05)
   }, 10000)
@@ -328,7 +327,7 @@ describe('RecordScreen GPS Distance Diagnostics', () => {
 
     await act(async () => {
       now = start.getTime() + 2000
-      fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+      fireEvent.click(screen.getByRole('button', { name: /end run/i }))
     })
 
     await waitFor(() => {
