@@ -89,6 +89,9 @@ export default function RootLayout({
         <meta property="og:url" content={siteUrl} />
         <meta property="og:site_name" content="RunSmart" />
         <meta property="og:type" content="website" />
+        {process.env.NEXT_PUBLIC_FB_APP_ID && (
+          <meta property="fb:app_id" content={process.env.NEXT_PUBLIC_FB_APP_ID} />
+        )}
         <meta property="og:image" content={`${siteUrl}/og-image.png`} />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
