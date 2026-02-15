@@ -669,11 +669,6 @@ export function TodayScreen() {
           ? `${todaysWorkout.duration} min`
           : '--')
     : '--'
-  const workoutEstimatedTimeLabel = todaysWorkout
-    ? (todaysWorkout.duration
-        ? `${Math.max(20, todaysWorkout.duration - 5)}-${todaysWorkout.duration + 5}m`
-        : `${Math.round((todaysWorkout.distance ?? 0) * 5)}-${Math.round((todaysWorkout.distance ?? 0) * 7)}m`)
-    : '--'
   const workoutCoachCue = todaysWorkout
     ? ({
         easy: 'Keep your breathing easy and conversational.',

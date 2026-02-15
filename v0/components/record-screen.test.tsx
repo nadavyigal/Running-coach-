@@ -143,7 +143,7 @@ describe('RecordScreen GPS lifecycle', () => {
 
     await waitFor(() => expect(mockGeolocation.watchPosition).toHaveBeenCalled())
 
-    fireEvent.click(await screen.findByRole('button', { name: /end run/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /stop/i }))
 
     await waitFor(() => expect(mockGeolocation.clearWatch).toHaveBeenCalledWith(0))
   })
@@ -206,10 +206,10 @@ describe('RecordScreen GPS lifecycle', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start Run' }))
     await waitFor(() => expect(mockGeolocation.watchPosition).toHaveBeenCalledTimes(1))
 
-    fireEvent.click(await screen.findByRole('button', { name: /pause run/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /pause/i }))
     await waitFor(() => expect(mockGeolocation.clearWatch).toHaveBeenCalledWith(1))
 
-    fireEvent.click(screen.getByRole('button', { name: /resume run/i }))
+    fireEvent.click(screen.getByRole('button', { name: /resume/i }))
     await waitFor(() => expect(mockGeolocation.watchPosition).toHaveBeenCalledTimes(2))
   })
 
@@ -237,7 +237,7 @@ describe('RecordScreen GPS lifecycle', () => {
 
     await act(async () => {
       now = start.getTime() + 2000
-      fireEvent.click(screen.getByRole('button', { name: /end run/i }))
+      fireEvent.click(screen.getByRole('button', { name: /stop/i }))
     })
 
     await waitFor(() => {

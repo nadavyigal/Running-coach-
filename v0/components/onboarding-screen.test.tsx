@@ -135,16 +135,12 @@ describe('OnboardingScreen', () => {
 
   it('shows onboarding intro', () => {
     render(<OnboardingScreen onComplete={mockOnComplete} />);
-    expect(screen.getByRole('heading', { name: /LET'S CRUSH YOUR NEXT GOAL/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /What is your main goal\?/i })).toBeInTheDocument();
   });
 
   it('renders and navigates through all steps', async () => {
     render(<OnboardingScreen onComplete={mockOnComplete} />);
-    // Step 1: Welcome
-    expect(screen.getByRole('heading', { name: /LET'S CRUSH YOUR NEXT GOAL/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
-
-    // Step 2: Goal selection
+    // Step 1: Goal selection
     expect(screen.getByText(/What is your main goal/i)).toBeInTheDocument();
     fireEvent.click(screen.getByText(/Build a running habit/i));
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
@@ -174,14 +170,12 @@ describe('OnboardingScreen', () => {
 
   it('validates required fields before proceeding', async () => {
     render(<OnboardingScreen onComplete={mockOnComplete} />);
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
-    // Try to continue without selecting a goal
+    // Continue is disabled until a goal is selected.
     expect(screen.getByRole('button', { name: /Continue/i })).toBeDisabled();
   });
 
   it('shows the finish button on the summary step', async () => {
     render(<OnboardingScreen onComplete={mockOnComplete} />);
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
     fireEvent.click(screen.getByText(/Build a running habit/i));
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
     fireEvent.click(screen.getByText(/Beginner/i));
@@ -189,12 +183,12 @@ describe('OnboardingScreen', () => {
     fireEvent.change(screen.getByLabelText(/Your age/i), { target: { value: '30' } });
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
-    fireEvent.click(screen.getByText(/Saturday/i));
+    fireEvent.click(screen.getByText(/3 days/i));
+    fireEvent.click(screen.getByText(/Monday/i));
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
 
     fireEvent.click(screen.getByLabelText(/i have read and agree/i))
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
 
-    expect(await screen.findByRole('button', { name: /Complete setup/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Complete setup/i })).toBeEnabled()
   });
 }); 
