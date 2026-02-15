@@ -4,8 +4,8 @@ import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export const metadata: Metadata = {
-  title: 'Terms of Service | Run-Smart AI',
-  description: 'Run-Smart AI terms of service.',
+  title: 'Terms of Service | RunSmart AI',
+  description: 'RunSmart AI terms of service.',
   alternates: { canonical: '/terms' },
   robots: { index: false, follow: false },
 }
@@ -28,7 +28,7 @@ export default function TermsPage() {
         <section>
           <h2 className="text-xl font-semibold mb-3">1. Beta Program</h2>
           <p>
-            Run-Smart AI is in active development. Features may change, be removed, or experience
+            RunSmart AI is in active development. Features may change, be removed, or experience
             downtime as we iterate during the beta.
           </p>
         </section>
@@ -41,7 +41,7 @@ export default function TermsPage() {
         <section>
           <h2 className="text-xl font-semibold mb-3">3. No Medical Advice</h2>
           <p>
-            Run-Smart AI provides general fitness guidance. It is not medical advice and should not
+            RunSmart AI provides general fitness guidance. It is not medical advice and should not
             replace professional medical guidance. Always consult a professional for medical or
             injury concerns.
           </p>
@@ -66,11 +66,11 @@ export default function TermsPage() {
         <section>
           <h2 className="text-xl font-semibold mb-3">6. Third-Party Integrations</h2>
           <p>
-            Run-Smart AI may integrate with third-party services such as Garmin Connect.
+            RunSmart AI may integrate with third-party services such as Garmin Connect.
           </p>
           <ul className="list-disc pl-5 mt-2 space-y-1">
             <li>
-              You authorize Run-Smart AI to access your Garmin data via OAuth when you connect Garmin.
+              You authorize RunSmart AI to access your Garmin data via OAuth when you connect Garmin.
             </li>
             <li>
               Your use of Garmin is subject to Garmin&apos;s own Terms of Service.
@@ -91,7 +91,7 @@ export default function TermsPage() {
           <h2 className="text-xl font-semibold mb-3">7. Limitation of Liability</h2>
           <p>
             The beta is provided &quot;as is&quot; without warranties of any kind. To the fullest extent
-            permitted by law, Run-Smart AI is not liable for damages arising from use of the beta.
+            permitted by law, RunSmart AI is not liable for damages arising from use of the beta.
           </p>
         </section>
 

@@ -22,7 +22,7 @@ export default function PrivacyPolicy() {
         <section>
           <h2 className="text-xl font-semibold mb-3">1. Introduction</h2>
           <p>
-            Welcome to Run-Smart AI. We respect your privacy and are committed to protecting your personal data. This
+            Welcome to RunSmart AI. We respect your privacy and are committed to protecting your personal data. This
             privacy policy allows you to understand what data we collect, how we use it, where it is stored, and your
             rights regarding your data.
           </p>
@@ -51,7 +51,7 @@ export default function PrivacyPolicy() {
         <section>
           <h2 className="text-xl font-semibold mb-3">3. How Your Data is Stored</h2>
           <p>
-            <strong>Local-First Storage:</strong> Run-Smart AI is designed with a &quot;local-first&quot; architecture. Your
+            <strong>Local-First Storage:</strong> RunSmart AI is designed with a &quot;local-first&quot; architecture. Your
             personal activity data, health metrics, and chat history are stored <strong>locally on your device</strong>{' '}
             using IndexedDB. We do not maintain a central database of your detailed activity history.
           </p>
@@ -84,7 +84,7 @@ export default function PrivacyPolicy() {
               <h3 className="font-medium text-primary">Garmin &amp; Device Integrations</h3>
               <p>
                 If you choose to connect your Garmin account, we access your user-authorized activity data via the Garmin
-                Connect Developer Program strictly to import your runs into Run-Smart AI. We do not write data back to
+                Connect Developer Program strictly to import your runs into RunSmart AI. We do not write data back to
                 Garmin or share this data with other third parties.
               </p>
             </div>

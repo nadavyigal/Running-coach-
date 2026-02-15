@@ -29,6 +29,22 @@ interface ProfessionalLandingScreenProps {
   onExistingAccount?: () => void;
 }
 
+const getInitialLanguage = (): 'en' | 'he' => {
+  if (typeof window === 'undefined') return 'en';
+
+  const params = new URLSearchParams(window.location.search);
+  const urlLang = params.get('lang');
+  const storedLang = localStorage.getItem('landing_lang');
+  const initial =
+    urlLang === 'he' || urlLang === 'en'
+      ? urlLang
+      : storedLang === 'he' || storedLang === 'en'
+        ? storedLang
+        : 'en';
+
+  return initial as 'en' | 'he';
+};
+
 const COPY = {
   en: {
     existingAccount: 'I already have an account',
@@ -36,7 +52,7 @@ const COPY = {
     earlyAccessDeadline: 'Early access available until March 1, 2026',
     heroTitleTop: 'Your AI',
     heroTitleHighlight: 'Running Coach',
-    heroSubtitle: 'Join our growing community of runners getting fitter, faster with personalized AI coaching',
+    heroSubtitle: 'The AI coach that adapts to how you feel so you can train consistently and improve safely.',
     socialProof: {
       plans: 'AI-Powered Plans',
       tracking: 'Real-Time Tracking',
@@ -44,16 +60,16 @@ const COPY = {
     },
     ctaPrimary: 'Get Started Free',
     ctaExisting: 'I already have an account',
-    ctaSubtext: 'No credit card required • Cancel anytime',
+    ctaSubtext: 'Free early access. No credit card required.',
     betaSectionTitle: 'Get Early Access',
     betaSectionSubtitle:
-      'Share your name and email for exclusive beta updates and a lifetime discount (email optional)',
+      'Optional: share your name and email for beta updates and founding-member offers.',
     placeholders: {
       name: 'Your name',
       email: 'you@example.com',
     },
     labels: {
-      name: 'Name',
+      name: 'Name (optional)',
       email: 'Email (optional)',
     },
     continue: 'Continue',
@@ -233,7 +249,7 @@ export function ProfessionalLandingScreen({
 }: ProfessionalLandingScreenProps) {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
-  const [language, setLanguage] = useState<'en' | 'he'>('en');
+  const [language, setLanguage] = useState<'en' | 'he'>(getInitialLanguage);
   const betaSignups = useBetaSignupCount();
   const { toast } = useToast();
   const isHebrew = language === 'he';
@@ -243,24 +259,16 @@ export function ProfessionalLandingScreen({
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const urlLang = params.get('lang');
-    const storedLang = localStorage.getItem('landing_lang');
-    const initial =
-      urlLang === 'he' || urlLang === 'en'
-        ? urlLang
-        : storedLang === 'he' || storedLang === 'en'
-          ? storedLang
-          : 'en';
-    setLanguage(initial as 'en' | 'he');
-    if (initial !== urlLang) {
+    if (urlLang !== language) {
       const url = new URL(window.location.href);
-      url.searchParams.set('lang', initial);
+      url.searchParams.set('lang', language);
       window.history.replaceState({}, '', url.toString());
     }
     void trackAnalyticsEvent('page_viewed', {
       referrer_source: document.referrer || 'direct',
       page: 'professional_landing',
     });
-  }, []);
+  }, [language]);
 
   const setLanguagePreference = (nextLanguage: 'en' | 'he') => {
     setLanguage(nextLanguage);
@@ -615,14 +623,6 @@ export function ProfessionalLandingScreen({
               <Button
                 size="lg"
                 onClick={() => {
-                  if (!name.trim()) {
-                    toast({
-                      title: copy.validation.nameRequiredTitle,
-                      description: copy.validation.nameRequiredBody,
-                      variant: 'destructive',
-                    });
-                    return;
-                  }
                   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
                     toast({
                       title: copy.validation.invalidEmailTitle,
@@ -631,11 +631,16 @@ export function ProfessionalLandingScreen({
                     });
                     return;
                   }
-                  localStorage.setItem('beta_signup_name', name.trim());
-                  trackCtaClick('Continue', 'beta_signup');
-                  if (email) {
-                    void trackAnalyticsEvent('form_submitted', { form_type: 'beta_email', source: 'professional_landing' });
+                  if (name.trim()) {
+                    localStorage.setItem('beta_signup_name', name.trim());
                   }
+                  trackCtaClick('Continue', 'beta_signup');
+                  void trackAnalyticsEvent('form_submitted', {
+                    form_type: 'beta_interest',
+                    source: 'professional_landing',
+                    has_email: Boolean(email.trim()),
+                    has_name: Boolean(name.trim()),
+                  });
                   revealChallenges();
                 }}
                 className="h-14 px-6 bg-primary text-primary-foreground rounded-full font-semibold shadow-md hover:shadow-lg transition-all"

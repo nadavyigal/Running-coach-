@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next"
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Run-Smart - AI Running Coach",
-    short_name: "Run-Smart",
+    name: "RunSmart - AI Running Coach",
+    short_name: "RunSmart",
     description: "Your personal AI running coach for training plans, tracking, and motivation",
     start_url: "/",
     display: "standalone",

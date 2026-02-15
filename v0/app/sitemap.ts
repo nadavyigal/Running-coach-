@@ -1,4 +1,5 @@
 import { MetadataRoute } from 'next'
+import { getAllChallengeSlugs } from '@/lib/challengeTemplates'
 
 /**
  * Dynamic sitemap for RunSmart
@@ -9,65 +10,21 @@ import { MetadataRoute } from 'next'
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://runsmart.app'
   const currentDate = new Date()
+  const challengeRoutes = getAllChallengeSlugs().map((slug) => ({
+    url: `${baseUrl}/challenges/${slug}`,
+    lastModified: currentDate,
+    changeFrequency: 'weekly' as const,
+    priority: 0.8,
+  }))
 
   return [
-    // Homepage
     {
       url: baseUrl,
       lastModified: currentDate,
       changeFrequency: 'weekly',
       priority: 1.0,
     },
-    // Beta landing page
-    {
-      url: `${baseUrl}/landing`,
-      lastModified: currentDate,
-      changeFrequency: 'daily',
-      priority: 0.9,
-    },
-    // Chat page
-    {
-      url: `${baseUrl}/chat`,
-      lastModified: currentDate,
-      changeFrequency: 'daily',
-      priority: 0.7,
-    },
-    // Plan page
-    {
-      url: `${baseUrl}/plan`,
-      lastModified: currentDate,
-      changeFrequency: 'daily',
-      priority: 0.7,
-    },
-    // Today page
-    {
-      url: `${baseUrl}/today`,
-      lastModified: currentDate,
-      changeFrequency: 'daily',
-      priority: 0.7,
-    },
-    // Record page
-    {
-      url: `${baseUrl}/record`,
-      lastModified: currentDate,
-      changeFrequency: 'weekly',
-      priority: 0.6,
-    },
-    // Profile page
-    {
-      url: `${baseUrl}/profile`,
-      lastModified: currentDate,
-      changeFrequency: 'weekly',
-      priority: 0.6,
-    },
-    // Onboarding
-    {
-      url: `${baseUrl}/onboarding`,
-      lastModified: currentDate,
-      changeFrequency: 'weekly',
-      priority: 0.8,
-    },
-    // Legal pages
+    ...challengeRoutes,
     {
       url: `${baseUrl}/privacy`,
       lastModified: currentDate,
@@ -80,11 +37,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'monthly',
       priority: 0.3,
     },
-    // Future dynamic routes:
-    // - Challenge pages: /challenges/[slug]
-    // - Run reports: /runs/[runId]/report
-    // - Public user profiles (when implemented)
-    // - Blog posts (when implemented)
-    // - Help/FAQ pages (when implemented)
   ]
 }

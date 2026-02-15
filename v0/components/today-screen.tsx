@@ -966,7 +966,9 @@ export function TodayScreen() {
                     <h3 className="text-2xl font-semibold">{accountHeadline}</h3>
                     <div className="flex items-center gap-2 text-xs text-emerald-200/80">
                       <Users className="h-3 w-3" />
-                      <span>200+ runners already registered</span>
+                      <span>
+                        {betaSignups.loading ? 'Runner count updating...' : `${betaSignups.count}+ runners already registered`}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -978,7 +980,7 @@ export function TodayScreen() {
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-emerald-300 flex-shrink-0">✓</span>
-                      <span>50% lifetime discount</span>
+                      <span>Founding member pricing when paid plans launch</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-emerald-300 flex-shrink-0">✓</span>
@@ -996,7 +998,7 @@ export function TodayScreen() {
                         ? 'Loading...'
                         : betaSignups.isNearCapacity
                           ? `Almost full! Only ${betaSignups.spotsRemaining} spots left`
-                          : `Limited: ${betaSignups.count}/500 early access spots taken`
+                          : `${betaSignups.count} runners have joined the early access program`
                       }
                     </span>
                   </div>

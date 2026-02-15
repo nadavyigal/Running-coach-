@@ -2,16 +2,16 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
-  title: "Run-Smart AI | Early Access Beta",
+  title: "RunSmart | Adaptive AI Running Coach",
   description:
-    "Join 200+ runners getting fitter, faster with personalized AI coaching. Early access beta for Run-Smart AI.",
+    "RunSmart adapts your training plan to how you feel so you stay consistent and improve safely.",
   alternates: {
     canonical: "/landing",
   },
   openGraph: {
-    title: "Run-Smart AI | Early Access Beta",
+    title: "RunSmart | Adaptive AI Running Coach",
     description:
-      "Join 200+ runners getting fitter, faster with personalized AI coaching. Early access beta for Run-Smart AI.",
+      "RunSmart adapts your training plan to how you feel so you stay consistent and improve safely.",
     url: "/landing",
     type: "website",
     images: [
@@ -19,14 +19,14 @@ export const metadata: Metadata = {
         url: "/images/runsmart-intro-bg.jpg",
         width: 1200,
         height: 630,
-        alt: "Run-Smart AI beta preview",
+        alt: "RunSmart app preview",
       },
     ],
   },
   twitter: {
-    title: "Run-Smart AI | Early Access Beta",
+    title: "RunSmart | Adaptive AI Running Coach",
     description:
-      "Join 200+ runners getting fitter, faster with personalized AI coaching. Early access beta for Run-Smart AI.",
+      "RunSmart adapts your training plan to how you feel so you stay consistent and improve safely.",
     images: ["/images/runsmart-intro-bg.jpg"],
     card: "summary_large_image",
   },
