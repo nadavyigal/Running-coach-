@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1200, height=630">
+    <title>RunSmart OG Image V2</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 1200px;
+            height: 630px;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .container {
+            width: 1200px;
+            height: 630px;
+            background: linear-gradient(135deg, #0a0f1a 0%, #1a2332 50%, #0f1419 100%);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Left section - Text content */
+        .content {
+            flex: 1;
+            padding: 80px;
+            z-index: 10;
+        }
+
+        /* Logo */
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .logo-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            box-shadow: 0 8px 24px rgba(34, 197, 94, 0.3);
+        }
+
+        .logo-text {
+            font-size: 32px;
+            font-weight: 800;
+            color: white;
+            letter-spacing: -1px;
+        }
+
+        .logo-text .smart {
+            color: #22c55e;
+        }
+
+        /* Main heading */
+        h1 {
+            font-size: 56px;
+            font-weight: 900;
+            color: white;
+            margin: 0 0 24px 0;
+            line-height: 1.1;
+            letter-spacing: -2px;
+            max-width: 600px;
+        }
+
+        .highlight {
+            background: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Subtitle/tagline */
+        .tagline {
+            font-size: 24px;
+            color: rgba(255, 255, 255, 0.75);
+            margin: 0 0 32px 0;
+            line-height: 1.4;
+            font-weight: 500;
+            max-width: 550px;
+        }
+
+        /* Features list */
+        .features {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 32px;
+        }
+
+        .feature {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.65);
+        }
+
+        .feature-icon {
+            width: 24px;
+            height: 24px;
+            background: rgba(34, 197, 94, 0.2);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #22c55e;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        /* Right section - Visual mockup */
+        .mockup-container {
+            position: absolute;
+            right: -50px;
+            top: 50%;
+            transform: translateY(-50%) rotate(5deg);
+            z-index: 5;
+            filter: drop-shadow(-20px 20px 60px rgba(0, 0, 0, 0.5));
+        }
+
+        .phone-mockup {
+            width: 350px;
+            height: 550px;
+            background: white;
+            border-radius: 36px;
+            padding: 12px;
+            box-shadow: 0 0 0 8px #1a1a1a,
+                        0 30px 80px rgba(0, 0, 0, 0.6);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .phone-screen {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, #f8f9fa 0%, #ffffff 100%);
+            border-radius: 28px;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Calendar UI elements */
+        .screen-header {
+            font-size: 11px;
+            font-weight: 600;
+            color: #22c55e;
+            margin-bottom: 8px;
+        }
+
+        .screen-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: #0f172a;
+            margin-bottom: 4px;
+        }
+
+        .screen-subtitle {
+            font-size: 12px;
+            color: #64748b;
+            margin-bottom: 16px;
+        }
+
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 14px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 6px;
+        }
+
+        .calendar-day-label {
+            text-align: center;
+            font-size: 9px;
+            font-weight: 600;
+            color: #64748b;
+            padding: 4px 0;
+        }
+
+        .calendar-day {
+            aspect-ratio: 1;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .calendar-day.easy {
+            background: rgba(34, 197, 94, 0.1);
+            color: #22c55e;
+        }
+
+        .calendar-day.rest {
+            background: rgba(100, 116, 139, 0.1);
+            color: #64748b;
+        }
+
+        .calendar-day.intervals {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+
+        .calendar-day.long {
+            background: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+        }
+
+        .day-number {
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+
+        .day-label {
+            font-size: 8px;
+            opacity: 0.8;
+        }
+
+        /* Decorative elements */
+        .gradient-orb {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(34, 197, 94, 0.08) 0%, transparent 70%);
+            border-radius: 50%;
+            filter: blur(80px);
+            pointer-events: none;
+        }
+
+        .orb-1 {
+            top: -200px;
+            left: -200px;
+        }
+
+        .orb-2 {
+            bottom: -300px;
+            right: 200px;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.06) 0%, transparent 70%);
+        }
+
+        /* Floating decorative lines */
+        .deco-line {
+            position: absolute;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.2), transparent);
+            width: 100%;
+        }
+
+        .deco-line-1 { top: 25%; }
+        .deco-line-2 { top: 50%; opacity: 0.5; }
+        .deco-line-3 { top: 75%; opacity: 0.3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Decorative background orbs -->
+        <div class="gradient-orb orb-1"></div>
+        <div class="gradient-orb orb-2"></div>
+        <div class="deco-line deco-line-1"></div>
+        <div class="deco-line deco-line-2"></div>
+        <div class="deco-line deco-line-3"></div>
+
+        <!-- Left content section -->
+        <div class="content">
+            <!-- Logo -->
+            <div class="logo-container">
+                <div class="logo-icon">✨</div>
+                <div class="logo-text">
+                    Run<span class="smart">Smart</span>
+                </div>
+            </div>
+
+            <!-- Main headline -->
+            <h1>
+                Your <span class="highlight">AI Running Coach</span> That Adapts to Your Life
+            </h1>
+
+            <!-- Tagline -->
+            <p class="tagline">
+                Personalized training plans that adjust when you miss workouts. Stay consistent, not perfect.
+            </p>
+
+            <!-- Key features -->
+            <div class="features">
+                <div class="feature">
+                    <div class="feature-icon">✓</div>
+                    <span>Adaptive AI Plans • Recovery Tracking • Offline-First</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right mockup section -->
+        <div class="mockup-container">
+            <div class="phone-mockup">
+                <div class="phone-screen">
+                    <div class="screen-header">GOAL ALIGNED</div>
+                    <div class="screen-title">10k Plan</div>
+                    <div class="screen-subtitle">86 days remaining • 0% progress</div>
+
+                    <div class="calendar-header">
+                        <span>← January 2026 →</span>
+                    </div>
+
+                    <div class="calendar-grid">
+                        <!-- Day labels -->
+                        <div class="calendar-day-label">S</div>
+                        <div class="calendar-day-label">M</div>
+                        <div class="calendar-day-label">T</div>
+                        <div class="calendar-day-label">W</div>
+                        <div class="calendar-day-label">T</div>
+                        <div class="calendar-day-label">F</div>
+                        <div class="calendar-day-label">S</div>
+
+                        <!-- Week 1 -->
+                        <div class="calendar-day"></div>
+                        <div class="calendar-day"></div>
+                        <div class="calendar-day"></div>
+                        <div class="calendar-day"></div>
+                        <div class="calendar-day long">
+                            <div class="day-number">1</div>
+                            <div class="day-label">long</div>
+                        </div>
+                        <div class="calendar-day long">
+                            <div class="day-number">2</div>
+                            <div class="day-label">long</div>
+                        </div>
+                        <div class="calendar-day easy">
+                            <div class="day-number">3</div>
+                            <div class="day-label">easy</div>
+                        </div>
+
+                        <!-- Week 2 -->
+                        <div class="calendar-day easy">
+                            <div class="day-number">4</div>
+                            <div class="day-label">easy</div>
+                        </div>
+                        <div class="calendar-day rest">
+                            <div class="day-number">5</div>
+                            <div class="day-label">rest</div>
+                        </div>
+                        <div class="calendar-day easy">
+                            <div class="day-number">6</div>
+                        </div>
+                        <div class="calendar-day intervals">
+                            <div class="day-number">7</div>
+                            <div class="day-label">intervals</div>
+                        </div>
+                        <div class="calendar-day easy">
+                            <div class="day-number">8</div>
+                        </div>
+                        <div class="calendar-day long">
+                            <div class="day-number">9</div>
+                            <div class="day-label">long</div>
+                        </div>
+                        <div class="calendar-day easy">
+                            <div class="day-number">10</div>
+                        </div>
+
+                        <!-- Week 3 -->
+                        <div class="calendar-day easy">
+                            <div class="day-number">11</div>
+                            <div class="day-label">easy</div>
+                        </div>
+                        <div class="calendar-day rest">
+                            <div class="day-number">12</div>
+                            <div class="day-label">rest</div>
+                        </div>
+                        <div class="calendar-day easy">
+                            <div class="day-number">13</div>
+                        </div>
+                        <div class="calendar-day intervals">
+                            <div class="day-number">14</div>
+                            <div class="day-label">tempo</div>
+                        </div>
+                        <div class="calendar-day easy">
+                            <div class="day-number">15</div>
+                        </div>
+                        <div class="calendar-day long">
+                            <div class="day-number">16</div>
+                            <div class="day-label">long</div>
+                        </div>
+                        <div class="calendar-day easy">
+                            <div class="day-number">17</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

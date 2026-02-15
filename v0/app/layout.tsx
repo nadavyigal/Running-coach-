@@ -90,6 +90,9 @@ export default function RootLayout({
         <meta property="og:site_name" content="RunSmart" />
         <meta property="og:type" content="website" />
         <meta property="og:image" content={`${siteUrl}/og-image.png`} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:image:type" content="image/png" />
         <meta property="og:locale" content="en_US" />
 
         {/* Twitter Card meta tags */}
@@ -97,6 +100,8 @@ export default function RootLayout({
         <meta name="twitter:title" content={defaultTitle} />
         <meta name="twitter:description" content={defaultDescription} />
         <meta name="twitter:image" content={`${siteUrl}/og-image.png`} />
+        <meta name="twitter:image:width" content="1200" />
+        <meta name="twitter:image:height" content="630" />
 
         {/* Keywords for SEO */}
         <meta
