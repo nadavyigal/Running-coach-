@@ -5,17 +5,13 @@ import { Button } from "@/components/ui/button"
 import {
   AlertCircle,
   ArrowLeft,
-  Brain,
   Calendar,
-  CalendarDays,
   CheckCircle2,
   Gauge,
   HelpCircle,
   Route,
-  Trophy,
   TrendingUp,
 } from "lucide-react"
-import Image from "next/image"
 import { dbUtils, setReferenceRace } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -33,7 +29,6 @@ import { onboardingManager } from "@/lib/onboardingManager"
 import OnboardingErrorBoundary from "@/components/onboarding-error-boundary"
 import { UserPrivacySettings } from "@/components/privacy-dashboard"
 import { cn } from "@/lib/utils"
-import { ChallengePicker } from "@/components/challenge-picker"
 import type { ChallengeTemplate } from "@/lib/db"
 import { getChallengeTemplateBySlug } from "@/lib/challengeTemplates"
 
@@ -467,7 +462,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     setReferenceRaceSeconds(defaultRaceSeconds % 60)
   }, [defaultRaceSeconds, timeSeeded])
 
-  const totalSteps = 8
+  const totalSteps = 6
   const progressPercent = Math.round(((currentStep - 1) / (totalSteps - 1)) * 100)
 
   const nextStep = () => {
@@ -491,20 +486,18 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const canProceed = () => {
     const canProceedResult = (() => {
       switch (currentStep) {
-        case 2:
+        case 1:
           return selectedGoal !== ""
-        case 3:
+        case 2:
           return selectedExperience !== ""
-        case 4:
+        case 3:
           return age !== null && age >= 10 && age <= 100
-        case 5:
+        case 4:
           return referenceRaceTimeSeconds > 0
-        case 6:
+        case 5:
           return daysPerWeek >= 2 && Boolean(longRunDay)
-        case 7:
+        case 6:
           return privacyAccepted
-        case 8:
-          return true // Challenge selection is optional
         default:
           return true
       }
@@ -514,20 +507,18 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     if (!canProceedResult) {
       const getValidationError = () => {
         switch (currentStep) {
-          case 2:
+          case 1:
             return { field: 'goal', message: 'Goal selection is required' }
-          case 3:
+          case 2:
             return { field: 'experience', message: 'Experience level is required' }
-          case 4:
+          case 3:
             return { field: 'age', message: 'Valid age (10-100) is required' }
-          case 5:
+          case 4:
             return { field: 'referenceRace', message: 'Enter your current race time' }
-          case 6:
+          case 5:
             return { field: 'schedule', message: 'Select your training days and long run day' }
-          case 7:
+          case 6:
             return { field: 'privacy', message: 'Please accept the privacy policy to continue' }
-          case 8:
-            return { field: 'challenge', message: 'Select a challenge or skip to continue' }
           default:
             return { field: 'unknown', message: 'Validation failed' }
         }
@@ -547,20 +538,18 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
   const getValidationMessage = (step: number): string => {
     switch (step) {
-      case 2:
+      case 1:
         return "Please select your running goal to continue"
-      case 3:
+      case 2:
         return "Please tell us about your running experience"
-      case 4:
+      case 3:
         return "Age helps us personalize your training"
-      case 5:
+      case 4:
         return "Enter your current race time to continue"
-      case 6:
+      case 5:
         return "Select your training days and long run day"
-      case 7:
+      case 6:
         return "Please accept the privacy policy to continue"
-      case 8:
-        return "Select a challenge or skip to continue"
       default:
         return "Please complete all required fields"
     }
@@ -568,7 +557,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
   const isStepValid = canProceed()
   const isFinalStep = currentStep === totalSteps
-  const isIntroStep = currentStep === 1
   const isActionDisabled = !isStepValid || (isFinalStep && isGeneratingPlan)
 
   const applyAiProfile = (profile: {
@@ -883,54 +871,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     switch (currentStep) {
       case 1:
         return (
-          <div className="flex min-h-[calc(100vh-200px)] flex-col relative px-6 pt-6">
-            {/* Header - Back Button Only */}
-            <header>
-              <button
-                className="flex h-10 w-10 items-center justify-center rounded-full text-white/80 transition-colors hover:text-white"
-                aria-label="Go back"
-                disabled
-              >
-                <ArrowLeft className="h-5 w-5" strokeWidth={2.5} />
-              </button>
-            </header>
-
-            {/* Headline Section */}
-            <div className="mt-28">
-              <h1 className="text-[2.5rem] font-black italic leading-[1] tracking-tight text-white drop-shadow-lg">
-                {"LET'S CRUSH YOUR"}
-                <br />
-                {"NEXT GOAL."}
-              </h1>
-
-              <p className="mt-5 text-base text-white/70">
-                Tell me about your running style
-              </p>
-
-              {/* Feature Icons */}
-              <div className="mt-10 flex items-start gap-4">
-                <FeatureIcon
-                  icon={<Brain className="h-7 w-7" strokeWidth={1.5} />}
-                  label="AI Powered"
-                />
-                <FeatureIcon
-                  icon={<CalendarDays className="h-7 w-7" strokeWidth={1.5} />}
-                  label="Flexible Sched"
-                />
-                <FeatureIcon
-                  icon={<Trophy className="h-7 w-7" strokeWidth={1.5} />}
-                  label="Goal Oriented"
-                />
-              </div>
-            </div>
-
-            {/* Spacer */}
-            <div className="flex-1" />
-          </div>
-        )
-
-      case 2:
-        return (
           <div className="pt-2 space-y-8">
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold leading-tight">What is your main goal?</h2>
@@ -956,7 +896,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           </div>
         )
 
-      case 3:
+      case 2:
         return (
           <div className="pt-2 space-y-8">
             <div className="space-y-2">
@@ -1015,7 +955,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           </div>
         )
 
-      case 4:
+      case 3:
         return (
           <div className="pt-2 space-y-6">
             <div className="space-y-2">
@@ -1037,7 +977,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           </div>
         )
 
-      case 5:
+      case 4:
         return (
           <div className="pt-2 space-y-5">
             <div className="flex items-start justify-between gap-2">
@@ -1133,7 +1073,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           </div>
         )
 
-      case 6:
+      case 5:
         return (
           <div className="pt-2 space-y-10">
             <div className="space-y-4">
@@ -1195,7 +1135,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           </div>
         )
 
-      case 7:
+      case 6:
         const distanceLabel =
           referenceRaceDistance === 21.1
             ? 'Half Marathon'
@@ -1274,32 +1214,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           </div>
         )
 
-      case 8:
-        return (
-          <div className="pt-2 space-y-6">
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold leading-tight">Start with a Challenge?</h2>
-              <p className="text-white/60 text-sm">
-                Jump-start your running journey with a structured challenge, or skip to build your own plan.
-              </p>
-            </div>
-
-            <ChallengePicker
-              onChallengeSelected={setSelectedChallenge}
-              onSelectionChange={setSelectedChallenge}
-              selectedTemplate={selectedChallenge}
-              showFeaturedOnly={true}
-              className="mt-4"
-            />
-
-            {selectedChallenge && (
-              <div className="flex items-center gap-2 text-sm text-primary bg-primary/10 border border-primary/20 p-3 rounded-2xl">
-                <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
-                Challenge selected: {selectedChallenge.name}
-              </div>
-            )}
-          </div>
-        )
       default:
         return null
     }
@@ -1335,22 +1249,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         className="sr-only"
       />
       <div className="relative min-h-screen bg-[oklch(16%_0.02_255)] text-white flex flex-col">
-        {isIntroStep && (
-          <div className="absolute inset-0">
-            {/* Full-screen Background Image */}
-            <Image
-              src="/images/runsmart-intro-bg-v2.jpg"
-              alt="Runner silhouette at sunset with RunSmart products"
-              fill
-              className="object-cover"
-              priority
-            />
-          </div>
-        )}
-
-        {/* Header - Hidden on intro step */}
-        {!isIntroStep && (
-          <div className="px-4 pb-3 pt-4 relative z-10" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 1rem))' }}>
+        {/* Header */}
+        <div className="px-4 pb-3 pt-4 relative z-10" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 1rem))' }}>
             <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
@@ -1375,9 +1275,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               <p className="mt-3 text-xs text-amber-400">Working in offline mode</p>
             )}
           </div>
-        )}
 
-        <div className={cn("flex-1 overflow-y-auto relative z-10", isIntroStep ? "px-0 pb-44" : "px-4 pb-4")}>
+        <div className={cn("flex-1 overflow-y-auto relative z-10", "px-4 pb-4")}>
           {renderStep()}
 
           {!isStepValid && currentStep > 1 && (
@@ -1388,22 +1287,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           )}
         </div>
 
-        {/* Branding with logo - positioned at bottom for intro step */}
-        {isIntroStep && (
-          <div className="relative z-10 flex flex-col items-center pb-6 px-6">
-            {/* Logo with glow - SVG version */}
-            <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/15 shadow-[0_0_30px_rgba(64,200,170,0.25)]">
-              <RunSmartLogo className="h-10 w-10 text-primary" />
-            </div>
-            <h2 className="text-xl font-bold italic text-white">RunSmart</h2>
-            <p className="mt-1 text-sm text-white/60">Your AI Running Coach</p>
-          </div>
-        )}
-
         <div
           className={cn(
             "px-6 pt-3 relative z-10",
-            isIntroStep ? "bg-transparent" : "bg-[oklch(12%_0.02_255)] px-8"
+            "bg-[oklch(12%_0.02_255)] px-8"
           )}
           style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom, 2rem))' }}
         >
@@ -1411,9 +1298,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             type="button"
             className={cn(
               "w-full font-semibold rounded-2xl transition-all duration-200 shadow-lg",
-              isIntroStep
-                ? "h-14 text-base bg-[#38bdf8] text-[#0a0a0a] hover:bg-[#4cc5f9] active:scale-[0.98]"
-                : "h-[58px] text-xl font-bold bg-white text-neutral-950 hover:bg-white/95 hover:shadow-2xl hover:scale-[1.02] active:scale-100"
+              "h-[58px] text-xl font-bold bg-white text-neutral-950 hover:bg-white/95 hover:shadow-2xl hover:scale-[1.02] active:scale-100"
             )}
             onClick={isFinalStep ? handleComplete : nextStep}
             disabled={isActionDisabled}
@@ -1426,46 +1311,3 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   )
 }
 
-function RunSmartLogo({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 48 48"
-      fill="none"
-      className={className}
-    >
-      {/* Main 4-point star */}
-      <path
-        d="M24 4L27 20L43 24L27 28L24 44L21 28L5 24L21 20L24 4Z"
-        stroke="currentColor"
-        strokeWidth="2.5"
-        fill="none"
-        style={{ filter: 'drop-shadow(0 0 6px rgba(64, 200, 170, 0.6))' }}
-      />
-      {/* Small sparkle top right */}
-      <path
-        d="M36 10L37 14L41 15L37 16L36 20L35 16L31 15L35 14L36 10Z"
-        fill="currentColor"
-        style={{ filter: 'drop-shadow(0 0 4px rgba(64, 200, 170, 0.8))' }}
-      />
-      {/* Small sparkle bottom left */}
-      <path
-        d="M12 30L13 33L16 34L13 35L12 38L11 35L8 34L11 33L12 30Z"
-        fill="currentColor"
-        style={{ filter: 'drop-shadow(0 0 4px rgba(64, 200, 170, 0.8))' }}
-      />
-    </svg>
-  )
-}
-
-function FeatureIcon({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <div
-        className="flex h-[60px] w-[60px] items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-primary"
-      >
-        {icon}
-      </div>
-      <span className="text-[11px] font-medium text-white/80">{label}</span>
-    </div>
-  )
-}

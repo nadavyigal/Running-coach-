@@ -168,7 +168,7 @@ describe('OnboardingChatOverlay', () => {
         onClose={mockOnClose}
         onComplete={mockOnComplete}
         currentStep={2}
-        totalSteps={8}
+        totalSteps={6}
       />
     )
 
@@ -183,7 +183,7 @@ describe('OnboardingChatOverlay', () => {
         onClose={mockOnClose}
         onComplete={mockOnComplete}
         currentStep={2}
-        totalSteps={8}
+        totalSteps={6}
       />
     )
 
@@ -197,7 +197,7 @@ describe('OnboardingChatOverlay', () => {
         onClose={mockOnClose}
         onComplete={mockOnComplete}
         currentStep={2}
-        totalSteps={8}
+        totalSteps={6}
       />
     )
 
@@ -213,7 +213,7 @@ describe('OnboardingChatOverlay', () => {
         onClose={mockOnClose}
         onComplete={mockOnComplete}
         currentStep={2}
-        totalSteps={8}
+        totalSteps={6}
       />
     )
 
@@ -247,7 +247,7 @@ describe('OnboardingChatOverlay', () => {
         onClose={mockOnClose}
         onComplete={mockOnComplete}
         currentStep={2}
-        totalSteps={8}
+        totalSteps={6}
       />
     )
 
@@ -275,7 +275,7 @@ describe('OnboardingChatOverlay', () => {
         onClose={mockOnClose}
         onComplete={mockOnComplete}
         currentStep={2}
-        totalSteps={8}
+        totalSteps={6}
       />
     )
 
@@ -310,7 +310,7 @@ describe('OnboardingChatOverlay', () => {
         onClose={mockOnClose}
         onComplete={mockOnComplete}
         currentStep={2}
-        totalSteps={8}
+        totalSteps={6}
       />
     )
 
@@ -340,7 +340,7 @@ describe('OnboardingChatOverlay', () => {
         onClose={mockOnClose}
         onComplete={mockOnComplete}
         currentStep={2}
-        totalSteps={8}
+        totalSteps={6}
       />
     )
 
@@ -363,7 +363,7 @@ describe('OnboardingChatOverlay', () => {
         onClose={mockOnClose}
         onComplete={mockOnComplete}
         currentStep={2}
-        totalSteps={8}
+        totalSteps={6}
       />
     )
 
