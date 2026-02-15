@@ -20,7 +20,7 @@ import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
 import { getActiveChallenge, getDailyChallengeData } from "@/lib/challengeEngine"
 import { NextChallengeRecommendation } from "@/components/next-challenge-recommendation"
 import { getNextChallengeRecommendation } from "@/lib/challengeTemplates"
-import { startChallenge } from "@/lib/challengeEngine"
+import { startChallengeAndSyncPlan } from "@/lib/challenge-plan-sync"
 
 export function PlanScreen() {
   // Get shared data from context
@@ -122,7 +122,20 @@ export function PlanScreen() {
     }
 
     try {
-      await startChallenge(userId, template.slug, plan.id!)
+      const syncResult = await startChallengeAndSyncPlan({
+        userId,
+        planId: plan.id!,
+        challenge: template,
+      })
+
+      const refreshedPlan = await dbUtils.getActivePlan(userId)
+      if (refreshedPlan) {
+        setPlan(refreshedPlan)
+        if (refreshedPlan.id) {
+          const refreshedWorkouts = await dbUtils.getWorkoutsByPlan(refreshedPlan.id)
+          setWorkouts(refreshedWorkouts)
+        }
+      }
 
       // Reload challenge data
       const challenge = await getActiveChallenge(userId)
@@ -130,8 +143,12 @@ export function PlanScreen() {
       setRecommendedChallenge(null)
 
       toast({
-        title: "Challenge Started! 🎉",
-        description: `${template.name} challenge has begun`,
+        title: syncResult.planUpdated ? "Challenge Started + Plan Synced" : "Challenge Started",
+        description: syncResult.planUpdated
+          ? syncResult.source === 'ai'
+            ? `${template.name} started with a challenge-aligned AI plan.`
+            : `${template.name} started with a fallback challenge plan.`
+          : `${template.name} challenge started, but the plan sync did not complete.`,
       })
     } catch (error) {
       console.error("Error starting challenge:", error)

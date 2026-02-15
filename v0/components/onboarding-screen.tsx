@@ -31,6 +31,7 @@ import { UserPrivacySettings } from "@/components/privacy-dashboard"
 import { cn } from "@/lib/utils"
 import type { ChallengeTemplate } from "@/lib/db"
 import { getChallengeTemplateBySlug } from "@/lib/challengeTemplates"
+import { syncPlanWithChallenge } from "@/lib/challenge-plan-sync"
 
 type Weekday = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
 
@@ -692,68 +693,59 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               const controller = new AbortController();
               const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-              const challengePayload = selectedChallenge ? {
-                slug: selectedChallenge.slug,
-                name: selectedChallenge.name,
-                category: selectedChallenge.category,
-                difficulty: selectedChallenge.difficulty,
-                durationDays: selectedChallenge.durationDays,
-                workoutPattern: selectedChallenge.workoutPattern,
-                coachTone: selectedChallenge.coachTone,
-                targetAudience: selectedChallenge.targetAudience,
-                promise: selectedChallenge.promise,
-              } : undefined
+              if (selectedChallenge) {
+                const syncResult = await syncPlanWithChallenge(userId, planId, selectedChallenge)
+                clearTimeout(timeoutId)
+                aiPlanGenerated = syncResult.planUpdated
 
-              const totalWeeks = selectedChallenge
-                ? Math.max(1, Math.ceil(selectedChallenge.durationDays / 7))
-                : undefined
-
-              const planResponse = await fetch('/api/generate-plan', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  user: {
-                    experience: formData.experience,
-                    goal: formData.goal,
-                    daysPerWeek: formData.daysPerWeek,
-                    preferredTimes: formData.selectedTimes,
-                    age: formData.age,
-                    averageWeeklyKm: formData.averageWeeklyKm ?? undefined
-                  },
-                  challenge: challengePayload,
-                  totalWeeks,
-                  planType: selectedChallenge ? 'challenge' : undefined
-                }),
-                signal: controller.signal
-              });
-
-              clearTimeout(timeoutId);
-
-              if (planResponse.ok) {
-                const planData = await planResponse.json();
-                console.log('✅ AI plan generated successfully:', planData);
-
-                // Update the plan with AI-generated workouts
-                if (planData.plan && planData.plan.workouts) {
-                  await dbUtils.updatePlanWithAIWorkouts(planId, planData.plan);
-                  console.log('✅ Plan updated with AI workouts');
-                  aiPlanGenerated = true;
+                if (!syncResult.planUpdated) {
+                  console.warn('Challenge plan sync failed:', syncResult.error)
                 }
               } else {
-                const errorData = await planResponse.json().catch(() => ({}));
-                console.warn('⚠️ AI plan generation failed:', {
-                  status: planResponse.status,
-                  error: errorData
+                const planResponse = await fetch('/api/generate-plan', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    user: {
+                      experience: formData.experience,
+                      goal: formData.goal,
+                      daysPerWeek: formData.daysPerWeek,
+                      preferredTimes: formData.selectedTimes,
+                      age: formData.age,
+                      averageWeeklyKm: formData.averageWeeklyKm ?? undefined
+                    }
+                  }),
+                  signal: controller.signal
                 });
 
-                // Check if it's an API key issue
-                if (planResponse.status === 503 || errorData.fallbackRequired) {
-                  console.log('📋 AI service unavailable - using default plan template');
-                  toast({
-                    title: "Using Default Plan",
-                    description: "AI coach is currently unavailable. We've created a great starter plan for you!",
-                    variant: "default"
+                clearTimeout(timeoutId);
+
+                if (planResponse.ok) {
+                  const planData = await planResponse.json();
+                  console.log('AI plan generated successfully:', planData);
+
+                  // Update the plan with AI-generated workouts
+                  if (planData.plan && planData.plan.workouts) {
+                    await dbUtils.updatePlanWithAIWorkouts(planId, planData.plan);
+                    console.log('Plan updated with AI workouts');
+                    aiPlanGenerated = true;
+                  }
+                } else {
+                  const errorData = await planResponse.json().catch(() => ({}));
+                  console.warn('AI plan generation failed:', {
+                    status: planResponse.status,
+                    error: errorData
                   });
+
+                  // Check if it is an API key issue
+                  if (planResponse.status === 503 || errorData.fallbackRequired) {
+                    console.log('AI service unavailable - using default plan template');
+                    toast({
+                      title: "Using Default Plan",
+                      description: "AI coach is currently unavailable. We have created a great starter plan for you!",
+                      variant: "default"
+                    });
+                  }
                 }
               }
             } catch (planError: any) {

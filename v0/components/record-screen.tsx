@@ -18,6 +18,7 @@ import { type Run, type Workout, type User, type Route, type ChallengeProgress, 
 import { dbUtils } from "@/lib/dbUtils"
 import { trackAnalyticsEvent } from "@/lib/analytics"
 import { getActiveChallenge, updateChallengeOnWorkoutComplete } from "@/lib/challengeEngine"
+import { startChallengeAndSyncPlan } from "@/lib/challenge-plan-sync"
 import { ENABLE_AUTO_PAUSE, ENABLE_VIBRATION_COACH, ENABLE_AUDIO_COACH } from "@/lib/featureFlags"
 import { recordRunWithSideEffects } from "@/lib/run-recording"
 import {
@@ -53,7 +54,6 @@ interface RunMetrics {
   currentSpeed: number // rolling m/s
   calories: number // estimated
 }
-
 type IntervalPhaseType = 'warmup' | 'interval' | 'recovery' | 'cooldown'
 
 interface IntervalPhase {
@@ -937,7 +937,7 @@ export function RecordScreen() {
   }, [currentUser, isRunning])
 
   useEffect(() => {
-    if (!ENABLE_VIBRATION_COACH) {
+    if (!ENABLE_VIBRATION_COACH && !ENABLE_AUDIO_COACH) {
       setIntervalPhases([])
       resetIntervalTimerState([])
       return
@@ -1052,7 +1052,7 @@ export function RecordScreen() {
   ])
 
   useEffect(() => {
-    if (!ENABLE_VIBRATION_COACH) {
+    if (!ENABLE_VIBRATION_COACH && !ENABLE_AUDIO_COACH) {
       return
     }
 
@@ -2422,7 +2422,7 @@ export function RecordScreen() {
         : satelliteProxyStatus === 'steady'
           ? 'text-yellow-300'
           : 'text-gray-300'
-  const intervalCoachEnabled = ENABLE_VIBRATION_COACH
+  const intervalCoachEnabled = ENABLE_VIBRATION_COACH || ENABLE_AUDIO_COACH
   const intervalTimerVisible = intervalCoachEnabled && intervalPhases.length > 0
   const currentPhase = intervalPhases[currentPhaseIndex]
   const intervalTotal = intervalPhases.filter((phase) => phase.type === 'interval').length
@@ -3356,16 +3356,21 @@ export function RecordScreen() {
           onStartNextChallenge={async (template) => {
             if (currentUser?.id) {
               try {
-                const { startChallenge } = await import('@/lib/challengeEngine')
                 const activePlan = await dbUtils.getActivePlan(currentUser.id)
                 if (activePlan) {
-                  await startChallenge(currentUser.id, template.slug, activePlan.id!)
+                  const syncResult = await startChallengeAndSyncPlan({
+                    userId: currentUser.id,
+                    planId: activePlan.id!,
+                    challenge: template,
+                  })
                   const updatedChallenge = await getActiveChallenge(currentUser.id)
                   setActiveChallenge(updatedChallenge)
                   setChallengeCompletionData(null)
                   toast({
-                    title: "New Challenge Started! 🎉",
-                    description: `${template.name} challenge has begun`,
+                    title: "New Challenge Started",
+                    description: syncResult.planUpdated
+                      ? `${template.name} challenge has begun with a synced plan.`
+                      : `${template.name} challenge has begun, but plan sync did not complete.`,
                   })
                 }
               } catch (error) {
@@ -3383,3 +3388,4 @@ export function RecordScreen() {
     </div>
   )
 }
+

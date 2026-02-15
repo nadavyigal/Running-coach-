@@ -59,6 +59,37 @@ type PlanRequest = {
     age?: number;
     averageWeeklyKm?: number;
   };
+  trainingHistory?: {
+    weeklyVolumeKm?: number;
+    consistencyScore?: number;
+    recentRuns?: Array<{
+      date?: string;
+      distanceKm?: number;
+      durationMinutes?: number;
+      avgPace?: string;
+      rpe?: number;
+      notes?: string;
+      surface?: string;
+    }>;
+  };
+  goals?: {
+    primaryGoal?: {
+      title?: string;
+      goalType?: string;
+      category?: string;
+      target?: string;
+      deadline?: string;
+      progressPercentage?: number;
+    };
+    activeGoals?: Array<{
+      title?: string;
+      goalType?: string;
+      category?: string;
+      target?: string;
+      deadline?: string;
+      progressPercentage?: number;
+    }>;
+  };
   challenge?: {
     slug?: string;
     name?: string;
@@ -128,13 +159,18 @@ function resolveUser(body: PlanRequest) {
       ? source.preferredTimes
       : ['morning'];
 
+  const historyWeeklyVolume =
+    typeof body.trainingHistory?.weeklyVolumeKm === 'number' ? body.trainingHistory.weeklyVolumeKm : undefined;
+  const averageWeeklyKm =
+    typeof source.averageWeeklyKm === 'number' ? source.averageWeeklyKm : historyWeeklyVolume;
+
   return {
     goal,
     experience,
     daysPerWeek,
     preferredTimes,
     age: typeof source.age === 'number' ? source.age : undefined,
-    averageWeeklyKm: typeof source.averageWeeklyKm === 'number' ? source.averageWeeklyKm : undefined,
+    averageWeeklyKm,
   };
 }
 
@@ -216,6 +252,7 @@ function generateFallbackPlan(
   const challengeCategory = challenge?.category;
   const allowIntensity = challengeCategory === 'performance';
   const mindfulFocus = challengeCategory === 'mindful';
+  const recoveryFocus = challengeCategory === 'recovery';
 
   let baseDistance: number;
   if (typeof user.averageWeeklyKm === 'number' && user.averageWeeklyKm > 0) {
@@ -228,15 +265,18 @@ function generateFallbackPlan(
   const workouts: PlanData['workouts'] = [];
 
   for (let week = 1; week <= totalWeeks; week += 1) {
-    const weeklyBase = baseDistance + (week - 1) * 0.5;
+    const weeklyBaseRaw = baseDistance + (week - 1) * 0.5;
+    const weeklyBase = recoveryFocus ? weeklyBaseRaw * 0.8 : weeklyBaseRaw;
 
     for (const day of trainingDays) {
       const isLongRun = day === longRunDay;
-      const type: PlanData['workouts'][number]['type'] = isLongRun
-        ? 'long'
-        : allowIntensity && week % 2 === 0 && trainingDays.length >= 3 && day === trainingDays[1]
-          ? 'tempo'
-          : 'easy';
+      const type: PlanData['workouts'][number]['type'] = recoveryFocus
+        ? 'easy'
+        : isLongRun
+          ? 'long'
+          : allowIntensity && week % 2 === 0 && trainingDays.length >= 3 && day === trainingDays[1]
+            ? 'tempo'
+            : 'easy';
 
       const distance = isLongRun ? weeklyBase * 1.4 : weeklyBase;
       const duration =
@@ -283,6 +323,102 @@ function generateFallbackPlan(
   };
 }
 
+function buildTrainingHistoryContext(trainingHistory?: PlanRequest['trainingHistory']) {
+  if (!trainingHistory) return '';
+
+  const weeklyVolumeLine =
+    typeof trainingHistory.weeklyVolumeKm === 'number'
+      ? `- Recent weekly volume: ${Math.round(trainingHistory.weeklyVolumeKm * 10) / 10}km`
+      : '';
+  const consistencyLine =
+    typeof trainingHistory.consistencyScore === 'number'
+      ? `- 4-week consistency score: ${Math.round(trainingHistory.consistencyScore * 100)}%`
+      : '';
+
+  const runLines = Array.isArray(trainingHistory.recentRuns)
+    ? trainingHistory.recentRuns
+        .slice(0, 6)
+        .map((run, index) => {
+          const date = run.date ? sanitizeForPrompt(run.date, 30) : `Run ${index + 1}`;
+          const distance =
+            typeof run.distanceKm === 'number' ? `${Math.round(run.distanceKm * 10) / 10}km` : 'n/a';
+          const duration =
+            typeof run.durationMinutes === 'number'
+              ? `${Math.round(run.durationMinutes)}min`
+              : 'n/a';
+          const pace = run.avgPace ? sanitizeForPrompt(run.avgPace, 20) : 'n/a';
+          const rpe = typeof run.rpe === 'number' ? `RPE ${Math.round(run.rpe)}` : 'RPE n/a';
+          return `  - ${date}: ${distance}, ${duration}, ${pace}, ${rpe}`;
+        })
+        .join('\n')
+    : '';
+
+  if (!weeklyVolumeLine && !consistencyLine && !runLines) return '';
+
+  return `
+
+RECENT TRAINING HISTORY:
+${weeklyVolumeLine}
+${consistencyLine}
+${runLines ? `- Last runs:\n${runLines}` : ''}
+- Respect recent load; avoid abrupt spikes in frequency or intensity.
+`;
+}
+
+function buildGoalsContext(goals?: PlanRequest['goals']) {
+  if (!goals) return '';
+
+  const primary = goals.primaryGoal;
+  const primaryLine = primary?.title
+    ? `- Primary goal: ${sanitizeForPrompt(primary.title, 120)}${
+        primary.goalType ? ` (${sanitizeForPrompt(primary.goalType, 40)})` : ''
+      }${
+        primary.target ? ` target: ${sanitizeForPrompt(primary.target, 80)}` : ''
+      }${
+        primary.deadline ? ` by ${sanitizeForPrompt(primary.deadline, 30)}` : ''
+      }`
+    : '';
+
+  const activeGoalLines = Array.isArray(goals.activeGoals)
+    ? goals.activeGoals
+        .slice(0, 4)
+        .filter((goal) => Boolean(goal?.title))
+        .map((goal) => {
+          const title = goal.title ? sanitizeForPrompt(goal.title, 100) : 'Goal';
+          const goalType = goal.goalType ? sanitizeForPrompt(goal.goalType, 40) : '';
+          const target = goal.target ? sanitizeForPrompt(goal.target, 70) : '';
+          return `  - ${title}${goalType ? ` (${goalType})` : ''}${target ? ` -> ${target}` : ''}`;
+        })
+        .join('\n')
+    : '';
+
+  if (!primaryLine && !activeGoalLines) return '';
+
+  return `
+
+GOAL CONTEXT:
+${primaryLine}
+${activeGoalLines ? `- Additional active goals:\n${activeGoalLines}` : ''}
+- Prioritize alignment with goals without violating challenge intent or safety.
+`;
+}
+
+function buildWorkoutMixConstraint(challenge?: PlanRequest['challenge']) {
+  if (challenge?.category === 'performance') {
+    return '- Include easy, tempo/interval, and long-run stimuli with progressive overload.';
+  }
+  if (challenge?.category === 'mindful') {
+    return '- Keep sessions mostly easy and mindful. Avoid hard intervals unless clearly justified.';
+  }
+  if (challenge?.category === 'recovery') {
+    return '- Keep intensity low and recovery-focused. Prefer easy or rest days; avoid hard workouts.';
+  }
+  if (challenge?.category === 'habit') {
+    return '- Prioritize consistency and confidence with mostly easy efforts. Keep intensity optional and conservative.';
+  }
+  return '- Keep workout mix conservative: mostly easy runs with at most one quality workout each week.';
+}
+
 function buildPlanPrompt(
   user: ReturnType<typeof resolveUser>,
   totalWeeks: number,
@@ -290,7 +426,9 @@ function buildPlanPrompt(
   planType?: string,
   targetDistance?: string,
   challenge?: PlanRequest['challenge'],
-  advancedMetrics?: PersonalizationContext['advancedMetrics']
+  advancedMetrics?: PersonalizationContext['advancedMetrics'],
+  trainingHistory?: PlanRequest['trainingHistory'],
+  goals?: PlanRequest['goals']
 ) {
   const sanitizedPlanType = planType ? sanitizeForPrompt(planType, 50) : '';
   const sanitizedTarget = targetDistance ? sanitizeForPrompt(targetDistance, 50) : '';
@@ -315,6 +453,8 @@ function buildPlanPrompt(
   const weeklyKmContext = user.averageWeeklyKm
     ? `- Current weekly volume: ${user.averageWeeklyKm}km/week (use as starting baseline)`
     : '';
+  const trainingHistoryContext = buildTrainingHistoryContext(trainingHistory);
+  const goalsContext = buildGoalsContext(goals);
 
   const { trainingDays, longRunDay } = resolveTrainingDays(user.daysPerWeek, planPreferences);
 
@@ -385,6 +525,8 @@ Runner profile:
 - Preferred times: ${user.preferredTimes.join(', ')}
 ${weeklyKmContext}
 ${advancedMetricsContext}
+${trainingHistoryContext}
+${goalsContext}
 ${sanitizedPlanType ? `- Plan type: ${sanitizedPlanType}` : ''}
 ${sanitizedTarget ? `- Target distance: ${sanitizedTarget}` : ''}
 ${sanitizedVolume ? `- Training volume: ${sanitizedVolume}` : ''}
@@ -395,7 +537,7 @@ Constraints:
 - totalWeeks must be ${totalWeeks}
 - Schedule workouts only on: ${trainingDays.join(', ')}
 - Long run day: ${longRunDay}
-- Include easy, tempo, intervals, and long runs across the plan.
+- ${buildWorkoutMixConstraint(challenge)}
 - Distances are in kilometers, durations in minutes.
 - Keep progression gradual and safe.
 - ${advancedMetrics?.vdot ? 'Use VDOT-based pace zones for all workout intensities.' : 'Use conservative pace progression.'}`;
@@ -479,7 +621,9 @@ export async function POST(req: Request) {
       body.planType,
       body.targetDistance,
       body.challenge,
-      advancedMetrics
+      advancedMetrics,
+      body.trainingHistory,
+      body.goals
     );
 
     const result = await withSecureOpenAI(async () => {

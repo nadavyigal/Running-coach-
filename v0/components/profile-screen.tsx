@@ -67,6 +67,7 @@ import { Separator } from "@/components/ui/separator";
 import { UserDataSettings } from "@/components/user-data-settings";
 import { RunSmartBrandMark } from "@/components/run-smart-brand-mark";
 import { getActiveChallengeTemplates } from "@/lib/challengeTemplates";
+import { startChallengeAndSyncPlan } from "@/lib/challenge-plan-sync";
 
 type ChallengeTemplateSeed = ReturnType<typeof getActiveChallengeTemplates>[number]
 
@@ -302,8 +303,11 @@ export function ProfileScreen() {
         throw new Error("No active plan found")
       }
 
-      const { startChallenge } = await import("@/lib/challengeEngine")
-      await startChallenge(userId, template.slug, activePlan.id)
+      const syncResult = await startChallengeAndSyncPlan({
+        userId,
+        planId: activePlan.id,
+        challenge: template,
+      })
 
       const active = await getActiveChallenge(userId)
       setActiveChallenge(active)
@@ -311,12 +315,17 @@ export function ProfileScreen() {
       const history = await getChallengeHistory(userId)
       const filteredHistory = history.filter(ch => ch.progress.status !== 'active')
       setChallengeHistory(filteredHistory)
+      await refreshContext()
 
       toast({
         title: "Challenge started",
         description: hadActive
-          ? `${template.name} has begun. Your previous challenge is now in history.`
-          : `${template.name} has begun.`,
+          ? syncResult.planUpdated
+            ? `${template.name} has begun with a synced challenge plan. Your previous challenge is now in history.`
+            : `${template.name} has begun. Your previous challenge is now in history, but plan sync did not complete.`
+          : syncResult.planUpdated
+            ? `${template.name} has begun with a synced challenge plan.`
+            : `${template.name} has begun, but plan sync did not complete.`,
       })
     } catch (error) {
       console.error("Failed to start challenge:", error)
