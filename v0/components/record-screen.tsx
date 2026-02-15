@@ -2979,40 +2979,40 @@ export function RecordScreen() {
 
       {/* Main Controls */}
       <Card>
-        <CardContent className="p-6">
-          <div className="text-center space-y-6">
+        <CardContent className="p-4">
+          <div className="text-center space-y-4">
             {/* Metrics Display */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <div className="text-center">
-                <p className="text-2xl font-bold text-blue-600">
+                <p className="text-xl font-bold text-blue-600">
                   {metrics.distance.toFixed(2)}
                 </p>
-                <p className="text-sm text-gray-600">Distance (km)</p>
+                <p className="text-xs text-gray-600">Distance (km)</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-xl font-bold text-green-600">
                   {formatTime(metrics.duration)}
                 </p>
-                <p className="text-sm text-gray-600">Duration</p>
+                <p className="text-xs text-gray-600">Duration</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold text-purple-600">
+                <p className="text-xl font-bold text-purple-600">
                   {formatPace(metrics.pace)}
                 </p>
-                <p className="text-sm text-gray-600">Pace (min/km)</p>
+                <p className="text-xs text-gray-600">Pace (min/km)</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold text-orange-600">
+                <p className="text-xl font-bold text-orange-600">
                   {Number.isFinite(metrics.currentSpeed) ? (metrics.currentSpeed * 3.6).toFixed(1) : '0.0'}
                 </p>
-                <p className="text-sm text-gray-600">Speed (km/h)</p>
+                <p className="text-xs text-gray-600">Speed (km/h)</p>
               </div>
               {autoPauseEnabled && isRunning && (
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-orange-600">
+                  <p className="text-xl font-bold text-orange-600">
                     {autoPauseCount}
                   </p>
-                  <p className="text-sm text-gray-600">Auto Pauses</p>
+                  <p className="text-xs text-gray-600">Auto Pauses</p>
                 </div>
               )}
             </div>
@@ -3023,8 +3023,7 @@ export function RecordScreen() {
                 <>
                   <Button
                     onClick={startRun}
-                    size="lg"
-                    className="bg-green-600 hover:bg-green-700"
+                    className="h-10 bg-green-600 px-4 text-sm hover:bg-green-700"
                     disabled={gpsPermission === 'denied' || gpsPermission === 'unsupported' || isInitializingGps || isGpsWarmingUp}
                   >
                     {isInitializingGps || isGpsWarmingUp ? (
@@ -3046,8 +3045,7 @@ export function RecordScreen() {
                   {isPaused ? (
                     <Button
                       onClick={resumeRun}
-                      size="lg"
-                      className="bg-green-600 hover:bg-green-700"
+                      className="h-10 bg-green-600 px-4 text-sm hover:bg-green-700"
                     >
                       <Play className="h-5 w-5 mr-2" />
                       Resume
@@ -3055,7 +3053,7 @@ export function RecordScreen() {
                   ) : (
                     <Button
                       onClick={pauseRun}
-                      size="lg"
+                      className="h-10 px-4 text-sm"
                       variant="outline"
                     >
                       <Pause className="h-5 w-5 mr-2" />
@@ -3064,7 +3062,7 @@ export function RecordScreen() {
                   )}
                   <Button
                     onClick={stopRun}
-                    size="lg"
+                    className="h-10 px-4 text-sm"
                     variant="destructive"
                   >
                     <Square className="h-5 w-5 mr-2" />
@@ -3101,9 +3099,9 @@ export function RecordScreen() {
 
       {/* Live Map */}
       <Card>
-        <CardContent className="p-4">
-          <h3 className="font-medium mb-3">Map</h3>
-          <div className="relative h-64 rounded-lg overflow-hidden">
+        <CardContent className="p-3">
+          <h3 className="font-medium mb-2 text-sm">Map</h3>
+          <div className="relative h-48 rounded-lg overflow-hidden">
             <RunMap
               height="100%"
               userLocation={

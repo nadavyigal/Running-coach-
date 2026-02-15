@@ -1,20 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
   Sun,
-  Clock,
   Plus,
   MapPin,
   Play,
   ChevronDown,
   ChevronUp,
   Zap,
-  StretchHorizontal,
   Loader2,
   Flame,
   BarChart3,
@@ -664,6 +662,25 @@ export function TodayScreen() {
   const recoveryScoreValue = recoverySnapshot?.overallScore ?? 50
   const recoveryConfidenceValue = coachConfidence?.confidence ?? 0
   const recoveryNextStep = coachConfidence?.nextSteps?.[0] ?? 'Complete your morning check-in'
+  const workoutDistanceLabel = todaysWorkout
+    ? (todaysWorkout.distance ? `${todaysWorkout.distance} km` : `${todaysWorkout.duration} min`)
+    : '--'
+  const workoutEstimatedTimeLabel = todaysWorkout
+    ? (todaysWorkout.duration
+        ? `${Math.max(20, todaysWorkout.duration - 5)}-${todaysWorkout.duration + 5}m`
+        : `${Math.round((todaysWorkout.distance ?? 0) * 5)}-${Math.round((todaysWorkout.distance ?? 0) * 7)}m`)
+    : '--'
+  const workoutCoachCue = todaysWorkout
+    ? ({
+        easy: 'Keep your breathing easy and conversational.',
+        tempo: 'Hold a steady strong effort, not an all-out sprint.',
+        intervals: 'Run smooth repeats and recover fully between efforts.',
+        long: 'Start controlled and finish relaxed with good form.',
+        hill: 'Short stride, quick cadence, drive the arms uphill.',
+        rest: 'Use this session for active recovery and mobility.',
+        'time-trial': 'Settle early, then build effort in the final third.',
+      }[todaysWorkout.type] ?? 'Focus on relaxed form and steady breathing.')
+    : ''
 
   const handleRouteSelected = (route: Route) => {
     setSelectedRoute(route)
@@ -1066,90 +1083,94 @@ export function TodayScreen() {
             <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
           </Card>
         ) : todaysWorkout ? (
-          <Card className="border shadow-lg">
-            <CardHeader>
-              <div className="flex items-center gap-2 mb-3">
-                <Badge variant="secondary" className="uppercase tracking-wider">
-                  Today
+          <Card className="border border-[#d7d8d0] bg-[#f7f7f4] shadow-sm rounded-[28px]">
+            <CardContent className="space-y-6 p-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm text-gray-600">Today</p>
+                  <h3 className="mt-1 text-3xl font-semibold leading-tight text-gray-900">
+                    {structuredWorkout?.name ?? `${todaysWorkout.type.charAt(0).toUpperCase()}${todaysWorkout.type.slice(1)} Run`}
+                  </h3>
+                </div>
+                <Badge className="rounded-full border border-emerald-300 bg-white px-3 py-1 text-sm text-emerald-700">
+                  Personalized
                 </Badge>
-                <span className="text-sm text-gray-500">
-                  {todaysWorkout.scheduledDate
-                    ? new Date(todaysWorkout.scheduledDate).toLocaleDateString(
-                      "en-US",
-                      { month: "short", day: "numeric" }
-                    )
-                    : ""}
-                </span>
               </div>
-              <CardTitle className="text-2xl font-bold mb-2 text-gray-900">
-                {todaysWorkout.type.charAt(0).toUpperCase() +
-                  todaysWorkout.type.slice(1)}{" "}
-                Run
-              </CardTitle>
-              <div className="flex items-center gap-4 text-gray-700">
-                <div className="flex items-center gap-2">
-                  <StretchHorizontal className="h-5 w-5" />
-                  <span className="font-semibold">
-                    {todaysWorkout.distance
-                      ? `${todaysWorkout.distance} km`
-                      : `${todaysWorkout.duration} min`}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
-                  <span className="font-semibold">
-                    {todaysWorkout.duration
-                      ? `${Math.max(20, todaysWorkout.duration - 5)}-${todaysWorkout.duration + 5
-                      }m`
-                      : `${Math.round(todaysWorkout.distance! * 5)}-${Math.round(
-                        todaysWorkout.distance! * 7
-                      )}m`}
-                  </span>
-                </div>
-              </div>
-            </CardHeader>
 
-            <CardContent className="space-y-4">
-              {/* Quick Actions */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <Button
-                  variant="default"
-                  size="lg"
-                  onClick={startRecordFlow}
-                >
-                  <Play className="h-5 w-5 mr-2" />
+              <div className="rounded-3xl border border-[#d7d8d0] bg-[#efefe9] p-6">
+                <p className="text-sm text-gray-700">Target distance</p>
+                <p className="text-5xl font-semibold tracking-tight text-gray-900 mt-2">{workoutDistanceLabel}</p>
+                <Progress
+                  value={Math.max(20, Math.min(100, getGoalProgressPercent() || 0))}
+                  className="mt-4 h-3 rounded-full bg-white/80"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-[#d7d8d0] bg-white p-4">
+                  <p className="text-xs text-gray-600">Coach cue</p>
+                  <p className="mt-1.5 text-base font-semibold leading-snug text-gray-900">Hold 6:05/km</p>
+                </div>
+                <div className="rounded-2xl border border-[#d7d8d0] bg-white p-4">
+                  <p className="text-xs text-gray-600">Recovery</p>
+                  <p className="mt-1.5 text-base font-semibold leading-snug text-gray-900">Green zone</p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-[#d7d8d0] bg-white p-4">
+                <div className="flex items-center gap-2 text-gray-700 mb-2">
+                  <Zap className="h-4 w-4 text-emerald-600" />
+                  <p className="text-xs font-medium">Coach message</p>
+                </div>
+                <p className="text-base leading-relaxed text-gray-900">{workoutCoachCue}</p>
+              </div>
+
+              <div className="flex gap-2">
+                <Button onClick={startRecordFlow} className="flex-1 h-12 text-sm font-semibold">
+                  <Play className="h-4 w-4 mr-2" />
                   Start Run
                 </Button>
                 <Button
                   variant="outline"
-                  size="lg"
                   onClick={() => setShowRouteSelectorModal(true)}
+                  className="h-12 px-4"
                 >
-                  <MapPin className="h-5 w-5 mr-2" />
-                  Select Route
+                  <MapPin className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
-                  size="lg"
                   onClick={() => setShowWorkoutBreakdown(!showWorkoutBreakdown)}
+                  className="h-12 px-4"
                 >
                   {showWorkoutBreakdown ? (
-                    <ChevronUp className="h-5 w-5 mr-2" />
+                    <ChevronUp className="h-4 w-4" />
                   ) : (
-                    <ChevronDown className="h-5 w-5 mr-2" />
+                    <ChevronDown className="h-4 w-4" />
                   )}
-                  Details
                 </Button>
               </div>
 
-              {/* Workout Breakdown - Garmin Style */}
+              {selectedRoute && (
+                <div className="rounded-2xl border border-[#d7d8d0] bg-white p-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-emerald-600" />
+                      <span className="font-semibold text-gray-900">{selectedRoute.name}</span>
+                    </div>
+                    {selectedRoute.distance && (
+                      <span className="text-gray-600">{selectedRoute.distance} km</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {showWorkoutBreakdown && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3 animate-in fade-in-0 slide-in-from-top-4 duration-300">
-                  <h4 className="font-semibold text-sm uppercase tracking-wide text-gray-700">
-                    Workout Phases
+                <div className="rounded-2xl border border-[#d7d8d0] bg-white p-4 animate-in fade-in-0 slide-in-from-top-4 duration-300">
+                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-700">
+                    Workout phases
                   </h4>
                   {structuredWorkout ? (
-                    <WorkoutPhasesDisplay workout={structuredWorkout} />
+                    <WorkoutPhasesDisplay workout={structuredWorkout} compact />
                   ) : (
                     <div className="space-y-2">
                       <div className="flex items-center gap-3">
@@ -1159,7 +1180,7 @@ export function TodayScreen() {
                       <div className="flex items-center gap-3">
                         <div className="w-2 h-2 rounded-full bg-gray-800" />
                         <span className="text-sm font-semibold text-gray-900">
-                          Main: {todaysWorkout.distance}km at target pace
+                          Main: {workoutDistanceLabel} at target pace
                         </span>
                       </div>
                       <div className="flex items-center gap-3">
@@ -1167,18 +1188,6 @@ export function TodayScreen() {
                         <span className="text-sm text-gray-600">Cool-down: 5 min walk</span>
                       </div>
                     </div>
-                  )}
-                </div>
-              )}
-
-              {selectedRoute && (
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 text-sm flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />
-                    <span className="font-semibold">{selectedRoute.name}</span>
-                  </div>
-                  {selectedRoute.distance && (
-                    <span className="text-white/80">{selectedRoute.distance} km</span>
                   )}
                 </div>
               )}
