@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1200, height=630">
+    <title>RunSmart OG Image</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 1200px;
+            height: 630px;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .container {
+            width: 1200px;
+            height: 630px;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 60px 80px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Decorative running track lines */
+        .track-line {
+            position: absolute;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.3), transparent);
+            width: 100%;
+        }
+
+        .track-line-1 { top: 20%; }
+        .track-line-2 { top: 50%; }
+        .track-line-3 { top: 80%; }
+
+        /* Decorative gradient orb */
+        .orb {
+            position: absolute;
+            right: -100px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(34, 197, 94, 0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            filter: blur(60px);
+        }
+
+        .content {
+            flex: 1;
+            z-index: 10;
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            padding: 8px 20px;
+            border-radius: 24px;
+            font-size: 16px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 24px;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        h1 {
+            font-size: 72px;
+            font-weight: 900;
+            color: white;
+            margin: 0 0 20px 0;
+            line-height: 1.1;
+            letter-spacing: -2px;
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-size: 28px;
+            color: rgba(255, 255, 255, 0.8);
+            margin: 0 0 24px 0;
+            line-height: 1.4;
+            font-weight: 500;
+            max-width: 600px;
+        }
+
+        .url {
+            font-size: 20px;
+            color: rgba(255, 255, 255, 0.5);
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+
+        /* Running shoe icon (simple SVG) */
+        .icon-container {
+            position: absolute;
+            right: 80px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 5;
+        }
+
+        .running-icon {
+            width: 200px;
+            height: 200px;
+            opacity: 0.15;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="track-line track-line-1"></div>
+        <div class="track-line track-line-2"></div>
+        <div class="track-line track-line-3"></div>
+        <div class="orb"></div>
+
+        <div class="content">
+            <div class="badge">🏃 AI Running Coach</div>
+            <h1>
+                Run<span class="gradient-text">Smart</span>
+            </h1>
+            <p class="subtitle">
+                Personalized training plans powered by AI.
+                Track progress, stay motivated, achieve your goals.
+            </p>
+            <div class="url">runsmart.app</div>
+        </div>
+
+        <!-- Simple running person icon -->
+        <div class="icon-container">
+            <svg class="running-icon" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Running person silhouette -->
+                <circle cx="120" cy="30" r="15" fill="#22c55e"/>
+                <path d="M120 45 L120 90 L90 120 L70 110" stroke="#22c55e" stroke-width="8" stroke-linecap="round"/>
+                <path d="M120 90 L150 120 L165 140" stroke="#22c55e" stroke-width="8" stroke-linecap="round"/>
+                <path d="M120 70 L90 60" stroke="#22c55e" stroke-width="8" stroke-linecap="round"/>
+                <path d="M120 70 L150 80" stroke="#22c55e" stroke-width="8" stroke-linecap="round"/>
+            </svg>
+        </div>
+    </div>
+</body>
+</html>
