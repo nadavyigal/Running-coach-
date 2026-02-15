@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { trackPWAInstallPromptShown, trackPWAInstalled, trackPWAInstallDismissed } from '@/lib/analytics'
+import { trackPWAInstallPromptShown, trackPWAInstalled } from '@/lib/analytics'
 
 /**
  * Registers service worker for PWA functionality and caching
