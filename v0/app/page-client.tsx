@@ -736,7 +736,7 @@ export default function RunSmartApp() {
 
   const renderScreen = () => {
     try {
-      if (isRootPath) {
+      if (isRootPath && !isBetaSignupComplete && !isOnboardingComplete) {
         logger.log('🏡 Rendering main landing screen on root path')
         return (
           <ProfessionalLandingScreen

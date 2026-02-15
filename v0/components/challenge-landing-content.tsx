@@ -203,6 +203,7 @@ export function ChallengeLandingContent({ template, initialLanguage = 'en' }: Ch
   const handleJoin = () => {
     try {
       localStorage.setItem('preselectedChallenge', displayTemplate.slug);
+      localStorage.setItem('beta_signup_complete', 'true');
     } catch {
       // ignore storage errors
     }
@@ -211,7 +212,7 @@ export function ChallengeLandingContent({ template, initialLanguage = 'en' }: Ch
       language: language,
       button_location: 'hero',
     });
-    router.push('/');
+    router.push('/onboarding');
   };
 
   return (

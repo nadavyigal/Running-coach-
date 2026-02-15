@@ -228,7 +228,7 @@ const COPY = {
 } as const;
 
 export function ProfessionalLandingScreen({
-  onContinue: _onContinue,
+  onContinue,
   onExistingAccount,
 }: ProfessionalLandingScreenProps) {
   const [email, setEmail] = useState('');
@@ -328,8 +328,12 @@ export function ProfessionalLandingScreen({
     }
   };
 
-  const handleGenericStart = async () => {
-    trackCtaClick('Start Without Challenge', 'challenge_section');
+  const startOnboardingFlow = async (
+    buttonText: string,
+    buttonLocation: string,
+    analyticsEvent: string,
+  ) => {
+    trackCtaClick(buttonText, buttonLocation);
 
     // Save email if provided
     if (email) {
@@ -337,14 +341,30 @@ export function ProfessionalLandingScreen({
       await saveEmailOptionally(email, name);
     }
 
-    localStorage.setItem('beta_signup_complete', 'true');
+    try {
+      localStorage.setItem('beta_signup_complete', 'true');
+      localStorage.removeItem('preselectedChallenge');
+      if (name.trim()) {
+        localStorage.setItem('beta_signup_name', name.trim());
+      }
+    } catch {
+      // ignore storage errors
+    }
 
-    trackAnalyticsEvent('generic_onboarding_started', {
+    trackAnalyticsEvent(analyticsEvent, {
       source: 'professional_landing',
     });
 
+    if (onContinue) {
+      onContinue();
+    }
+
     // Navigate to onboarding without challenge
     window.location.href = '/onboarding';
+  };
+
+  const handleGenericStart = async () => {
+    await startOnboardingFlow('Start Without Challenge', 'challenge_section', 'generic_onboarding_started');
   };
 
   const revealChallenges = () => {
@@ -355,8 +375,7 @@ export function ProfessionalLandingScreen({
   };
 
   const handleHeroCta = () => {
-    trackCtaClick('Get Started Free', 'hero');
-    revealChallenges();
+    void startOnboardingFlow('Get Started Free', 'hero', 'hero_onboarding_started');
   };
 
   const handleExistingAccount = () => {
