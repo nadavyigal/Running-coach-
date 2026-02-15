@@ -93,13 +93,13 @@ function formatVariance(seconds: number): string {
 function getGpsQualityStyles(level: GPSQuality['level']) {
   switch (level) {
     case 'Excellent':
-      return { bar: 'bg-green-500', badge: 'bg-green-100 text-green-700' }
+      return { bar: 'bg-primary', badge: 'bg-primary/10 text-primary' }
     case 'Good':
-      return { bar: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700' }
+      return { bar: 'bg-primary/80', badge: 'bg-primary/10 text-primary/80' }
     case 'Fair':
-      return { bar: 'bg-yellow-500', badge: 'bg-yellow-100 text-yellow-700' }
+      return { bar: 'bg-amber-400', badge: 'bg-amber-100 text-amber-700' }
     default:
-      return { bar: 'bg-red-500', badge: 'bg-red-100 text-red-700' }
+      return { bar: 'bg-rose-500', badge: 'bg-rose-100 text-rose-700' }
   }
 }
 
@@ -108,13 +108,13 @@ function getPaceConsistencyStyles(
 ): { badge: string; label: string } | null {
   switch (consistency) {
     case 'consistent':
-      return { badge: 'bg-emerald-100 text-emerald-700', label: 'Consistent' }
+      return { badge: 'bg-primary/10 text-primary', label: 'Consistent' }
     case 'negative-split':
-      return { badge: 'bg-blue-100 text-blue-700', label: 'Negative split' }
+      return { badge: 'bg-sky-100 text-sky-700', label: 'Negative split' }
     case 'fading':
       return { badge: 'bg-amber-100 text-amber-700', label: 'Fading' }
     case 'erratic':
-      return { badge: 'bg-red-100 text-red-700', label: 'Erratic' }
+      return { badge: 'bg-rose-100 text-rose-700', label: 'Erratic' }
     default:
       return null
   }
@@ -437,7 +437,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
 
   if (!runId) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4 space-y-4">
+      <div className="min-h-screen bg-[oklch(var(--surface-2))] p-4 space-y-4">
         <div className="flex items-center justify-between">
           <Button variant="ghost" size="sm" onClick={onBack} aria-label="Back">
             <ArrowLeft className="h-4 w-4" />
@@ -447,7 +447,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         </div>
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-gray-700">No run selected.</p>
+            <p className="text-sm text-foreground/70">No run selected.</p>
           </CardContent>
         </Card>
       </div>
@@ -456,9 +456,9 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4 space-y-4">
+      <div className="min-h-screen bg-[oklch(var(--surface-2))] p-4 space-y-4">
         <Card>
-          <CardContent className="p-6 flex items-center justify-center gap-2 text-sm text-gray-700">
+          <CardContent className="p-6 flex items-center justify-center gap-2 text-sm text-foreground/70">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading run...
           </CardContent>
@@ -469,7 +469,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
 
   if (!run) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4 space-y-4">
+      <div className="min-h-screen bg-[oklch(var(--surface-2))] p-4 space-y-4">
         <div className="flex items-center justify-between">
           <Button variant="ghost" size="sm" onClick={onBack} aria-label="Back">
             <ArrowLeft className="h-4 w-4" />
@@ -479,7 +479,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         </div>
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-gray-700">Run not found.</p>
+            <p className="text-sm text-foreground/70">Run not found.</p>
           </CardContent>
         </Card>
       </div>
@@ -487,7 +487,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 space-y-4">
+    <div className="min-h-screen bg-[oklch(var(--surface-2))] p-4 space-y-4">
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="sm" onClick={onBack} aria-label="Back to Today Screen">
           <ArrowLeft className="h-4 w-4" />
@@ -500,16 +500,16 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         <CardContent className="p-4">
           <div className="grid grid-cols-3 gap-3 text-center">
             <div>
-              <div className="text-xl font-bold text-blue-600">{run.distance.toFixed(2)}</div>
-              <div className="text-xs text-gray-600">km</div>
+              <div className="text-xl font-bold text-primary">{run.distance.toFixed(2)}</div>
+              <div className="text-xs text-foreground/60">km</div>
             </div>
             <div>
-              <div className="text-xl font-bold text-green-600">{formatTime(run.duration)}</div>
-              <div className="text-xs text-gray-600">time</div>
+              <div className="text-xl font-bold text-primary">{formatTime(run.duration)}</div>
+              <div className="text-xs text-foreground/60">time</div>
             </div>
             <div>
-              <div className="text-xl font-bold text-purple-600">{formatPace(avgPace)}</div>
-              <div className="text-xs text-gray-600">pace</div>
+              <div className="text-xl font-bold text-primary">{formatPace(avgPace)}</div>
+              <div className="text-xs text-foreground/60">pace</div>
             </div>
           </div>
         </CardContent>
@@ -527,11 +527,11 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
               </span>
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm text-gray-700">
+              <div className="flex items-center justify-between text-sm text-foreground/70">
                 <span>{gpsQuality.score}%</span>
                 <span>{gpsQuality.averageAccuracy.toFixed(1)}m avg accuracy</span>
               </div>
-              <div className="h-2 w-full rounded-full bg-gray-100">
+              <div className="h-2 w-full rounded-full bg-[oklch(var(--surface-3))]">
                 <div
                   className={`h-2 rounded-full ${gpsQualityStyles.bar}`}
                   style={{ width: `${gpsQuality.score}%` }}
@@ -564,7 +564,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         <Card>
           <CardContent className="p-4">
             <h3 className="font-medium mb-3">Pace Over Distance</h3>
-            <p className="text-xs text-gray-500 mb-3">Your pace (min/km) at each kilometer of your run</p>
+            <p className="text-xs text-foreground/60 mb-3">Your pace (min/km) at each kilometer of your run</p>
             <PaceChart gpsPath={pacePath} />
           </CardContent>
         </Card>
@@ -583,15 +583,15 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
             </div>
 
             {pacingInsight?.pacingAnalysis ? (
-              <p className="text-sm text-gray-700">{pacingInsight.pacingAnalysis}</p>
+              <p className="text-sm text-foreground/70">{pacingInsight.pacingAnalysis}</p>
             ) : (
-              <p className="text-sm text-gray-600">Pacing analysis unavailable.</p>
+              <p className="text-sm text-foreground/60">Pacing analysis unavailable.</p>
             )}
 
             {typeof pacingInsight?.paceVariability === 'number' && (
               <div
                 className={`text-sm ${
-                  pacingInsight.paceVariability > 30 ? 'text-red-600' : 'text-gray-600'
+                  pacingInsight.paceVariability > 30 ? 'text-red-600' : 'text-foreground/60'
                 }`}
               >
                 Variability: {formatVariance(pacingInsight.paceVariability)}/km
@@ -627,12 +627,12 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
 
           {coachNotes ? (
             <div className="space-y-3 text-sm">
-              <p className="text-gray-800">{coachNotes.shortSummary}</p>
+              <p className="text-foreground">{coachNotes.shortSummary}</p>
 
               {coachNotes.positives.length > 0 && (
                 <div>
-                  <div className="font-medium text-gray-900 mb-1">Positives</div>
-                  <ul className="list-disc list-inside space-y-1 text-gray-700">
+                  <div className="font-medium text-foreground mb-1">Positives</div>
+                  <ul className="list-disc list-inside space-y-1 text-foreground/70">
                     {coachNotes.positives.map((item) => (
                       <li key={item}>{item}</li>
                     ))}
@@ -642,8 +642,8 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
 
               {coachNotes.flags.length > 0 && (
                 <div>
-                  <div className="font-medium text-gray-900 mb-1">Flags</div>
-                  <ul className="list-disc list-inside space-y-1 text-gray-700">
+                  <div className="font-medium text-foreground mb-1">Flags</div>
+                  <ul className="list-disc list-inside space-y-1 text-foreground/70">
                     {coachNotes.flags.map((item) => (
                       <li key={item}>{item}</li>
                     ))}
@@ -652,17 +652,17 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
               )}
 
               <div>
-                <div className="font-medium text-gray-900 mb-1">Recovery (next 24h)</div>
-                <p className="text-gray-700">{coachNotes.recoveryNext24h}</p>
+                <div className="font-medium text-foreground mb-1">Recovery (next 24h)</div>
+                <p className="text-foreground/70">{coachNotes.recoveryNext24h}</p>
               </div>
 
               <div>
-                <div className="font-medium text-gray-900 mb-1">Suggested next workout</div>
-                <p className="text-gray-700">{coachNotes.suggestedNextWorkout}</p>
+                <div className="font-medium text-foreground mb-1">Suggested next workout</div>
+                <p className="text-foreground/70">{coachNotes.suggestedNextWorkout}</p>
               </div>
             </div>
           ) : (
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-foreground/60">
               {isGenerating ? 'Generating coach notes...' : 'Coach notes will appear here.'}
             </div>
           )}
@@ -673,3 +673,4 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
 }
 
 export default RunReportScreen
+

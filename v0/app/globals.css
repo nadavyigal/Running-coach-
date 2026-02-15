@@ -2,15 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: var(--font-inter), Arial, Helvetica, sans-serif;
+/* Modern Athletic typography system */
+:root {
+  --font-display: "Inter";
+  --font-body: "Inter";
+  --font-hebrew-display: "Heebo";
+  --font-hebrew-body: "Heebo";
 }
 
-/* Hebrew language support */
+body {
+  font-family: var(--font-body), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Display/Heading fonts for English */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+/* Hebrew language support with distinctive fonts */
 [lang="he"],
 [dir="rtl"],
 .font-hebrew {
-  font-family: var(--font-heebo), Arial, Helvetica, sans-serif;
+  font-family: var(--font-hebrew-body), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+[lang="he"] h1,
+[lang="he"] h2,
+[lang="he"] h3,
+[lang="he"] h4,
+[lang="he"] h5,
+[lang="he"] h6,
+[dir="rtl"] h1,
+[dir="rtl"] h2,
+[dir="rtl"] h3,
+[dir="rtl"] h4,
+[dir="rtl"] h5,
+[dir="rtl"] h6,
+.font-hebrew h1,
+.font-hebrew h2,
+.font-hebrew h3,
+.font-hebrew h4,
+.font-hebrew h5,
+.font-hebrew h6 {
+  font-family: var(--font-hebrew-display), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 700;
 }
 
 @layer utilities {
@@ -28,79 +65,305 @@ body {
   }
 
   .font-hebrew {
-    font-family: var(--font-heebo), Arial, Helvetica, sans-serif;
+    font-family: var(--font-hebrew-body), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  .font-display {
+    font-family: var(--font-display), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  [lang="he"] .font-display,
+  [dir="rtl"] .font-display {
+    font-family: var(--font-hebrew-display), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  /* Accessibility: Custom focus styles with brand colors */
+  .focus-brand:focus-visible {
+    outline: 2px solid oklch(var(--ring));
+    outline-offset: 2px;
+  }
+
+  .focus-brand-dark:focus-visible {
+    outline: 2px solid oklch(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /* Bold Athletic Minimalism Utilities */
+  .text-display-xl {
+    font-size: clamp(3.2rem, 8vw, 6rem);
+    font-weight: 800;
+    line-height: 0.98;
+    letter-spacing: -0.02em;
+  }
+
+  .text-display-lg {
+    font-size: clamp(2.6rem, 6vw, 4.5rem);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+  }
+
+  .text-display-md {
+    font-size: clamp(2rem, 4.2vw, 3rem);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+  }
+
+  .text-heading-xl {
+    font-size: clamp(1.8rem, 3.2vw, 2.5rem);
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .text-heading-lg {
+    font-size: clamp(1.4rem, 2.4vw, 1.9rem);
+    font-weight: 650;
+    line-height: 1.3;
+  }
+
+  .text-heading-md {
+    font-size: clamp(1.1rem, 1.8vw, 1.4rem);
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  .text-label-lg {
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1.4;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .text-label-sm {
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.4;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  /* Gradient Backgrounds */
+  .bg-gradient-energy {
+    background: linear-gradient(
+      135deg,
+      oklch(62% 0.16 150) 0%,
+      oklch(70% 0.16 120) 50%,
+      oklch(80% 0.14 90) 100%
+    );
+  }
+
+  .bg-gradient-focus {
+    background: linear-gradient(
+      135deg,
+      oklch(42% 0.12 260) 0%,
+      oklch(58% 0.12 220) 55%,
+      oklch(72% 0.1 180) 100%
+    );
+  }
+
+  .bg-gradient-recovery {
+    background: linear-gradient(
+      135deg,
+      oklch(48% 0.1 210) 0%,
+      oklch(62% 0.1 185) 50%,
+      oklch(75% 0.1 150) 100%
+    );
+  }
+
+  .bg-gradient-success {
+    background: linear-gradient(
+      135deg,
+      oklch(54% 0.15 150) 0%,
+      oklch(60% 0.16 150) 55%,
+      oklch(70% 0.12 130) 100%
+    );
+  }
+
+  /* Glow Effects */
+  .glow-cyan {
+    box-shadow: 0 0 24px rgba(64, 220, 190, 0.35);
+  }
+
+  .glow-yellow {
+    box-shadow: 0 0 24px rgba(238, 214, 120, 0.35);
+  }
+
+  .glow-pink {
+    box-shadow: 0 0 24px rgba(214, 120, 160, 0.32);
+  }
+
+  /* Noise Texture Overlay */
+  .noise-overlay::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+
+  /* Kinetic Animations */
+  .animate-pulse-glow {
+    animation: pulse-glow 2.4s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+  }
+
+  .animate-slide-in-right {
+    animation: slide-in-right 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .animate-morph {
+    animation: morph 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.05);
+    }
+  }
+
+  @keyframes slide-in-right {
+    from {
+      transform: translateX(20px);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes morph {
+    from {
+      border-radius: 1rem;
+    }
+    to {
+      border-radius: 2rem;
+    }
   }
 }
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --background: 98% 0.008 85;
+    --foreground: 22% 0.02 255;
+    --card: 99% 0.006 85;
+    --card-foreground: 22% 0.02 255;
+    --popover: 99% 0.006 85;
+    --popover-foreground: 22% 0.02 255;
+    --primary: 62% 0.16 150;
+    --primary-foreground: 98% 0.01 85;
+    --secondary: 94% 0.01 85;
+    --secondary-foreground: 26% 0.02 255;
+    --muted: 95% 0.01 85;
+    --muted-foreground: 52% 0.03 255;
+    --accent: 90% 0.04 155;
+    --accent-foreground: 22% 0.02 255;
+    --destructive: 62% 0.2 30;
+    --destructive-foreground: 98% 0.01 85;
+    --border: 88% 0.01 85;
+    --input: 88% 0.01 85;
+    --ring: 68% 0.16 150;
+    --chart-1: 62% 0.16 150;
+    --chart-2: 58% 0.14 200;
+    --chart-3: 66% 0.12 110;
+    --chart-4: 72% 0.12 60;
+    --chart-5: 60% 0.18 20;
+    --radius: 0.85rem;
+    --sidebar-background: 96% 0.008 85;
+    --sidebar-foreground: 25% 0.02 255;
+    --sidebar-primary: 26% 0.02 255;
+    --sidebar-primary-foreground: 98% 0.01 85;
+    --sidebar-accent: 92% 0.015 85;
+    --sidebar-accent-foreground: 26% 0.02 255;
+    --sidebar-border: 88% 0.01 85;
+    --sidebar-ring: 68% 0.16 150;
+
+    /* Precision Athlete palette */
+    --neon-cyan: 78% 0.11 190;
+    --neon-yellow: 86% 0.12 92;
+    --neon-pink: 74% 0.12 18;
+
+    --black: 16% 0.01 255;
+    --gray-900: 22% 0.02 255;
+    --gray-800: 28% 0.02 255;
+    --gray-700: 35% 0.02 255;
+    --gray-100: 96% 0.008 85;
+    --white: 99% 0.005 85;
+
+    --success: 60% 0.16 150;
+    --warning: 80% 0.12 90;
+    --error: 62% 0.2 30;
+    --info: 60% 0.14 220;
+
+    --surface-1: 99% 0.005 85;
+    --surface-2: 97% 0.008 85;
+    --surface-3: 94% 0.01 85;
+
+    /* Optical Spacing */
+    --space-xs: 0.25rem;
+    --space-sm: 0.5rem;
+    --space-md: 1rem;
+    --space-lg: 1.5rem;
+    --space-xl: 2.5rem;
+    --space-2xl: 4rem;
+    --space-3xl: 6rem;
+
+    /* Border Radius */
+    --radius-sm: 0.6rem;
+    --radius-md: 1rem;
+    --radius-lg: 1.6rem;
+    --radius-xl: 2.2rem;
+    --radius-full: 9999px;
+
+    /* Animation Timing */
+    --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    --duration-fast: 120ms;
+    --duration-normal: 280ms;
+    --duration-slow: 520ms;
   }
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --background: 14% 0.012 255;
+    --foreground: 96% 0.01 85;
+    --card: 18% 0.015 255;
+    --card-foreground: 96% 0.01 85;
+    --popover: 18% 0.015 255;
+    --popover-foreground: 96% 0.01 85;
+    --primary: 72% 0.14 150;
+    --primary-foreground: 18% 0.02 255;
+    --secondary: 22% 0.02 255;
+    --secondary-foreground: 96% 0.01 85;
+    --muted: 22% 0.02 255;
+    --muted-foreground: 70% 0.02 250;
+    --accent: 26% 0.03 200;
+    --accent-foreground: 96% 0.01 85;
+    --destructive: 52% 0.18 30;
+    --destructive-foreground: 96% 0.01 85;
+    --border: 26% 0.02 255;
+    --input: 26% 0.02 255;
+    --ring: 70% 0.14 150;
+    --chart-1: 72% 0.14 150;
+    --chart-2: 68% 0.12 200;
+    --chart-3: 74% 0.12 110;
+    --chart-4: 78% 0.12 60;
+    --chart-5: 70% 0.16 20;
+    --sidebar-background: 16% 0.015 255;
+    --sidebar-foreground: 94% 0.01 85;
+    --sidebar-primary: 72% 0.14 150;
+    --sidebar-primary-foreground: 18% 0.02 255;
+    --sidebar-accent: 24% 0.02 255;
+    --sidebar-accent-foreground: 94% 0.01 85;
+    --sidebar-border: 24% 0.02 255;
+    --sidebar-ring: 70% 0.14 150;
   }
 }
 
@@ -110,6 +373,18 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Accessibility: Enhanced focus styles for all interactive elements */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  [role="button"]:focus-visible,
+  [tabindex]:not([tabindex="-1"]):focus-visible {
+    outline: 2px solid oklch(var(--ring));
+    outline-offset: 2px;
   }
 
   /* Ensure proper touch handling for interactive elements */
@@ -132,5 +407,14 @@ body {
   [data-radix-popper-content-wrapper] {
     pointer-events: auto !important;
     touch-action: auto !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

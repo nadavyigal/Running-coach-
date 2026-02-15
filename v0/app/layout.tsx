@@ -2,7 +2,6 @@
 
 import Script from 'next/script'
 import { Analytics } from '@vercel/analytics/next'
-import { Inter, Heebo } from 'next/font/google'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
 import { ReminderInit } from '@/components/reminder-init'
@@ -13,20 +12,9 @@ import { ServiceWorkerRegister } from '@/components/service-worker-register'
 import { DataProvider } from '@/contexts/DataContext'
 import { AuthProvider } from '@/lib/auth-context'
 
-// Optimized font loading with next/font
-const inter = Inter({
-  subsets: ['latin'],
-  display: 'swap', // Use font-display: swap for better performance
-  preload: true,
-  variable: '--font-inter',
-})
-
-const heebo = Heebo({
-  subsets: ['hebrew'],
-  display: 'swap', // Use font-display: swap for better performance
-  preload: true,
-  variable: '--font-heebo',
-})
+// Modern Athletic typography system
+// English: Inter for display and body
+// Hebrew: Heebo for display and body
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ??
@@ -85,7 +73,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${heebo.variable}`}>
+    <html lang="en">
       <head>
         <title>{defaultTitle}</title>
         <meta name="description" content={defaultDescription} />
@@ -96,6 +84,12 @@ export default function RootLayout({
         <link rel="icon" type="image/png" sizes="512x512" href="/icon-512x512.png" />
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
         <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Heebo:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet"
+        />
         {/* Resource hints for external services */}
         <link rel="dns-prefetch" href="https://us.i.posthog.com" />
         <link rel="preconnect" href="https://us.i.posthog.com" crossOrigin="" />
@@ -107,7 +101,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaOrgJsonLd) }}
         />
       </head>
-      <body className={inter.className}>
+      <body>
         {/* Google Analytics */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-YBJKT7T4DE"

@@ -583,8 +583,8 @@ export function ProfileScreen() {
       {isLoading && (
         <Card>
           <CardContent className="p-8 flex flex-col items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-gray-700 mb-4" />
-            <p className="text-gray-600">Loading profile data...</p>
+            <Loader2 className="h-8 w-8 animate-spin text-foreground/70 mb-4" />
+            <p className="text-foreground/70">Loading profile data...</p>
           </CardContent>
         </Card>
       )}
@@ -595,10 +595,10 @@ export function ProfileScreen() {
           <CardContent className="p-6 flex flex-col items-center text-center">
             <AlertCircle className="h-8 w-8 text-red-500 mb-4" />
             <h3 className="text-lg font-semibold mb-2">Unable to Load Profile</h3>
-            <p className="text-gray-600 mb-4">{error}</p>
+            <p className="text-foreground/70 mb-4">{error}</p>
 
             {/* Database Status Indicator */}
-            <div className="flex items-center gap-2 text-xs text-gray-500 mb-4 bg-gray-50 px-3 py-2 rounded-lg">
+            <div className="flex items-center gap-2 text-xs text-foreground/60 mb-4 bg-[oklch(var(--surface-2))] px-3 py-2 rounded-lg">
               <Database className="h-3 w-3" />
               <span>Database: {typeof indexedDB !== 'undefined' ? 'Available' : 'Not Available'}</span>
             </div>
@@ -666,7 +666,7 @@ export function ProfileScreen() {
                 Clear Data & Restart
               </Button>
             </div>
-            <p className="text-xs text-gray-500 mt-4">
+            <p className="text-xs text-foreground/60 mt-4">
               If this persists, try clearing your browser cache or using incognito mode.
             </p>
           </CardContent>
@@ -692,9 +692,9 @@ export function ProfileScreen() {
                 <CardContent className="p-5 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-semibold text-blue-600">PRIMARY GOAL</p>
-                      <h3 className="text-lg font-semibold text-gray-900">{primaryGoal.title}</h3>
-                      <p className="text-sm text-gray-700">{primaryGoal.description}</p>
+                      <p className="text-xs font-semibold text-primary">PRIMARY GOAL</p>
+                      <h3 className="text-lg font-semibold text-foreground">{primaryGoal.title}</h3>
+                      <p className="text-sm text-foreground/70">{primaryGoal.description}</p>
                     </div>
                     <div className="flex items-start gap-2">
                       <div className="text-right space-y-1">
@@ -704,7 +704,7 @@ export function ProfileScreen() {
                           </Badge>
                         )}
                         {primaryGoal.timeBound?.deadline && (
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-foreground/60">
                             Target date:{' '}
                             {(() => {
                               const deadline = new Date(primaryGoal.timeBound.deadline);
@@ -715,7 +715,7 @@ export function ProfileScreen() {
                       </div>
                       <button
                         onClick={() => openDeleteDialog(primaryGoal)}
-                        className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                        className="p-1 text-foreground/50 hover:text-red-500 transition-colors"
                         title="Delete goal"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -724,15 +724,15 @@ export function ProfileScreen() {
                   </div>
 
                   <div className="space-y-1">
-                    <div className="flex justify-between text-sm text-gray-700">
+                    <div className="flex justify-between text-sm text-foreground/70">
                       <span>Progress</span>
                       <div className="flex items-center gap-2">
                         <span>{Math.round(getGoalProgress(primaryGoal.id))}%</span>
                         {getGoalTrajectory(primaryGoal.id) && (
                           <Badge
                             variant="outline"
-                            className={`text-xs capitalize ${getGoalTrajectory(primaryGoal.id) === 'ahead' ? 'text-emerald-600 border-emerald-300' :
-                                getGoalTrajectory(primaryGoal.id) === 'on_track' ? 'text-blue-600 border-blue-300' :
+                            className={`text-xs capitalize ${getGoalTrajectory(primaryGoal.id) === 'ahead' ? 'text-primary border-primary/30' :
+                                getGoalTrajectory(primaryGoal.id) === 'on_track' ? 'text-primary border-primary/30' :
                                   getGoalTrajectory(primaryGoal.id) === 'behind' ? 'text-amber-600 border-amber-300' :
                                     'text-red-600 border-red-300'
                               }`}
@@ -743,7 +743,7 @@ export function ProfileScreen() {
                       </div>
                     </div>
                     <Progress value={getGoalProgress(primaryGoal.id)} className="h-2" />
-                    <p className="text-xs text-gray-600">
+                    <p className="text-xs text-foreground/70">
                       This plan is designed to help you achieve your goal by the target date.
                     </p>
                   </div>
@@ -754,7 +754,7 @@ export function ProfileScreen() {
                 <CardContent className="p-5 flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-semibold">No active goal</h3>
-                    <p className="text-sm text-gray-600">Set a goal to get a tailored training plan.</p>
+                    <p className="text-sm text-foreground/70">Set a goal to get a tailored training plan.</p>
                   </div>
                   <Button size="sm" onClick={() => setShowPlanTemplateFlow(true)} className="gap-2">
                     <Plus className="h-4 w-4" />
@@ -773,11 +773,11 @@ export function ProfileScreen() {
                   {goals
                     .filter(g => !primaryGoal || g.id !== primaryGoal.id)
                     .map(goal => (
-                      <div key={goal.id} className="p-3 rounded-lg border bg-gray-50">
+                      <div key={goal.id} className="p-3 rounded-lg border bg-[oklch(var(--surface-2))]">
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
-                            <h4 className="font-semibold text-gray-900">{goal.title}</h4>
-                            <p className="text-xs text-gray-600">{goal.description}</p>
+                            <h4 className="font-semibold text-foreground">{goal.title}</h4>
+                            <p className="text-xs text-foreground/70">{goal.description}</p>
                           </div>
                           <div className="flex items-center gap-1">
                             <Button
@@ -804,7 +804,7 @@ export function ProfileScreen() {
                             )}
                             <button
                               onClick={() => openDeleteDialog(goal)}
-                              className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                              className="p-1.5 text-foreground/50 hover:text-red-500 transition-colors"
                               title="Delete goal"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -812,13 +812,13 @@ export function ProfileScreen() {
                           </div>
                         </div>
                         <div className="mt-2">
-                          <div className="flex justify-between text-xs text-gray-600 mb-1">
+                          <div className="flex justify-between text-xs text-foreground/70 mb-1">
                             <span>Progress</span>
                             <div className="flex items-center gap-2">
                               <span>{Math.round(getGoalProgress(goal.id))}%</span>
                               {getGoalTrajectory(goal.id) && (
-                                <span className={`capitalize ${getGoalTrajectory(goal.id) === 'ahead' ? 'text-emerald-600' :
-                                    getGoalTrajectory(goal.id) === 'on_track' ? 'text-blue-600' :
+                                <span className={`capitalize ${getGoalTrajectory(goal.id) === 'ahead' ? 'text-primary' :
+                                    getGoalTrajectory(goal.id) === 'on_track' ? 'text-primary' :
                                       getGoalTrajectory(goal.id) === 'behind' ? 'text-amber-600' :
                                         'text-red-600'
                                   }`}>
@@ -845,26 +845,26 @@ export function ProfileScreen() {
             {isChallengesLoading ? (
               <Card>
                 <CardContent className="p-8 flex flex-col items-center justify-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-gray-700 mb-4" />
-                  <p className="text-gray-600">Loading challenges...</p>
+                  <Loader2 className="h-8 w-8 animate-spin text-foreground/70 mb-4" />
+                  <p className="text-foreground/70">Loading challenges...</p>
                 </CardContent>
               </Card>
             ) : (
               <div className="space-y-3">
                 {/* Active Challenge */}
                 {activeChallenge && (
-                  <Card className="border-2 border-emerald-500 bg-gradient-to-r from-emerald-50 to-teal-50">
+                  <Card className="border-2 border-primary bg-primary/10">
                     <CardContent className="p-5 space-y-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <Activity className="h-4 w-4 text-emerald-500" />
-                            <p className="text-xs font-semibold text-emerald-600">ACTIVE CHALLENGE</p>
+                            <Activity className="h-4 w-4 text-primary" />
+                            <p className="text-xs font-semibold text-primary">ACTIVE CHALLENGE</p>
                           </div>
-                          <h3 className="text-lg font-semibold text-gray-900">{activeChallenge.template.name}</h3>
-                          <p className="text-sm text-gray-700">{activeChallenge.template.tagline}</p>
+                          <h3 className="text-lg font-semibold text-foreground">{activeChallenge.template.name}</h3>
+                          <p className="text-sm text-foreground/70">{activeChallenge.template.tagline}</p>
                         </div>
-                        <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700">
+                        <Badge variant="secondary" className="text-xs bg-primary/10 text-primary">
                           Day {activeChallenge.dailyData.currentDay}/{activeChallenge.dailyData.totalDays}
                         </Badge>
                       </div>
@@ -872,24 +872,24 @@ export function ProfileScreen() {
                       {/* Progress Bar */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Progress</span>
-                          <span className="font-medium text-emerald-600">{activeChallenge.dailyData.progress}%</span>
+                          <span className="text-foreground/70">Progress</span>
+                          <span className="font-medium text-primary">{activeChallenge.dailyData.progress}%</span>
                         </div>
                         <Progress value={activeChallenge.dailyData.progress} className="h-2" />
                       </div>
 
                       {/* Today's Theme */}
                       <div className="bg-white/60 rounded-lg p-3">
-                        <p className="text-sm font-medium text-gray-800">{activeChallenge.dailyData.dayTheme}</p>
+                        <p className="text-sm font-medium text-foreground/80">{activeChallenge.dailyData.dayTheme}</p>
                       </div>
 
-                      <div className="flex gap-4 text-sm text-gray-600">
+                      <div className="flex gap-4 text-sm text-foreground/70">
                         <div className="flex items-center gap-1">
-                          <Flame className="h-4 w-4 text-orange-500" />
+                          <Flame className="h-4 w-4 text-primary" />
                           <span>{activeChallenge.dailyData.streakDays}-day streak</span>
                         </div>
                         <div className="flex items-center gap-1">
-                          <Clock className="h-4 w-4 text-blue-500" />
+                          <Clock className="h-4 w-4 text-primary" />
                           <span>{activeChallenge.dailyData.daysRemaining} days left</span>
                         </div>
                       </div>
@@ -902,8 +902,8 @@ export function ProfileScreen() {
                   <>
                     {activeChallenge && (
                       <div className="flex items-center gap-2 pt-2">
-                        <History className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm text-gray-600 font-medium">Past Challenges</span>
+                        <History className="h-4 w-4 text-foreground/60" />
+                        <span className="text-sm text-foreground/70 font-medium">Past Challenges</span>
                       </div>
                     )}
                     {challengeHistory.map((challenge) => (
@@ -915,26 +915,26 @@ export function ProfileScreen() {
                                 {challenge.progress.status === 'completed' ? (
                                   <>
                                     <Trophy className="h-4 w-4 text-amber-500" />
-                                    <p className="text-xs font-semibold text-emerald-600">COMPLETED</p>
+                                    <p className="text-xs font-semibold text-primary">COMPLETED</p>
                                   </>
                                 ) : (
                                   <>
-                                    <AlertCircle className="h-4 w-4 text-gray-400" />
-                                    <p className="text-xs font-semibold text-gray-500">ENDED</p>
+                                    <AlertCircle className="h-4 w-4 text-foreground/50" />
+                                    <p className="text-xs font-semibold text-foreground/60">ENDED</p>
                                   </>
                                 )}
                               </div>
-                              <h3 className="text-lg font-semibold text-gray-900">{challenge.template.name}</h3>
-                              <p className="text-sm text-gray-700">{challenge.template.tagline}</p>
+                              <h3 className="text-lg font-semibold text-foreground">{challenge.template.name}</h3>
+                              <p className="text-sm text-foreground/70">{challenge.template.tagline}</p>
                             </div>
                             <Badge variant="secondary" className="text-xs">
                               {challenge.template.durationDays} days
                             </Badge>
                           </div>
 
-                          <div className="flex gap-4 text-sm text-gray-600">
+                          <div className="flex gap-4 text-sm text-foreground/70">
                             <div className="flex items-center gap-1">
-                              <Flame className="h-4 w-4 text-orange-500" />
+                              <Flame className="h-4 w-4 text-primary" />
                               <span>{challenge.progress.streakDays}-day streak</span>
                             </div>
                             <div className="flex items-center gap-1">
@@ -944,7 +944,7 @@ export function ProfileScreen() {
                           </div>
 
                           {challenge.progress.completedAt && (
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-foreground/60">
                               Completed {new Date(challenge.progress.completedAt).toLocaleDateString()}
                             </p>
                           )}
@@ -957,7 +957,7 @@ export function ProfileScreen() {
                     <CardContent className="p-5 flex items-center justify-between">
                       <div>
                         <h3 className="text-lg font-semibold">No challenges yet</h3>
-                        <p className="text-sm text-gray-600">Start a challenge to build consistency and reach your goals.</p>
+                        <p className="text-sm text-foreground/70">Start a challenge to build consistency and reach your goals.</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -965,15 +965,15 @@ export function ProfileScreen() {
 
                 <div className="pt-2">
                   <div className="flex items-center gap-2">
-                    <Target className="h-4 w-4 text-emerald-600" />
-                    <span className="text-sm text-gray-600 font-medium">Available Challenges</span>
+                    <Target className="h-4 w-4 text-primary" />
+                    <span className="text-sm text-foreground/70 font-medium">Available Challenges</span>
                   </div>
                 </div>
 
                 {availableChallenges.length === 0 ? (
                   <Card>
                     <CardContent className="p-5">
-                      <p className="text-sm text-gray-600">No challenges available right now.</p>
+                      <p className="text-sm text-foreground/70">No challenges available right now.</p>
                     </CardContent>
                   </Card>
                 ) : (
@@ -986,8 +986,8 @@ export function ProfileScreen() {
                           <CardContent className="p-5 space-y-3">
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1">
-                                <h3 className="text-lg font-semibold text-gray-900">{template.name}</h3>
-                                <p className="text-sm text-gray-700">{template.tagline}</p>
+                                <h3 className="text-lg font-semibold text-foreground">{template.name}</h3>
+                                <p className="text-sm text-foreground/70">{template.tagline}</p>
                               </div>
                               <Badge variant="secondary" className="text-xs">
                                 {template.durationDays} days
@@ -1002,7 +1002,7 @@ export function ProfileScreen() {
                                 {template.category}
                               </Badge>
                               {isActive && (
-                                <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700">
+                                <Badge variant="secondary" className="text-xs bg-primary/10 text-primary">
                                   Active
                                 </Badge>
                               )}
@@ -1035,13 +1035,13 @@ export function ProfileScreen() {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center">
+                <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center">
                   <User className="h-8 w-8 text-white" />
                 </div>
                 <div className="flex-1">
                   <h2 className="text-xl font-bold">Runner</h2>
-                  <p className="text-gray-600">Beginner Runner</p>
-                  <div className="flex gap-2 text-sm text-gray-500 mt-1">
+                  <p className="text-foreground/70">Beginner Runner</p>
+                  <div className="flex gap-2 text-sm text-foreground/60 mt-1">
                     <span>{allTimeStats.totalRuns} total runs</span>
                   </div>
                 </div>
@@ -1053,7 +1053,7 @@ export function ProfileScreen() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <div className="flex items-center gap-2">
-                <Database className="h-5 w-5 text-blue-600" />
+                <Database className="h-5 w-5 text-primary" />
                 <CardTitle>Training Data</CardTitle>
               </div>
               <Button
@@ -1075,21 +1075,21 @@ export function ProfileScreen() {
                 </h4>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Age:</span>
+                    <span className="text-foreground/70">Age:</span>
                     <span className="font-medium">{user?.age ?? '--'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Experience:</span>
+                    <span className="text-foreground/70">Experience:</span>
                     <span className="font-medium capitalize">{user?.experience ?? '--'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Weekly Volume:</span>
+                    <span className="text-foreground/70">Weekly Volume:</span>
                     <span className="font-medium">
                       {typeof user?.averageWeeklyKm === 'number' ? `${user.averageWeeklyKm} km` : '--'}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Days/Week:</span>
+                    <span className="text-foreground/70">Days/Week:</span>
                     <span className="font-medium">{user?.daysPerWeek ?? '--'}</span>
                   </div>
                 </div>
@@ -1106,7 +1106,7 @@ export function ProfileScreen() {
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                       {user?.calculatedVDOT && (
                         <div className="flex justify-between">
-                          <span className="text-gray-600">VDOT:</span>
+                          <span className="text-foreground/70">VDOT:</span>
                           <span className="font-medium flex items-center gap-1">
                             {user.calculatedVDOT.toFixed(1)}
                             <Badge variant="secondary" className="text-xs px-1 py-0">
@@ -1117,42 +1117,42 @@ export function ProfileScreen() {
                       )}
                       {user?.vo2Max && (
                         <div className="flex justify-between">
-                          <span className="text-gray-600">VO2 Max:</span>
+                          <span className="text-foreground/70">VO2 Max:</span>
                           <span className="font-medium">{user.vo2Max} ml/kg/min</span>
                         </div>
                       )}
                       {user?.lactateThreshold && (
                         <div className="flex justify-between">
-                          <span className="text-gray-600">LT Pace:</span>
+                          <span className="text-foreground/70">LT Pace:</span>
                           <span className="font-medium">{formatPace(user.lactateThreshold)}/km</span>
                         </div>
                       )}
                       {user?.lactateThresholdHR && (
                         <div className="flex justify-between">
-                          <span className="text-gray-600">LT HR:</span>
+                          <span className="text-foreground/70">LT HR:</span>
                           <span className="font-medium">{user.lactateThresholdHR} bpm</span>
                         </div>
                       )}
                       {user?.hrvBaseline && (
                         <div className="flex justify-between">
-                          <span className="text-gray-600">HRV Baseline:</span>
+                          <span className="text-foreground/70">HRV Baseline:</span>
                           <span className="font-medium">{user.hrvBaseline} ms</span>
                         </div>
                       )}
                       {user?.maxHeartRate && (
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Max HR:</span>
+                          <span className="text-foreground/70">Max HR:</span>
                           <span className="font-medium">
                             {user.maxHeartRate} bpm
                             {user.maxHeartRateSource === 'calculated' && (
-                              <span className="text-xs text-gray-500 ml-1">(calc)</span>
+                              <span className="text-xs text-foreground/60 ml-1">(calc)</span>
                             )}
                           </span>
                         </div>
                       )}
                       {user?.restingHeartRate && (
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Resting HR:</span>
+                          <span className="text-foreground/70">Resting HR:</span>
                           <span className="font-medium">{user.restingHeartRate} bpm</span>
                         </div>
                       )}
@@ -1171,21 +1171,21 @@ export function ProfileScreen() {
                     </h4>
                     <div className="text-sm">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-gray-600">Distance & Time:</span>
+                        <span className="text-foreground/70">Distance & Time:</span>
                         <span className="font-medium">
                           {user.referenceRaceDistance}K in {formatTime(user.referenceRaceTime)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600">Pace:</span>
+                        <span className="text-foreground/70">Pace:</span>
                         <span className="font-medium">
                           {formatPace(user.referenceRaceTime / user.referenceRaceDistance)}/km
                         </span>
                       </div>
                       {user.referenceRaceDate && (
                         <div className="flex items-center justify-between mt-1">
-                          <span className="text-gray-600">Date:</span>
-                          <span className="text-gray-500 text-xs">
+                          <span className="text-foreground/70">Date:</span>
+                          <span className="text-foreground/60 text-xs">
                             {formatDate(user.referenceRaceDate)}
                           </span>
                         </div>
@@ -1203,7 +1203,7 @@ export function ProfileScreen() {
                       <History className="h-4 w-4" />
                       Training History
                     </h4>
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm text-foreground/70">
                       {user.historicalRuns.length} significant run{user.historicalRuns.length !== 1 ? 's' : ''} logged
                     </div>
                   </div>
@@ -1211,11 +1211,11 @@ export function ProfileScreen() {
               )}
 
               {!user?.vo2Max && !user?.lactateThreshold && !user?.referenceRaceDistance && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm">
-                  <p className="text-blue-900 font-medium mb-1">
+                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 text-sm">
+                  <p className="text-foreground font-medium mb-1">
                     Add your training data
                   </p>
-                  <p className="text-blue-700 text-xs">
+                  <p className="text-foreground/70 text-xs">
                     Metrics like VO2 max, lactate threshold, and race times help us personalize your training plan.
                   </p>
                 </div>
@@ -1227,23 +1227,23 @@ export function ProfileScreen() {
           <div className="grid grid-cols-3 gap-4">
             <Card>
               <CardContent className="p-4 text-center">
-                <Route className="h-6 w-6 text-green-500 mx-auto mb-2" />
+                <Route className="h-6 w-6 text-primary mx-auto mb-2" />
                 <div className="text-lg font-bold">{allTimeStats.totalDistanceKm.toFixed(1)} km</div>
-                <div className="text-xs text-gray-600">Total Distance</div>
+                <div className="text-xs text-foreground/70">Total Distance</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
-                <Clock className="h-6 w-6 text-blue-500 mx-auto mb-2" />
+                <Clock className="h-6 w-6 text-primary mx-auto mb-2" />
                 <div className="text-lg font-bold">{Math.round(allTimeStats.totalDurationSeconds / 60)} min</div>
-                <div className="text-xs text-gray-600">Total Time</div>
+                <div className="text-xs text-foreground/70">Total Time</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
-                <Flame className="h-6 w-6 text-orange-500 mx-auto mb-2" />
+                <Flame className="h-6 w-6 text-primary mx-auto mb-2" />
                 <div className="text-lg font-bold">{allTimeStats.totalRuns}</div>
-                <div className="text-xs text-gray-600">Total Runs</div>
+                <div className="text-xs text-foreground/70">Total Runs</div>
               </CardContent>
             </Card>
           </div>
@@ -1255,24 +1255,24 @@ export function ProfileScreen() {
             </CardHeader>
             <CardContent className="space-y-3">
               {isRunsLoading ? (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
+                <div className="flex items-center gap-2 text-sm text-foreground/70">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading runs...
                 </div>
               ) : recentRuns.length === 0 ? (
-                <p className="text-sm text-gray-600">No runs yet.</p>
+                <p className="text-sm text-foreground/70">No runs yet.</p>
               ) : (
                 recentRuns.slice(0, 5).map((run) => (
                   <div key={run.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-white">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-900">{run.distance.toFixed(2)} km</span>
-                        <span className="text-xs text-gray-500">•</span>
-                        <span className="text-sm text-gray-700">{formatTime(run.duration)}</span>
-                        <span className="text-xs text-gray-500">•</span>
-                        <span className="text-sm text-gray-700">{formatPace(run.pace ?? run.duration / run.distance)}/km</span>
+                        <span className="font-medium text-foreground">{run.distance.toFixed(2)} km</span>
+                        <span className="text-xs text-foreground/60">•</span>
+                        <span className="text-sm text-foreground/70">{formatTime(run.duration)}</span>
+                        <span className="text-xs text-foreground/60">•</span>
+                        <span className="text-sm text-foreground/70">{formatPace(run.pace ?? run.duration / run.distance)}/km</span>
                       </div>
-                      <div className="text-xs text-gray-500 truncate">
+                      <div className="text-xs text-foreground/60 truncate">
                         {new Date(run.completedAt).toLocaleDateString()} • {run.type}
                         {run.runReport ? ' • report ready' : ''}
                       </div>
@@ -1335,7 +1335,7 @@ export function ProfileScreen() {
                 </Button>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-gray-500">Share your entire badge collection with friends and on social media.</p>
+                <p className="text-sm text-foreground/60">Share your entire badge collection with friends and on social media.</p>
               </CardContent>
             </Card>
           )}
@@ -1356,24 +1356,24 @@ export function ProfileScreen() {
               </CardHeader>
               <CardContent className="space-y-3">
                 {runningShoes.map((shoe) => (
-                  <div key={shoe.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div key={shoe.id} className="flex items-center justify-between p-3 bg-[oklch(var(--surface-2))] rounded-lg">
                     <div className="flex items-center gap-3">
-                      <Footprints className="h-5 w-5 text-gray-600" />
+                      <Footprints className="h-5 w-5 text-foreground/70" />
                       <div>
                         <div className="font-medium">{shoe.name}</div>
-                        <div className="text-sm text-gray-600">
+                        <div className="text-sm text-foreground/70">
                           {shoe.brand} {shoe.model}
                         </div>
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-foreground/60">
                           {shoe.currentKm}km / {shoe.maxKm}km
                         </div>
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-medium">{Math.round((shoe.currentKm / shoe.maxKm) * 100)}%</div>
-                      <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="w-16 h-2 bg-border/60 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-green-500 transition-all"
+                          className="h-full bg-primary transition-all"
                           style={{ width: `${Math.min((shoe.currentKm / shoe.maxKm) * 100, 100)}%` }}
                         />
                       </div>
@@ -1403,17 +1403,17 @@ export function ProfileScreen() {
                 return (
                   <div
                     key={index}
-                    className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
+                    className="flex items-center justify-between p-3 rounded-lg hover:bg-[oklch(var(--surface-2))] cursor-pointer"
                     onClick={handleClick}
                   >
                     <div className="flex items-center gap-3">
-                      <connection.icon className="h-5 w-5 text-gray-600" />
+                      <connection.icon className="h-5 w-5 text-foreground/70" />
                       <div>
                         <div className="font-medium">{connection.name}</div>
-                        <div className="text-sm text-gray-600">{connection.desc}</div>
+                        <div className="text-sm text-foreground/70">{connection.desc}</div>
                       </div>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-gray-400" />
+                    <ChevronRight className="h-4 w-4 text-foreground/50" />
                   </div>
                 );
               })}
@@ -1445,17 +1445,17 @@ export function ProfileScreen() {
                 return (
                   <div
                     key={index}
-                    className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
+                    className="flex items-center justify-between p-3 rounded-lg hover:bg-[oklch(var(--surface-2))] cursor-pointer"
                     onClick={handleSettingClick}
                   >
                     <div className="flex items-center gap-3">
-                      <setting.icon className="h-5 w-5 text-gray-600" />
+                      <setting.icon className="h-5 w-5 text-foreground/70" />
                       <div>
                         <div className="font-medium">{setting.name}</div>
-                        <div className="text-sm text-gray-600">{setting.desc}</div>
+                        <div className="text-sm text-foreground/70">{setting.desc}</div>
                       </div>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-gray-400" />
+                    <ChevronRight className="h-4 w-4 text-foreground/50" />
                   </div>
                 );
               })}
@@ -1514,7 +1514,7 @@ export function ProfileScreen() {
           <ReminderSettings />
 
           {/* App Info */}
-          <div className="text-center text-sm text-gray-500 space-y-1">
+          <div className="text-center text-sm text-foreground/60 space-y-1">
             <p>Run-Smart v1.0.0</p>
             <p>Made with ❤️ for runners</p>
           </div>
@@ -1622,7 +1622,7 @@ export function ProfileScreen() {
                     <p className="mb-3">
                       Merge &quot;{mergeSourceGoal?.title}&quot; into your primary goal &quot;{primaryGoal?.title}&quot;?
                     </p>
-                    <p className="text-sm text-gray-600 mb-3">
+                    <p className="text-sm text-foreground/70 mb-3">
                       This will:
                     </p>
                     <ul className="list-disc list-inside text-sm space-y-1 mb-3">
@@ -1637,7 +1637,7 @@ export function ProfileScreen() {
                 <Button variant="outline" onClick={() => setShowMergeDialog(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleMergeGoal} className="bg-blue-500 hover:bg-blue-600">
+                <Button onClick={handleMergeGoal} className="bg-primary/100 hover:bg-primary/90">
                   <GitMerge className="h-4 w-4 mr-2" />
                   Merge Goals
                 </Button>
@@ -1650,3 +1650,5 @@ export function ProfileScreen() {
     </div>
   )
 }
+
+

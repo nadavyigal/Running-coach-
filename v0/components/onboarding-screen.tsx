@@ -146,13 +146,13 @@ function SelectCard(props: {
         className={cn(
           'relative overflow-hidden border rounded-3xl px-6 py-5 flex items-center justify-between shadow-lg transition-all duration-200 bg-gradient-to-br',
           selected
-            ? 'border-emerald-400/60 ring-2 ring-inset ring-emerald-400/30 from-emerald-500/[0.15] via-emerald-500/[0.08] to-emerald-500/[0.03] text-white'
+            ? 'border-primary/60 ring-2 ring-inset ring-primary/30 from-white/[0.18] via-white/[0.1] to-white/[0.04] text-white'
             : 'border-white/[0.15] hover:border-white/30 from-white/[0.08] via-white/[0.05] to-white/[0.02] text-white hover:from-white/[0.12]'
         )}
       >
         <div className="flex items-center gap-4">
           {left && (
-            <div className="h-11 w-11 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-emerald-300">
+            <div className="h-11 w-11 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-primary/80">
               {left}
             </div>
           )}
@@ -279,8 +279,8 @@ function WheelColumn(props: {
         })}
       </div>
       <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-12 rounded-lg border border-white/10 bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-neutral-950 via-neutral-950/80 to-transparent" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-neutral-950 via-neutral-950/80 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[oklch(12%_0.02_255)] via-[oklch(12%_0.02_255/0.8)] to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[oklch(12%_0.02_255)] via-[oklch(12%_0.02_255/0.8)] to-transparent" />
     </div>
   )
 }
@@ -1073,7 +1073,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                     className={cn(
                       'h-10 rounded-full px-4 shrink-0 text-sm font-medium border transition-all duration-200',
                       active
-                        ? 'bg-emerald-400 text-neutral-950 border-emerald-400 shadow-lg shadow-emerald-500/25 hover:bg-emerald-300'
+                        ? 'bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/25 hover:bg-primary/90'
                         : 'bg-white/[0.03] text-white/70 border-white/10 hover:bg-white/[0.06] hover:text-white hover:border-white/20'
                     )}
                   >
@@ -1125,7 +1125,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
             <div className="text-center text-white/60 text-sm pt-3 leading-relaxed">
               I can currently run a{' '}
-              <span className="text-emerald-400 font-medium">
+              <span className="text-primary font-medium">
                 {DISTANCE_CHIPS.find((chip) => chip.value === referenceRaceDistance)?.label ?? `${referenceRaceDistance}K`}
               </span>{' '}
               in <span className="text-white font-semibold">{formatTimeHms(referenceRaceTimeSeconds)}</span>
@@ -1206,7 +1206,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         return (
           <div className="pt-2 space-y-8" role="region" aria-label="Summary and confirmation">
             <div className="text-center space-y-2">
-              <CheckCircle2 className="h-12 w-12 text-emerald-400 mx-auto" />
+              <CheckCircle2 className="h-12 w-12 text-primary mx-auto" />
               <h2 className="text-2xl font-semibold">Summary and confirmation</h2>
               <p className="text-white/60 text-sm">Confirm everything looks right before we build your plan.</p>
             </div>
@@ -1255,7 +1255,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 id="privacy-policy"
                 checked={privacyAccepted}
                 onChange={(e) => setPrivacyAccepted(e.target.checked)}
-                className="mt-1 h-5 w-5 rounded border-white/30 bg-white/10 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                className="mt-1 h-5 w-5 rounded border-white/30 bg-white/10 text-primary focus:ring-primary focus:ring-offset-0"
               />
               <label htmlFor="privacy-policy" className="text-sm text-white/80 leading-relaxed cursor-pointer select-none">
                 I have read and agree to the{' '}
@@ -1263,7 +1263,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                   href="/privacy"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium"
+                  className="text-primary hover:text-primary/80 underline underline-offset-2 font-medium"
                   onClick={(e) => e.stopPropagation()}
                 >
                   Privacy Policy
@@ -1293,7 +1293,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             />
 
             {selectedChallenge && (
-              <div className="flex items-center gap-2 text-sm text-emerald-200 bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-2xl">
+              <div className="flex items-center gap-2 text-sm text-primary bg-primary/10 border border-primary/20 p-3 rounded-2xl">
                 <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
                 Challenge selected: {selectedChallenge.name}
               </div>
@@ -1334,7 +1334,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         aria-hidden="true"
         className="sr-only"
       />
-      <div className="relative min-h-screen bg-[#1a1a1a] text-white flex flex-col">
+      <div className="relative min-h-screen bg-[oklch(16%_0.02_255)] text-white flex flex-col">
         {isIntroStep && (
           <div className="absolute inset-0">
             {/* Full-screen Background Image */}
@@ -1364,7 +1364,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               <div className="flex-1 flex items-center justify-center">
                 <div className="h-1 w-40 bg-white/10 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-emerald-400 transition-all duration-300 ease-out"
+                    className="h-full bg-primary transition-all duration-300 ease-out"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
@@ -1392,8 +1392,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         {isIntroStep && (
           <div className="relative z-10 flex flex-col items-center pb-6 px-6">
             {/* Logo with glow - SVG version */}
-            <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#1a3a2a] shadow-[0_0_30px_rgba(74,222,128,0.2)]">
-              <RunSmartLogo className="h-10 w-10" />
+            <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/15 shadow-[0_0_30px_rgba(64,200,170,0.25)]">
+              <RunSmartLogo className="h-10 w-10 text-primary" />
             </div>
             <h2 className="text-xl font-bold italic text-white">RunSmart</h2>
             <p className="mt-1 text-sm text-white/60">Your AI Running Coach</p>
@@ -1403,7 +1403,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         <div
           className={cn(
             "px-6 pt-3 relative z-10",
-            isIntroStep ? "bg-transparent" : "bg-neutral-950 px-8"
+            isIntroStep ? "bg-transparent" : "bg-[oklch(12%_0.02_255)] px-8"
           )}
           style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom, 2rem))' }}
         >
@@ -1436,22 +1436,22 @@ function RunSmartLogo({ className }: { className?: string }) {
       {/* Main 4-point star */}
       <path
         d="M24 4L27 20L43 24L27 28L24 44L21 28L5 24L21 20L24 4Z"
-        stroke="#4ade80"
+        stroke="currentColor"
         strokeWidth="2.5"
         fill="none"
-        style={{ filter: 'drop-shadow(0 0 6px rgba(74, 222, 128, 0.6))' }}
+        style={{ filter: 'drop-shadow(0 0 6px rgba(64, 200, 170, 0.6))' }}
       />
       {/* Small sparkle top right */}
       <path
         d="M36 10L37 14L41 15L37 16L36 20L35 16L31 15L35 14L36 10Z"
-        fill="#4ade80"
-        style={{ filter: 'drop-shadow(0 0 4px rgba(74, 222, 128, 0.8))' }}
+        fill="currentColor"
+        style={{ filter: 'drop-shadow(0 0 4px rgba(64, 200, 170, 0.8))' }}
       />
       {/* Small sparkle bottom left */}
       <path
         d="M12 30L13 33L16 34L13 35L12 38L11 35L8 34L11 33L12 30Z"
-        fill="#4ade80"
-        style={{ filter: 'drop-shadow(0 0 4px rgba(74, 222, 128, 0.8))' }}
+        fill="currentColor"
+        style={{ filter: 'drop-shadow(0 0 4px rgba(64, 200, 170, 0.8))' }}
       />
     </svg>
   )
@@ -1461,10 +1461,7 @@ function FeatureIcon({ icon, label }: { icon: React.ReactNode; label: string }) 
   return (
     <div className="flex flex-col items-center gap-2">
       <div
-        className="flex h-[60px] w-[60px] items-center justify-center rounded-full border-2 border-[#4ade80] bg-[#4ade80]/10 text-[#4ade80]"
-        style={{
-          boxShadow: '0 0 20px rgba(74, 222, 128, 0.3), inset 0 0 15px rgba(74, 222, 128, 0.1)',
-        }}
+        className="flex h-[60px] w-[60px] items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-primary"
       >
         {icon}
       </div>
