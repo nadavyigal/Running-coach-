@@ -653,6 +653,54 @@ export const forceFlush = async () => {
   }
 }
 
+// ============================================================================
+// PWA INSTALLATION TRACKING (Critical for installability funnel)
+// ============================================================================
+
+/**
+ * Track when PWA install prompt is shown to user
+ * Called when browser's beforeinstallprompt event fires
+ */
+export const trackPWAInstallPromptShown = async (properties?: Record<string, any>) => {
+  await trackEvent('pwa_install_prompt_shown', {
+    platform: properties?.platform || 'unknown',
+    browser: properties?.browser || navigator.userAgent,
+    timing: properties?.timing || 'auto',
+    timestamp: new Date().toISOString(),
+    ...properties,
+  })
+}
+
+/**
+ * Track successful PWA installation
+ * Called when appinstalled event fires
+ */
+export const trackPWAInstalled = async (properties?: Record<string, any>) => {
+  await trackEvent('pwa_installed', {
+    install_method: properties?.installMethod || 'browser_prompt',
+    platform: properties?.platform || 'unknown',
+    browser: properties?.browser || navigator.userAgent,
+    timing: properties?.timing || 'unknown',
+    timestamp: new Date().toISOString(),
+    funnel_stage: 'pwa_installed',
+    ...properties,
+  })
+}
+
+/**
+ * Track when user dismisses PWA install prompt
+ * Called when user clicks "Not now" or dismisses the prompt
+ */
+export const trackPWAInstallDismissed = async (properties?: Record<string, any>) => {
+  await trackEvent('pwa_install_dismissed', {
+    platform: properties?.platform || 'unknown',
+    browser: properties?.browser || navigator.userAgent,
+    timing: properties?.timing || 'unknown',
+    timestamp: new Date().toISOString(),
+    ...properties,
+  })
+}
+
 // Export analytics object for direct access if needed
 export const analytics = {
   setUserId,

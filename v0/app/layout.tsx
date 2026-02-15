@@ -79,6 +79,31 @@ export default function RootLayout({
         <meta name="description" content={defaultDescription} />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
         <meta name="theme-color" content="#ffffff" />
+
+        {/* SEO: Canonical URL */}
+        <link rel="canonical" href={siteUrl} />
+
+        {/* Open Graph meta tags */}
+        <meta property="og:title" content={defaultTitle} />
+        <meta property="og:description" content={defaultDescription} />
+        <meta property="og:url" content={siteUrl} />
+        <meta property="og:site_name" content="RunSmart" />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content={`${siteUrl}/og-image.png`} />
+        <meta property="og:locale" content="en_US" />
+
+        {/* Twitter Card meta tags */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={defaultTitle} />
+        <meta name="twitter:description" content={defaultDescription} />
+        <meta name="twitter:image" content={`${siteUrl}/og-image.png`} />
+
+        {/* Keywords for SEO */}
+        <meta
+          name="keywords"
+          content="running coach, AI running coach, training plan, running app, marathon training, 5K training, running tracker, GPS running, personalized running plan"
+        />
+
         <link rel="icon" href="/favicon.ico" />
         <link rel="icon" type="image/png" sizes="192x192" href="/icon-192x192.png" />
         <link rel="icon" type="image/png" sizes="512x512" href="/icon-512x512.png" />
