@@ -663,7 +663,11 @@ export function TodayScreen() {
   const recoveryConfidenceValue = coachConfidence?.confidence ?? 0
   const recoveryNextStep = coachConfidence?.nextSteps?.[0] ?? 'Complete your morning check-in'
   const workoutDistanceLabel = todaysWorkout
-    ? (todaysWorkout.distance ? `${todaysWorkout.distance} km` : `${todaysWorkout.duration} min`)
+    ? (todaysWorkout.distance && todaysWorkout.distance > 0
+        ? `${todaysWorkout.distance} km`
+        : todaysWorkout.duration && todaysWorkout.duration > 0
+          ? `${todaysWorkout.duration} min`
+          : '--')
     : '--'
   const workoutEstimatedTimeLabel = todaysWorkout
     ? (todaysWorkout.duration

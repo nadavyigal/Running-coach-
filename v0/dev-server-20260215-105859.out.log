@@ -1,0 +1,98 @@
+
+> my-v0-project@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.16
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 2.2s
+ ○ Compiling /middleware ...
+ ✓ Compiled /middleware in 693ms (167 modules)
+ ○ Compiling / ...
+ ✓ Compiled / in 14.1s (4872 modules)
+🚀 RunSmartApp component rendering... { isLoading: true, isOnboardingComplete: false }
+🎭 Current screen: onboarding Onboarding complete: false Loading: true Error: false
+⏳ Showing loading state...
+ GET /?lang=en 200 in 14457ms
+ ✓ Compiled in 650ms (2414 modules)
+ ○ Compiling /api/auth/session ...
+ ✓ Compiled /api/auth/session in 520ms (2474 modules)
+ ✓ Compiled /api/analytics/events in 1ms (2540 modules)
+ ✓ Compiled in 1ms (2573 modules)
+ ✓ Compiled in 0ms (2573 modules)
+ GET /manifest.webmanifest 200 in 1753ms
+ ✓ Compiled in 1ms (2573 modules)
+ GET /api/auth/session 200 in 1878ms
+ ✓ Compiled /api/user-memory in 0ms (2573 modules)
+ ✓ Compiled (2575 modules)
+ GET /api/auth/session 200 in 554ms
+ PUT /api/user-memory 200 in 1854ms
+[analytics/events] Event recorded { eventName: 'page_viewed', userId: 4 }
+ POST /api/analytics/events 200 in 3463ms
+[analytics/events] Event recorded { eventName: 'page_viewed', userId: 4 }
+ POST /api/analytics/events 200 in 3467ms
+🚀 RunSmartApp component rendering... { isLoading: true, isOnboardingComplete: false }
+🎭 Current screen: onboarding Onboarding complete: false Loading: true Error: false
+⏳ Showing loading state...
+ GET /?lang=en 200 in 441ms
+ GET /manifest.webmanifest 200 in 56ms
+ GET /api/auth/session 200 in 29ms
+ GET /api/auth/session 200 in 23ms
+[analytics/events] Event recorded { eventName: 'page_viewed', userId: 4 }
+ POST /api/analytics/events 200 in 1238ms
+[analytics/events] Event recorded { eventName: 'page_viewed', userId: 4 }
+ POST /api/analytics/events 200 in 1309ms
+ PUT /api/user-memory 200 in 942ms
+ ○ Compiling /today ...
+ ✓ Compiled /today in 2.8s (4981 modules)
+🚀 RunSmartApp component rendering... { isLoading: true, isOnboardingComplete: false }
+🎭 Current screen: onboarding Onboarding complete: false Loading: true Error: false
+⏳ Showing loading state...
+ POST /api/analytics/events 200 in 3331ms
+ GET /today 200 in 3362ms
+[analytics/events] Event recorded { eventName: 'cta_clicked', userId: 4 }
+ GET /manifest.webmanifest 200 in 61ms
+ GET /api/auth/session 200 in 35ms
+ GET /api/auth/session 200 in 34ms
+[analytics/events] Event recorded { eventName: 'onboarding_error', userId: 4 }
+ POST /api/analytics/events 200 in 616ms
+[analytics/events] Event recorded { eventName: 'onboarding_error', userId: 4 }
+ POST /api/analytics/events 200 in 726ms
+[analytics/events] Event recorded { eventName: 'onboarding_started', userId: 4 }
+ POST /api/analytics/events 200 in 413ms
+[analytics/events] Event recorded { eventName: 'onboarding_error', userId: 4 }
+ POST /api/analytics/events 200 in 1144ms
+[analytics/events] Event recorded { eventName: 'onboarding_user_context', userId: 4 }
+ POST /api/analytics/events 200 in 1095ms
+[analytics/events] Event recorded { eventName: 'onboarding_started', userId: 4 }
+ POST /api/analytics/events 200 in 1131ms
+[analytics/events] Event recorded { eventName: 'onboarding_user_context', userId: 4 }
+ POST /api/analytics/events 200 in 405ms
+[analytics/events] Event recorded { eventName: 'onboarding_error', userId: 4 }
+ POST /api/analytics/events 200 in 1155ms
+ PUT /api/user-memory 200 in 559ms
+ ○ Compiling /api/health ...
+ ✓ Compiled /api/health in 561ms (2582 modules)
+ HEAD /api/health 200 in 642ms
+ HEAD /api/health 200 in 50ms
+ HEAD /api/health 200 in 32ms
+ HEAD /api/health 200 in 29ms
+ HEAD /api/health 200 in 41ms
+ HEAD /api/health 200 in 27ms
+ HEAD /api/health 200 in 30ms
+ HEAD /api/health 200 in 28ms
+ HEAD /api/health 200 in 35ms
+🚀 RunSmartApp component rendering... { isLoading: true, isOnboardingComplete: false }
+🎭 Current screen: onboarding Onboarding complete: false Loading: true Error: false
+⏳ Showing loading state...
+ GET /?lang=en 200 in 180ms
+ GET /manifest.webmanifest 200 in 40ms
+ GET /api/auth/session 200 in 62ms
+ GET /api/auth/session 200 in 117ms
+[analytics/events] Event recorded { eventName: 'page_viewed', userId: 4 }
+ POST /api/analytics/events 200 in 948ms
+[analytics/events] Event recorded { eventName: 'page_viewed', userId: 4 }
+ POST /api/analytics/events 200 in 1240ms
+ PUT /api/user-memory 200 in 495ms

@@ -1785,15 +1785,17 @@ export async function getTodaysWorkout(userId: number): Promise<Workout | null> 
 
     const today = startOfDayUTC(nowUTC());
     const tomorrow = addDaysUTC(1, today);
-    
+
     // Get all plans for the user
     const plans = await db.plans.where('userId').equals(userId).toArray();
     const planIds = plans.map(p => p.id!).filter(Boolean);
-    
+
     if (planIds.length === 0) return null;
-    
+
     const allWorkouts = await db.workouts.toArray();
-    const todaysWorkout = allWorkouts
+
+    // Filter ALL workouts for today (not just find the first one)
+    const todaysWorkouts = allWorkouts
       .map(workout => {
         // Normalize scheduledDate
         const normalizedScheduledDate = normalizeDate(workout.scheduledDate);
@@ -1802,14 +1804,26 @@ export async function getTodaysWorkout(userId: number): Promise<Workout | null> 
         }
         return { ...workout, scheduledDate: normalizedScheduledDate };
       })
-      .find(workout => 
+      .filter((workout): workout is Workout =>
         workout !== null &&
         planIds.includes(workout.planId) &&
-        workout.scheduledDate >= today && 
+        workout.scheduledDate >= today &&
         workout.scheduledDate < tomorrow
       );
-    
-    return todaysWorkout || null;
+
+    if (todaysWorkouts.length === 0) return null;
+
+    // Sort workouts: incomplete first, then by ID for consistent ordering
+    todaysWorkouts.sort((a, b) => {
+      // Prioritize incomplete workouts
+      if (a.completed !== b.completed) {
+        return a.completed ? 1 : -1;
+      }
+      // Then sort by ID (lower ID first) for consistent ordering
+      return (a.id ?? 0) - (b.id ?? 0);
+    });
+
+    return todaysWorkouts[0] ?? null;
   }, 'getTodaysWorkout', null);
 }
 
