@@ -431,6 +431,20 @@ export default function RunSmartApp() {
           await dbUtils.performStartupMigration();
           logger.log('[app:init:migration] ✅ Startup migration completed');
 
+          // Run one-time migration to fix multiple active plans
+          const migrationKey = 'migration_fix_multiple_active_plans_v1';
+          if (!localStorage.getItem(migrationKey)) {
+            try {
+              const result = await dbUtils.fixMultipleActivePlans();
+              if (result.plansDeactivated > 0) {
+                logger.log(`[app:init:migration] ✅ Fixed ${result.usersFixed} users with multiple active plans`);
+              }
+              localStorage.setItem(migrationKey, 'true');
+            } catch (migrationError) {
+              logger.warn('[app:init:migration] ⚠️ Failed to fix multiple active plans:', migrationError);
+            }
+          }
+
           const user = await dbUtils.ensureUserReady();
           if (user) {
             logger.log(`[app:init:user] ✅ User ready: id=${user.id}, onboarding=${user.onboardingComplete}`);

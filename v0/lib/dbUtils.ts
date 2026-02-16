@@ -1408,6 +1408,61 @@ export async function createPlan(planData: Omit<Plan, 'id' | 'createdAt' | 'upda
 }
 
 /**
+ * Migration: Fix users with multiple active plans
+ * Keeps the most recently updated plan as active
+ */
+export async function fixMultipleActivePlans(): Promise<{ usersFixed: number; plansDeactivated: number }> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) {
+      return { usersFixed: 0, plansDeactivated: 0 };
+    }
+
+    const users = await database.users.toArray();
+    let usersFixed = 0;
+    let plansDeactivated = 0;
+
+    for (const user of users) {
+      if (!user.id) continue;
+
+      // Get all active plans for this user
+      const activePlans = await database.plans
+        .where('userId')
+        .equals(user.id)
+        .and(plan => plan.isActive)
+        .toArray();
+
+      if (activePlans.length <= 1) continue; // No issue
+
+      console.log(`[Migration] User ${user.id} has ${activePlans.length} active plans`);
+
+      // Sort by updatedAt (most recent first)
+      activePlans.sort((a, b) => {
+        const aTime = a.updatedAt?.getTime() ?? 0;
+        const bTime = b.updatedAt?.getTime() ?? 0;
+        return bTime - aTime;
+      });
+
+      // Keep first (most recent), deactivate rest
+      for (let i = 1; i < activePlans.length; i++) {
+        const plan = activePlans[i];
+        await database.plans.update(plan.id!, {
+          isActive: false,
+          updatedAt: new Date(),
+        });
+        plansDeactivated++;
+        console.log(`  Deactivated plan ${plan.id}: "${plan.title}"`);
+      }
+
+      usersFixed++;
+    }
+
+    console.log(`✅ Migration: Fixed ${usersFixed} users, deactivated ${plansDeactivated} plans`);
+    return { usersFixed, plansDeactivated };
+  }, 'fixMultipleActivePlans', { usersFixed: 0, plansDeactivated: 0 });
+}
+
+/**
  * Get active plan for user
  */
 export async function getActivePlan(userId: number): Promise<Plan | null> {
@@ -1786,11 +1841,19 @@ export async function getTodaysWorkout(userId: number): Promise<Workout | null> 
     const today = startOfDayUTC(nowUTC());
     const tomorrow = addDaysUTC(1, today);
 
-    // Get all plans for the user
-    const plans = await db.plans.where('userId').equals(userId).toArray();
-    const planIds = plans.map(p => p.id!).filter(Boolean);
+    // Get ONLY the active plan for the user
+    const activePlan = await db.plans
+      .where('userId')
+      .equals(userId)
+      .and(plan => plan.isActive)
+      .first();
 
-    if (planIds.length === 0) return null;
+    if (!activePlan || !activePlan.id) {
+      console.log(`[getTodaysWorkout] No active plan found for userId=${userId}`);
+      return null;
+    }
+
+    const planIds = [activePlan.id];
 
     const allWorkouts = await db.workouts.toArray();
 

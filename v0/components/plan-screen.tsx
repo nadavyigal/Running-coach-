@@ -28,6 +28,7 @@ export function PlanScreen() {
     plan: contextPlan,
     primaryGoal,
     userId,
+    refresh: refreshContext,
   } = useData()
 
   const [currentView, setCurrentView] = useState<"monthly" | "biweekly" | "progress">("monthly")
@@ -128,6 +129,10 @@ export function PlanScreen() {
         challenge: template,
       })
 
+      // Refresh ALL context data (plan, workouts, goals)
+      await refreshContext()
+
+      // Re-fetch local state
       const refreshedPlan = await dbUtils.getActivePlan(userId)
       if (refreshedPlan) {
         setPlan(refreshedPlan)
