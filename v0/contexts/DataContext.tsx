@@ -51,6 +51,7 @@ export type DataContextValue = {
   refresh: () => Promise<void>
   refreshGoals: () => Promise<void>
   refreshRuns: () => Promise<void>
+  refreshPlan: () => Promise<void>
   syncData: () => Promise<{ linkedRuns: number; updatedGoals: number; updatedWorkouts: number }>
 }
 
@@ -172,6 +173,27 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setAllRuns(all)
     } catch (err) {
       console.error("[DataContext] Failed to refresh runs:", err)
+    }
+  }, [userId])
+
+  // Refresh plan and workouts
+  const refreshPlan = useCallback(async () => {
+    if (!userId) return
+
+    try {
+      const activePlan = await dbUtils.getActivePlan(userId)
+      setPlan(activePlan)
+
+      // Also refresh workouts for the new plan
+      if (activePlan?.id) {
+        const { start, end } = getWeekBoundaries()
+        const workouts = await dbUtils.getWorkoutsForDateRange(userId, start, end)
+        setWeeklyWorkouts(workouts)
+      } else {
+        setWeeklyWorkouts([])
+      }
+    } catch (err) {
+      console.error("[DataContext] Failed to refresh plan:", err)
     }
   }, [userId])
 
@@ -366,6 +388,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     refresh,
     refreshGoals,
     refreshRuns,
+    refreshPlan,
     syncData,
   }
 

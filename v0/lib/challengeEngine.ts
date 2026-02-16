@@ -152,6 +152,15 @@ export async function startChallenge(
       });
     }
 
+    // Deactivate ALL existing active plans for this user
+    await db.plans
+      .where('userId')
+      .equals(userId)
+      .and(plan => plan.isActive)
+      .modify({ isActive: false, updatedAt: new Date() });
+
+    console.log(`[challengeEngine] Deactivated all active plans for user ${userId}`);
+
     // Create new challenge progress
     const progressId = await db.challengeProgress.add({
       userId,
@@ -168,6 +177,7 @@ export async function startChallenge(
 
     try {
       await db.plans.update(planId, {
+        isActive: true,
         isChallenge: true,
         challengeTemplateId: resolvedTemplateId,
         updatedAt: new Date(),
