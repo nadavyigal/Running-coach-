@@ -250,7 +250,7 @@ export function TodayScreen() {
         stripEnd.setHours(23, 59, 59, 999)
 
         const [stripWorkouts, todayWorkout] = await Promise.all([
-          dbUtils.getWorkoutsForDateRange(userId, stripStart, stripEnd),
+          dbUtils.getWorkoutsForDateRange(userId, stripStart, stripEnd, { planScope: "active" }),
           dbUtils.getTodaysWorkout(userId),
         ])
 
@@ -474,7 +474,7 @@ export function TodayScreen() {
       stripEnd.setHours(23, 59, 59, 999)
 
       const [stripWorkouts, todayWorkout] = await Promise.all([
-        dbUtils.getWorkoutsForDateRange(resolvedUserId, stripStart, stripEnd),
+        dbUtils.getWorkoutsForDateRange(resolvedUserId, stripStart, stripEnd, { planScope: "active" }),
         dbUtils.getTodaysWorkout(resolvedUserId),
       ])
 
@@ -518,7 +518,7 @@ export function TodayScreen() {
     const end = new Date(date)
     end.setHours(23, 59, 59, 999)
 
-    const workouts = await dbUtils.getWorkoutsForDateRange(userId, start, end)
+    const workouts = await dbUtils.getWorkoutsForDateRange(userId, start, end, { planScope: "active" })
     return workouts.find(matchesDate) ?? null
   }
 

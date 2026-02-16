@@ -30,7 +30,6 @@ import {
   nowUTC,
   addDaysUTC,
   getUserTimezone,
-  startOfDayUTC,
   migrateLocalDateToUTC
 } from './timezone-utils';
 import { SyncService } from './sync/sync-service';
@@ -57,6 +56,58 @@ function validateUserId(userId: number | string | undefined | null): number {
   }
 
   return id;
+}
+
+function toTimestamp(value?: Date): number {
+  if (!value) return 0;
+  const time = value.getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+/**
+ * Ensure a user has at most one active plan and return it.
+ * If duplicates exist, keep the most recently updated plan and deactivate the rest.
+ */
+async function getSingleActivePlanForUser(userId: number): Promise<Plan | null> {
+  const database = getDatabase();
+  if (!database) return null;
+
+  const activePlans = await database.plans
+    .where('userId')
+    .equals(userId)
+    .and((plan) => plan.isActive)
+    .toArray();
+
+  if (activePlans.length === 0) return null;
+  if (activePlans.length === 1) return activePlans[0] ?? null;
+
+  const sortedPlans = [...activePlans].sort((a, b) => {
+    const byUpdatedAt = toTimestamp(b.updatedAt) - toTimestamp(a.updatedAt);
+    if (byUpdatedAt !== 0) return byUpdatedAt;
+
+    const byCreatedAt = toTimestamp(b.createdAt) - toTimestamp(a.createdAt);
+    if (byCreatedAt !== 0) return byCreatedAt;
+
+    return (b.id ?? 0) - (a.id ?? 0);
+  });
+
+  const planToKeep = sortedPlans[0];
+  const plansToDeactivate = sortedPlans.slice(1);
+  const now = nowUTC();
+
+  for (const plan of plansToDeactivate) {
+    if (!plan.id) continue;
+    await database.plans.update(plan.id, {
+      isActive: false,
+      updatedAt: now,
+    });
+  }
+
+  console.warn(
+    `[dbUtils] Fixed duplicate active plans for userId=${userId}; kept planId=${planToKeep?.id}, deactivated=${plansToDeactivate.length}`
+  );
+
+  return planToKeep ?? null;
 }
 
 /**
@@ -1469,21 +1520,21 @@ export async function getActivePlan(userId: number): Promise<Plan | null> {
   return safeDbOperation(async () => {
     const phase = 'getActivePlan';
     const traceId = `${phase}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const validatedUserId = validateUserId(userId);
     
-    console.log(`[${phase}:start] traceId=${traceId} Fetching active plan for userId=${userId}`);
+    console.log(`[${phase}:start] traceId=${traceId} Fetching active plan for userId=${validatedUserId}`);
     
-    const database = getDatabase();
-    if (!database) {
+    if (!getDatabase()) {
       console.error(`[${phase}:error] traceId=${traceId} Database not available`);
       return null;
     }
     
-    const plan = await database.plans.where('userId').equals(userId).and(plan => plan.isActive).first();
+    const plan = await getSingleActivePlanForUser(validatedUserId);
     
     if (plan) {
       console.log(`[${phase}:success] traceId=${traceId} Active plan found: planId=${plan.id} title="${plan.title}"`);
     } else {
-      console.log(`[${phase}:not_found] traceId=${traceId} No active plan found for userId=${userId}`);
+      console.log(`[${phase}:not_found] traceId=${traceId} No active plan found for userId=${validatedUserId}`);
     }
     
     return plan || null;
@@ -1519,15 +1570,16 @@ export async function ensureUserHasActivePlan(userId: number): Promise<Plan> {
   return safeDbOperation(async () => {
     const database = getDatabase();
     if (!database) throw new Error('Database not available');
+    const validatedUserId = validateUserId(userId);
     
     // Check if there's already a plan creation in progress for this user
-    if (activePlanCreationLocks.has(userId)) {
+    if (activePlanCreationLocks.has(validatedUserId)) {
       console.log(`⏳ Plan creation already in progress for userId=${userId}, waiting...`);
-      return await activePlanCreationLocks.get(userId)!;
+      return await activePlanCreationLocks.get(validatedUserId)!;
     }
     
     // Check if user exists and has completed onboarding
-    const user = await database.users.get(userId);
+    const user = await database.users.get(validatedUserId);
     if (!user) {
       throw new Error('User not found');
     }
@@ -1537,7 +1589,7 @@ export async function ensureUserHasActivePlan(userId: number): Promise<Plan> {
     }
     
     // Check for existing active plan (double-check after potential wait)
-    const activePlan = await database.plans.where('userId').equals(userId).and(plan => plan.isActive).first();
+    const activePlan = await getSingleActivePlanForUser(validatedUserId);
     
     if (activePlan) {
       return activePlan;
@@ -1547,9 +1599,18 @@ export async function ensureUserHasActivePlan(userId: number): Promise<Plan> {
     const planCreationPromise = (async (): Promise<Plan> => {
       try {
         // Check for inactive plans to reactivate
-        const inactivePlan = await database.plans.where('userId').equals(userId).and(plan => !plan.isActive).first();
+        const inactivePlan = await database.plans.where('userId').equals(validatedUserId).and(plan => !plan.isActive).first();
         
         if (inactivePlan) {
+          await database.plans
+            .where('userId')
+            .equals(validatedUserId)
+            .and(plan => plan.isActive)
+            .modify({
+              isActive: false,
+              updatedAt: nowUTC(),
+            });
+
           await database.plans.update(inactivePlan.id!, { 
             isActive: true, 
             updatedAt: nowUTC() 
@@ -1561,7 +1622,7 @@ export async function ensureUserHasActivePlan(userId: number): Promise<Plan> {
         
         // Create a new basic plan
         const planData: Omit<Plan, 'id' | 'createdAt' | 'updatedAt'> = {
-          userId,
+          userId: validatedUserId,
           title: 'Default Running Plan',
           description: 'A basic running plan to get you started',
           startDate: nowUTC(),
@@ -1603,12 +1664,12 @@ export async function ensureUserHasActivePlan(userId: number): Promise<Plan> {
         return newPlan;
       } finally {
         // Always clean up the lock when done
-        activePlanCreationLocks.delete(userId);
+        activePlanCreationLocks.delete(validatedUserId);
       }
     })();
     
     // Set the lock before starting the operation
-    activePlanCreationLocks.set(userId, planCreationPromise);
+    activePlanCreationLocks.set(validatedUserId, planCreationPromise);
     
     return await planCreationPromise;
   }, 'ensureUserHasActivePlan');
@@ -1773,10 +1834,11 @@ export async function getWorkoutsForDateRange(
   userId: number,
   startDate: Date,
   endDate: Date,
-  options?: { limit?: number; offset?: number }
+  options?: { limit?: number; offset?: number; planScope?: 'all' | 'active' }
 ): Promise<Workout[]> {
   return safeDbOperation(async () => {
-    if (!db) return [];
+    const database = getDatabase();
+    if (!database) return [];
 
     // Security: Validate userId
     const validatedUserId = validateUserId(userId);
@@ -1801,14 +1863,23 @@ export async function getWorkoutsForDateRange(
       return [];
     }
 
-    // Get plans for the user with limit
-    const plans = await db.plans.where('userId').equals(validatedUserId).limit(100).toArray();
-    const planIds = plans.map(p => p.id!);
+    const planScope = options?.planScope ?? 'all';
+    let planIds: number[] = [];
+
+    if (planScope === 'active') {
+      const activePlan = await getSingleActivePlanForUser(validatedUserId);
+      if (!activePlan?.id) return [];
+      planIds = [activePlan.id];
+    } else {
+      // Get plans for the user with limit
+      const plans = await database.plans.where('userId').equals(validatedUserId).limit(100).toArray();
+      planIds = plans.map(p => p.id!).filter((id): id is number => typeof id === 'number');
+    }
 
     if (planIds.length === 0) return [];
 
     // Get workouts within date range with pagination
-    const allWorkouts = await db.workouts.limit(limit + offset).toArray();
+    const allWorkouts = await database.workouts.limit(limit + offset).toArray();
     const workouts = allWorkouts
       .map(workout => {
         // Normalize scheduledDate
@@ -1836,26 +1907,26 @@ export async function getWorkoutsForDateRange(
  */
 export async function getTodaysWorkout(userId: number): Promise<Workout | null> {
   return safeDbOperation(async () => {
-    if (!db) return null;
+    const database = getDatabase();
+    if (!database) return null;
+    const validatedUserId = validateUserId(userId);
 
-    const today = startOfDayUTC(nowUTC());
-    const tomorrow = addDaysUTC(1, today);
+    const today = normalizeDate(nowUTC());
+    if (!today) return null;
+    const tomorrow = new Date(today.getTime());
+    tomorrow.setDate(tomorrow.getDate() + 1);
 
     // Get ONLY the active plan for the user
-    const activePlan = await db.plans
-      .where('userId')
-      .equals(userId)
-      .and(plan => plan.isActive)
-      .first();
+    const activePlan = await getSingleActivePlanForUser(validatedUserId);
 
     if (!activePlan || !activePlan.id) {
-      console.log(`[getTodaysWorkout] No active plan found for userId=${userId}`);
+      console.log(`[getTodaysWorkout] No active plan found for userId=${validatedUserId}`);
       return null;
     }
 
     const planIds = [activePlan.id];
 
-    const allWorkouts = await db.workouts.toArray();
+    const allWorkouts = await database.workouts.toArray();
 
     // Filter ALL workouts for today (not just find the first one)
     const todaysWorkouts = allWorkouts

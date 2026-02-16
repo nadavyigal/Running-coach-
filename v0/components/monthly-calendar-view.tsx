@@ -60,7 +60,7 @@ export function MonthlyCalendarView() {
           const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
           endOfMonth.setHours(23, 59, 59, 999)
 
-          const monthWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfMonth, endOfMonth)
+          const monthWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfMonth, endOfMonth, { planScope: "active" })
           setWorkouts(monthWorkouts)
         }
       } catch (error) {
@@ -190,7 +190,7 @@ export function MonthlyCalendarView() {
       if (user && user.id) {
         const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
         const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
-        const monthWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfMonth, endOfMonth)
+        const monthWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfMonth, endOfMonth, { planScope: "active" })
         setWorkouts(monthWorkouts)
       }
 
@@ -235,7 +235,7 @@ export function MonthlyCalendarView() {
                 if (user && user.id) {
                   const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
                   const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
-                  const monthWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfMonth, endOfMonth)
+                  const monthWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfMonth, endOfMonth, { planScope: "active" })
                   setWorkouts(monthWorkouts)
                 }
               } catch (error) {

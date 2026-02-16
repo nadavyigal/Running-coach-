@@ -187,7 +187,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // Also refresh workouts for the new plan
       if (activePlan?.id) {
         const { start, end } = getWeekBoundaries()
-        const workouts = await dbUtils.getWorkoutsForDateRange(userId, start, end)
+        const workouts = await dbUtils.getWorkoutsForDateRange(userId, start, end, { planScope: "active" })
         setWeeklyWorkouts(workouts)
       } else {
         setWeeklyWorkouts([])
@@ -225,7 +225,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         dbUtils.getRunsInTimeRange(userId, start, end),
         dbUtils.getUserRuns(userId, 10),
         dbUtils.getRunsByUser(userId),
-        dbUtils.getWorkoutsForDateRange(userId, start, end),
+        dbUtils.getWorkoutsForDateRange(userId, start, end, { planScope: "active" }),
       ])
 
       if (refreshedUser) {
@@ -351,11 +351,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const handleRunSaved = () => {
       refreshRuns()
       refreshGoals()
+      refreshPlan()
     }
 
     window.addEventListener("run-saved", handleRunSaved)
     return () => window.removeEventListener("run-saved", handleRunSaved)
-  }, [refreshRuns, refreshGoals])
+  }, [refreshRuns, refreshGoals, refreshPlan])
 
   // Listen for goal updates - also sync to recalculate progress from runs
   useEffect(() => {

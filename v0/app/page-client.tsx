@@ -432,7 +432,7 @@ export default function RunSmartApp() {
           logger.log('[app:init:migration] ✅ Startup migration completed');
 
           // Run one-time migration to fix multiple active plans
-          const migrationKey = 'migration_fix_multiple_active_plans_v1';
+          const migrationKey = 'migration_fix_multiple_active_plans_v2';
           if (!localStorage.getItem(migrationKey)) {
             try {
               const result = await dbUtils.fixMultipleActivePlans();
