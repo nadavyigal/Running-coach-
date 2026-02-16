@@ -1,4 +1,5 @@
-import { db, type ChallengeProgress, type ChallengeTemplate } from './db';
+import { db, type ChallengeProgress, type ChallengeTemplate, type Workout } from './db';
+import { getNextChallengeRecommendation } from './challengeTemplates';
 
 /**
  * Challenge Engine - Core logic for Challenge-Led Growth Engine
@@ -13,6 +14,85 @@ export interface DailyChallengeData {
   isLastDay: boolean;
   daysRemaining: number;
   streakDays: number;
+}
+
+function emitChallengeUpdated(userId: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent('challenge-updated', { detail: { userId } }));
+  } catch (error) {
+    console.warn('[challengeEngine] Failed to emit challenge-updated event:', error);
+  }
+}
+
+const WORKOUT_THEME_LABELS: Record<Workout['type'], string> = {
+  easy: 'Easy Run',
+  tempo: 'Tempo Session',
+  intervals: 'Intervals',
+  long: 'Long Run',
+  'time-trial': 'Time Trial',
+  hill: 'Hill Repeats',
+  rest: 'Active Recovery',
+  'race-pace': 'Race Pace Session',
+  recovery: 'Recovery Run',
+  fartlek: 'Fartlek',
+};
+
+function normalizeToDay(dateValue: Date | string | number | null | undefined): Date | null {
+  if (!dateValue) return null;
+  const date = dateValue instanceof Date ? new Date(dateValue) : new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function getDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function choosePrimaryWorkoutForDay(workouts: Workout[]): Workout | null {
+  if (workouts.length === 0) return null;
+
+  const sorted = [...workouts].sort((a, b) => {
+    if (a.completed !== b.completed) {
+      return a.completed ? 1 : -1;
+    }
+    return (a.id ?? 0) - (b.id ?? 0);
+  });
+
+  return sorted[0] ?? null;
+}
+
+function getTemplateDayTheme(currentDay: number, template: ChallengeTemplate): string {
+  return currentDay <= template.dailyThemes.length
+    ? template.dailyThemes[currentDay - 1] ?? `Day ${currentDay}: Keep going!`
+    : `Day ${currentDay}: Bonus day!`;
+}
+
+async function getPlannedWorkoutDayTheme(progress: ChallengeProgress, challengeDay: number): Promise<string | null> {
+  if (!progress.planId) return null;
+
+  const startDate = normalizeToDay(progress.startDate);
+  if (!startDate) return null;
+
+  const challengeDate = new Date(startDate);
+  challengeDate.setDate(challengeDate.getDate() + Math.max(0, challengeDay - 1));
+  const challengeDateKey = getDateKey(challengeDate);
+
+  const planWorkouts = await db.workouts.where('planId').equals(progress.planId).toArray();
+  const sameDayWorkouts = planWorkouts.filter((workout) => {
+    const normalized = normalizeToDay(workout.scheduledDate);
+    return normalized ? getDateKey(normalized) === challengeDateKey : false;
+  });
+
+  const primaryWorkout = choosePrimaryWorkoutForDay(sameDayWorkouts);
+  if (!primaryWorkout) return null;
+
+  const workoutLabel = WORKOUT_THEME_LABELS[primaryWorkout.type] ?? primaryWorkout.type;
+  return `Day ${challengeDay}: ${workoutLabel}`;
 }
 
 /**
@@ -56,11 +136,11 @@ export async function getDailyChallengeData(
   const isLastDay = currentDay === totalDays;
   const daysRemaining = Math.max(0, totalDays - currentDay);
 
-  // Get day theme (handle array bounds)
+  // Prefer the actual workout scheduled in the challenge plan for this day.
+  // Fall back to template themes when a workout isn't available.
   const dayTheme =
-    currentDay <= template.dailyThemes.length
-      ? template.dailyThemes[currentDay - 1] ?? `Day ${currentDay}: Keep going!`
-      : `Day ${currentDay}: Bonus day!`;
+    (await getPlannedWorkoutDayTheme(progress, currentDay)) ??
+    getTemplateDayTheme(currentDay, template);
 
   return {
     currentDay: Math.min(currentDay, totalDays),
@@ -94,14 +174,14 @@ export async function getActiveChallenge(userId: number): Promise<{
     const template = await db.challengeTemplates.get(progress.challengeTemplateId);
     if (!template) return null;
 
-    // Get daily data
-    const dailyData = await getDailyChallengeData(progress, template);
-
-    // Auto-complete if past end date
-    if (isChallengeComplete(dailyData.currentDay, dailyData.totalDays)) {
+    const currentDay = calculateChallengeDay(progress.startDate);
+    if (isChallengeComplete(currentDay, template.durationDays)) {
       await completeChallengeAutomatically(progress, template);
       return null;
     }
+
+    // Get daily data
+    const dailyData = await getDailyChallengeData(progress, template);
 
     return {
       progress,
@@ -189,6 +269,8 @@ export async function startChallenge(
     const progress = await db.challengeProgress.get(progressId);
     if (!progress) throw new Error('Failed to create challenge progress');
 
+    emitChallengeUpdated(userId);
+
     return progress;
   } catch (error) {
     console.error('[challengeEngine] Error starting challenge:', error);
@@ -229,6 +311,8 @@ export async function updateChallengeOnWorkoutComplete(
     if (currentDay >= template.durationDays) {
       await completeChallenge(progressId);
     }
+
+    emitChallengeUpdated(progress.userId);
   } catch (error) {
     console.error('[challengeEngine] Error updating challenge progress:', error);
   }
@@ -256,6 +340,7 @@ export async function completeChallenge(progressId: number): Promise<void> {
     });
 
     console.log(`[challengeEngine] Challenge completed: ${template.name}`);
+    emitChallengeUpdated(progress.userId);
   } catch (error) {
     console.error('[challengeEngine] Error completing challenge:', error);
   }
@@ -322,10 +407,14 @@ export async function getCompletedChallengeCount(userId: number): Promise<number
  */
 export async function abandonChallenge(progressId: number): Promise<void> {
   try {
+    const progress = await db.challengeProgress.get(progressId);
     await db.challengeProgress.update(progressId, {
       status: 'abandoned',
       updatedAt: new Date(),
     });
+    if (progress?.userId) {
+      emitChallengeUpdated(progress.userId);
+    }
   } catch (error) {
     console.error('[challengeEngine] Error abandoning challenge:', error);
   }

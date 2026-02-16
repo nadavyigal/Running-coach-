@@ -64,6 +64,26 @@ function toTimestamp(value?: Date): number {
   return Number.isFinite(time) ? time : 0;
 }
 
+function getLocalDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function choosePrimaryWorkoutForDay(workouts: Workout[]): Workout | null {
+  if (workouts.length === 0) return null;
+
+  const sorted = [...workouts].sort((a, b) => {
+    if (a.completed !== b.completed) {
+      return a.completed ? 1 : -1;
+    }
+    return (a.id ?? 0) - (b.id ?? 0);
+  });
+
+  return sorted[0] ?? null;
+}
+
 /**
  * Ensure a user has at most one active plan and return it.
  * If duplicates exist, keep the most recently updated plan and deactivate the rest.
@@ -1880,7 +1900,7 @@ export async function getWorkoutsForDateRange(
 
     // Get workouts within date range with pagination
     const allWorkouts = await database.workouts.limit(limit + offset).toArray();
-    const workouts = allWorkouts
+    let workouts = allWorkouts
       .map(workout => {
         // Normalize scheduledDate
         const normalizedScheduledDate = normalizeDate(workout.scheduledDate);
@@ -1895,8 +1915,29 @@ export async function getWorkoutsForDateRange(
         planIds.includes(workout.planId) &&
         workout.scheduledDate >= normalizedStart &&
         workout.scheduledDate <= normalizedEnd
-      )
-      .slice(offset, offset + limit);
+      );
+
+    // For active-plan views, enforce one canonical workout per day to keep screens consistent.
+    if (planScope === 'active' && workouts.length > 1) {
+      const workoutsByDay = new Map<string, Workout[]>();
+      for (const workout of workouts) {
+        const key = getLocalDateKey(workout.scheduledDate);
+        const bucket = workoutsByDay.get(key) ?? [];
+        bucket.push(workout);
+        workoutsByDay.set(key, bucket);
+      }
+
+      workouts = Array.from(workoutsByDay.values())
+        .map((dailyWorkouts) => choosePrimaryWorkoutForDay(dailyWorkouts))
+        .filter((workout): workout is Workout => workout !== null)
+        .sort((a, b) => {
+          const dateDiff = a.scheduledDate.getTime() - b.scheduledDate.getTime();
+          if (dateDiff !== 0) return dateDiff;
+          return (a.id ?? 0) - (b.id ?? 0);
+        });
+    }
+
+    workouts = workouts.slice(offset, offset + limit);
 
     return workouts;
   }, 'getWorkoutsForDateRange', []);

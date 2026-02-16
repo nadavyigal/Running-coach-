@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -65,7 +65,7 @@ import { useBetaSignupCount } from "@/lib/hooks/useBetaSignupCount"
 import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
 import { ChallengeProgressRing } from "@/components/challenge-progress-ring"
 import { DailyChallengePrompt } from "@/components/daily-challenge-prompt"
-import { getActiveChallenge, getDailyChallengeData } from "@/lib/challengeEngine"
+import { getActiveChallenge } from "@/lib/challengeEngine"
 import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db"
 import type { DailyChallengeData } from "@/lib/challengeEngine"
 import { RecoveryEngine } from "@/lib/recoveryEngine"
@@ -110,8 +110,7 @@ export function TodayScreen() {
   const [showRescheduleModal, setShowRescheduleModal] = useState(false)
   const [showDateWorkoutModal, setShowDateWorkoutModal] = useState(false)
   const [selectedDateWorkout, setSelectedDateWorkout] = useState<any>(null)
-  const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate } | null>(null)
-  const [dailyChallengeData, setDailyChallengeData] = useState<DailyChallengeData | null>(null)
+  const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate; dailyData: DailyChallengeData } | null>(null)
   const [workoutToDelete, setWorkoutToDelete] = useState<number | null>(null)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(new Date())
   const { toast } = useToast()
@@ -266,40 +265,39 @@ export function TodayScreen() {
     initializeLocalData()
   }, [userId])
 
-  // Load active challenge data
-  useEffect(() => {
-    const loadChallengeData = async () => {
-      if (!userId) {
-        setActiveChallenge(null)
-        setDailyChallengeData(null)
-        return
-      }
-
-      try {
-        const challenge = await getActiveChallenge(userId)
-
-        if (challenge) {
-          setActiveChallenge(challenge)
-
-          // Get daily challenge data for today
-          const dailyData = getDailyChallengeData(
-            challenge.progress,
-            challenge.template
-          )
-          setDailyChallengeData(dailyData)
-        } else {
-          setActiveChallenge(null)
-          setDailyChallengeData(null)
-        }
-      } catch (error) {
-        console.error("Error loading challenge data:", error)
-        setActiveChallenge(null)
-        setDailyChallengeData(null)
-      }
+  const loadChallengeData = useCallback(async () => {
+    if (!userId) {
+      setActiveChallenge(null)
+      return
     }
 
-    loadChallengeData()
+    try {
+      const challenge = await getActiveChallenge(userId)
+      setActiveChallenge(challenge)
+    } catch (error) {
+      console.error("Error loading challenge data:", error)
+      setActiveChallenge(null)
+    }
   }, [userId])
+
+  // Load active challenge data
+  useEffect(() => {
+    void loadChallengeData()
+  }, [loadChallengeData])
+
+  // Keep challenge tracker fresh after run completion or challenge updates
+  useEffect(() => {
+    const handleChallengeRefresh = () => {
+      void loadChallengeData()
+    }
+
+    window.addEventListener("run-saved", handleChallengeRefresh)
+    window.addEventListener("challenge-updated", handleChallengeRefresh)
+    return () => {
+      window.removeEventListener("run-saved", handleChallengeRefresh)
+      window.removeEventListener("challenge-updated", handleChallengeRefresh)
+    }
+  }, [loadChallengeData])
 
   useEffect(() => {
     let cancelled = false
@@ -708,10 +706,10 @@ export function TodayScreen() {
           />
         </div>
       )}
-      {activeChallenge && dailyChallengeData && (
+      {activeChallenge && (
         <div className="px-4 space-y-4">
           <ChallengeProgressRing
-            data={dailyChallengeData}
+            data={activeChallenge.dailyData}
             challengeName={activeChallenge.template.name}
             showDetails={true}
           />

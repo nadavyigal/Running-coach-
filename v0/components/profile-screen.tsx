@@ -41,7 +41,7 @@ import {
 } from "lucide-react"
 import { AddShoesModal } from "@/components/add-shoes-modal"
 import { ReminderSettings } from "@/components/reminder-settings"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { BadgeCabinet } from "@/components/badge-cabinet";
@@ -148,37 +148,37 @@ export function ProfileScreen() {
     loadGoalProgress()
   }, [goals])
 
-  // Load challenge history and active challenge
-  useEffect(() => {
-    const loadChallengeData = async () => {
-      if (!userId) {
-        setChallengeHistory([])
-        setActiveChallenge(null)
-        return
-      }
-
-      setIsChallengesLoading(true)
-      try {
-        // Load active challenge
-        const active = await getActiveChallenge(userId)
-        setActiveChallenge(active)
-
-        // Load challenge history (filter out active challenge to avoid duplication)
-        const history = await getChallengeHistory(userId)
-        // Only show completed/abandoned challenges in history
-        const filteredHistory = history.filter(ch => ch.progress.status !== 'active')
-        setChallengeHistory(filteredHistory)
-      } catch (error) {
-        console.error("Error loading challenge data:", error)
-        setChallengeHistory([])
-        setActiveChallenge(null)
-      } finally {
-        setIsChallengesLoading(false)
-      }
+  const loadChallengeData = useCallback(async () => {
+    if (!userId) {
+      setChallengeHistory([])
+      setActiveChallenge(null)
+      return
     }
 
-    loadChallengeData()
+    setIsChallengesLoading(true)
+    try {
+      // Load active challenge
+      const active = await getActiveChallenge(userId)
+      setActiveChallenge(active)
+
+      // Load challenge history (filter out active challenge to avoid duplication)
+      const history = await getChallengeHistory(userId)
+      // Only show completed/abandoned challenges in history
+      const filteredHistory = history.filter(ch => ch.progress.status !== 'active')
+      setChallengeHistory(filteredHistory)
+    } catch (error) {
+      console.error("Error loading challenge data:", error)
+      setChallengeHistory([])
+      setActiveChallenge(null)
+    } finally {
+      setIsChallengesLoading(false)
+    }
   }, [userId])
+
+  // Load challenge history and active challenge
+  useEffect(() => {
+    void loadChallengeData()
+  }, [loadChallengeData])
 
   const availableChallenges = getActiveChallengeTemplates()
 
@@ -309,12 +309,7 @@ export function ProfileScreen() {
         challenge: template,
       })
 
-      const active = await getActiveChallenge(userId)
-      setActiveChallenge(active)
-
-      const history = await getChallengeHistory(userId)
-      const filteredHistory = history.filter(ch => ch.progress.status !== 'active')
-      setChallengeHistory(filteredHistory)
+      await loadChallengeData()
       await refreshContext()
 
       toast({
@@ -420,13 +415,21 @@ export function ProfileScreen() {
 
     loadRuns()
 
-    const onRunSaved = () => loadRuns()
+    const onRunSaved = () => {
+      void loadRuns()
+      void loadChallengeData()
+    }
+    const onChallengeUpdated = () => {
+      void loadChallengeData()
+    }
     window.addEventListener('run-saved', onRunSaved)
+    window.addEventListener('challenge-updated', onChallengeUpdated)
     return () => {
       cancelled = true
       window.removeEventListener('run-saved', onRunSaved)
+      window.removeEventListener('challenge-updated', onChallengeUpdated)
     }
-  }, [userId])
+  }, [userId, loadChallengeData])
 
   useEffect(() => {
     const loadUserData = async (retryCount = 0) => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -17,7 +17,8 @@ import { useData } from "@/contexts/DataContext"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
 import { formatLocalizedDate } from "@/lib/timezone-utils"
 import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
-import { getActiveChallenge, getDailyChallengeData } from "@/lib/challengeEngine"
+import { getActiveChallenge } from "@/lib/challengeEngine"
+import type { DailyChallengeData } from "@/lib/challengeEngine"
 import { NextChallengeRecommendation } from "@/components/next-challenge-recommendation"
 import { getNextChallengeRecommendation } from "@/lib/challengeTemplates"
 import { startChallengeAndSyncPlan } from "@/lib/challenge-plan-sync"
@@ -38,9 +39,39 @@ export function PlanScreen() {
   const [plan, setPlan] = useState<Plan | null>(null)
   const [workouts, setWorkouts] = useState<Workout[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate } | null>(null)
+  const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate; dailyData: DailyChallengeData } | null>(null)
   const [recommendedChallenge, setRecommendedChallenge] = useState<ChallengeTemplate | null>(null)
   const { toast } = useToast()
+
+  const collapseToSingleWorkoutPerDay = (input: Workout[]): Workout[] => {
+    const byDay = new Map<string, Workout[]>()
+
+    for (const workout of input) {
+      const scheduledDate = new Date(workout.scheduledDate)
+      if (Number.isNaN(scheduledDate.getTime())) continue
+      const key = `${scheduledDate.getFullYear()}-${scheduledDate.getMonth() + 1}-${scheduledDate.getDate()}`
+      const bucket = byDay.get(key) ?? []
+      bucket.push(workout)
+      byDay.set(key, bucket)
+    }
+
+    return Array.from(byDay.values())
+      .map((dailyWorkouts) =>
+        [...dailyWorkouts].sort((a, b) => {
+          if (a.completed !== b.completed) {
+            return a.completed ? 1 : -1
+          }
+          return (a.id ?? 0) - (b.id ?? 0)
+        })[0]
+      )
+      .filter((workout): workout is Workout => Boolean(workout))
+      .sort((a, b) => {
+        const dateA = new Date(a.scheduledDate).getTime()
+        const dateB = new Date(b.scheduledDate).getTime()
+        if (dateA !== dateB) return dateA - dateB
+        return (a.id ?? 0) - (b.id ?? 0)
+      })
+  }
 
   // Sync plan from context
   useEffect(() => {
@@ -49,47 +80,58 @@ export function PlanScreen() {
     }
   }, [contextPlan])
 
-  // Load active challenge
-  useEffect(() => {
-    const loadChallengeData = async () => {
-      if (!userId) {
-        setActiveChallenge(null)
-        setRecommendedChallenge(null)
-        return
-      }
-
-      try {
-        const challenge = await getActiveChallenge(userId)
-
-        if (challenge) {
-          setActiveChallenge(challenge)
-          setRecommendedChallenge(null)
-        } else {
-          // No active challenge, check if we should recommend one
-          setActiveChallenge(null)
-          // Get recommendation based on completed challenges
-          const recommendation = getNextChallengeRecommendation()
-          setRecommendedChallenge(recommendation)
-        }
-      } catch (error) {
-        console.error("Error loading challenge data:", error)
-        setActiveChallenge(null)
-        setRecommendedChallenge(null)
-      }
+  const loadChallengeData = useCallback(async () => {
+    if (!userId) {
+      setActiveChallenge(null)
+      setRecommendedChallenge(null)
+      return
     }
 
-    loadChallengeData()
+    try {
+      const challenge = await getActiveChallenge(userId)
+
+      if (challenge) {
+        setActiveChallenge(challenge)
+        setRecommendedChallenge(null)
+      } else {
+        // No active challenge, check if we should recommend one
+        setActiveChallenge(null)
+        // Get recommendation based on completed challenges
+        const recommendation = getNextChallengeRecommendation()
+        setRecommendedChallenge(recommendation)
+      }
+    } catch (error) {
+      console.error("Error loading challenge data:", error)
+      setActiveChallenge(null)
+      setRecommendedChallenge(null)
+    }
   }, [userId])
+
+  // Load active challenge
+  useEffect(() => {
+    void loadChallengeData()
+  }, [loadChallengeData])
+
+  useEffect(() => {
+    const onChallengeUpdated = () => {
+      void loadChallengeData()
+    }
+    window.addEventListener("run-saved", onChallengeUpdated)
+    window.addEventListener("challenge-updated", onChallengeUpdated)
+    return () => {
+      window.removeEventListener("run-saved", onChallengeUpdated)
+      window.removeEventListener("challenge-updated", onChallengeUpdated)
+    }
+  }, [loadChallengeData])
 
   // Calculate challenge day progress
   const calculateChallengeProgress = () => {
     // If we have an active challenge, use its progress
     if (activeChallenge) {
-      const dailyData = getDailyChallengeData(
-        activeChallenge.progress,
-        activeChallenge.template
-      )
-      return { currentDay: dailyData.currentDay, totalDays: dailyData.totalDays }
+      return {
+        currentDay: activeChallenge.dailyData.currentDay,
+        totalDays: activeChallenge.dailyData.totalDays,
+      }
     }
 
     // Fallback to plan-based calculation
@@ -138,13 +180,12 @@ export function PlanScreen() {
         setPlan(refreshedPlan)
         if (refreshedPlan.id) {
           const refreshedWorkouts = await dbUtils.getWorkoutsByPlan(refreshedPlan.id)
-          setWorkouts(refreshedWorkouts)
+          setWorkouts(collapseToSingleWorkoutPerDay(refreshedWorkouts))
         }
       }
 
       // Reload challenge data
-      const challenge = await getActiveChallenge(userId)
-      setActiveChallenge(challenge)
+      await loadChallengeData()
       setRecommendedChallenge(null)
 
       toast({
@@ -212,8 +253,9 @@ export function PlanScreen() {
 
       try {
         const planWorkouts = await dbUtils.getPlanWorkouts(plan.id)
-        setWorkouts(planWorkouts)
-        console.log('📅 PlanScreen: Loaded', planWorkouts.length, 'workouts for plan', plan.id)
+        const dailyWorkouts = collapseToSingleWorkoutPerDay(planWorkouts)
+        setWorkouts(dailyWorkouts)
+        console.log('📅 PlanScreen: Loaded', dailyWorkouts.length, 'workouts for plan', plan.id)
       } catch (error) {
         const errorInfo = dbUtils.handleDatabaseError(error, 'loading')
         toast({
@@ -637,7 +679,7 @@ export function PlanScreen() {
                   if (activePlan) {
                     setPlan(activePlan)
                     const planWorkouts = await dbUtils.getPlanWorkouts(activePlan.id!)
-                    setWorkouts(planWorkouts)
+                    setWorkouts(collapseToSingleWorkoutPerDay(planWorkouts))
                   }
                 }
               } catch (error) {

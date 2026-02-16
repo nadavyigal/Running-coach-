@@ -134,4 +134,26 @@ describe('Training plan consistency', () => {
     expect(todaysWorkout?.planId).toBe(newPlanId)
     expect(todaysWorkout?.type).toBe('intervals')
   })
+
+  it('returns a single canonical workout per day for active-plan date ranges', async () => {
+    const userId = await createTestUser()
+    const activePlanId = await addPlan(userId, { isActive: true, title: 'Active Plan' })
+
+    const today = new Date()
+    today.setUTCHours(12, 0, 0, 0)
+
+    await addWorkout(activePlanId, today, { type: 'rest', completed: true })
+    const expectedWorkoutId = await addWorkout(activePlanId, today, { type: 'intervals', completed: false })
+
+    const start = new Date(today)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(today)
+    end.setHours(23, 59, 59, 999)
+
+    const workouts = await dbUtils.getWorkoutsForDateRange(userId, start, end, { planScope: 'active' })
+
+    expect(workouts).toHaveLength(1)
+    expect(workouts[0]?.id).toBe(expectedWorkoutId)
+    expect(workouts[0]?.type).toBe('intervals')
+  })
 })
