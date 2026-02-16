@@ -3,7 +3,7 @@
 import type { ReactNode } from "react"
 
 type RechartsTooltipPayload = Array<{
-  value?: number | string
+  value?: number | string | Array<number | string>
 }> | undefined
 
 interface TodayChartTooltipContentProps {

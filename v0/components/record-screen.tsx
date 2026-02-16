@@ -48,6 +48,14 @@ type GPSCoordinate = GPSPoint
 
 type GPSRejectReason = 'accuracy' | 'duplicate' | 'stale' | 'speed' | 'jitter'
 
+const EMPTY_GPS_REJECT_REASONS: Record<GPSRejectReason, number> = {
+  accuracy: 0,
+  duplicate: 0,
+  jitter: 0,
+  speed: 0,
+  stale: 0,
+}
+
 interface RunMetrics {
   distance: number // in km
   duration: number // in seconds
@@ -408,7 +416,7 @@ export function RecordScreen() {
   const acceptedPointCountRef = useRef(0)
   const rejectedPointCountRef = useRef(0)
   const gpsQualityWarningShownRef = useRef(false)
-  const rejectionReasonsRef = useRef<Record<GPSRejectReason, number>>({})
+  const rejectionReasonsRef = useRef<Record<GPSRejectReason, number>>({ ...EMPTY_GPS_REJECT_REASONS })
   const GPS_MAX_ACCEPTABLE_ACCURACY_METERS = 50
   const GPS_DEFAULT_ACCURACY_METERS = 50
   const GPS_MIN_TIME_DELTA_MS = 400  // Reduced from 700ms to 400ms to accept more frequent GPS updates
@@ -829,8 +837,8 @@ export function RecordScreen() {
     rejectedPointCountRef.current = nextRejected
     setGpsAcceptedCount(nextAccepted)
     setGpsRejectedCount(nextRejected)
-    rejectionReasonsRef.current = {}
-    setGpsRejectReasons({})
+    rejectionReasonsRef.current = { ...EMPTY_GPS_REJECT_REASONS }
+    setGpsRejectReasons({ ...EMPTY_GPS_REJECT_REASONS })
     setLastRejectReason(null)
 
     setAutoPauseActive(false)
@@ -1207,10 +1215,10 @@ export function RecordScreen() {
     acceptedPointCountRef.current = 0
     rejectedPointCountRef.current = 0
     gpsQualityWarningShownRef.current = false
-    rejectionReasonsRef.current = {}
+    rejectionReasonsRef.current = { ...EMPTY_GPS_REJECT_REASONS }
     setGpsAcceptedCount(0)
     setGpsRejectedCount(0)
-    setGpsRejectReasons({})
+    setGpsRejectReasons({ ...EMPTY_GPS_REJECT_REASONS })
     setLastRejectReason(null)
     setLastSegmentStats(null)
   }
@@ -2331,12 +2339,9 @@ export function RecordScreen() {
       // Update challenge progress if there's an active challenge
       if (activeChallenge) {
         try {
-          const result = await updateChallengeOnWorkoutComplete(
-            user.id,
-            activeChallenge.progress.id!
-          )
+          const result = await updateChallengeOnWorkoutComplete(activeChallenge.progress.id!, new Date())
 
-          if (result.challengeCompleted) {
+          if (result?.challengeCompleted) {
             // Challenge completed! Show challenge completion modal
             setChallengeCompletionData({
               progress: result.progress,
@@ -2390,6 +2395,7 @@ export function RecordScreen() {
           title: "Plan updated based on your recent performance",
           action: (
             <ToastAction
+              altText="View plan changes"
               onClick={() => {
                 router.push("/plan")
               }}
@@ -2409,6 +2415,7 @@ export function RecordScreen() {
           variant: "destructive",
           action: (
             <ToastAction
+              altText="Retry adaptive plan update"
               onClick={() => {
                 void retryPostRunAdaptation({
                   userId: user.id,

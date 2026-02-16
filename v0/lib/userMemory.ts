@@ -187,7 +187,7 @@ export const restoreUserMemory = async (): Promise<User | null> => {
 
     const restoredUser = reviveDates(snapshot.user)
 
-    await db.transaction('rw', db.users, db.plans, db.workouts, db.goals, db.runs, db.routes, async () => {
+    await db.transaction('rw', [db.users, db.plans, db.workouts, db.goals, db.runs, db.routes], async () => {
       await db.users.put(restoredUser)
 
       if (snapshot.plan) {

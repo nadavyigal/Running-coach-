@@ -4,11 +4,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowRight, Sparkles, Calendar, Target } from 'lucide-react';
-import { type ChallengeTemplate } from '@/lib/db';
+import { type ChallengeTemplateSeed } from '@/lib/challengeTemplates';
 
 export interface NextChallengeRecommendationProps {
-  template: ChallengeTemplate;
-  onStartChallenge: (template: ChallengeTemplate) => void;
+  template: ChallengeTemplateSeed;
+  onStartChallenge: (template: ChallengeTemplateSeed) => void;
   className?: string;
 }
 
