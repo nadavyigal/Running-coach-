@@ -125,13 +125,15 @@ export class RecordingCheckpointService {
    */
   async getIncompleteSession(userId: number): Promise<ActiveRecordingSession | null> {
     try {
+      let localSession: ActiveRecordingSession | null = null;
+
       // Check localStorage first (most recent)
       const localCheckpoint = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (localCheckpoint) {
         const checkpoint: RecordingCheckpoint = JSON.parse(localCheckpoint);
         if (checkpoint.userId === userId && checkpoint.status !== 'interrupted') {
           // Convert to ActiveRecordingSession format
-          const session: ActiveRecordingSession = {
+          localSession = {
             id: checkpoint.sessionId,
             userId: checkpoint.userId,
             status: checkpoint.status,
@@ -153,7 +155,12 @@ export class RecordingCheckpointService {
             createdAt: new Date(checkpoint.startedAt),
             updatedAt: new Date(checkpoint.lastCheckpointAt),
           } as ActiveRecordingSession;
-          return session;
+
+          // If we have a durable session ID, we can return immediately.
+          if (typeof checkpoint.sessionId === 'number') {
+            this.sessionId = checkpoint.sessionId;
+            return localSession;
+          }
         }
       }
 
@@ -167,10 +174,14 @@ export class RecordingCheckpointService {
       if (sessions.length > 0) {
         // Return the most recent session
         const sorted = sessions.sort((a, b) => b.lastCheckpointAt.getTime() - a.lastCheckpointAt.getTime());
-        return sorted[0] || null;
+        const session = sorted[0] || null;
+        if (session?.id !== undefined) {
+          this.sessionId = session.id;
+        }
+        return session;
       }
 
-      return null;
+      return localSession;
     } catch (e) {
       console.error('[Checkpoint] Failed to get incomplete session:', e);
       return null;
@@ -196,6 +207,47 @@ export class RecordingCheckpointService {
       }
     } catch (e) {
       console.error('[Checkpoint] Failed to clear checkpoint:', e);
+      throw e;
+    }
+  }
+
+  /**
+   * Clear all incomplete sessions for a user (local + IndexedDB fallback)
+   */
+  async clearAllIncompleteSessions(userId: number): Promise<number> {
+    try {
+      const localCheckpoint = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (localCheckpoint) {
+        try {
+          const checkpoint: RecordingCheckpoint = JSON.parse(localCheckpoint);
+          if (checkpoint.userId === userId) {
+            localStorage.removeItem(LOCAL_STORAGE_KEY);
+          }
+        } catch {
+          // Malformed checkpoint should not block recovery/discard flows.
+          localStorage.removeItem(LOCAL_STORAGE_KEY);
+        }
+      }
+
+      const sessions = await db.activeRecordingSessions
+        .where('userId')
+        .equals(userId)
+        .filter(s => s.status === 'recording' || s.status === 'paused')
+        .toArray();
+
+      const sessionIds = sessions
+        .map(session => session.id)
+        .filter((id): id is number => typeof id === 'number');
+
+      if (sessionIds.length > 0) {
+        await db.activeRecordingSessions.bulkDelete(sessionIds);
+      }
+
+      this.sessionId = undefined;
+      return sessionIds.length;
+    } catch (e) {
+      console.error('[Checkpoint] Failed to clear all incomplete sessions:', e);
+      throw e;
     }
   }
 

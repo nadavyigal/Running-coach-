@@ -1901,10 +1901,44 @@ export function RecordScreen() {
       router.push("/")
       return
     }
+    const userId = user.id
 
     // Initialize checkpoint service if not already done
     if (!checkpointServiceRef.current) {
-      checkpointServiceRef.current = new RecordingCheckpointService(user.id)
+      checkpointServiceRef.current = new RecordingCheckpointService(userId)
+    }
+
+    const discardIncompleteSession = async (sessionId?: number) => {
+      if (!checkpointServiceRef.current) {
+        checkpointServiceRef.current = new RecordingCheckpointService(userId)
+      }
+
+      try {
+        const clearedCount = await checkpointServiceRef.current.clearAllIncompleteSessions(userId)
+        if (typeof sessionId === 'number') {
+          await checkpointServiceRef.current.clearCheckpoint(sessionId)
+        }
+        sessionIdRef.current = undefined
+        try {
+          sessionStorage.removeItem('recording_recovery')
+        } catch {
+          // Ignore sessionStorage failures in private browsing modes
+        }
+        toast({
+          title: "Previous recording discarded",
+          description:
+            clearedCount > 1
+              ? "Multiple stale recordings were cleared. Tap Start Run again."
+              : "Tap Start Run again to begin a new run.",
+        })
+      } catch (err) {
+        console.error('[RecordScreen] Failed to discard incomplete recording:', err)
+        toast({
+          title: "Unable to discard recording",
+          description: "Please try again from the home recovery prompt.",
+          variant: "destructive",
+        })
+      }
     }
 
     // Check for existing active session
@@ -1913,8 +1947,18 @@ export function RecordScreen() {
       if (existingSession) {
         toast({
           title: "Previous Recording Found",
-          description: "You have an incomplete recording. Please use the recovery option from the home screen.",
+          description: "Discard the previous recording to start a new run, or resume it from the home recovery prompt.",
           variant: "default",
+          action: (
+            <ToastAction
+              altText="Discard previous recording"
+              onClick={() => {
+                void discardIncompleteSession(existingSession.id)
+              }}
+            >
+              Discard
+            </ToastAction>
+          ),
         })
         return
       }

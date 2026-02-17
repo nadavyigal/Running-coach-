@@ -871,7 +871,10 @@ export default function RunSmartApp() {
 
     try {
       const checkpointService = new RecordingCheckpointService(incompleteRecording.userId);
-      await checkpointService.clearCheckpoint(incompleteRecording.id);
+      await checkpointService.clearAllIncompleteSessions(incompleteRecording.userId);
+      if (typeof incompleteRecording.id === 'number') {
+        await checkpointService.clearCheckpoint(incompleteRecording.id);
+      }
       try {
         sessionStorage.removeItem('recording_recovery');
       } catch {
