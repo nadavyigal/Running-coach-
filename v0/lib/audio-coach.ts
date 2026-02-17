@@ -4,6 +4,7 @@
  */
 
 const AUDIO_PREF_KEY = 'audioCoachEnabled'
+const SPEECH_MIN_INTERVAL_MS = 4000
 
 // Feature flag check
 export const ENABLE_AUDIO_COACH =
@@ -11,6 +12,9 @@ export const ENABLE_AUDIO_COACH =
 
 // AudioContext singleton
 let audioContext: AudioContext | null = null
+let speechUnlocked = false
+let lastSpeechAt = 0
+let cachedVoice: SpeechSynthesisVoice | null = null
 
 const canAccessStorage = () =>
   typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
@@ -25,6 +29,33 @@ export const isAudioSupported = (): boolean => {
     (window as unknown as { webkitAudioContext?: typeof AudioContext })
       .webkitAudioContext
   )
+}
+
+export const isSpeechSupported = (): boolean => {
+  if (typeof window === 'undefined') return false
+  return (
+    typeof window.speechSynthesis !== 'undefined' &&
+    typeof window.SpeechSynthesisUtterance !== 'undefined'
+  )
+}
+
+const resolveSpeechVoice = (): SpeechSynthesisVoice | null => {
+  if (!isSpeechSupported()) return null
+  if (cachedVoice) return cachedVoice
+
+  const voices = window.speechSynthesis.getVoices()
+  if (!voices.length) return null
+
+  // Prefer common iOS voices, then English local voices, then any local voice.
+  cachedVoice =
+    voices.find((voice) => /samantha|allison|ava|karen/i.test(voice.name)) ||
+    voices.find((voice) => voice.localService && /^en(-|_)/i.test(voice.lang)) ||
+    voices.find((voice) => /^en(-|_)/i.test(voice.lang)) ||
+    voices.find((voice) => voice.localService) ||
+    voices[0] ||
+    null
+
+  return cachedVoice
 }
 
 /**
@@ -91,27 +122,128 @@ export const initializeAudioContext = (): boolean => {
  * Resume AudioContext (required after user gesture on iOS)
  */
 export const resumeAudioContext = async (): Promise<boolean> => {
-  if (!audioContext) {
-    if (!initializeAudioContext()) return false
-  }
-
-  if (audioContext!.state === 'suspended') {
-    try {
-      await audioContext!.resume()
-      return true
-    } catch {
-      return false
+  const toneReadyPromise = (async () => {
+    if (!audioContext) {
+      if (!initializeAudioContext()) return false
     }
+
+    if (audioContext!.state === 'suspended') {
+      try {
+        await audioContext!.resume()
+        return true
+      } catch {
+        return false
+      }
+    }
+
+    return audioContext!.state === 'running'
+  })()
+
+  const speechReadyPromise = primeSpeechSynthesis()
+
+  const [toneReady, speechReady] = await Promise.all([toneReadyPromise, speechReadyPromise])
+  return toneReady || speechReady
+}
+
+/**
+ * Prime SpeechSynthesis on user gesture for iOS Safari.
+ */
+export const primeSpeechSynthesis = async (): Promise<boolean> => {
+  if (!isSpeechSupported()) return false
+
+  try {
+    // Force voice list hydration on Safari.
+    const voices = window.speechSynthesis.getVoices()
+    if (!voices.length) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        resolveSpeechVoice()
+      }
+    } else {
+      resolveSpeechVoice()
+    }
+
+    // iOS usually requires a user gesture before speaking.
+    const utterance = new window.SpeechSynthesisUtterance(' ')
+    const voice = resolveSpeechVoice()
+    if (voice) utterance.voice = voice
+    utterance.volume = 0
+    utterance.rate = 1
+    utterance.pitch = 1
+
+    await new Promise<void>((resolve, reject) => {
+      const timer = window.setTimeout(() => {
+        reject(new Error('speech-prime-timeout'))
+      }, 1200)
+
+      utterance.onend = () => {
+        window.clearTimeout(timer)
+        resolve()
+      }
+      utterance.onerror = () => {
+        window.clearTimeout(timer)
+        reject(new Error('speech-prime-failed'))
+      }
+
+      window.speechSynthesis.speak(utterance)
+    })
+
+    speechUnlocked = true
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Speak coaching text using local browser voice synthesis.
+ */
+export const speakCoachingText = (
+  message: string,
+  options?: { interrupt?: boolean; force?: boolean }
+): boolean => {
+  if (!message.trim()) return false
+  if (!ENABLE_AUDIO_COACH) return false
+  if (!isAudioEnabled()) return false
+  if (!isSpeechSupported()) return false
+  if (isIOSDevice() && !speechUnlocked) return false
+
+  const now = Date.now()
+  if (!options?.force && now - lastSpeechAt < SPEECH_MIN_INTERVAL_MS) {
+    return false
   }
 
-  return audioContext!.state === 'running'
+  try {
+    if (options?.interrupt) {
+      window.speechSynthesis.cancel()
+    }
+
+    const utterance = new window.SpeechSynthesisUtterance(message)
+    const voice = resolveSpeechVoice()
+    if (voice) utterance.voice = voice
+    utterance.volume = 1
+    utterance.rate = isIOSDevice() ? 0.96 : 1
+    utterance.pitch = 1
+    utterance.onstart = () => {
+      lastSpeechAt = Date.now()
+    }
+    utterance.onerror = () => {
+      // Ignore runtime speaking errors, keep the run flow intact.
+    }
+
+    window.speechSynthesis.speak(utterance)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**
  * Check if audio system is ready to play
  */
 export const isAudioReady = (): boolean => {
-  return audioContext !== null && audioContext.state === 'running'
+  const toneReady = audioContext !== null && audioContext.state === 'running'
+  const speechReady = isSpeechSupported() && (!isIOSDevice() || speechUnlocked)
+  return toneReady || speechReady
 }
 
 /**
@@ -122,6 +254,17 @@ const shouldPlayAudio = (): boolean => {
   if (!isAudioEnabled()) return false
   if (!isAudioSupported()) return false
   return isAudioReady()
+}
+
+/**
+ * Check if voice cue should play (all conditions met)
+ */
+const shouldSpeakAudio = (): boolean => {
+  if (!ENABLE_AUDIO_COACH) return false
+  if (!isAudioEnabled()) return false
+  if (!isSpeechSupported()) return false
+  if (isIOSDevice() && !speechUnlocked) return false
+  return true
 }
 
 /**
@@ -169,6 +312,10 @@ const playTone = (
  * A5 at 880Hz, 150ms duration
  */
 export const audioSingle = (): void => {
+  if (shouldSpeakAudio()) {
+    speakCoachingText('Interval complete.')
+    return
+  }
   playTone(880, 0.15, 'sine', 0.25)
 }
 
@@ -177,6 +324,11 @@ export const audioSingle = (): void => {
  * C5 (523Hz) then E5 (659Hz)
  */
 export const audioDouble = (): void => {
+  if (shouldSpeakAudio()) {
+    speakCoachingText('Next interval. Keep your form steady.')
+    return
+  }
+
   if (!shouldPlayAudio() || !audioContext) return
 
   try {
@@ -195,6 +347,11 @@ export const audioDouble = (): void => {
  * G4-C5-G4 pattern
  */
 export const audioAlert = (): void => {
+  if (shouldSpeakAudio()) {
+    speakCoachingText('Attention. Adjust your pace and stay focused.', { interrupt: true })
+    return
+  }
+
   if (!shouldPlayAudio() || !audioContext) return
 
   try {
@@ -217,4 +374,15 @@ export const cleanupAudioContext = (): void => {
     })
     audioContext = null
   }
+
+  if (isSpeechSupported()) {
+    try {
+      window.speechSynthesis.cancel()
+    } catch {
+      // Ignore synthesis cleanup errors
+    }
+  }
+  speechUnlocked = false
+  lastSpeechAt = 0
+  cachedVoice = null
 }

@@ -25,6 +25,8 @@ import {
   getCoachingCueState,
   initializeCoachingCues,
   cueSingle,
+  cueAlert,
+  speakCoachMessage,
   setVibrationEnabled as persistVibrationEnabled,
   setAudioEnabled as persistAudioEnabled,
   cleanupCoachingCues,
@@ -652,6 +654,11 @@ export function RecordScreen() {
     setNextPhaseInSeconds(phases[0]?.duration ?? null)
   }
 
+  const resetSpokenCueMilestones = (distanceKm = 0, durationSec = 0) => {
+    nextDistanceCueKmRef.current = Math.max(1, Math.floor(distanceKm) + 1)
+    nextTimeCueSecRef.current = Math.max(300, (Math.floor(durationSec / 300) + 1) * 300)
+  }
+
   // Metrics state
   const [metrics, setMetrics] = useState<RunMetrics>({
     distance: 0,
@@ -680,6 +687,8 @@ export function RecordScreen() {
     isIOS: false,
     activeCueType: 'none',
   })
+  const nextDistanceCueKmRef = useRef(1)
+  const nextTimeCueSecRef = useRef(300)
 
   const { toast } = useToast()
   const router = useRouter()
@@ -805,6 +814,7 @@ export function RecordScreen() {
       currentSpeed: 0,
       calories: estimateCalories(durationSeconds, distanceKm),
     })
+    resetSpokenCueMilestones(distanceKm, durationSeconds)
 
     const nextAutoPauseCount = Number.isFinite(recovery?.autoPauseCount) ? recovery.autoPauseCount : 0
     autoPauseCountRef.current = nextAutoPauseCount
@@ -1087,17 +1097,23 @@ export function RecordScreen() {
 
     const nextIndex = currentPhaseIndex + 1
     if (nextIndex < intervalPhases.length) {
+      const nextPhase = intervalPhases[nextIndex]
+      if (!nextPhase) {
+        intervalCompletedRef.current = true
+        return
+      }
       setCurrentPhaseIndex(nextIndex)
       phaseStartElapsedRef.current = metrics.duration
       phaseStartDistanceRef.current = metrics.distance
       setPhaseElapsedSeconds(0)
       setPhaseProgress(0)
       setPhaseRemainingDistance(null)
-      setNextPhaseInSeconds(intervalPhases[nextIndex].duration ?? null)
+      setNextPhaseInSeconds(nextPhase.duration ?? null)
       if (coachingCueState.activeCueType !== 'none') {
+        cueSingle()
         void trackAnalyticsEvent('coaching_cue_triggered', {
           cue_type: 'interval_start',
-          phase_type: intervalPhases[nextIndex].type,
+          phase_type: nextPhase.type,
           cue_method: coachingCueState.activeCueType,
         })
       }
@@ -1113,6 +1129,23 @@ export function RecordScreen() {
     metrics.duration,
     coachingCueState.activeCueType,
   ])
+
+  useEffect(() => {
+    if (!isRunning || isPaused) return
+    if (coachingCueState.activeCueType !== 'audio' && coachingCueState.activeCueType !== 'both') return
+
+    if (metrics.distance >= nextDistanceCueKmRef.current) {
+      const reachedKm = nextDistanceCueKmRef.current
+      nextDistanceCueKmRef.current += 1
+      speakCoachMessage(`${reachedKm} kilometer${reachedKm === 1 ? '' : 's'} completed.`)
+    }
+
+    if (metrics.duration >= nextTimeCueSecRef.current) {
+      const reachedMinutes = Math.floor(nextTimeCueSecRef.current / 60)
+      nextTimeCueSecRef.current += 300
+      speakCoachMessage(`${reachedMinutes} minutes running. Stay relaxed and keep your rhythm.`)
+    }
+  }, [coachingCueState.activeCueType, isPaused, isRunning, metrics.distance, metrics.duration])
 
   const loadCurrentUser = async () => {
     try {
@@ -1744,6 +1777,40 @@ export function RecordScreen() {
     setCoachingCueState(getCoachingCueState())
   }
 
+  const handleTestAudioCue = async () => {
+    const initialized = await initializeCoachingCues()
+    const nextState = getCoachingCueState()
+    setCoachingCueState(nextState)
+
+    if (!initialized || !nextState.audioEnabled) {
+      toast({
+        title: "Audio test failed",
+        description: "Tap Start Run again and keep Safari open to allow local voice playback.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const spoken = speakCoachMessage(
+      "Audio coach is ready. Keep Safari in the foreground while recording your run.",
+      { force: true, interrupt: true }
+    )
+
+    if (!spoken) {
+      toast({
+        title: "Audio not ready yet",
+        description: "Enable Audio Cues and tap Test Audio again.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    toast({
+      title: "Audio cue played",
+      description: "If you did not hear it, raise volume and disable silent mode.",
+    })
+  }
+
   const startGpsWarmup = async () => {
     setIsGpsWarmingUp(true)
     setGpsWarmupCountdown(GPS_WARMUP_DURATION_SECONDS)
@@ -1839,12 +1906,7 @@ export function RecordScreen() {
 
   const proceedWithRun = async () => {
     clearGpsWeakSignalPrompt()
-    // Initialize coaching cues on user gesture (required for iOS Safari audio)
-    // This ensures both vibration and audio are properly detected and enabled
-    if (ENABLE_AUDIO_COACH || ENABLE_VIBRATION_COACH) {
-      await initializeCoachingCues()
-      setCoachingCueState(getCoachingCueState())
-    }
+    setCoachingCueState(getCoachingCueState())
 
     // Find best point from warmup to use as baseline
     if (gpsWarmupPointsRef.current.length > 0) {
@@ -1878,16 +1940,33 @@ export function RecordScreen() {
     setIsPaused(false)
     isRunningRef.current = true
     isPausedRef.current = false
+    resetSpokenCueMilestones(0, 0)
 
     toast({
       title: "Run Started",
       description: "GPS tracking active. Your run is being recorded."
     })
+    speakCoachMessage("Run started. GPS tracking active.", { force: true })
 
     logRunStats({ event: 'start', startedAt: Date.now() })
 
     // Activate wake lock
     void requestWakeLock()
+  }
+
+  const handleStartRunPress = async () => {
+    if (ENABLE_AUDIO_COACH || ENABLE_VIBRATION_COACH) {
+      const initialized = await initializeCoachingCues()
+      setCoachingCueState(getCoachingCueState())
+      if (ENABLE_AUDIO_COACH && !initialized) {
+        toast({
+          title: "Audio not ready yet",
+          description: "Tap Start Run again, then keep Safari in the foreground for voice coaching.",
+          variant: "destructive",
+        })
+      }
+    }
+    await startRun()
   }
 
   const startRun = async () => {
@@ -1995,11 +2074,7 @@ export function RecordScreen() {
         description: `Starting run with ${currentGPSAccuracy.signalStrength}% signal strength...`,
       })
 
-      // Initialize coaching cues before starting (user gesture required for iOS audio)
-      if (ENABLE_AUDIO_COACH || ENABLE_VIBRATION_COACH) {
-        await initializeCoachingCues()
-        setCoachingCueState(getCoachingCueState())
-      }
+      setCoachingCueState(getCoachingCueState())
 
         // Reset only run-specific state (not GPS tracking!)
         gpsPathRef.current = []
@@ -2079,6 +2154,8 @@ export function RecordScreen() {
       title: "Run Paused",
       description: "Your run has been paused. Resume when ready.",
     })
+    cueAlert()
+    speakCoachMessage("Run paused. Resume when you are ready.", { interrupt: true })
 
     // Release wake lock to save battery
     void releaseWakeLock()
@@ -2123,6 +2200,7 @@ export function RecordScreen() {
       title: "Run Resumed",
       description: "GPS tracking resumed. Your run continues.",
     })
+    speakCoachMessage("Run resumed. Keep a steady rhythm.", { force: true })
 
     // Re-activate wake lock
     void requestWakeLock()
@@ -2152,6 +2230,7 @@ export function RecordScreen() {
       acceptedPoints: acceptedPointCountRef.current,
       rejectedPoints: rejectedPointCountRef.current,
     })
+    speakCoachMessage("Run stopped. Great work today.", { interrupt: true, force: true })
 
     if (totalDistance > 0 && finalDuration > 0) {
       await saveRun(totalDistance, finalDuration)
@@ -2991,20 +3070,35 @@ export function RecordScreen() {
 
             {/* Audio Toggle (show especially on iOS, or when audio available) */}
             {ENABLE_AUDIO_COACH && coachingCueState.audioSupported && (
-              <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Audio Cues</p>
+                    <p className="text-xs text-gray-600">
+                      {coachingCueState.isIOS && !coachingCueState.vibrationSupported
+                        ? 'Audio cues for interval changes (haptics unavailable on iOS).'
+                        : 'Play sounds for interval changes.'}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={coachingCueState.audioEnabled}
+                    onCheckedChange={handleAudioToggle}
+                    aria-label="Toggle audio cues"
+                  />
+                </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Audio Cues</p>
-                  <p className="text-xs text-gray-600">
-                    {coachingCueState.isIOS && !coachingCueState.vibrationSupported
-                      ? 'Audio cues for interval changes (haptics unavailable on iOS).'
-                      : 'Play sounds for interval changes.'}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleTestAudioCue}
+                    className="h-8 text-xs"
+                  >
+                    Test Audio
+                  </Button>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Keep Safari in the foreground while recording so GPS and coach audio continue.
                   </p>
                 </div>
-                <Switch
-                  checked={coachingCueState.audioEnabled}
-                  onCheckedChange={handleAudioToggle}
-                  aria-label="Toggle audio cues"
-                />
               </div>
             )}
 
@@ -3066,7 +3160,7 @@ export function RecordScreen() {
               {!isRunning ? (
                 <>
                   <Button
-                    onClick={startRun}
+                    onClick={handleStartRunPress}
                     className="h-10 bg-green-600 px-4 text-sm hover:bg-green-700"
                     disabled={gpsPermission === 'denied' || gpsPermission === 'unsupported' || isInitializingGps || isGpsWarmingUp}
                   >

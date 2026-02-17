@@ -19,6 +19,7 @@ import {
   audioSingle,
   audioDouble,
   audioAlert,
+  speakCoachingText,
   resumeAudioContext,
   isAudioReady,
   isIOSDevice,
@@ -105,6 +106,18 @@ export const cueAlert = (): void => {
   const cueType = getActiveCueType()
   if (cueType === 'vibration' || cueType === 'both') vibrateAlert()
   if (cueType === 'audio' || cueType === 'both') audioAlert()
+}
+
+/**
+ * Speak a coach phrase when audio cues are available.
+ */
+export const speakCoachMessage = (
+  message: string,
+  options?: { interrupt?: boolean; force?: boolean }
+): boolean => {
+  const cueType = getActiveCueType()
+  if (cueType !== 'audio' && cueType !== 'both') return false
+  return speakCoachingText(message, options)
 }
 
 /**
