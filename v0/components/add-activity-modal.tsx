@@ -111,8 +111,31 @@ export function AddActivityModal({
       name: "Connect to Garmin",
       icon: Watch,
       description: "Sync with Garmin Connect",
-      action: () => {
-        alert("Garmin integration coming soon!")
+      action: async () => {
+        try {
+          const { dbUtils } = await import("@/lib/dbUtils")
+          const user = await dbUtils.getCurrentUser()
+          if (!user?.id) {
+            toast({ title: "Setup required", description: "Please complete onboarding before connecting Garmin.", variant: "destructive" })
+            return
+          }
+          const response = await fetch("/api/devices/garmin/connect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: user.id,
+              redirectUri: `${window.location.origin}/garmin/callback`,
+            }),
+          })
+          const data = await response.json()
+          if (data.success) {
+            window.location.href = data.authUrl
+          } else {
+            toast({ title: "Connection failed", description: data.error || "Failed to initiate Garmin connection.", variant: "destructive" })
+          }
+        } catch {
+          toast({ title: "Connection failed", description: "Failed to initiate Garmin connection. Please try again.", variant: "destructive" })
+        }
       },
     },
     {
