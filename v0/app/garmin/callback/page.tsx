@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type CallbackStatus = "processing" | "success" | "error";
 
-export default function GarminCallbackPage() {
+function GarminCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const hasProcessedRef = useRef(false);
@@ -91,5 +91,25 @@ export default function GarminCallbackPage() {
         )}
       </div>
     </main>
+  );
+}
+
+function GarminCallbackFallback() {
+  return (
+    <main className="mx-auto flex min-h-screen w-full max-w-xl items-center justify-center p-6">
+      <div className="w-full rounded-lg border bg-white p-6 shadow-sm">
+        <h1 className="text-xl font-semibold text-gray-900">Garmin Connection</h1>
+        <p className="mt-3 text-sm text-gray-700">Finalizing Garmin connection...</p>
+        <p className="mt-4 text-sm text-gray-500">Please wait...</p>
+      </div>
+    </main>
+  );
+}
+
+export default function GarminCallbackPage() {
+  return (
+    <Suspense fallback={<GarminCallbackFallback />}>
+      <GarminCallbackContent />
+    </Suspense>
   );
 }
