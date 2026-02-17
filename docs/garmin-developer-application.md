@@ -160,6 +160,11 @@ GARMIN_CLIENT_SECRET=<from-garmin-developer-portal>
 GARMIN_OAUTH_REDIRECT_URI=https://runsmart-ai.com/garmin/callback
 ```
 
+### Post-Approval Create-App Walkthrough
+
+Use `docs/garmin-portal-create-app-setup.md` for field-by-field values for:
+`https://developerportal.garmin.com/teams/runsmart_ai/create-app`
+
 ## Existing Code Ready for Credentials
 
 | Endpoint | File | Status |

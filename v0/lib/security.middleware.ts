@@ -48,6 +48,12 @@ function getClientIP(request: NextRequest): string {
   return '127.0.0.1';
 }
 
+function hasSupabaseAuthCookie(request: NextRequest): boolean {
+  return request.cookies.getAll().some((cookie) => {
+    return cookie.name.startsWith('sb-') && cookie.name.includes('-auth-token');
+  });
+}
+
 // Validate request size
 function validateRequestSize(request: NextRequest): boolean {
   const contentLength = request.headers.get('content-length');
@@ -277,8 +283,9 @@ export function withAuthSecurity(
     // Check for authentication token/session
     const authHeader = request.headers.get('authorization');
     const sessionCookie = request.cookies.get('session');
+    const supabaseAuthCookie = hasSupabaseAuthCookie(request);
     
-    if (!authHeader && !sessionCookie) {
+    if (!authHeader && !sessionCookie && !supabaseAuthCookie) {
       securityMonitor.trackSecurityEvent({
         type: 'unauthorized_access_attempt',
         severity: 'warning',

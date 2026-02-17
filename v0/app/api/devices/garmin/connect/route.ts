@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import { withAuthSecurity, ApiRequest } from '@/lib/security.middleware';
 import { generateSignedState } from '../oauth-state';
-import { logger } from '@/lib/logger';
 
 // POST - Initiate Garmin OAuth flow (SECURED)
 async function handleGarminConnect(req: ApiRequest) {
@@ -33,17 +33,48 @@ async function handleGarminConnect(req: ApiRequest) {
       }, { status: 400 });
     }
 
+    const envRedirectUri = process.env.GARMIN_OAUTH_REDIRECT_URI?.trim();
+    const requestRedirectUri = typeof redirectUri === 'string' ? redirectUri.trim() : '';
+    const origin = req.headers.get('origin')?.trim();
+    const fallbackRedirectUri = origin ? `${origin}/garmin/callback` : '';
+    const resolvedRedirectUri = envRedirectUri || requestRedirectUri || fallbackRedirectUri;
+
+    if (!resolvedRedirectUri) {
+      logger.error('Garmin redirect URI not configured');
+      return NextResponse.json({
+        success: false,
+        error: 'Service configuration error'
+      }, { status: 503 });
+    }
+
+    let parsedRedirectUri: URL;
+    try {
+      parsedRedirectUri = new URL(resolvedRedirectUri);
+    } catch {
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid redirect URI'
+      }, { status: 400 });
+    }
+
+    if (!['https:', 'http:'].includes(parsedRedirectUri.protocol)) {
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid redirect URI protocol'
+      }, { status: 400 });
+    }
+
     // Garmin Connect OAuth 2.0 configuration
     const garminConfig = {
       clientId: process.env.GARMIN_CLIENT_ID,
-      redirectUri: redirectUri || `${req.headers.get('origin')}/garmin/callback`,
+      redirectUri: parsedRedirectUri.toString(),
       scope: 'activities workouts heart_rate training_data',
       baseUrl: 'https://connect.garmin.com'
     };
 
     // Security: Never send client secret to client
     if (!garminConfig.clientId) {
-      logger.error('❌ Garmin client ID not configured');
+      logger.error('Garmin client ID not configured');
       return NextResponse.json({
         success: false,
         error: 'Service configuration error'
