@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
-import { withAuthSecurity, ApiRequest } from '@/lib/security.middleware';
+import { withApiSecurity, ApiRequest } from '@/lib/security.middleware';
 import { generateSignedState } from '../oauth-state';
 
 // POST - Initiate Garmin OAuth flow (SECURED)
@@ -109,4 +109,4 @@ async function handleGarminConnect(req: ApiRequest) {
 }
 
 // Export secured handler with authentication
-export const POST = withAuthSecurity(handleGarminConnect);
+export const POST = withApiSecurity(handleGarminConnect);

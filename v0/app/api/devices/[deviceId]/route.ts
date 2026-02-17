@@ -1,35 +1,21 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 // DELETE - Disconnect device
+// Returns success; client updates device status in Dexie.js (PWA local storage)
 export async function DELETE(req: Request, { params }: { params: { deviceId: string } }) {
   try {
     const deviceId = parseInt(params.deviceId);
 
-    if (!deviceId) {
+    if (!deviceId || isNaN(deviceId)) {
       return NextResponse.json({
         success: false,
         error: 'Invalid device ID'
       }, { status: 400 });
     }
 
-    const device = await db.wearableDevices.get(deviceId);
-    
-    if (!device) {
-      return NextResponse.json({
-        success: false,
-        error: 'Device not found'
-      }, { status: 404 });
-    }
-
-    // Update device status to disconnected instead of deleting
-    await db.wearableDevices.update(deviceId, {
-      connectionStatus: 'disconnected',
-      lastSync: null,
-      updatedAt: new Date()
-    });
-
+    // Device state is managed client-side in Dexie.js
+    // Client is responsible for updating connectionStatus to 'disconnected'
     return NextResponse.json({
       success: true,
       message: 'Device disconnected successfully'
@@ -45,37 +31,25 @@ export async function DELETE(req: Request, { params }: { params: { deviceId: str
 }
 
 // PUT - Update device settings
+// Returns success; client applies updates in Dexie.js (PWA local storage)
 export async function PUT(req: Request, { params }: { params: { deviceId: string } }) {
   try {
     const deviceId = parseInt(params.deviceId);
-    const updates = await req.json();
 
-    if (!deviceId) {
+    if (!deviceId || isNaN(deviceId)) {
       return NextResponse.json({
         success: false,
         error: 'Invalid device ID'
       }, { status: 400 });
     }
 
-    const device = await db.wearableDevices.get(deviceId);
-    
-    if (!device) {
-      return NextResponse.json({
-        success: false,
-        error: 'Device not found'
-      }, { status: 404 });
-    }
+    const updates = await req.json();
 
-    await db.wearableDevices.update(deviceId, {
-      ...updates,
-      updatedAt: new Date()
-    });
-
-    const updatedDevice = await db.wearableDevices.get(deviceId);
-
+    // Device state is managed client-side in Dexie.js
+    // Client is responsible for applying these updates to its local store
     return NextResponse.json({
       success: true,
-      device: updatedDevice,
+      updates,
       message: 'Device updated successfully'
     });
 

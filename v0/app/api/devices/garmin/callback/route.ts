@@ -1,12 +1,9 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { withAuthSecurity, ApiRequest } from '@/lib/security.middleware';
-import { encryptToken } from '../token-crypto';
+import { withApiSecurity, ApiRequest } from '@/lib/security.middleware';
 import { verifyAndParseState } from '../oauth-state';
 import { logger } from '@/lib/logger';
-import { queueGarminSyncJob, isRedisConfigured } from '@/lib/queue/syncQueue';
 
-// POST - Handle Garmin OAuth callback (SECURED)
+// POST - Handle Garmin OAuth callback (SECURED via signed state)
 async function handleGarminCallback(req: ApiRequest) {
   try {
     const { code, state, error } = await req.json();
@@ -45,7 +42,7 @@ async function handleGarminCallback(req: ApiRequest) {
     // Security: Extract userId from secure storage (not from client)
     const userId = storedState.userId;
 
-    // Security: Verify authenticated user matches the OAuth state
+    // Security: Optionally verify authenticated user matches the OAuth state
     const authUserId = req.headers.get('x-user-id');
     if (authUserId && parseInt(authUserId) !== userId) {
       return NextResponse.json({
@@ -101,59 +98,40 @@ async function handleGarminCallback(req: ApiRequest) {
 
       const userProfile = profileResponse.ok ? await profileResponse.json() : null;
 
-      // Security: Find or create device record without relying on client-side storage
-      const device = await db.wearableDevices
-        .where({ userId, type: 'garmin' })
-        .first();
-
+      // Return device data to client for Dexie.js storage (PWA "thin backend" pattern)
+      // Tokens are stored client-side in IndexedDB (browser sandbox isolation)
       const deviceData = {
-        deviceId: userProfile?.userId ? `garmin-${userProfile.userId}` : `garmin-${userId}-${Date.now()}`,
+        userId,
+        type: 'garmin' as const,
+        deviceId: userProfile?.userId
+          ? `garmin-${userProfile.userId}`
+          : `garmin-${userId}-${Date.now()}`,
         name: userProfile?.displayName || 'Garmin Device',
         connectionStatus: 'connected' as const,
         lastSync: new Date(),
-        // Security: Encrypt tokens before storage (reversible for API usage)
         authTokens: {
-          accessToken: encryptToken(tokenData.access_token),
-          refreshToken: encryptToken(tokenData.refresh_token),
-          expiresAt: new Date(Date.now() + (tokenData.expires_in * 1000))
+          accessToken: tokenData.access_token as string,
+          refreshToken: (tokenData.refresh_token as string | undefined),
+          expiresAt: new Date(Date.now() + (tokenData.expires_in ?? 3600) * 1000),
         },
         capabilities: [
           'heart_rate',
           'activities',
           'advanced_metrics',
-          'running_dynamics'
+          'running_dynamics',
         ],
         settings: {
           userProfile,
-          encryptedStorage: true // Flag to indicate tokens are encrypted
         },
-        updatedAt: new Date()
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
-
-      let deviceId: number;
-      if (device) {
-        await db.wearableDevices.update(device.id!, deviceData);
-        deviceId = device.id!;
-      } else {
-        deviceId = await db.wearableDevices.add({
-          userId,
-          type: 'garmin',
-          ...deviceData,
-          createdAt: new Date()
-        }) as number;
-      }
-
-      // Queue background sync job using Redis (with in-memory fallback)
-      await queueGarminSync(deviceId, userId);
 
       return NextResponse.json({
         success: true,
-        device: {
-          id: deviceId,
-          name: userProfile?.displayName || 'Garmin Device',
-          connectionStatus: 'connected'
-        },
-        message: 'Garmin device connected successfully'
+        userId,
+        device: deviceData,
+        message: 'Garmin authorized successfully',
       });
 
     } catch (tokenError) {
@@ -173,107 +151,5 @@ async function handleGarminCallback(req: ApiRequest) {
   }
 }
 
-// Export secured handler with authentication
-export const POST = withAuthSecurity(handleGarminCallback);
-
-// Background job queue for Garmin sync operations
-// Uses Redis (BullMQ) when available, falls back to in-memory queue
-
-interface SyncJob {
-  deviceId: number;
-  userId: number;
-  scheduledAt: Date;
-  retryCount: number;
-  maxRetries: number;
-}
-
-// In-memory fallback queue (used when Redis is unavailable)
-const fallbackQueue: SyncJob[] = [];
-let fallbackWorkerRunning = false;
-
-async function queueGarminSync(deviceId: number, userId: number) {
-  // Try Redis queue first
-  if (isRedisConfigured()) {
-    const jobId = await queueGarminSyncJob({
-      deviceId,
-      userId,
-      type: 'initial_sync',
-      priority: 1, // Higher priority for initial sync
-    });
-
-    if (jobId) {
-      logger.log(`[Garmin] Sync job queued to Redis: ${jobId}`);
-      return;
-    }
-  }
-
-  // Fallback to in-memory queue
-  logger.warn('[Garmin] Using in-memory fallback queue (Redis unavailable)');
-  fallbackQueue.push({
-    deviceId,
-    userId,
-    scheduledAt: new Date(),
-    retryCount: 0,
-    maxRetries: 3
-  });
-
-  if (!fallbackWorkerRunning) {
-    processFallbackQueue();
-  }
-}
-
-async function processFallbackQueue() {
-  if (fallbackWorkerRunning) return;
-  fallbackWorkerRunning = true;
-
-  while (fallbackQueue.length > 0) {
-    const job = fallbackQueue.shift();
-    if (!job) continue;
-
-    try {
-      await performGarminSync(job.deviceId, job.userId);
-    } catch (error) {
-      logger.error(`Sync failed for device ${job.deviceId}:`, error);
-
-      // Retry logic
-      if (job.retryCount < job.maxRetries) {
-        job.retryCount++;
-        fallbackQueue.push(job);
-        logger.log(`Retrying sync for device ${job.deviceId} (attempt ${job.retryCount + 1})`);
-      } else {
-        logger.error(`Max retries reached for device ${job.deviceId}`);
-        // Mark device as error state
-        try {
-          await db.wearableDevices.update(job.deviceId, {
-            connectionStatus: 'error',
-            updatedAt: new Date()
-          });
-        } catch (updateError) {
-          logger.error('Failed to update device status:', updateError);
-        }
-      }
-    }
-
-    // Small delay between jobs to avoid overwhelming the API
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
-
-  fallbackWorkerRunning = false;
-}
-
-async function performGarminSync(deviceId: number, userId: number) {
-  const device = await db.wearableDevices.get(deviceId);
-  if (!device || !device.authTokens) {
-    throw new Error('Device or tokens not found');
-  }
-
-  // Note: Token is encrypted, would need decryption in real implementation
-  logger.log(`[Garmin] Performing sync for device ${deviceId}, user ${userId}`);
-
-  // Update last sync time
-  await db.wearableDevices.update(deviceId, {
-    lastSync: new Date(),
-    connectionStatus: 'connected',
-    updatedAt: new Date()
-  });
-}
+// Export secured handler — OAuth security is provided by the signed state token
+export const POST = withApiSecurity(handleGarminCallback);

@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { db } from "@/lib/db";
 
 type CallbackStatus = "processing" | "success" | "error";
 
@@ -18,7 +19,8 @@ function GarminCallbackContent() {
     hasProcessedRef.current = true;
 
     const code = searchParams.get("code");
-    const state = searchParams.get("state");
+    // Garmin may return state as "state" (standard OAuth 2.0) or "oauth_state" (Garmin variant)
+    const state = searchParams.get("state") ?? searchParams.get("oauth_state");
     const oauthError = searchParams.get("error");
 
     const completeOAuth = async () => {
@@ -49,6 +51,23 @@ function GarminCallbackContent() {
         if (!response.ok || !data?.success) {
           const errorText = data?.error || "Garmin callback failed";
           throw new Error(errorText);
+        }
+
+        // Store device data in Dexie.js (client-side IndexedDB)
+        // This PWA uses browser storage — the server handles only the OAuth secret exchange
+        if (data.device && typeof data.userId === "number") {
+          const { userId, device } = data as { userId: number; device: any };
+          const existing = await db.wearableDevices
+            .where({ userId, type: "garmin" })
+            .first();
+          if (existing?.id) {
+            await db.wearableDevices.update(existing.id, {
+              ...device,
+              updatedAt: new Date(),
+            });
+          } else {
+            await db.wearableDevices.add(device);
+          }
         }
 
         setStatus("success");

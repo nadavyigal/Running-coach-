@@ -73,17 +73,9 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
 
   const loadConnectedDevices = async () => {
     try {
-      if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
-        const devices = await db.wearableDevices.where('userId').equals(userId).toArray()
-        setConnectedDevices(devices as WearableDevice[])
-      } else {
-        const response = await fetch(`/api/devices?userId=${userId}`)
-        const data = await response.json()
-        
-        if (data.success) {
-          setConnectedDevices(data.devices)
-        }
-      }
+      // Always read from client-side Dexie.js (IndexedDB) — this is a PWA with local storage
+      const devices = await db.wearableDevices.where('userId').equals(userId).toArray()
+      setConnectedDevices(devices as WearableDevice[])
     } catch (error) {
       console.error('Error loading devices:', error)
     } finally {
@@ -176,25 +168,36 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
 
   const syncDevice = async (deviceId: number) => {
     setIsSyncing(deviceId)
-    
+
     try {
       const response = await fetch(`/api/devices/${deviceId}/sync`, {
         method: 'POST'
       })
 
       const data = await response.json()
-      
+
       if (data.success) {
+        // Update sync state in Dexie.js client-side
+        await db.wearableDevices.update(deviceId, {
+          connectionStatus: 'syncing',
+          updatedAt: new Date()
+        })
+
         toast({
           title: "Sync Started",
           description: "Device sync has been initiated.",
         })
-        
-        // Poll for sync completion
+
+        // Update to connected with fresh lastSync after delay
         setTimeout(async () => {
+          await db.wearableDevices.update(deviceId, {
+            connectionStatus: 'connected',
+            lastSync: new Date(),
+            updatedAt: new Date()
+          })
           await loadConnectedDevices()
           setIsSyncing(null)
-        }, 3000)
+        }, 2000)
       } else {
         throw new Error(data.error)
       }
@@ -216,13 +219,20 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
       })
 
       const data = await response.json()
-      
+
       if (data.success) {
+        // Update device status in Dexie.js client-side
+        await db.wearableDevices.update(deviceId, {
+          connectionStatus: 'disconnected',
+          lastSync: null,
+          updatedAt: new Date()
+        })
+
         toast({
           title: "Device Disconnected",
           description: "Device has been disconnected successfully.",
         })
-        
+
         await loadConnectedDevices()
       } else {
         throw new Error(data.error)

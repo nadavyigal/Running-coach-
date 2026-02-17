@@ -1,59 +1,23 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 // POST - Trigger manual sync for device
+// Returns success; client manages sync state in Dexie.js (PWA local storage)
+// Actual data fetching happens via /api/devices/garmin/activities (client sends Bearer token)
 export async function POST(req: Request, { params }: { params: { deviceId: string } }) {
   try {
     const deviceId = parseInt(params.deviceId);
 
-    if (!deviceId) {
+    if (!deviceId || isNaN(deviceId)) {
       return NextResponse.json({
         success: false,
         error: 'Invalid device ID'
       }, { status: 400 });
     }
 
-    const device = await db.wearableDevices.get(deviceId);
-    
-    if (!device) {
-      return NextResponse.json({
-        success: false,
-        error: 'Device not found'
-      }, { status: 404 });
-    }
-
-    if (device.connectionStatus !== 'connected') {
-      return NextResponse.json({
-        success: false,
-        error: 'Device is not connected'
-      }, { status: 400 });
-    }
-
-    // Update sync status
-    await db.wearableDevices.update(deviceId, {
-      connectionStatus: 'syncing',
-      updatedAt: new Date()
-    });
-
-    // Simulate sync process - in real implementation, this would:
-    // 1. For Apple Watch: Query HealthKit data
-    // 2. For Garmin: Call Garmin Connect API
-    // 3. Process and store the data
-    
-    // For now, just update the last sync time
-    setTimeout(async () => {
-      try {
-        await db.wearableDevices.update(deviceId, {
-          connectionStatus: 'connected',
-          lastSync: new Date(),
-          updatedAt: new Date()
-        });
-      } catch (error) {
-        logger.error('Error updating sync status:', error);
-      }
-    }, 2000);
-
+    // Device state is managed client-side in Dexie.js
+    // Client is responsible for updating connectionStatus to 'syncing' → 'connected'
+    // and calling /api/devices/garmin/activities with its stored Bearer token
     return NextResponse.json({
       success: true,
       message: 'Sync initiated successfully'
