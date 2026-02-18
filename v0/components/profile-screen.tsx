@@ -54,6 +54,7 @@ import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db";
 import { ShareBadgeModal } from "@/components/share-badge-modal";
 import { Share2, Users } from "lucide-react";
 import { JoinCohortModal } from "@/components/join-cohort-modal";
+import { GarminSyncPanel } from "@/components/garmin-sync-panel";
 import { CommunityStatsWidget } from "@/components/community-stats-widget";
 import { CoachingInsightsWidget } from "@/components/coaching-insights-widget";
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
@@ -1394,6 +1395,17 @@ export function ProfileScreen() {
                 ))}
               </CardContent>
             </Card>
+          )}
+
+          {/* Garmin Sync Panel — shown when Garmin is connected */}
+          {userId && (
+            <GarminSyncPanel
+              userId={userId}
+              onReconnect={() => {
+                // Navigate to Add Activity to reconnect via the Garmin OAuth flow
+                window.location.href = "/?screen=today"
+              }}
+            />
           )}
 
           {/* Devices & Apps */}
