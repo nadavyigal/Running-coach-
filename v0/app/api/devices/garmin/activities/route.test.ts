@@ -202,4 +202,38 @@ describe("/api/devices/garmin/activities", () => {
     expect(body.needsReauth).toBeUndefined();
     expect(body.source).toBe("wellness-backfill");
   });
+
+  it("returns explicit ACTIVITY_EXPORT permission guidance when CONNECT_ACTIVITY summary is not enabled", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("Not Found", { status: 404 })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            errorMessage:
+              "[abc]Endpoint not enabled for summary type: CONNECT_ACTIVITY",
+          }),
+          { status: 400 }
+        )
+      );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const req = new Request(
+      "http://localhost/api/devices/garmin/activities?userId=42&days=1",
+      {
+        headers: { authorization: "Bearer test-token" },
+      }
+    );
+
+    const res = await GET(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.success).toBe(false);
+    expect(body.requiredPermissions).toEqual(["ACTIVITY_EXPORT"]);
+    expect(body.needsReauth).toBeUndefined();
+  });
 });

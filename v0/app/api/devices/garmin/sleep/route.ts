@@ -80,6 +80,13 @@ function isFallbackWorthyWellnessStatus(status: number): boolean {
   return status === 400 || status === 404;
 }
 
+function isSleepPermissionNotEnabled(status: number, body: string): boolean {
+  if (/Endpoint not enabled for summary type:\s*CONNECT_SLEEP/i.test(body)) return true;
+  // Garmin may return 404 for sleep endpoints when sleep export is not provisioned/enabled.
+  if (status === 404 && /\/wellness-api\/rest\/(backfill\/)?sleep/i.test(body)) return true;
+  return false;
+}
+
 async function fetchSleepData(
   accessToken: string,
   startTime: number,
@@ -223,6 +230,21 @@ export async function GET(req: Request) {
             detail,
           },
           { status: 401 }
+        );
+      }
+
+      if (isSleepPermissionNotEnabled(error.status, error.body)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Garmin sleep sharing permission is not enabled for this app',
+            source: error.source,
+            requiredPermissions: ['HEALTH_EXPORT'],
+            detail,
+            action:
+              'Enable sleep/health sharing for RunSmart in Garmin Connect and reconnect Garmin.',
+          },
+          { status: 403 }
         );
       }
 

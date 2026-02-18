@@ -129,4 +129,48 @@ describe("/api/devices/garmin/sleep", () => {
     expect(secondUrl).toContain("summaryStartTimeInSeconds");
     expect(secondUrl).toContain("summaryEndTimeInSeconds");
   });
+
+  it("returns explicit HEALTH_EXPORT permission guidance when sleep endpoints are not enabled", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            timestamp: 1771441495662,
+            status: 404,
+            error: "Not Found",
+            path: "/wellness-api/rest/sleep",
+          }),
+          { status: 404 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            timestamp: 1771441495691,
+            status: 404,
+            error: "Not Found",
+            path: "/wellness-api/rest/backfill/sleep",
+          }),
+          { status: 404 }
+        )
+      );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const req = new Request(
+      "http://localhost/api/devices/garmin/sleep?userId=42&days=1",
+      {
+        headers: { authorization: "Bearer test-token" },
+      }
+    );
+
+    const res = await GET(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.success).toBe(false);
+    expect(body.requiredPermissions).toEqual(["HEALTH_EXPORT"]);
+    expect(body.needsReauth).toBeUndefined();
+  });
 });

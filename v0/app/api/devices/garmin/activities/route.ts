@@ -94,6 +94,10 @@ function isFallbackWorthyWellnessStatus(status: number): boolean {
   return status === 400 || status === 404;
 }
 
+function isActivityPermissionNotEnabled(body: string): boolean {
+  return /Endpoint not enabled for summary type:\s*CONNECT_ACTIVITY/i.test(body);
+}
+
 function dedupeActivities(rawActivities: any[]): any[] {
   const seen = new Set<string>();
   return rawActivities.filter((activity) => {
@@ -264,6 +268,21 @@ export async function GET(req: Request) {
             detail,
           },
           { status: 401 }
+        );
+      }
+
+      if (isActivityPermissionNotEnabled(error.body)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Garmin activity sharing permission is not enabled for this app',
+            source: error.source,
+            requiredPermissions: ['ACTIVITY_EXPORT'],
+            detail,
+            action:
+              'Enable activity sharing for RunSmart in Garmin Connect and reconnect Garmin.',
+          },
+          { status: 403 }
         );
       }
 

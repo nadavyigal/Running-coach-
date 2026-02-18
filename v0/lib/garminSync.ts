@@ -115,7 +115,14 @@ export async function syncGarminActivities(
     if (!data.success || !Array.isArray(data.activities)) {
       // Surface the actual Garmin error detail if available
       const detail = summarizeGarminDetail(data.detail)
-      result.errors.push((data.error || 'Failed to fetch activities from Garmin') + (detail ? ` (${detail})` : ''))
+      const perms = Array.isArray(data.requiredPermissions) ? ` [required: ${data.requiredPermissions.join(', ')}]` : ''
+      const action = typeof data.action === 'string' && data.action.trim().length > 0 ? ` ${data.action}` : ''
+      result.errors.push(
+        (data.error || 'Failed to fetch activities from Garmin') +
+        perms +
+        (detail ? ` (${detail})` : '') +
+        action
+      )
       return result
     }
 
@@ -213,7 +220,14 @@ export async function syncGarminSleep(
 
     if (!data.success || !Array.isArray(data.sleep)) {
       const detail = summarizeGarminDetail(data.detail)
-      result.errors.push((data.error || 'Failed to fetch sleep data from Garmin') + (detail ? ` (${detail})` : ''))
+      const perms = Array.isArray(data.requiredPermissions) ? ` [required: ${data.requiredPermissions.join(', ')}]` : ''
+      const action = typeof data.action === 'string' && data.action.trim().length > 0 ? ` ${data.action}` : ''
+      result.errors.push(
+        (data.error || 'Failed to fetch sleep data from Garmin') +
+        perms +
+        (detail ? ` (${detail})` : '') +
+        action
+      )
       return result
     }
 
