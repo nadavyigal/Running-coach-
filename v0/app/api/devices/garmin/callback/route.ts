@@ -3,7 +3,12 @@ import { withApiSecurity, ApiRequest } from '@/lib/security.middleware';
 import { verifyAndParseState } from '../oauth-state';
 import { logger } from '@/lib/logger';
 
-// POST - Handle Garmin OAuth callback (SECURED via signed state)
+// Garmin OAuth 2.0 PKCE token endpoint
+// Ref: https://developerportal.garmin.com/sites/default/files/OAuth2PKCE_1.pdf
+const GARMIN_TOKEN_URL = 'https://diauth.garmin.com/di-oauth2-service/oauth/token';
+const GARMIN_PROFILE_URL = 'https://connect.garmin.com/userprofile-service/userprofile';
+
+// POST - Handle Garmin OAuth 2.0 PKCE callback (SECURED via signed state)
 async function handleGarminCallback(req: ApiRequest) {
   try {
     const { code, state, error } = await req.json();
@@ -23,14 +28,15 @@ async function handleGarminCallback(req: ApiRequest) {
       }, { status: 400 });
     }
 
-    if (!state || typeof state !== 'string' || state.length > 512) {
+    // State is larger now (contains base64url-encoded PKCE code_verifier)
+    if (!state || typeof state !== 'string' || state.length > 4096) {
       return NextResponse.json({
         success: false,
         error: 'Invalid state parameter format'
       }, { status: 400 });
     }
 
-    // Security: Retrieve OAuth state from signed payload rather than in-memory storage
+    // Security: Verify HMAC-signed state and extract payload
     const storedState = verifyAndParseState(state);
     if (!storedState) {
       return NextResponse.json({
@@ -39,8 +45,16 @@ async function handleGarminCallback(req: ApiRequest) {
       }, { status: 400 });
     }
 
-    // Security: Extract userId from secure storage (not from client)
-    const userId = storedState.userId;
+    // Security: Extract userId and codeVerifier from secure signed state (not from client)
+    const { userId, redirectUri, codeVerifier } = storedState;
+
+    if (!codeVerifier) {
+      logger.error('Missing codeVerifier in OAuth state — state may be from old flow');
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid OAuth state: missing PKCE verifier'
+      }, { status: 400 });
+    }
 
     // Security: Optionally verify authenticated user matches the OAuth state
     const authUserId = req.headers.get('x-user-id');
@@ -51,14 +65,10 @@ async function handleGarminCallback(req: ApiRequest) {
       }, { status: 403 });
     }
 
-    const garminConfig = {
-      clientId: process.env.GARMIN_CLIENT_ID,
-      clientSecret: process.env.GARMIN_CLIENT_SECRET,
-      baseUrl: 'https://connect.garmin.com'
-    };
+    const clientId = process.env.GARMIN_CLIENT_ID;
+    const clientSecret = process.env.GARMIN_CLIENT_SECRET;
 
-    // Security: Server-side validation only
-    if (!garminConfig.clientId || !garminConfig.clientSecret) {
+    if (!clientId || !clientSecret) {
       logger.error('❌ Garmin API credentials not configured');
       return NextResponse.json({
         success: false,
@@ -66,31 +76,43 @@ async function handleGarminCallback(req: ApiRequest) {
       }, { status: 503 });
     }
 
-    // Security: Exchange authorization code for access token (server-side only)
+    // Exchange authorization code for access token using OAuth 2.0 PKCE
+    // POST to Garmin token endpoint with code_verifier (PKCE proof)
     try {
-      const tokenResponse = await fetch(`${garminConfig.baseUrl}/oauth-service/oauth/access_token`, {
+      const tokenResponse = await fetch(GARMIN_TOKEN_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': `Basic ${Buffer.from(`${garminConfig.clientId}:${garminConfig.clientSecret}`).toString('base64')}`
+          'Authorization': `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`
         },
         body: new URLSearchParams({
           grant_type: 'authorization_code',
           code,
-          redirect_uri: storedState.redirectUri
+          redirect_uri: redirectUri,
+          client_id: clientId,
+          code_verifier: codeVerifier,
         })
       });
 
       if (!tokenResponse.ok) {
         const errorText = await tokenResponse.text();
-        logger.error('❌ Token exchange failed:', errorText);
-        throw new Error(`Token exchange failed with status ${tokenResponse.status}`);
+        logger.error('❌ Garmin token exchange failed:', tokenResponse.status, errorText);
+        throw new Error(`Token exchange failed with status ${tokenResponse.status}: ${errorText}`);
       }
 
-      const tokenData = await tokenResponse.json();
+      const tokenData = await tokenResponse.json() as {
+        access_token: string;
+        refresh_token?: string;
+        expires_in?: number;
+        token_type?: string;
+      };
 
-      // Get user profile from Garmin
-      const profileResponse = await fetch(`${garminConfig.baseUrl}/userprofile-service/userprofile`, {
+      if (!tokenData.access_token) {
+        throw new Error('No access_token in Garmin token response');
+      }
+
+      // Fetch Garmin user profile
+      const profileResponse = await fetch(GARMIN_PROFILE_URL, {
         headers: {
           'Authorization': `Bearer ${tokenData.access_token}`
         }
@@ -110,9 +132,10 @@ async function handleGarminCallback(req: ApiRequest) {
         connectionStatus: 'connected' as const,
         lastSync: new Date(),
         authTokens: {
-          accessToken: tokenData.access_token as string,
-          refreshToken: (tokenData.refresh_token as string | undefined),
-          expiresAt: new Date(Date.now() + (tokenData.expires_in ?? 3600) * 1000),
+          accessToken: tokenData.access_token,
+          refreshToken: tokenData.refresh_token,
+          // Garmin access tokens expire after ~3 months; expires_in may be in seconds
+          expiresAt: new Date(Date.now() + (tokenData.expires_in ?? 7776000) * 1000),
         },
         capabilities: [
           'heart_rate',
@@ -138,7 +161,7 @@ async function handleGarminCallback(req: ApiRequest) {
       logger.error('Garmin token exchange error:', tokenError);
       return NextResponse.json({
         success: false,
-        error: 'Failed to exchange authorization code'
+        error: tokenError instanceof Error ? tokenError.message : 'Failed to exchange authorization code'
       }, { status: 500 });
     }
 
@@ -151,5 +174,5 @@ async function handleGarminCallback(req: ApiRequest) {
   }
 }
 
-// Export secured handler — OAuth security is provided by the signed state token
+// Export secured handler — OAuth security provided by HMAC-signed state token
 export const POST = withApiSecurity(handleGarminCallback);

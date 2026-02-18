@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { withApiSecurity, ApiRequest } from '@/lib/security.middleware';
-import { generateSignedState } from '../oauth-state';
+import { generateSignedState, generateCodeVerifier, generateCodeChallenge } from '../oauth-state';
 
-// POST - Initiate Garmin OAuth flow (SECURED)
+// POST - Initiate Garmin OAuth 2.0 PKCE flow (SECURED)
 async function handleGarminConnect(req: ApiRequest) {
   try {
     const { userId, redirectUri } = await req.json();
@@ -64,16 +64,8 @@ async function handleGarminConnect(req: ApiRequest) {
       }, { status: 400 });
     }
 
-    // Garmin Connect OAuth 2.0 configuration
-    const garminConfig = {
-      clientId: process.env.GARMIN_CLIENT_ID,
-      redirectUri: parsedRedirectUri.toString(),
-      scope: 'activities workouts heart_rate training_data',
-      baseUrl: 'https://connect.garmin.com'
-    };
-
-    // Security: Never send client secret to client
-    if (!garminConfig.clientId) {
+    const clientId = process.env.GARMIN_CLIENT_ID;
+    if (!clientId) {
       logger.error('Garmin client ID not configured');
       return NextResponse.json({
         success: false,
@@ -81,22 +73,27 @@ async function handleGarminConnect(req: ApiRequest) {
       }, { status: 503 });
     }
 
-    // Security: Generate cryptographically secure signed state (stateless verification)
-    const state = generateSignedState(userId, garminConfig.redirectUri);
+    // PKCE: Generate code_verifier (kept server-side in signed state) and code_challenge (sent to Garmin)
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = await generateCodeChallenge(codeVerifier);
 
-    // Generate OAuth authorization URL
-    const authUrl = new URL(`${garminConfig.baseUrl}/oauth-service/oauth/preauthorized`);
+    // Embed code_verifier securely in the signed state so callback can retrieve it
+    const state = generateSignedState(userId, parsedRedirectUri.toString(), codeVerifier);
 
-    authUrl.searchParams.append('oauth_client_id', garminConfig.clientId);
-    authUrl.searchParams.append('oauth_response_type', 'code');
-    authUrl.searchParams.append('oauth_redirect_uri', garminConfig.redirectUri);
-    authUrl.searchParams.append('oauth_scope', garminConfig.scope);
-    authUrl.searchParams.append('oauth_state', state);
+    // Garmin Connect OAuth 2.0 PKCE authorization URL
+    // Ref: https://developerportal.garmin.com/sites/default/files/OAuth2PKCE_1.pdf
+    const authUrl = new URL('https://connect.garmin.com/oauth2Confirm');
+    authUrl.searchParams.append('client_id', clientId);
+    authUrl.searchParams.append('response_type', 'code');
+    authUrl.searchParams.append('redirect_uri', parsedRedirectUri.toString());
+    authUrl.searchParams.append('scope', 'activity workout heart_rate');
+    authUrl.searchParams.append('state', state);
+    authUrl.searchParams.append('code_challenge', codeChallenge);
+    authUrl.searchParams.append('code_challenge_method', 'S256');
 
     return NextResponse.json({
       success: true,
       authUrl: authUrl.toString()
-      // Security: Don't send state to client - it's stored server-side
     });
 
   } catch (error) {
@@ -108,5 +105,4 @@ async function handleGarminConnect(req: ApiRequest) {
   }
 }
 
-// Export secured handler with authentication
 export const POST = withApiSecurity(handleGarminConnect);

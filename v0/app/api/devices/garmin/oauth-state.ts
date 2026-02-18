@@ -7,6 +7,7 @@ interface OAuthStatePayload {
   nonce: string;
   createdAt: number;
   expiresAt: number;
+  codeVerifier: string; // PKCE code verifier — stored server-side, never sent to browser
 }
 
 function getStateSecret() {
@@ -23,7 +24,11 @@ function signStatePayload(payload: OAuthStatePayload) {
 }
 
 function verifyAndParseState(state: string): OAuthStatePayload | null {
-  const [encodedPayload, providedSignature] = state.split('.');
+  const dotIndex = state.lastIndexOf('.');
+  if (dotIndex === -1) return null;
+
+  const encodedPayload = state.slice(0, dotIndex);
+  const providedSignature = state.slice(dotIndex + 1);
 
   if (!encodedPayload || !providedSignature) {
     return null;
@@ -58,16 +63,27 @@ function verifyAndParseState(state: string): OAuthStatePayload | null {
   }
 }
 
-function generateSignedState(userId: number, redirectUri: string) {
+function generateCodeVerifier(): string {
+  // RFC 7636: 43-128 unreserved chars [A-Z a-z 0-9 - . _ ~]
+  return randomBytes(64).toString('base64url').slice(0, 128);
+}
+
+async function generateCodeChallenge(codeVerifier: string): Promise<string> {
+  const { createHash } = await import('crypto');
+  return createHash('sha256').update(codeVerifier).digest('base64url');
+}
+
+function generateSignedState(userId: number, redirectUri: string, codeVerifier: string) {
   const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
   return signStatePayload({
     userId,
     redirectUri,
+    codeVerifier,
     createdAt: Date.now(),
     expiresAt,
     nonce: randomBytes(16).toString('hex')
   });
 }
 
-export { generateSignedState, verifyAndParseState };
+export { generateSignedState, verifyAndParseState, generateCodeVerifier, generateCodeChallenge };
