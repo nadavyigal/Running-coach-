@@ -167,4 +167,54 @@ describe("/api/devices/garmin/activities", () => {
     expect(body.error).toContain("Please reconnect Garmin");
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("falls back to connectapi activity list when wellness window mode returns 404", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ errorMessage: "InvalidPullTokenException failure" }),
+          { status: 400 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response("Not found", { status: 404 })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              activityId: "capi-1",
+              activityType: { typeKey: "running" },
+              startTimeGMT: "2026-02-18T10:00:00.000Z",
+              distance: 5000,
+              duration: 1800,
+              averageHR: 150,
+            },
+          ]),
+          { status: 200 }
+        )
+      );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const req = new Request(
+      "http://localhost/api/devices/garmin/activities?userId=42&days=1",
+      {
+        headers: { authorization: "Bearer test-token" },
+      }
+    );
+
+    const res = await GET(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.source).toBe("connectapi");
+    expect(body.runningCount).toBe(1);
+    expect(body.activities[0].activityId).toBe("capi-1");
+
+    const thirdUrl = String(fetchMock.mock.calls[2]?.[0] ?? "");
+    expect(thirdUrl).toContain("connectapi.garmin.com/activitylist-service/activities/search/activities");
+  });
 });
