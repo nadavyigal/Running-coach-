@@ -49,10 +49,14 @@ export async function GET(req: Request) {
   const endTime = Math.floor(Date.now() / 1000);
   const startTime = Math.max(0, endTime - GARMIN_MAX_WINDOW_SECONDS + 1);
 
-  const [activities, sleep, profile] = await Promise.all([
+  const [activities, activitiesConnect, sleep, profile] = await Promise.all([
     testEndpoint(
       accessToken,
       `${GARMIN_API_BASE}/wellness-api/rest/activities?uploadStartTimeInSeconds=${startTime}&uploadEndTimeInSeconds=${endTime}`
+    ),
+    testEndpoint(
+      accessToken,
+      `${GARMIN_CONNECT_BASE}/activitylist-service/activities/search/activities?start=0&limit=5`
     ),
     testEndpoint(
       accessToken,
@@ -73,6 +77,6 @@ export async function GET(req: Request) {
       startIso: new Date(startTime * 1000).toISOString(),
       endIso: new Date(endTime * 1000).toISOString(),
     },
-    results: { profile, activities, sleep },
+    results: { profile, activities, activitiesConnect, sleep },
   });
 }

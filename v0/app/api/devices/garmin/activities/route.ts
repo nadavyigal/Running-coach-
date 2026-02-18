@@ -6,9 +6,28 @@ export const dynamic = 'force-dynamic';
 // Garmin Health API (Developer Program)
 // Docs: https://developer.garmin.com/health-api/overview/
 const GARMIN_API_BASE = 'https://apis.garmin.com';
+const GARMIN_CONNECT_BASE = 'https://connect.garmin.com';
 const GARMIN_MAX_WINDOW_SECONDS = 86400;
 const MAX_DAYS = 30;
 const DEFAULT_DAYS = 14;
+const CONNECT_PAGE_SIZE = 100;
+const CONNECT_MAX_PAGES = 20;
+
+type GarminSource = 'wellness' | 'connect';
+
+class GarminUpstreamError extends Error {
+  status: number;
+  body: string;
+  source: GarminSource;
+
+  constructor(source: GarminSource, status: number, body: string) {
+    super(`Garmin ${source} API returned ${status}`);
+    this.name = 'GarminUpstreamError';
+    this.source = source;
+    this.status = status;
+    this.body = body;
+  }
+}
 
 function parseDaysParam(rawDays: string | null): number {
   const parsed = Number.parseInt(rawDays ?? '', 10);
@@ -16,8 +35,152 @@ function parseDaysParam(rawDays: string | null): number {
   return Math.min(parsed, MAX_DAYS);
 }
 
-// GET - Fetch Garmin activities via the Wellness API
-// Client reads access token from Dexie.js and passes via Authorization: Bearer <token>
+function parseJsonArray(text: string): any[] {
+  if (!text) return [];
+  const parsed = JSON.parse(text) as unknown;
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+function getActivityStartSeconds(activity: any): number | null {
+  if (typeof activity?.startTimeInSeconds === 'number') {
+    return activity.startTimeInSeconds;
+  }
+
+  const dateValue = activity?.startTimeGMT ?? activity?.startTimeLocal ?? null;
+  if (!dateValue || typeof dateValue !== 'string') return null;
+  const parsed = Date.parse(dateValue);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.floor(parsed / 1000);
+}
+
+function isInvalidPullToken(body: string): boolean {
+  return /InvalidPullTokenException|invalid pull token/i.test(body);
+}
+
+function isAuthError(status: number, body: string): boolean {
+  if (status === 401 || status === 403) return true;
+  return /Unable to read oAuth header|invalid[_ ]token|expired|unauthorized/i.test(body);
+}
+
+function dedupeActivities(rawActivities: any[]): any[] {
+  const seen = new Set<string>();
+  return rawActivities.filter((activity) => {
+    const fallbackId = `${activity.startTimeInSeconds ?? activity.startTimeGMT ?? 'none'}-${activity.durationInSeconds ?? activity.duration ?? 'none'}-${activity.activityType ?? activity.activityType?.typeKey ?? 'unknown'}`;
+    const id = String(activity.activityId ?? activity.summaryId ?? fallbackId);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+async function fetchWellnessActivities(accessToken: string, startTime: number, endTime: number): Promise<any[]> {
+  const rawChunks: any[] = [];
+  let windowStart = startTime;
+
+  while (windowStart <= endTime) {
+    const windowEnd = Math.min(windowStart + GARMIN_MAX_WINDOW_SECONDS - 1, endTime);
+    const url = new URL(`${GARMIN_API_BASE}/wellness-api/rest/activities`);
+    url.searchParams.set('uploadStartTimeInSeconds', String(windowStart));
+    url.searchParams.set('uploadEndTimeInSeconds', String(windowEnd));
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      throw new GarminUpstreamError('wellness', response.status, responseText);
+    }
+
+    rawChunks.push(...parseJsonArray(responseText));
+    windowStart = windowEnd + 1;
+  }
+
+  return dedupeActivities(rawChunks);
+}
+
+async function fetchConnectActivities(accessToken: string, startTime: number, endTime: number): Promise<any[]> {
+  const activities: any[] = [];
+
+  for (let page = 0; page < CONNECT_MAX_PAGES; page++) {
+    const start = page * CONNECT_PAGE_SIZE;
+    const url = new URL(`${GARMIN_CONNECT_BASE}/activitylist-service/activities/search/activities`);
+    url.searchParams.set('start', String(start));
+    url.searchParams.set('limit', String(CONNECT_PAGE_SIZE));
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      throw new GarminUpstreamError('connect', response.status, responseText);
+    }
+
+    const pageRows = parseJsonArray(responseText);
+    if (pageRows.length === 0) break;
+
+    const inRange = pageRows.filter((row: any) => {
+      const startedAt = getActivityStartSeconds(row);
+      if (startedAt == null) return true;
+      return startedAt >= startTime && startedAt <= endTime;
+    });
+    activities.push(...inRange);
+
+    const timestamps = pageRows
+      .map((row: any) => getActivityStartSeconds(row))
+      .filter((value: number | null): value is number => value != null);
+    if (timestamps.length > 0) {
+      const oldestInPage = Math.min(...timestamps);
+      if (oldestInPage < startTime) break;
+    }
+
+    if (pageRows.length < CONNECT_PAGE_SIZE) break;
+  }
+
+  return dedupeActivities(activities);
+}
+
+function toRunSmartActivity(activity: any) {
+  const activityTypeRaw = activity.activityType?.typeKey ?? activity.activityType ?? '';
+  const normalizedActivityType = String(activityTypeRaw).toLowerCase().replace(/ /g, '_');
+
+  const startInSeconds = getActivityStartSeconds(activity);
+  const startIso = startInSeconds
+    ? new Date(startInSeconds * 1000).toISOString()
+    : null;
+
+  const distanceInMeters = activity.distanceInMeters ?? activity.distance ?? 0;
+  const durationInSeconds = activity.durationInSeconds ?? (activity.duration ? Math.round(activity.duration / 1000) : 0);
+  const averageSpeed = activity.averageSpeedInMetersPerSecond ?? activity.averageSpeed ?? null;
+  const averageHeartRate = activity.averageHeartRateInBeatsPerMinute ?? activity.averageHR ?? null;
+  const maxHeartRate = activity.maxHeartRateInBeatsPerMinute ?? activity.maxHR ?? null;
+  const calories = activity.activeKilocalories ?? activity.calories ?? null;
+  const elevationGain = activity.totalElevationGainInMeters ?? activity.elevationGain ?? null;
+
+  return {
+    activityId: activity.activityId ?? activity.summaryId,
+    activityName: activity.activityName ?? activityTypeRaw ?? 'Garmin Activity',
+    activityType: normalizedActivityType,
+    startTimeGMT: startIso,
+    distance: distanceInMeters ? distanceInMeters / 1000 : 0,
+    duration: durationInSeconds ?? 0,
+    averageHR: averageHeartRate,
+    maxHR: maxHeartRate,
+    calories,
+    averagePace: averageSpeed ? Math.round(1000 / averageSpeed) : null,
+    elevationGain,
+  };
+}
+
+// GET - Fetch Garmin activities via Wellness API, with automatic fallback to Garmin Connect API
+// when Garmin returns InvalidPullTokenException for wellness pull endpoints.
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -38,107 +201,65 @@ export async function GET(req: Request) {
 
     const accessToken = authHeader.slice(7);
 
-    // Garmin rejects windows over 86400 seconds, so fetch in day-sized chunks.
     const endTime = Math.floor(Date.now() / 1000);
     const startTime = Math.max(0, endTime - days * 86400 + 1);
 
-    const rawChunks: any[] = [];
-    let windowStart = startTime;
+    let source: GarminSource = 'wellness';
+    let rawActivities: any[];
 
-    while (windowStart <= endTime) {
-      const windowEnd = Math.min(windowStart + GARMIN_MAX_WINDOW_SECONDS - 1, endTime);
-      const url = new URL(`${GARMIN_API_BASE}/wellness-api/rest/activities`);
-      url.searchParams.set('uploadStartTimeInSeconds', String(windowStart));
-      url.searchParams.set('uploadEndTimeInSeconds', String(windowEnd));
-
-      const response = await fetch(url.toString(), {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/json',
-        },
-      });
-
-      if (response.status === 401) {
-        return NextResponse.json(
-          { success: false, error: 'Authentication expired, please reconnect Garmin', needsReauth: true },
-          { status: 401 }
-        );
+    try {
+      rawActivities = await fetchWellnessActivities(accessToken, startTime, endTime);
+    } catch (error) {
+      if (
+        error instanceof GarminUpstreamError &&
+        error.source === 'wellness' &&
+        isInvalidPullToken(error.body)
+      ) {
+        logger.warn('Garmin wellness-api returned InvalidPullTokenException, falling back to connect activitylist-service');
+        source = 'connect';
+        rawActivities = await fetchConnectActivities(accessToken, startTime, endTime);
+      } else {
+        throw error;
       }
-
-      const responseText = await response.text();
-      if (!response.ok) {
-        logger.error(`Garmin activities API error ${response.status}:`, responseText);
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Garmin API returned ${response.status}`,
-            detail: responseText,
-          },
-          { status: 502 }
-        );
-      }
-
-      let rawChunk: unknown;
-      try {
-        rawChunk = responseText ? JSON.parse(responseText) : [];
-      } catch {
-        rawChunk = [];
-      }
-
-      if (!Array.isArray(rawChunk)) {
-        logger.error('Garmin activities: unexpected response shape:', rawChunk);
-        return NextResponse.json(
-          { success: false, error: 'Unexpected response from Garmin API', detail: JSON.stringify(rawChunk) },
-          { status: 502 }
-        );
-      }
-
-      rawChunks.push(...rawChunk);
-      windowStart = windowEnd + 1;
     }
 
-    // Deduplicate in case an activity appears across adjacent windows.
-    const seenActivityIds = new Set<string>();
-    const raw = rawChunks.filter((a: any) => {
-      const fallbackId = `${a.startTimeInSeconds ?? 'none'}-${a.durationInSeconds ?? 'none'}-${a.activityType ?? 'unknown'}`;
-      const activityId = String(a.activityId ?? a.summaryId ?? fallbackId);
-      if (seenActivityIds.has(activityId)) return false;
-      seenActivityIds.add(activityId);
-      return true;
-    });
-
-    // Map Garmin Wellness API activity fields -> RunSmart format
-    const activities = raw.map((a: any) => ({
-      activityId: a.activityId ?? a.summaryId,
-      activityName: a.activityName ?? a.activityType ?? 'Garmin Activity',
-      // Garmin returns activityType in various cases - normalize to lowercase_underscored
-      activityType: (a.activityType ?? '').toLowerCase().replace(/ /g, '_'),
-      startTimeGMT: a.startTimeInSeconds
-        ? new Date(a.startTimeInSeconds * 1000).toISOString()
-        : null,
-      distance: a.distanceInMeters ? a.distanceInMeters / 1000 : 0,
-      duration: a.durationInSeconds ?? 0,
-      averageHR: a.averageHeartRateInBeatsPerMinute ?? null,
-      maxHR: a.maxHeartRateInBeatsPerMinute ?? null,
-      calories: a.activeKilocalories ?? null,
-      // averageSpeed in m/s -> pace in s/km
-      averagePace: a.averageSpeedInMetersPerSecond
-        ? Math.round(1000 / a.averageSpeedInMetersPerSecond)
-        : null,
-      elevationGain: a.totalElevationGainInMeters ?? null,
-    }));
-
-    const runningActivities = activities.filter(
-      (a) => a.activityType.includes('running') || a.activityType.includes('run')
+    const mapped = rawActivities.map((activity: any) => toRunSmartActivity(activity));
+    const runningActivities = mapped.filter(
+      (activity) => activity.activityType.includes('running') || activity.activityType.includes('run')
     );
 
     return NextResponse.json({
       success: true,
       activities: runningActivities,
-      allActivities: activities.length,
+      allActivities: mapped.length,
       runningCount: runningActivities.length,
+      source,
     });
   } catch (error) {
+    if (error instanceof GarminUpstreamError) {
+      if (isAuthError(error.status, error.body)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Authentication expired or invalid, please reconnect Garmin',
+            needsReauth: true,
+            detail: error.body,
+          },
+          { status: 401 }
+        );
+      }
+
+      logger.error(`Garmin ${error.source} activities API error ${error.status}:`, error.body);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Garmin API returned ${error.status}`,
+          detail: error.body,
+        },
+        { status: 502 }
+      );
+    }
+
     logger.error('Garmin activities fetch error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to fetch activities from Garmin' },

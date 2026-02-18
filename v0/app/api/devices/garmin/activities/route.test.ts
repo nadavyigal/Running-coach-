@@ -67,6 +67,7 @@ describe("/api/devices/garmin/activities", () => {
     expect(body.success).toBe(true);
     expect(body.allActivities).toBe(2);
     expect(body.runningCount).toBe(2);
+    expect(body.source).toBe("wellness");
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
     const windows = fetchMock.mock.calls.map(([url]) => {
@@ -79,5 +80,55 @@ describe("/api/devices/garmin/activities", () => {
     expect(windows[0].end - windows[0].start).toBeLessThanOrEqual(86399);
     expect(windows[1].end - windows[1].start).toBeLessThanOrEqual(86399);
     expect(windows[1].start).toBe(windows[0].end + 1);
+  });
+
+  it("falls back to connect activities API when wellness returns InvalidPullTokenException", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ errorMessage: "InvalidPullTokenException failure" }),
+          { status: 400 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              activityId: "c1",
+              activityName: "Morning Run",
+              activityType: { typeKey: "running" },
+              startTimeGMT: "2026-02-18T10:00:00.000Z",
+              distance: 5000,
+              duration: 1500000,
+              averageHR: 150,
+            },
+          ]),
+          { status: 200 }
+        )
+      );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const req = new Request(
+      "http://localhost/api/devices/garmin/activities?userId=42&days=1",
+      {
+        headers: { authorization: "Bearer test-token" },
+      }
+    );
+
+    const res = await GET(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.source).toBe("connect");
+    expect(body.runningCount).toBe(1);
+    expect(body.activities[0].activityId).toBe("c1");
+
+    const firstUrl = String(fetchMock.mock.calls[0]?.[0] ?? "");
+    const secondUrl = String(fetchMock.mock.calls[1]?.[0] ?? "");
+    expect(firstUrl).toContain("wellness-api/rest/activities");
+    expect(secondUrl).toContain("activitylist-service/activities/search/activities");
   });
 });
