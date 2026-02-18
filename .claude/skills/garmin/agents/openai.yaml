@@ -1,0 +1,4 @@
+interface:
+  display_name: "Garmin"
+  short_description: "RunSmart Garmin integration workflow and troubleshooting."
+  default_prompt: "Use this skill to implement and debug Garmin Health API sync for RunSmart."

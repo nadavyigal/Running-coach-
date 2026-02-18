@@ -3,8 +3,6 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 const GARMIN_API_BASE = 'https://apis.garmin.com';
-const GARMIN_CONNECT_API_BASE = 'https://connectapi.garmin.com';
-const GARMIN_CONNECT_PROXY_BASE = 'https://connect.garmin.com/modern/proxy';
 const GARMIN_MAX_WINDOW_SECONDS = 86400;
 
 interface EndpointResult {
@@ -14,13 +12,12 @@ interface EndpointResult {
   body: unknown;
 }
 
-async function testEndpoint(token: string, url: string, headers: HeadersInit = {}): Promise<EndpointResult> {
+async function testEndpoint(token: string, url: string): Promise<EndpointResult> {
   try {
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: 'application/json',
-        ...headers,
       },
     });
     let body: unknown;
@@ -28,9 +25,7 @@ async function testEndpoint(token: string, url: string, headers: HeadersInit = {
     try {
       body = JSON.parse(text);
     } catch {
-      body = /<!doctype html|<html/i.test(text.trim())
-        ? 'Garmin returned an HTML error page'
-        : text;
+      body = /<!doctype html|<html/i.test(text.trim()) ? 'Garmin returned an HTML error page' : text;
     }
     return { url, status: res.status, ok: res.ok, body };
   } catch (e) {
@@ -38,15 +33,56 @@ async function testEndpoint(token: string, url: string, headers: HeadersInit = {
   }
 }
 
-function connectHeaders(viaProxy: boolean): HeadersInit {
-  const headers: Record<string, string> = {
-    'User-Agent': 'GCM-iOS-5.19.1.2',
-  };
-  if (viaProxy) headers['DI-Backend'] = 'connectapi.garmin.com';
-  return headers;
+function parsePermissions(result: EndpointResult): string[] {
+  if (!result.ok || typeof result.body !== 'object' || result.body == null) return [];
+  const permissions = (result.body as { permissions?: unknown }).permissions;
+  return Array.isArray(permissions)
+    ? permissions.filter((entry): entry is string => typeof entry === 'string')
+    : [];
 }
 
-// GET - Diagnose Garmin API access for the current Bearer token.
+function includesPermission(permissions: string[], name: string): boolean {
+  return permissions.includes(name);
+}
+
+function buildBlockers(params: {
+  activitiesUpload: EndpointResult;
+  activitiesBackfill: EndpointResult;
+  sleepUpload: EndpointResult;
+  sleepBackfill: EndpointResult;
+}): string[] {
+  const blockers: string[] = [];
+  const { activitiesUpload, activitiesBackfill, sleepUpload, sleepBackfill } = params;
+
+  if (
+    typeof activitiesUpload.body === 'object' &&
+    activitiesUpload.body != null &&
+    'errorMessage' in activitiesUpload.body &&
+    String((activitiesUpload.body as { errorMessage?: unknown }).errorMessage ?? '').includes(
+      'InvalidPullTokenException'
+    )
+  ) {
+    blockers.push('Activity upload token is invalid (InvalidPullTokenException).');
+  }
+
+  if (
+    typeof activitiesBackfill.body === 'object' &&
+    activitiesBackfill.body != null &&
+    String((activitiesBackfill.body as { errorMessage?: unknown }).errorMessage ?? '').includes(
+      'CONNECT_ACTIVITY'
+    )
+  ) {
+    blockers.push('Activity backfill endpoint is not provisioned (CONNECT_ACTIVITY).');
+  }
+
+  if (sleepUpload.status === 404 || sleepBackfill.status === 404) {
+    blockers.push('Sleep endpoints are not provisioned for this app.');
+  }
+
+  return blockers;
+}
+
+// GET - Diagnose Garmin Wellness API access for the current Bearer token.
 export async function GET(req: Request) {
   const authHeader = req.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) {
@@ -59,80 +95,30 @@ export async function GET(req: Request) {
   const endTime = Math.floor(Date.now() / 1000);
   const startTime = Math.max(0, endTime - GARMIN_MAX_WINDOW_SECONDS + 1);
 
-  const [profile, permissions, activitiesUpload, activitiesBackfill, sleepUpload, sleepBackfill, socialProfileDirect, socialProfileProxy, activitiesConnectDirect, activitiesConnectProxy] = await Promise.all([
-    testEndpoint(
-      accessToken,
-      `${GARMIN_API_BASE}/wellness-api/rest/user/id`
-    ),
-    testEndpoint(
-      accessToken,
-      `${GARMIN_API_BASE}/wellness-api/rest/user/permissions`
-    ),
-    testEndpoint(
-      accessToken,
-      `${GARMIN_API_BASE}/wellness-api/rest/activities?uploadStartTimeInSeconds=${startTime}&uploadEndTimeInSeconds=${endTime}`
-    ),
-    testEndpoint(
-      accessToken,
-      `${GARMIN_API_BASE}/wellness-api/rest/backfill/activities?summaryStartTimeInSeconds=${startTime}&summaryEndTimeInSeconds=${endTime}`
-    ),
-    testEndpoint(
-      accessToken,
-      `${GARMIN_API_BASE}/wellness-api/rest/sleep?uploadStartTimeInSeconds=${startTime}&uploadEndTimeInSeconds=${endTime}`
-    ),
-    testEndpoint(
-      accessToken,
-      `${GARMIN_API_BASE}/wellness-api/rest/backfill/sleep?summaryStartTimeInSeconds=${startTime}&summaryEndTimeInSeconds=${endTime}`
-    ),
-    testEndpoint(
-      accessToken,
-      `${GARMIN_CONNECT_API_BASE}/userprofile-service/socialProfile`,
-      connectHeaders(false)
-    ),
-    testEndpoint(
-      accessToken,
-      `${GARMIN_CONNECT_PROXY_BASE}/userprofile-service/socialProfile`,
-      connectHeaders(true)
-    ),
-    testEndpoint(
-      accessToken,
-      `${GARMIN_CONNECT_API_BASE}/activitylist-service/activities/search/activities?start=0&limit=5`,
-      connectHeaders(false)
-    ),
-    testEndpoint(
-      accessToken,
-      `${GARMIN_CONNECT_PROXY_BASE}/activitylist-service/activities/search/activities?start=0&limit=5`,
-      connectHeaders(true)
-    ),
-  ]);
-
-  const socialProfileBody =
-    socialProfileDirect.ok && typeof socialProfileDirect.body === 'object'
-      ? socialProfileDirect.body as Record<string, unknown>
-      : socialProfileProxy.ok && typeof socialProfileProxy.body === 'object'
-        ? socialProfileProxy.body as Record<string, unknown>
-        : null;
-
-  const userName =
-    socialProfileBody && typeof socialProfileBody.userName === 'string'
-      ? socialProfileBody.userName
-      : null;
-
-  const sleepConnectDirect = userName
-    ? await testEndpoint(
+  const [profile, permissionsResult, activitiesUpload, activitiesBackfill, sleepUpload, sleepBackfill] =
+    await Promise.all([
+      testEndpoint(accessToken, `${GARMIN_API_BASE}/wellness-api/rest/user/id`),
+      testEndpoint(accessToken, `${GARMIN_API_BASE}/wellness-api/rest/user/permissions`),
+      testEndpoint(
         accessToken,
-        `${GARMIN_CONNECT_API_BASE}/wellness-service/wellness/dailySleepData/${encodeURIComponent(userName)}?date=${new Date(endTime * 1000).toISOString().slice(0, 10)}&nonSleepBufferMinutes=60`,
-        connectHeaders(false)
-      )
-    : null;
-
-  const sleepConnectProxy = userName
-    ? await testEndpoint(
+        `${GARMIN_API_BASE}/wellness-api/rest/activities?uploadStartTimeInSeconds=${startTime}&uploadEndTimeInSeconds=${endTime}`
+      ),
+      testEndpoint(
         accessToken,
-        `${GARMIN_CONNECT_PROXY_BASE}/wellness-service/wellness/dailySleepData/${encodeURIComponent(userName)}?date=${new Date(endTime * 1000).toISOString().slice(0, 10)}&nonSleepBufferMinutes=60`,
-        connectHeaders(true)
-      )
-    : null;
+        `${GARMIN_API_BASE}/wellness-api/rest/backfill/activities?summaryStartTimeInSeconds=${startTime}&summaryEndTimeInSeconds=${endTime}`
+      ),
+      testEndpoint(
+        accessToken,
+        `${GARMIN_API_BASE}/wellness-api/rest/sleep?uploadStartTimeInSeconds=${startTime}&uploadEndTimeInSeconds=${endTime}`
+      ),
+      testEndpoint(
+        accessToken,
+        `${GARMIN_API_BASE}/wellness-api/rest/backfill/sleep?summaryStartTimeInSeconds=${startTime}&summaryEndTimeInSeconds=${endTime}`
+      ),
+    ]);
+
+  const permissions = parsePermissions(permissionsResult);
+  const blockers = buildBlockers({ activitiesUpload, activitiesBackfill, sleepUpload, sleepBackfill });
 
   return NextResponse.json({
     timestamp: new Date().toISOString(),
@@ -143,19 +129,21 @@ export async function GET(req: Request) {
       startIso: new Date(startTime * 1000).toISOString(),
       endIso: new Date(endTime * 1000).toISOString(),
     },
+    capabilities: {
+      permissions,
+      activityUploadEnabled: includesPermission(permissions, 'ACTIVITY_EXPORT'),
+      activityBackfillEnabled: includesPermission(permissions, 'HISTORICAL_DATA_EXPORT'),
+      sleepEnabled: includesPermission(permissions, 'HEALTH_EXPORT'),
+      workoutImportEnabled: includesPermission(permissions, 'WORKOUT_IMPORT'),
+    },
+    blockers,
     results: {
       profile,
-      permissions,
+      permissions: permissionsResult,
       activitiesUpload,
       activitiesBackfill,
       sleepUpload,
       sleepBackfill,
-      socialProfileDirect,
-      socialProfileProxy,
-      activitiesConnectDirect,
-      activitiesConnectProxy,
-      sleepConnectDirect,
-      sleepConnectProxy,
     },
   });
 }

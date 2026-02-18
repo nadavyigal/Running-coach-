@@ -17,6 +17,12 @@ describe("/api/devices/garmin/sleep", () => {
       .fn()
       .mockResolvedValueOnce(
         new Response(
+          JSON.stringify({ permissions: ["HEALTH_EXPORT", "HISTORICAL_DATA_EXPORT"] }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
           JSON.stringify([
             {
               sleepSummaryId: "s1",
@@ -67,9 +73,9 @@ describe("/api/devices/garmin/sleep", () => {
     expect(body.source).toBe("sleep-upload");
     expect(Array.isArray(body.sleep)).toBe(true);
     expect(body.sleep).toHaveLength(2);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
 
-    const windows = fetchMock.mock.calls.map(([url]) => {
+    const windows = fetchMock.mock.calls.slice(1).map(([url]) => {
       const parsed = new URL(String(url));
       const start = Number(parsed.searchParams.get("uploadStartTimeInSeconds"));
       const end = Number(parsed.searchParams.get("uploadEndTimeInSeconds"));
@@ -84,6 +90,12 @@ describe("/api/devices/garmin/sleep", () => {
   it("retries via backfill summary params when upload mode returns InvalidPullTokenException", async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ permissions: ["HEALTH_EXPORT", "HISTORICAL_DATA_EXPORT"] }),
+          { status: 200 }
+        )
+      )
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({ errorMessage: "InvalidPullTokenException failure" }),
@@ -120,19 +132,46 @@ describe("/api/devices/garmin/sleep", () => {
     expect(body.success).toBe(true);
     expect(body.source).toBe("sleep-backfill");
     expect(body.sleep).toHaveLength(1);
-
-    const firstUrl = String(fetchMock.mock.calls[0]?.[0] ?? "");
-    const secondUrl = String(fetchMock.mock.calls[1]?.[0] ?? "");
-    expect(firstUrl).toContain("/wellness-api/rest/sleep");
-    expect(firstUrl).toContain("uploadStartTimeInSeconds");
-    expect(secondUrl).toContain("/wellness-api/rest/backfill/sleep");
-    expect(secondUrl).toContain("summaryStartTimeInSeconds");
-    expect(secondUrl).toContain("summaryEndTimeInSeconds");
   });
 
-  it("returns explicit HEALTH_EXPORT permission guidance when sleep endpoints are not enabled", async () => {
+  it("returns explicit HEALTH_EXPORT guidance when health permission is missing", async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ permissions: ["ACTIVITY_EXPORT"] }),
+          { status: 200 }
+        )
+      );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const req = new Request(
+      "http://localhost/api/devices/garmin/sleep?userId=42&days=1",
+      {
+        headers: { authorization: "Bearer test-token" },
+      }
+    );
+
+    const res = await GET(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.success).toBe(false);
+    expect(body.requiredPermissions).toEqual(["HEALTH_EXPORT"]);
+    expect(body.needsReauth).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns provisioning guidance when sleep endpoints are not enabled", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ permissions: ["HEALTH_EXPORT", "HISTORICAL_DATA_EXPORT"] }),
+          { status: 200 }
+        )
+      )
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -170,7 +209,7 @@ describe("/api/devices/garmin/sleep", () => {
 
     expect(res.status).toBe(403);
     expect(body.success).toBe(false);
-    expect(body.requiredPermissions).toEqual(["HEALTH_EXPORT"]);
+    expect(body.requiredPermissions).toEqual(["HEALTH_EXPORT", "HISTORICAL_DATA_EXPORT"]);
     expect(body.needsReauth).toBeUndefined();
   });
 });

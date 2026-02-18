@@ -4,17 +4,11 @@ import { logger } from '@/lib/logger';
 export const dynamic = 'force-dynamic';
 
 const GARMIN_API_BASE = 'https://apis.garmin.com';
-const GARMIN_CONNECT_API_BASE = 'https://connectapi.garmin.com';
-const GARMIN_CONNECT_PROXY_BASE = 'https://connect.garmin.com/modern/proxy';
 const GARMIN_MAX_WINDOW_SECONDS = 86400;
 const MAX_DAYS = 30;
 const DEFAULT_DAYS = 7;
 
-type GarminSleepSource =
-  | 'sleep-upload'
-  | 'sleep-backfill'
-  | 'connectapi-direct'
-  | 'connectapi-proxy';
+type GarminSleepSource = 'permissions' | 'sleep-upload' | 'sleep-backfill';
 type GarminSleepQueryMode = 'upload' | 'backfill';
 
 class GarminSleepUpstreamError extends Error {
@@ -86,160 +80,32 @@ function isFallbackWorthyWellnessStatus(status: number): boolean {
   return status === 400 || status === 404;
 }
 
-function isSleepPermissionNotEnabled(status: number, body: string): boolean {
+function isSleepEndpointNotProvisioned(status: number, body: string): boolean {
   if (/Endpoint not enabled for summary type:\s*CONNECT_SLEEP/i.test(body)) return true;
-  // Garmin may return 404 for sleep endpoints when sleep export is not provisioned/enabled.
   if (status === 404 && /\/wellness-api\/rest\/(backfill\/)?sleep/i.test(body)) return true;
   return false;
 }
 
-function connectApiHeaders(accessToken: string, viaProxy: boolean): Record<string, string> {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${accessToken}`,
-    Accept: 'application/json',
-    'User-Agent': 'GCM-iOS-5.19.1.2',
-  };
-  if (viaProxy) {
-    headers['DI-Backend'] = 'connectapi.garmin.com';
-  }
-  return headers;
-}
-
-function toDateKey(seconds: number): string {
-  return new Date(seconds * 1000).toISOString().slice(0, 10);
-}
-
-function normalizeConnectSleepValue(rawValue: unknown): number | null {
-  if (typeof rawValue !== 'number' || !Number.isFinite(rawValue)) return null;
-  // Garmin connectapi timestamps are typically in ms.
-  if (rawValue > 1_000_000_000_000) return Math.floor(rawValue / 1000);
-  return Math.floor(rawValue);
-}
-
-function normalizeConnectSleepRecord(raw: any): any | null {
-  const dto = raw?.dailySleepDTO ?? raw?.dailySleepDto;
-  if (!dto || typeof dto !== 'object') return null;
-
-  const calendarDate = dto.calendarDate ?? null;
-  if (!calendarDate || typeof calendarDate !== 'string') return null;
-
-  return {
-    calendarDate,
-    startTimeInSeconds: normalizeConnectSleepValue(dto.sleepStartTimestampGMT),
-    durationInSeconds:
-      typeof dto.sleepTimeSeconds === 'number'
-        ? Math.floor(dto.sleepTimeSeconds)
-        : null,
-    deepSleepDurationInSeconds:
-      typeof dto.deepSleepSeconds === 'number'
-        ? Math.floor(dto.deepSleepSeconds)
-        : null,
-    lightSleepDurationInSeconds:
-      typeof dto.lightSleepSeconds === 'number'
-        ? Math.floor(dto.lightSleepSeconds)
-        : null,
-    remSleepInSeconds:
-      typeof dto.remSleepSeconds === 'number'
-        ? Math.floor(dto.remSleepSeconds)
-        : null,
-    awakeDurationInSeconds:
-      typeof dto.awakeSleepSeconds === 'number'
-        ? Math.floor(dto.awakeSleepSeconds)
-        : null,
-    overallSleepScore: dto.sleepScores?.overall?.value ?? null,
-  };
-}
-
-async function fetchConnectApiSleepFromBase(
-  accessToken: string,
-  startTime: number,
-  endTime: number,
-  baseUrl: string,
-  source: GarminSleepSource
-): Promise<any[]> {
-  const viaProxy = source === 'connectapi-proxy';
-  const profileUrl = `${baseUrl}/userprofile-service/socialProfile`;
-  const profileResponse = await fetch(profileUrl, {
-    headers: connectApiHeaders(accessToken, viaProxy),
+async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
+  const response = await fetch(`${GARMIN_API_BASE}/wellness-api/rest/user/permissions`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
   });
-  const profileText = await profileResponse.text();
-  if (!profileResponse.ok) {
-    throw new GarminSleepUpstreamError(source, profileResponse.status, profileText);
+
+  const responseText = await response.text();
+  if (!response.ok) {
+    throw new GarminSleepUpstreamError('permissions', response.status, responseText);
   }
 
-  let profileJson: any = null;
   try {
-    profileJson = profileText ? JSON.parse(profileText) : null;
+    const parsed = JSON.parse(responseText) as { permissions?: unknown };
+    return Array.isArray(parsed.permissions)
+      ? parsed.permissions.filter((entry): entry is string => typeof entry === 'string')
+      : [];
   } catch {
-    profileJson = null;
-  }
-
-  const userName = profileJson?.userName;
-  if (!userName || typeof userName !== 'string') {
-    throw new GarminSleepUpstreamError(source, 502, 'Missing userName in connectapi socialProfile response');
-  }
-
-  const dayRecords: any[] = [];
-  let cursor = new Date(startTime * 1000);
-  const end = new Date(endTime * 1000);
-
-  while (cursor <= end) {
-    const dateKey = cursor.toISOString().slice(0, 10);
-    const sleepUrl = new URL(
-      `${baseUrl}/wellness-service/wellness/dailySleepData/${encodeURIComponent(userName)}`
-    );
-    sleepUrl.searchParams.set('date', dateKey);
-    sleepUrl.searchParams.set('nonSleepBufferMinutes', '60');
-
-    const sleepResponse = await fetch(sleepUrl.toString(), {
-      headers: connectApiHeaders(accessToken, viaProxy),
-    });
-    const sleepText = await sleepResponse.text();
-    if (!sleepResponse.ok) {
-      throw new GarminSleepUpstreamError(source, sleepResponse.status, sleepText);
-    }
-
-    let sleepJson: any = null;
-    try {
-      sleepJson = sleepText ? JSON.parse(sleepText) : null;
-    } catch {
-      sleepJson = null;
-    }
-
-    const normalized = normalizeConnectSleepRecord(sleepJson);
-    if (normalized) dayRecords.push(normalized);
-
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
-
-  return dayRecords;
-}
-
-async function fetchConnectApiSleep(
-  accessToken: string,
-  startTime: number,
-  endTime: number
-): Promise<{ source: GarminSleepSource; rows: any[] }> {
-  try {
-    const rows = await fetchConnectApiSleepFromBase(
-      accessToken,
-      startTime,
-      endTime,
-      GARMIN_CONNECT_API_BASE,
-      'connectapi-direct'
-    );
-    return { source: 'connectapi-direct', rows };
-  } catch (directError) {
-    logger.warn('Garmin connectapi-direct sleep fallback failed, trying connect proxy fallback');
-
-    const rows = await fetchConnectApiSleepFromBase(
-      accessToken,
-      startTime,
-      endTime,
-      GARMIN_CONNECT_PROXY_BASE,
-      'connectapi-proxy'
-    );
-    return { source: 'connectapi-proxy', rows };
+    return [];
   }
 }
 
@@ -285,9 +151,7 @@ async function fetchSleepData(
   return rawChunks;
 }
 
-// GET - Fetch Garmin sleep data via the Connect Developer Health API.
-// If upload-window params fail (InvalidPullTokenException or related 400/404),
-// retry via backfill/summary-window params before requesting reconnect.
+// GET - Fetch Garmin sleep data via officially supported Wellness API endpoints.
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -307,6 +171,22 @@ export async function GET(req: Request) {
     }
 
     const accessToken = authHeader.slice(7);
+    const permissions = await fetchGarminPermissions(accessToken);
+    const hasHealthExport = permissions.includes('HEALTH_EXPORT');
+    const hasHistoricalExport = permissions.includes('HISTORICAL_DATA_EXPORT');
+
+    if (!hasHealthExport) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Garmin health sharing permission is missing for this user/app',
+          source: 'permissions',
+          requiredPermissions: ['HEALTH_EXPORT'],
+          action: 'Enable HEALTH_EXPORT in Garmin Connect and reconnect Garmin.',
+        },
+        { status: 403 }
+      );
+    }
 
     const endTime = Math.floor(Date.now() / 1000);
     const startTime = Math.max(0, endTime - days * 86400 + 1);
@@ -316,50 +196,73 @@ export async function GET(req: Request) {
 
     try {
       rawChunks = await fetchSleepData(accessToken, startTime, endTime, 'upload');
-    } catch (error) {
+    } catch (uploadError) {
       if (
-        error instanceof GarminSleepUpstreamError &&
-        error.source === 'sleep-upload' &&
-        (
-          isInvalidPullToken(error.body) ||
-          isMissingTimeRange(error.body) ||
-          isFallbackWorthyWellnessStatus(error.status)
-        )
+        uploadError instanceof GarminSleepUpstreamError &&
+        uploadError.source === 'sleep-upload' &&
+        (isInvalidPullToken(uploadError.body) ||
+          isMissingTimeRange(uploadError.body) ||
+          isFallbackWorthyWellnessStatus(uploadError.status))
       ) {
+        if (!hasHistoricalExport) {
+          if (isSleepEndpointNotProvisioned(uploadError.status, uploadError.body)) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: 'Garmin sleep endpoint is not provisioned for this app',
+                source: uploadError.source,
+                detail: summarizeUpstreamBody(uploadError.body),
+                requiredPermissions: ['HEALTH_EXPORT'],
+                action: 'Ask Garmin to enable CONNECT_SLEEP export on your Wellness API app.',
+              },
+              { status: 403 }
+            );
+          }
+
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'Garmin sleep upload sync token is invalid and historical backfill is not enabled',
+              source: uploadError.source,
+              detail: summarizeUpstreamBody(uploadError.body),
+              requiredPermissions: ['HISTORICAL_DATA_EXPORT'],
+              action:
+                'Ask Garmin to enable CONNECT_SLEEP backfill for your app or reset pull token state.',
+            },
+            { status: 409 }
+          );
+        }
+
         logger.warn(
-          `Garmin upload-window sleep request failed (${error.status}); retrying with backfill summary-window params`
+          `Garmin upload-window sleep request failed (${uploadError.status}); retrying with backfill summary-window params`
         );
         source = 'sleep-backfill';
+
         try {
           rawChunks = await fetchSleepData(accessToken, startTime, endTime, 'backfill');
         } catch (backfillError) {
           if (
             backfillError instanceof GarminSleepUpstreamError &&
             backfillError.source === 'sleep-backfill' &&
-            (
-              isInvalidPullToken(backfillError.body) ||
-              isMissingTimeRange(backfillError.body) ||
-              isFallbackWorthyWellnessStatus(backfillError.status) ||
-              isSleepPermissionNotEnabled(backfillError.status, backfillError.body)
-            )
+            isSleepEndpointNotProvisioned(backfillError.status, backfillError.body)
           ) {
-            logger.warn(
-              `Garmin backfill sleep request failed (${backfillError.status}); trying connectapi fallback`
+            return NextResponse.json(
+              {
+                success: false,
+                error: 'Garmin sleep backfill endpoint is not provisioned for this app',
+                source: backfillError.source,
+                detail: summarizeUpstreamBody(backfillError.body),
+                requiredPermissions: ['HEALTH_EXPORT', 'HISTORICAL_DATA_EXPORT'],
+                action: 'Ask Garmin to enable CONNECT_SLEEP summary backfill on your Wellness API app.',
+              },
+              { status: 403 }
             );
-            try {
-              const connectFallback = await fetchConnectApiSleep(accessToken, startTime, endTime);
-              source = connectFallback.source;
-              rawChunks = connectFallback.rows;
-            } catch (connectFallbackError) {
-              logger.warn('Garmin connectapi sleep fallback failed; returning wellness error');
-              throw backfillError;
-            }
-          } else {
-            throw backfillError;
           }
+
+          throw backfillError;
         }
       } else {
-        throw error;
+        throw uploadError;
       }
     }
 
@@ -379,12 +282,11 @@ export async function GET(req: Request) {
 
         return {
           date: calendarDate,
-          sleepStartTimestampGMT: s.startTimeInSeconds
-            ? s.startTimeInSeconds * 1000
-            : null,
-          sleepEndTimestampGMT: s.startTimeInSeconds && s.durationInSeconds
-            ? (s.startTimeInSeconds + s.durationInSeconds) * 1000
-            : null,
+          sleepStartTimestampGMT: s.startTimeInSeconds ? s.startTimeInSeconds * 1000 : null,
+          sleepEndTimestampGMT:
+            s.startTimeInSeconds && s.durationInSeconds
+              ? (s.startTimeInSeconds + s.durationInSeconds) * 1000
+              : null,
           totalSleepSeconds: s.durationInSeconds ?? null,
           deepSleepSeconds: s.deepSleepDurationInSeconds ?? null,
           lightSleepSeconds: s.lightSleepDurationInSeconds ?? null,
@@ -397,7 +299,7 @@ export async function GET(req: Request) {
       })
       .filter(Boolean);
 
-    return NextResponse.json({ success: true, source, sleep: sleepRecords });
+    return NextResponse.json({ success: true, source, sleep: sleepRecords, permissions });
   } catch (error) {
     if (error instanceof GarminSleepUpstreamError) {
       const detail = summarizeUpstreamBody(error.body);
@@ -413,21 +315,6 @@ export async function GET(req: Request) {
             detail,
           },
           { status: 401 }
-        );
-      }
-
-      if (isSleepPermissionNotEnabled(error.status, error.body)) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Garmin sleep sharing permission is not enabled for this app',
-            source: error.source,
-            requiredPermissions: ['HEALTH_EXPORT'],
-            detail,
-            action:
-              'Enable sleep/health sharing for RunSmart in Garmin Connect and reconnect Garmin.',
-          },
-          { status: 403 }
         );
       }
 

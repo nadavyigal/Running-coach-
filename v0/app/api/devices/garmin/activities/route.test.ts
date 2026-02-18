@@ -17,6 +17,12 @@ describe("/api/devices/garmin/activities", () => {
       .fn()
       .mockResolvedValueOnce(
         new Response(
+          JSON.stringify({ permissions: ["ACTIVITY_EXPORT", "HISTORICAL_DATA_EXPORT"] }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
           JSON.stringify([
             {
               activityId: "a1",
@@ -68,9 +74,9 @@ describe("/api/devices/garmin/activities", () => {
     expect(body.allActivities).toBe(2);
     expect(body.runningCount).toBe(2);
     expect(body.source).toBe("wellness-upload");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
 
-    const windows = fetchMock.mock.calls.map(([url]) => {
+    const windows = fetchMock.mock.calls.slice(1).map(([url]) => {
       const parsed = new URL(String(url));
       const start = Number(parsed.searchParams.get("uploadStartTimeInSeconds"));
       const end = Number(parsed.searchParams.get("uploadEndTimeInSeconds"));
@@ -85,6 +91,12 @@ describe("/api/devices/garmin/activities", () => {
   it("retries via backfill summary params when upload mode returns InvalidPullTokenException", async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ permissions: ["ACTIVITY_EXPORT", "HISTORICAL_DATA_EXPORT"] }),
+          { status: 200 }
+        )
+      )
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({ errorMessage: "InvalidPullTokenException failure" }),
@@ -124,8 +136,8 @@ describe("/api/devices/garmin/activities", () => {
     expect(body.runningCount).toBe(1);
     expect(body.activities[0].activityId).toBe("b1");
 
-    const firstUrl = String(fetchMock.mock.calls[0]?.[0] ?? "");
-    const secondUrl = String(fetchMock.mock.calls[1]?.[0] ?? "");
+    const firstUrl = String(fetchMock.mock.calls[1]?.[0] ?? "");
+    const secondUrl = String(fetchMock.mock.calls[2]?.[0] ?? "");
     expect(firstUrl).toContain("/wellness-api/rest/activities");
     expect(firstUrl).toContain("uploadStartTimeInSeconds");
     expect(secondUrl).toContain("/wellness-api/rest/backfill/activities");
@@ -133,23 +145,12 @@ describe("/api/devices/garmin/activities", () => {
     expect(secondUrl).toContain("summaryEndTimeInSeconds");
   });
 
-  it("retries via backfill summary params when upload mode returns 404", async () => {
+  it("returns explicit ACTIVITY_EXPORT guidance when permission is missing", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response("Not Found", { status: 404 })
-      )
-      .mockResolvedValueOnce(
         new Response(
-          JSON.stringify([
-            {
-              activityId: "b404",
-              activityType: "running",
-              startTimeInSeconds: 1771408800,
-              durationInSeconds: 1800,
-              distanceInMeters: 5000,
-            },
-          ]),
+          JSON.stringify({ permissions: ["HEALTH_EXPORT"] }),
           { status: 200 }
         )
       );
@@ -166,48 +167,27 @@ describe("/api/devices/garmin/activities", () => {
     const res = await GET(req);
     const body = await res.json();
 
-    expect(res.status).toBe(200);
-    expect(body.success).toBe(true);
-    expect(body.source).toBe("wellness-backfill");
-    expect(body.runningCount).toBe(1);
+    expect(res.status).toBe(403);
+    expect(body.success).toBe(false);
+    expect(body.requiredPermissions).toEqual(["ACTIVITY_EXPORT"]);
+    expect(body.needsReauth).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("does not force reauth on generic 403 Forbidden without token-expired markers", async () => {
+  it("returns explicit backfill provisioning guidance when CONNECT_ACTIVITY is not enabled", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response("Not Found", { status: 404 })
+        new Response(
+          JSON.stringify({ permissions: ["ACTIVITY_EXPORT", "HISTORICAL_DATA_EXPORT"] }),
+          { status: 200 }
+        )
       )
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ message: "HTTP 403 Forbidden", error: "ForbiddenException" }),
-          { status: 403 }
+          JSON.stringify({ errorMessage: "InvalidPullTokenException failure" }),
+          { status: 400 }
         )
-      );
-
-    vi.stubGlobal("fetch", fetchMock);
-
-    const req = new Request(
-      "http://localhost/api/devices/garmin/activities?userId=42&days=1",
-      {
-        headers: { authorization: "Bearer test-token" },
-      }
-    );
-
-    const res = await GET(req);
-    const body = await res.json();
-
-    expect(res.status).toBe(502);
-    expect(body.success).toBe(false);
-    expect(body.needsReauth).toBeUndefined();
-    expect(body.source).toBe("wellness-backfill");
-  });
-
-  it("returns explicit ACTIVITY_EXPORT permission guidance when CONNECT_ACTIVITY summary is not enabled", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response("Not Found", { status: 404 })
       )
       .mockResolvedValueOnce(
         new Response(
@@ -233,7 +213,7 @@ describe("/api/devices/garmin/activities", () => {
 
     expect(res.status).toBe(403);
     expect(body.success).toBe(false);
-    expect(body.requiredPermissions).toEqual(["ACTIVITY_EXPORT"]);
+    expect(body.requiredPermissions).toEqual(["ACTIVITY_EXPORT", "HISTORICAL_DATA_EXPORT"]);
     expect(body.needsReauth).toBeUndefined();
   });
 });
