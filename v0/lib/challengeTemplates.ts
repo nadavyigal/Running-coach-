@@ -13,11 +13,11 @@ const CHALLENGE_TRANSLATIONS = {
   'start-running': {
     he: {
       name: '21 יום להתחיל לרוץ',
-      tagline: 'מאפס ועד 30 דקות ריצה רצופה',
-      description: 'מושלם למתחילים לגמרי. בנו הרגל ריצה בלי שום לחץ. נלווה אתכם מהצעדים הראשונים ועד ריצה בטוחה ונוחה של 30 דקות.',
-      targetAudience: 'רצים חדשים לגמרי שמתמודדים עם פחד וחוסר עקביות',
-      promise: 'תעברו מ"אני לא יכול לרוץ" ל"אני רץ" תוך 21 יום בלבד',
-      workoutPattern: 'יחסי הליכה/ריצה הדרגתיים, מתחילים ב-1 דקת ריצה / 2 דקות הליכה ובונים בהדרגה ל-30 דקות ריצה רצופה. הדגש על עקביות ולא על עצימות.',
+      tagline: '21 יום. ללא ניסיון. תהיה רץ.',
+      description: 'כל מי שרץ היום התחיל פעם אחת. הפחד, חוסר הזמן, ה"אני לא מסוג הרצים" — כולם עברו את זה. האתגר הזה בנוי בדיוק לשם. שלושה שבועות של צעדים קטנים, מוכוונות AI, ופתאום אתה רץ.',
+      targetAudience: 'אנשים שתמיד רצו לרוץ אבל לא ידעו מאיפה להתחיל',
+      promise: 'ביום 21 תסיים 21 ריצות, תבנה הרגל אמיתי, ותשתיק את הקול שאמר שאתה לא יכול.',
+      workoutPattern: 'יחסי הליכה/ריצה הדרגתיים — מתחילים ב-1 דקת ריצה / 2 דקות הליכה ובונים עד ל-30 דקות ריצה רצופה. הדגש על להגיע, לא על מהירות.',
       dailyThemes: [
         'יום 1: פשוט להגיע — המטרה היחידה היום היא להתחיל',
         'יום 2: חוגגים שהופעתם פעמיים',
@@ -46,10 +46,10 @@ const CHALLENGE_TRANSLATIONS = {
   'morning-ritual': {
     he: {
       name: 'ריצת בוקר מודרכת — 21 יום',
-      tagline: 'הפכו את הריצה לטקס בוקר רגוע',
-      description: 'לרצים שרוצים יותר מסתם אימון. הפכו את ריצת הבוקר שלכם לתרגול מיינדפולנס שקובע את הטון ליום כולו. כולל הנחיות נשימה, נקודות מיקוד ושאלות להתבוננות.',
-      targetAudience: 'רצים מזדמנים שמחפשים משמעות, שגרה ובהירות נפשית',
-      promise: 'התחילו כל יום ממורכזים, בעלי אנרגיה ותחושת הישג',
+      tagline: 'הבוקרים שלך עומדים להשתנות. 21 יום לריצה שמייצבת אותך.',
+      description: 'לא עוד "עוד 5 דקות". ריצת הבוקר הנכונה לא מתישה — היא מאירה את שאר היום. 21 יום של ריצה מודרכת עם מיינדפולנס, נשימה, וכוונות שמכינות אותך לכל מה שיבוא.',
+      targetAudience: 'רצים מזדמנים שמחפשים שגרה, משמעות ובהירות נפשית בבוקר',
+      promise: 'תתחיל כל יום ממורכז, עם אנרגיה ותחושת הישג — לפני שיום העבודה בכלל מתחיל.',
       workoutPattern: 'ריצות בוקר בקצב נוח (30-40 דקות) עם הנחיות מיינדפולנס, תרגילי נשימה וקביעת כוונות. ההתמקדות בחוויה, לא בקצב.',
       dailyThemes: [
         'יום 1: קבעו את הכוונה — מה אתם רוצים מ-21 הימים האלה?',
@@ -79,10 +79,10 @@ const CHALLENGE_TRANSLATIONS = {
   'plateau-breaker': {
     he: {
       name: 'פורצי פלטו — 21 יום',
-      tagline: 'תרגישו התקדמות שוב תוך 3 שבועות',
-      description: 'תקועים באותן 3 ריצות בשבוע? בואו נפרוץ את זה עם גיוון מובנה. נציג סטריידים, עליות ועבודת טמפו קלה כדי להצית מחדש את ההתקדמות שלכם. מונע נתונים ומסתגל.',
-      targetAudience: 'רצים מזדמנים תקועים באותה שגרה כבר 3+ חודשים',
-      promise: 'פרצו לרמת כושר חדשה עם אימון חכם ומתקדם',
+      tagline: 'תקוע באותו קצב? 21 יום למהיר יותר — בניהול AI ומבוסס נתונים.',
+      description: 'אותן שלוש ריצות בשבוע, אותו קצב, אותה תחושה שאתה תקוע. הגיע הזמן לשנות. הAI מנתח את האימונים שלך ומוסיף בדיוק מה שהגוף שלך צריך — סטריידים, עליות, טמפו — עד שאתה מרגיש את ההבדל.',
+      targetAudience: 'רצים שרצים כבר כמה חודשים ולא רואים התקדמות',
+      promise: 'פרוץ לרמת כושר חדשה עם אימון חכם שמסתגל בדיוק לגוף שלך.',
       workoutPattern: 'שילוב אסטרטגי של ריצות קלות (60%), עבודת מהירות (20%) ואימוני עליות (20%). מציג סטריידים, פארטלק ומאמצי סף. קושי מסתגל על בסיס משוב.',
       dailyThemes: [
         'יום 1: ריצת אבחון — בואו נראה איפה אתם נמצאים',
@@ -128,14 +128,14 @@ export const CHALLENGE_TEMPLATES: Omit<ChallengeTemplate, 'id' | 'createdAt' | '
   {
     slug: 'start-running',
     name: '21-Day Start Running',
-    tagline: 'From zero to running 30 minutes comfortably',
-    description: 'Perfect for brand-new runners. Build a sustainable running habit with zero pressure. We\'ll guide you from your first steps to running confidently for 30 minutes.',
-    targetAudience: 'brand-new runners struggling with fear and inconsistency',
-    promise: 'You\'ll transform from "I can\'t run" to "I\'m a runner" in just 21 days',
+    tagline: '21 days. No experience needed. You\'ll be a runner.',
+    description: 'Everyone who runs today started exactly once. The fear, the "I\'m not a runner" voice, the not knowing where to begin — all of it is normal, and none of it has to stop you. This challenge was built for that moment. Three weeks of small, guided steps. An AI coach that adjusts to how you feel. And on day 21, you\'ll wonder why you waited.',
+    targetAudience: 'people who always wanted to run but never knew how to start',
+    promise: 'By Day 21, you\'ll have completed 21 runs, built a real habit, and silenced the voice that said you couldn\'t.',
     durationDays: 21,
     difficulty: 'beginner',
     category: 'habit',
-    workoutPattern: 'Progressive walk/run ratios starting with 1min run / 2min walk, gradually building to continuous 30min runs. Emphasis on consistency over intensity.',
+    workoutPattern: 'Progressive walk/run intervals — starting with 1 min run / 2 min walk, building to 30 continuous minutes. The goal is showing up, not speed. Every session adapts to how you felt yesterday.',
     coachTone: 'gentle',
     dailyThemes: [
       'Day 1: Just show up - Your only goal today is to start',
@@ -168,14 +168,14 @@ export const CHALLENGE_TEMPLATES: Omit<ChallengeTemplate, 'id' | 'createdAt' | '
   {
     slug: 'morning-ritual',
     name: '21-Day Morning Guided Run',
-    tagline: 'Turn running into a calm morning ritual',
-    description: 'For runners who want more than exercise. Transform your morning runs into a mindful practice that sets the tone for your entire day. Includes guided breathing, focus cues, and reflection prompts.',
-    targetAudience: 'casual runners seeking meaning, routine, and mental clarity',
-    promise: 'Start every day centered, energized, and with a sense of accomplishment',
+    tagline: 'Your mornings are about to change. 21 days to a run that grounds you.',
+    description: 'Not another exhausting workout before coffee. The right morning run doesn\'t drain you — it sets the tone for everything that follows. 21 days of guided runs with mindfulness cues, breathing exercises, and daily intentions that leave you feeling clear, energized, and ahead of your day before it starts.',
+    targetAudience: 'casual runners seeking meaning, routine, and mental clarity in the morning',
+    promise: 'Start every day centered, energized, and with a sense of accomplishment — before your workday even begins.',
     durationDays: 21,
     difficulty: 'beginner',
     category: 'mindful',
-    workoutPattern: 'Easy-paced morning runs (30-40min) with guided mindfulness cues, breathing exercises, and intention-setting. Focus on the experience, not the pace.',
+    workoutPattern: 'Easy-paced morning runs (30-40min) with guided mindfulness cues, breathing exercises, and intention-setting. Focus on the experience, not the pace. Your coach adapts based on how rested you feel.',
     coachTone: 'calm',
     dailyThemes: [
       'Day 1: Set your intention - What do you want from these 21 days?',
@@ -208,14 +208,14 @@ export const CHALLENGE_TEMPLATES: Omit<ChallengeTemplate, 'id' | 'createdAt' | '
   {
     slug: 'plateau-breaker',
     name: '21-Day Plateau Breaker',
-    tagline: 'Feel progress again in 3 weeks',
-    description: 'Stuck at the same 3 runs per week? Break through with structured variety. Introduce strides, hills, and easy tempo work to reignite your progress. Data-driven and adaptive.',
-    targetAudience: 'casual runners stuck at same routine for 3+ months',
-    promise: 'Breakthrough to a new level of fitness with smart, progressive training',
+    tagline: 'Stuck at the same pace? 21 days to faster — AI-coached, data-driven.',
+    description: 'Same three runs per week. Same pace. Same feeling of going nowhere. You\'re not lazy — you\'re undertrained in the right ways. This challenge analyzes your pattern and adds exactly what\'s missing: strides, hills, and tempo work timed precisely to when your body is ready. Three weeks in, you\'ll feel the difference on every run.',
+    targetAudience: 'casual runners stuck at the same routine for 3+ months who want measurable progress',
+    promise: 'Break through to a new fitness level with smart, progressive training that adapts to your data — not a one-size plan.',
     durationDays: 21,
     difficulty: 'intermediate',
     category: 'performance',
-    workoutPattern: 'Strategic mix of easy runs (60%), speed work (20%), and hill sessions (20%). Introduces strides, fartlek, and threshold efforts. Adaptive difficulty based on feedback.',
+    workoutPattern: 'Strategic mix of easy runs (60%), speed work (20%), and hill sessions (20%). Introduces strides, fartlek, and threshold efforts. Difficulty adapts based on your post-run feedback.',
     coachTone: 'analytical',
     dailyThemes: [
       'Day 1: Diagnostic run - Let\'s see where you are',
