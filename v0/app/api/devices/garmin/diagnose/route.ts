@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 const GARMIN_API_BASE = 'https://apis.garmin.com';
 const GARMIN_CONNECT_BASE = 'https://connect.garmin.com';
+const GARMIN_MAX_WINDOW_SECONDS = 86400;
 
 interface EndpointResult {
   url: string;
@@ -44,22 +45,19 @@ export async function GET(req: Request) {
 
   const accessToken = authHeader.slice(7);
 
-  // 7-day window (safe for both activities and sleep)
+  // Garmin limits query windows to 86400 seconds.
   const endTime = Math.floor(Date.now() / 1000);
-  const startTime = endTime - 7 * 86400;
+  const startTime = Math.max(0, endTime - GARMIN_MAX_WINDOW_SECONDS + 1);
 
   const [activities, sleep, profile] = await Promise.all([
-    // Activities — wellness-api pull endpoint
     testEndpoint(
       accessToken,
       `${GARMIN_API_BASE}/wellness-api/rest/activities?uploadStartTimeInSeconds=${startTime}&uploadEndTimeInSeconds=${endTime}`
     ),
-    // Sleep — wellness-api pull endpoint
     testEndpoint(
       accessToken,
       `${GARMIN_API_BASE}/wellness-api/rest/sleep?startTimeInSeconds=${startTime}&endTimeInSeconds=${endTime}`
     ),
-    // User profile — verify token is valid and get user info
     testEndpoint(
       accessToken,
       `${GARMIN_CONNECT_BASE}/userprofile-service/userprofile`
@@ -71,7 +69,7 @@ export async function GET(req: Request) {
     timeRange: {
       startTime,
       endTime,
-      days: 7,
+      seconds: endTime - startTime + 1,
       startIso: new Date(startTime * 1000).toISOString(),
       endIso: new Date(endTime * 1000).toISOString(),
     },

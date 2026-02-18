@@ -69,7 +69,7 @@ export async function syncGarminActivities(
   }
 
   try {
-    const res = await fetch(`/api/devices/garmin/activities?userId=${userId}&limit=40`, {
+    const res = await fetch(`/api/devices/garmin/activities?userId=${userId}&days=${days}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
     const data = await res.json()
