@@ -82,9 +82,10 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
 
       if (result.errors.length > 0) {
         toast({
-          title: "Sync issue",
+          title: "Sync failed",
           description: result.errors[0],
           variant: "destructive",
+          duration: 8000,
         })
       } else {
         toast({
@@ -92,7 +93,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
           description:
             result.activitiesImported > 0
               ? `${result.activitiesImported} new run${result.activitiesImported !== 1 ? "s" : ""} added${result.activitiesSkipped > 0 ? `, ${result.activitiesSkipped} already existed` : ""}.`
-              : "No new activities to import from the last 14 days.",
+              : "No new activities found in the last 14 days.",
         })
       }
 
@@ -124,9 +125,10 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
 
       if (result.errors.length > 0) {
         toast({
-          title: "Sync issue",
+          title: "Sync failed",
           description: result.errors[0],
           variant: "destructive",
+          duration: 8000,
         })
       } else {
         toast({
@@ -134,7 +136,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
           description:
             result.sleepImported > 0
               ? `${result.sleepImported} night${result.sleepImported !== 1 ? "s" : ""} of sleep data added.`
-              : "No new sleep data from the last 7 days.",
+              : "No new sleep data found in the last 7 days.",
         })
       }
     } finally {

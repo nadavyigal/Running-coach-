@@ -1,106 +1,105 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 
-// Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
 
-// GET - List Garmin activities
-// The client reads the access token from its local Dexie.js store and passes it
-// via Authorization: Bearer <token> — the server proxies the request to Garmin.
+// Garmin Connect Developer API base
+// Ref: developerportal.garmin.com — Activity API + Health API
+const GARMIN_API_BASE = 'https://apis.garmin.com';
+
+// GET - Fetch Garmin activities via the Connect Developer API
+// Client reads access token from Dexie.js and passes via Authorization: Bearer <token>
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const start = parseInt(searchParams.get('start') || '0');
+    const days = Math.min(parseInt(searchParams.get('days') || '14'), 30);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '40'), 100);
 
     if (!userId) {
-      return NextResponse.json({
-        success: false,
-        error: 'User ID is required'
-      }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
     }
 
-    // Token is provided by the client (stored in client-side Dexie.js / IndexedDB)
     const authHeader = req.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({
-        success: false,
-        error: 'Authorization token required — please reconnect your Garmin device',
-        needsReauth: true
-      }, { status: 401 });
-    }
-
-    const accessToken = authHeader.slice(7); // Remove "Bearer " prefix
-
-    const garminConfig = {
-      baseUrl: 'https://connect.garmin.com'
-    };
-
-    try {
-      // Fetch activities from Garmin Connect
-      const activitiesResponse = await fetch(
-        `${garminConfig.baseUrl}/activitylist-service/activities/search/activities?start=${start}&limit=${limit}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`
-          }
-        }
+      return NextResponse.json(
+        { success: false, error: 'Authorization token required', needsReauth: true },
+        { status: 401 }
       );
-
-      if (!activitiesResponse.ok) {
-        if (activitiesResponse.status === 401) {
-          // Token expired — signal client to reconnect (client updates Dexie.js)
-          return NextResponse.json({
-            success: false,
-            error: 'Authentication expired, please reconnect your Garmin device',
-            needsReauth: true
-          }, { status: 401 });
-        }
-
-        throw new Error(`Garmin API error: ${activitiesResponse.status}`);
-      }
-
-      const activities = await activitiesResponse.json();
-
-      // Filter running activities and format data
-      const runningActivities = activities.filter((activity: any) =>
-        activity.activityType?.typeKey === 'running'
-      ).map((activity: any) => ({
-        activityId: activity.activityId,
-        activityName: activity.activityName,
-        startTimeGMT: activity.startTimeGMT,
-        distance: activity.distance / 1000, // Convert to km
-        duration: activity.duration / 1000, // Convert to seconds
-        averageHR: activity.averageHR,
-        maxHR: activity.maxHR,
-        calories: activity.calories,
-        averagePace: activity.averageSpeed ? (1000 / activity.averageSpeed) : null, // Convert to pace (s/km)
-        elevationGain: activity.elevationGain,
-        activityType: activity.activityType?.typeKey,
-        sportType: activity.sportType?.sportTypeKey
-      }));
-
-      return NextResponse.json({
-        success: true,
-        activities: runningActivities,
-        totalCount: activities.length,
-        runningCount: runningActivities.length
-      });
-
-    } catch (apiError) {
-      logger.error('Garmin API error:', apiError);
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to fetch activities from Garmin Connect'
-      }, { status: 502 });
     }
 
-  } catch (error) {
-    logger.error('Error fetching Garmin activities:', error);
+    const accessToken = authHeader.slice(7);
+
+    // Build Unix timestamp range
+    const endTime = Math.floor(Date.now() / 1000);
+    const startTime = endTime - days * 86400;
+
+    const url = new URL(`${GARMIN_API_BASE}/wellness-api/rest/activities`);
+    url.searchParams.set('uploadStartTimeInSeconds', String(startTime));
+    url.searchParams.set('uploadEndTimeInSeconds', String(endTime));
+    url.searchParams.set('limit', String(limit));
+
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (response.status === 401) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication expired, please reconnect Garmin', needsReauth: true },
+        { status: 401 }
+      );
+    }
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      logger.error(`Garmin activities API error ${response.status}:`, errorBody);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Garmin API returned ${response.status}`,
+          detail: errorBody,
+        },
+        { status: 502 }
+      );
+    }
+
+    const raw: any[] = await response.json();
+
+    // Map Garmin Wellness API activity fields → RunSmart format
+    const activities = raw.map((a: any) => ({
+      activityId: a.activityId ?? a.summaryId,
+      activityName: a.activityName ?? a.activityType ?? 'Garmin Activity',
+      activityType: (a.activityType ?? '').toLowerCase().replace(/ /g, '_'), // e.g. "RUNNING" → "running"
+      startTimeGMT: a.startTimeInSeconds
+        ? new Date(a.startTimeInSeconds * 1000).toISOString()
+        : null,
+      distance: a.distanceInMeters ? a.distanceInMeters / 1000 : 0,          // → km
+      duration: a.durationInSeconds ?? 0,                                     // seconds
+      averageHR: a.averageHeartRateInBeatsPerMinute ?? null,
+      maxHR: a.maxHeartRateInBeatsPerMinute ?? null,
+      calories: a.activeKilocalories ?? null,
+      // averageSpeed in m/s → pace in s/km
+      averagePace: a.averageSpeedInMetersPerSecond
+        ? Math.round(1000 / a.averageSpeedInMetersPerSecond)
+        : null,
+      elevationGain: a.totalElevationGainInMeters ?? null,
+    }));
+
+    const runningActivities = activities.filter(
+      (a) => a.activityType.includes('running') || a.activityType.includes('run')
+    );
+
     return NextResponse.json({
-      success: false,
-      error: 'Failed to fetch Garmin activities'
-    }, { status: 500 });
+      success: true,
+      activities: runningActivities,
+      allActivities: activities.length,
+      runningCount: runningActivities.length,
+    });
+  } catch (error) {
+    logger.error('Garmin activities fetch error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch activities from Garmin' },
+      { status: 500 }
+    );
   }
 }

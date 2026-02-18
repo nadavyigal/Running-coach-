@@ -85,7 +85,9 @@ export async function syncGarminActivities(
     }
 
     if (!data.success || !Array.isArray(data.activities)) {
-      result.errors.push(data.error || 'Failed to fetch activities from Garmin')
+      // Surface the actual Garmin error detail if available
+      const detail = data.detail ? ` (${data.detail})` : ''
+      result.errors.push((data.error || 'Failed to fetch activities from Garmin') + detail)
       return result
     }
 
@@ -95,7 +97,8 @@ export async function syncGarminActivities(
 
     for (const act of data.activities) {
       const activityId = String(act.activityId)
-      const completedAt = new Date(act.startTimeGMT)
+      // startTimeGMT is already an ISO string from our route mapping
+      const completedAt = act.startTimeGMT ? new Date(act.startTimeGMT) : new Date()
 
       if (completedAt < cutoff) continue
 
@@ -181,7 +184,8 @@ export async function syncGarminSleep(
     }
 
     if (!data.success || !Array.isArray(data.sleep)) {
-      result.errors.push(data.error || 'Failed to fetch sleep data from Garmin')
+      const detail = data.detail ? ` (${data.detail})` : ''
+      result.errors.push((data.error || 'Failed to fetch sleep data from Garmin') + detail)
       return result
     }
 

@@ -3,13 +3,14 @@ import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
-// GET - Fetch Garmin sleep data for a date range
+const GARMIN_API_BASE = 'https://apis.garmin.com';
+
+// GET - Fetch Garmin sleep data via the Connect Developer Health API
 // Client reads access token from Dexie.js and passes via Authorization: Bearer <token>
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
-    // Date range: default last 7 days
     const days = Math.min(parseInt(searchParams.get('days') || '7'), 30);
 
     if (!userId) {
@@ -26,72 +27,62 @@ export async function GET(req: Request) {
 
     const accessToken = authHeader.slice(7);
 
-    // Build date list: today going back <days> days
-    const dates: string[] = [];
-    for (let i = 0; i < days; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      dates.push(d.toISOString().slice(0, 10)); // YYYY-MM-DD
-    }
+    // Build Unix timestamp range
+    const endTime = Math.floor(Date.now() / 1000);
+    const startTime = endTime - days * 86400;
 
-    // Fetch each day in parallel (Garmin sleep endpoint is per-day)
-    const results = await Promise.allSettled(
-      dates.map(async (date) => {
-        const res = await fetch(
-          `https://connect.garmin.com/wellness-service/wellness/dailySleepData?date=${date}`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
+    const url = new URL(`${GARMIN_API_BASE}/wellness-api/rest/sleep`);
+    url.searchParams.set('startTimeInSeconds', String(startTime));
+    url.searchParams.set('endTimeInSeconds', String(endTime));
 
-        if (res.status === 401) {
-          throw Object.assign(new Error('Token expired'), { needsReauth: true });
-        }
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
 
-        if (!res.ok) {
-          // No data for this date — skip silently
-          return null;
-        }
-
-        const data = await res.json();
-        return { date, data };
-      })
-    );
-
-    // Check if any result was a 401
-    const reauth = results.some(
-      (r) => r.status === 'rejected' && (r.reason as any)?.needsReauth
-    );
-    if (reauth) {
+    if (response.status === 401) {
       return NextResponse.json(
         { success: false, error: 'Authentication expired, please reconnect Garmin', needsReauth: true },
         { status: 401 }
       );
     }
 
-    const sleepRecords = results
-      .filter((r): r is PromiseFulfilledResult<{ date: string; data: any } | null> =>
-        r.status === 'fulfilled' && r.value !== null
-      )
-      .map((r) => {
-        const { date, data } = r.value!;
-        const daily = data?.dailySleepDTO;
-        if (!daily) return null;
+    if (!response.ok) {
+      const errorBody = await response.text();
+      logger.error(`Garmin sleep API error ${response.status}:`, errorBody);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Garmin API returned ${response.status}`,
+          detail: errorBody,
+        },
+        { status: 502 }
+      );
+    }
+
+    const raw: any[] = await response.json();
+
+    // Map Garmin Wellness API sleep fields → RunSmart format
+    const sleepRecords = raw
+      .map((s: any) => {
+        const calendarDate: string | null = s.calendarDate ?? null;
+        if (!calendarDate) return null;
 
         return {
-          date,
-          sleepStartTimestampGMT: daily.sleepStartTimestampGMT,
-          sleepEndTimestampGMT: daily.sleepEndTimestampGMT,
-          totalSleepSeconds: daily.sleepTimeSeconds,          // seconds
-          deepSleepSeconds: daily.deepSleepSeconds,
-          lightSleepSeconds: daily.lightSleepSeconds,
-          remSleepSeconds: daily.remSleepSeconds,
-          awakeSleepSeconds: daily.awakeSleepSeconds,
-          sleepScores: daily.sleepScores,                    // { overall, rem, deep, light, awakenings }
-          restlessCount: daily.restlessCount,
-          restlessMomentCount: daily.restlessMomentCount,
-          sleepWindowConfirmationType: daily.sleepWindowConfirmationType,
-          averageSpO2Value: daily.averageSpO2Value,
-          averageRespirationValue: daily.averageRespirationValue,
-          averageStressLevel: daily.averageStressLevel,
+          date: calendarDate,                                                  // YYYY-MM-DD
+          sleepStartTimestampGMT: s.startTimeInSeconds
+            ? s.startTimeInSeconds * 1000
+            : null,
+          sleepEndTimestampGMT: s.startTimeInSeconds && s.durationInSeconds
+            ? (s.startTimeInSeconds + s.durationInSeconds) * 1000
+            : null,
+          totalSleepSeconds: s.durationInSeconds ?? null,
+          deepSleepSeconds: s.deepSleepDurationInSeconds ?? null,
+          lightSleepSeconds: s.lightSleepDurationInSeconds ?? null,
+          remSleepSeconds: s.remSleepInSeconds ?? null,
+          awakeSleepSeconds: s.awakeDurationInSeconds ?? null,
+          sleepScores: s.overallSleepScore
+            ? { overall: { value: s.overallSleepScore?.value ?? s.overallSleepScore } }
+            : null,
         };
       })
       .filter(Boolean);
