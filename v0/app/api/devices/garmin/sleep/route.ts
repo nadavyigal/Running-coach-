@@ -36,7 +36,10 @@ export async function GET(req: Request) {
     url.searchParams.set('endTimeInSeconds', String(endTime));
 
     const response = await fetch(url.toString(), {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
     });
 
     if (response.status === 401) {

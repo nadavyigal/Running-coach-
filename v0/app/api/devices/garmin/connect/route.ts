@@ -86,7 +86,9 @@ async function handleGarminConnect(req: ApiRequest) {
     authUrl.searchParams.append('client_id', clientId);
     authUrl.searchParams.append('response_type', 'code');
     authUrl.searchParams.append('redirect_uri', parsedRedirectUri.toString());
-    authUrl.searchParams.append('scope', 'activity workout heart_rate');
+    // Garmin Health API scopes: activity (runs), sleep, workout, heart_rate
+    // Full list: https://developer.garmin.com/health-api/overview/
+    authUrl.searchParams.append('scope', 'activity workout heart_rate sleep');
     authUrl.searchParams.append('state', state);
     authUrl.searchParams.append('code_challenge', codeChallenge);
     authUrl.searchParams.append('code_challenge_method', 'S256');
