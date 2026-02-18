@@ -270,17 +270,13 @@ export async function GET(req: Request) {
             retryError.source === 'wellness-window' &&
             isInvalidPullToken(retryError.body)
           ) {
-            return NextResponse.json(
-              {
-                success: false,
-                error: 'Garmin token is not valid for activity pull. Please reconnect Garmin.',
-                needsReauth: true,
-                detail: summarizeUpstreamBody(retryError.body),
-              },
-              { status: 401 }
+            logger.warn(
+              'Garmin wellness-api returned InvalidPullTokenException for both query modes; falling back to connectapi activitylist-service'
             );
-          }
-          if (
+            source = 'connectapi';
+            rawActivities = await fetchConnectApiActivities(accessToken, startTime, endTime);
+            // Fallback succeeded, continue response path.
+          } else if (
             retryError instanceof GarminUpstreamError &&
             retryError.source === 'wellness-window' &&
             isFallbackWorthyWellnessStatus(retryError.status)
@@ -290,7 +286,8 @@ export async function GET(req: Request) {
             );
             source = 'connectapi';
             rawActivities = await fetchConnectApiActivities(accessToken, startTime, endTime);
-          } else {
+          }
+          else {
             throw retryError;
           }
         }

@@ -133,7 +133,7 @@ describe("/api/devices/garmin/activities", () => {
     expect(secondUrl).not.toContain("uploadStartTimeInSeconds");
   });
 
-  it("returns needsReauth when both activity query modes return InvalidPullTokenException", async () => {
+  it("falls back to connectapi when both wellness activity query modes return InvalidPullTokenException", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -146,6 +146,21 @@ describe("/api/devices/garmin/activities", () => {
         new Response(
           JSON.stringify({ errorMessage: "InvalidPullTokenException failure" }),
           { status: 400 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              activityId: "capi-ivpt",
+              activityType: { typeKey: "running" },
+              startTimeGMT: "2026-02-18T10:00:00.000Z",
+              distance: 6000,
+              duration: 2100,
+              averageHR: 152,
+            },
+          ]),
+          { status: 200 }
         )
       );
 
@@ -161,11 +176,11 @@ describe("/api/devices/garmin/activities", () => {
     const res = await GET(req);
     const body = await res.json();
 
-    expect(res.status).toBe(401);
-    expect(body.success).toBe(false);
-    expect(body.needsReauth).toBe(true);
-    expect(body.error).toContain("Please reconnect Garmin");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(res.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.source).toBe("connectapi");
+    expect(body.runningCount).toBe(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("falls back to connectapi activity list when wellness window mode returns 404", async () => {

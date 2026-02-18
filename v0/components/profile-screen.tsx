@@ -1401,9 +1401,33 @@ export function ProfileScreen() {
           {userId && (
             <GarminSyncPanel
               userId={userId}
-              onReconnect={() => {
-                // Navigate to Add Activity to reconnect via the Garmin OAuth flow
-                window.location.href = "/?screen=today"
+              onReconnect={async () => {
+                try {
+                  const response = await fetch('/api/devices/garmin/connect', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      userId,
+                      redirectUri: `${window.location.origin}/garmin/callback`,
+                    }),
+                  })
+
+                  const data = await response.json()
+                  if (!response.ok || !data?.success || !data?.authUrl) {
+                    throw new Error(data?.error || 'Failed to initiate Garmin reconnect')
+                  }
+
+                  window.location.href = data.authUrl
+                } catch (reconnectError) {
+                  console.error('Garmin reconnect initiation failed:', reconnectError)
+                  toast({
+                    title: 'Reconnect failed',
+                    description: 'Could not start Garmin reconnect. Please try again.',
+                    variant: 'destructive',
+                  })
+                }
               }}
             />
           )}
