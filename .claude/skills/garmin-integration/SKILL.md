@@ -68,7 +68,25 @@ ENCRYPTION_KEY=<32+ char secret used for HMAC signing OAuth state>
 
 ---
 
-## OAuth Flow (Step-by-Step)
+## Garmin API Endpoints (OAuth 2.0 PKCE — Verified from Official PDF Spec)
+
+| Endpoint | URL | Purpose |
+|----------|-----|---------|
+| Authorization | `https://connect.garmin.com/oauth2Confirm` | Redirect user to grant access |
+| Token Exchange | `https://diauth.garmin.com/di-oauth2-service/oauth/token` | Exchange code → access_token |
+| User Profile | `https://connect.garmin.com/userprofile-service/userprofile` | Get Garmin user info after auth |
+| Activities | `https://connect.garmin.com/activitylist-service/activities/search/activities` | List activities |
+| User Permissions | `https://apis.garmin.com/wellness-api/rest/user/permissions` | Check granted scopes |
+
+> **Old (broken) endpoints — DO NOT USE:**
+> - ~~`https://connect.garmin.com/oauth-service/oauth/preauthorized`~~ (OAuth 1.0, returns 404)
+> - ~~`https://connect.garmin.com/oauth-service/oauth/access_token`~~ (OAuth 1.0, broken)
+
+---
+
+## OAuth 2.0 PKCE Flow (Required by Garmin Developer Program)
+
+Garmin requires **Authorization Code + PKCE** (RFC 7636). OAuth 1.0 is deprecated (retires 12/31/2026).
 
 ### Step 1 — User clicks "Connect Garmin"
 
@@ -126,26 +144,40 @@ Redirects to `/?screen=profile`.
 
 ---
 
-## Garmin API Endpoints Used
+## Garmin OAuth 2.0 PKCE Authorization Request
 
-| Endpoint | Purpose |
-|----------|---------|
-| `https://connect.garmin.com/oauth-service/oauth/preauthorized` | Authorization URL (OAuth 2.0, Garmin variant) |
-| `https://connect.garmin.com/oauth-service/oauth/access_token` | Token exchange (POST with Basic auth + `grant_type=authorization_code`) |
-| `https://connect.garmin.com/userprofile-service/userprofile` | Fetch user profile after auth |
-| `https://connect.garmin.com/activitylist-service/activities/search/activities` | List activities |
+`GET https://connect.garmin.com/oauth2Confirm` with these query parameters:
 
-### Garmin OAuth Parameter Names
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| `client_id` | your registered client ID | Standard OAuth 2.0 (NOT `oauth_client_id`) |
+| `response_type` | `code` | Standard OAuth 2.0 |
+| `redirect_uri` | registered callback URL | Must exactly match Garmin portal |
+| `scope` | `activity workout heart_rate` | Space-separated |
+| `state` | HMAC-signed payload | Contains userId + codeVerifier + nonce |
+| `code_challenge` | base64url(SHA256(codeVerifier)) | PKCE S256 challenge |
+| `code_challenge_method` | `S256` | Required by Garmin |
 
-Garmin uses non-standard `oauth_` prefixed parameters in the authorization URL:
-- `oauth_client_id` (not `client_id`)
-- `oauth_response_type` (not `response_type`)
-- `oauth_redirect_uri` (not `redirect_uri`)
-- `oauth_scope` (not `scope`)
-- `oauth_state` (not `state`)
+## Garmin Token Exchange Request
 
-The callback URL returns standard `code` and `state` (or `oauth_state`).
-Always read both: `searchParams.get("state") ?? searchParams.get("oauth_state")`.
+`POST https://diauth.garmin.com/di-oauth2-service/oauth/token` with:
+
+| Parameter | Value |
+|-----------|-------|
+| `grant_type` | `authorization_code` |
+| `code` | code from Garmin callback |
+| `redirect_uri` | same URI used in auth request |
+| `client_id` | your client ID |
+| `code_verifier` | original random string (PKCE proof) |
+| `Authorization` | `Basic base64(clientId:clientSecret)` |
+
+### Scopes Available
+
+```
+activity    # Activity data (runs, workouts)
+workout     # Planned workouts
+heart_rate  # Heart rate measurements
+```
 
 ### Scopes Requested
 
