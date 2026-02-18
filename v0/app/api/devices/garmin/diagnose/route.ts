@@ -26,7 +26,9 @@ async function testEndpoint(token: string, url: string): Promise<EndpointResult>
     try {
       body = JSON.parse(text);
     } catch {
-      body = text;
+      body = /<!doctype html|<html/i.test(text.trim())
+        ? 'Garmin returned an HTML error page'
+        : text;
     }
     return { url, status: res.status, ok: res.ok, body };
   } catch (e) {
@@ -49,14 +51,14 @@ export async function GET(req: Request) {
   const endTime = Math.floor(Date.now() / 1000);
   const startTime = Math.max(0, endTime - GARMIN_MAX_WINDOW_SECONDS + 1);
 
-  const [activities, activitiesConnect, sleep, profile] = await Promise.all([
+  const [activitiesUpload, activitiesWindow, sleep, profile] = await Promise.all([
     testEndpoint(
       accessToken,
       `${GARMIN_API_BASE}/wellness-api/rest/activities?uploadStartTimeInSeconds=${startTime}&uploadEndTimeInSeconds=${endTime}`
     ),
     testEndpoint(
       accessToken,
-      `${GARMIN_CONNECT_BASE}/activitylist-service/activities/search/activities?start=0&limit=5`
+      `${GARMIN_API_BASE}/wellness-api/rest/activities?startTimeInSeconds=${startTime}&endTimeInSeconds=${endTime}`
     ),
     testEndpoint(
       accessToken,
@@ -77,6 +79,6 @@ export async function GET(req: Request) {
       startIso: new Date(startTime * 1000).toISOString(),
       endIso: new Date(endTime * 1000).toISOString(),
     },
-    results: { profile, activities, activitiesConnect, sleep },
+    results: { profile, activitiesUpload, activitiesWindow, sleep },
   });
 }

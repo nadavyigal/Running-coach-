@@ -47,6 +47,34 @@ async function getConnectedGarminDevice(userId: number): Promise<WearableDevice 
   return device as WearableDevice
 }
 
+function summarizeGarminDetail(detail: unknown): string {
+  if (detail == null) return ''
+
+  const raw = typeof detail === 'string' ? detail : JSON.stringify(detail)
+  const trimmed = raw.trim()
+  if (!trimmed) return ''
+
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      errorMessage?: unknown
+      message?: unknown
+      error?: unknown
+    }
+    const message = [parsed.errorMessage, parsed.message, parsed.error].find(
+      (value): value is string => typeof value === 'string' && value.trim().length > 0
+    )
+    if (message) return message.slice(0, 240)
+  } catch {
+    // Ignore and continue with text heuristics.
+  }
+
+  if (/<!doctype html|<html/i.test(trimmed)) {
+    return 'Garmin returned an HTML error page'
+  }
+
+  return trimmed.length > 240 ? `${trimmed.slice(0, 240)}...` : trimmed
+}
+
 // ─── activities sync ──────────────────────────────────────────────────────────
 
 export async function syncGarminActivities(
@@ -86,8 +114,8 @@ export async function syncGarminActivities(
 
     if (!data.success || !Array.isArray(data.activities)) {
       // Surface the actual Garmin error detail if available
-      const detail = data.detail ? ` (${data.detail})` : ''
-      result.errors.push((data.error || 'Failed to fetch activities from Garmin') + detail)
+      const detail = summarizeGarminDetail(data.detail)
+      result.errors.push((data.error || 'Failed to fetch activities from Garmin') + (detail ? ` (${detail})` : ''))
       return result
     }
 
@@ -184,8 +212,8 @@ export async function syncGarminSleep(
     }
 
     if (!data.success || !Array.isArray(data.sleep)) {
-      const detail = data.detail ? ` (${data.detail})` : ''
-      result.errors.push((data.error || 'Failed to fetch sleep data from Garmin') + detail)
+      const detail = summarizeGarminDetail(data.detail)
+      result.errors.push((data.error || 'Failed to fetch sleep data from Garmin') + (detail ? ` (${detail})` : ''))
       return result
     }
 
