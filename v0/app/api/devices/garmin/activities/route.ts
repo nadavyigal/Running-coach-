@@ -6,11 +6,19 @@ export const dynamic = 'force-dynamic';
 // Garmin Health API (Developer Program)
 // Docs: https://developer.garmin.com/health-api/overview/
 const GARMIN_API_BASE = 'https://apis.garmin.com';
+const GARMIN_CONNECT_API_BASE = 'https://connectapi.garmin.com';
+const GARMIN_CONNECT_PROXY_BASE = 'https://connect.garmin.com/modern/proxy';
 const GARMIN_MAX_WINDOW_SECONDS = 86400;
 const MAX_DAYS = 30;
 const DEFAULT_DAYS = 14;
+const CONNECT_PAGE_SIZE = 100;
+const CONNECT_MAX_PAGES = 20;
 
-type GarminSource = 'wellness-upload' | 'wellness-backfill';
+type GarminSource =
+  | 'wellness-upload'
+  | 'wellness-backfill'
+  | 'connectapi-direct'
+  | 'connectapi-proxy';
 type GarminActivityQueryMode = 'upload' | 'backfill';
 
 class GarminUpstreamError extends Error {
@@ -107,6 +115,93 @@ function dedupeActivities(rawActivities: any[]): any[] {
     seen.add(id);
     return true;
   });
+}
+
+function formatUtcDate(seconds: number): string {
+  return new Date(seconds * 1000).toISOString().slice(0, 10);
+}
+
+function connectApiHeaders(accessToken: string, viaProxy: boolean): Record<string, string> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    Accept: 'application/json',
+    'User-Agent': 'GCM-iOS-5.19.1.2',
+  };
+  if (viaProxy) {
+    headers['DI-Backend'] = 'connectapi.garmin.com';
+  }
+  return headers;
+}
+
+async function fetchConnectApiActivitiesFromBase(
+  accessToken: string,
+  startTime: number,
+  endTime: number,
+  baseUrl: string,
+  source: GarminSource
+): Promise<any[]> {
+  const viaProxy = source === 'connectapi-proxy';
+  const activities: any[] = [];
+
+  for (let page = 0; page < CONNECT_MAX_PAGES; page++) {
+    const start = page * CONNECT_PAGE_SIZE;
+    const url = new URL(`${baseUrl}/activitylist-service/activities/search/activities`);
+    url.searchParams.set('start', String(start));
+    url.searchParams.set('limit', String(CONNECT_PAGE_SIZE));
+    url.searchParams.set('startDate', formatUtcDate(startTime));
+    url.searchParams.set('endDate', formatUtcDate(endTime));
+
+    const response = await fetch(url.toString(), {
+      headers: connectApiHeaders(accessToken, viaProxy),
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      throw new GarminUpstreamError(source, response.status, responseText);
+    }
+
+    const pageRows = parseJsonArray(responseText);
+    if (pageRows.length === 0) break;
+    activities.push(...pageRows);
+
+    if (pageRows.length < CONNECT_PAGE_SIZE) break;
+  }
+
+  const inRange = activities.filter((row: any) => {
+    const startedAt = getActivityStartSeconds(row);
+    if (startedAt == null) return true;
+    return startedAt >= startTime && startedAt <= endTime;
+  });
+
+  return dedupeActivities(inRange);
+}
+
+async function fetchConnectApiActivities(
+  accessToken: string,
+  startTime: number,
+  endTime: number
+): Promise<{ source: GarminSource; rows: any[] }> {
+  try {
+    const rows = await fetchConnectApiActivitiesFromBase(
+      accessToken,
+      startTime,
+      endTime,
+      GARMIN_CONNECT_API_BASE,
+      'connectapi-direct'
+    );
+    return { source: 'connectapi-direct', rows };
+  } catch (directError) {
+    logger.warn('Garmin connectapi-direct activities fallback failed, trying connect proxy fallback');
+
+    const rows = await fetchConnectApiActivitiesFromBase(
+      accessToken,
+      startTime,
+      endTime,
+      GARMIN_CONNECT_PROXY_BASE,
+      'connectapi-proxy'
+    );
+    return { source: 'connectapi-proxy', rows };
+  }
 }
 
 async function fetchWellnessActivities(
@@ -235,7 +330,34 @@ export async function GET(req: Request) {
           `Garmin upload-window activities request failed (${error.status}); retrying with backfill summary-window params`
         );
         source = 'wellness-backfill';
-        rawActivities = await fetchWellnessActivities(accessToken, startTime, endTime, 'backfill');
+        try {
+          rawActivities = await fetchWellnessActivities(accessToken, startTime, endTime, 'backfill');
+        } catch (backfillError) {
+          if (
+            backfillError instanceof GarminUpstreamError &&
+            backfillError.source === 'wellness-backfill' &&
+            (
+              isInvalidPullToken(backfillError.body) ||
+              isMissingTimeRange(backfillError.body) ||
+              isFallbackWorthyWellnessStatus(backfillError.status) ||
+              isActivityPermissionNotEnabled(backfillError.body)
+            )
+          ) {
+            logger.warn(
+              `Garmin backfill activities request failed (${backfillError.status}); trying connectapi fallback`
+            );
+            try {
+              const connectFallback = await fetchConnectApiActivities(accessToken, startTime, endTime);
+              source = connectFallback.source;
+              rawActivities = connectFallback.rows;
+            } catch (connectFallbackError) {
+              logger.warn('Garmin connectapi activities fallback failed; returning wellness error');
+              throw backfillError;
+            }
+          } else {
+            throw backfillError;
+          }
+        }
       } else {
         throw error;
       }
