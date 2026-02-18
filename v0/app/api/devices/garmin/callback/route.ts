@@ -6,7 +6,7 @@ import { logger } from '@/lib/logger';
 // Garmin OAuth 2.0 PKCE token endpoint
 // Ref: https://developerportal.garmin.com/sites/default/files/OAuth2PKCE_1.pdf
 const GARMIN_TOKEN_URL = 'https://diauth.garmin.com/di-oauth2-service/oauth/token';
-const GARMIN_PROFILE_URL = 'https://connect.garmin.com/userprofile-service/userprofile';
+const GARMIN_PROFILE_URL = 'https://apis.garmin.com/wellness-api/rest/user/id';
 
 // POST - Handle Garmin OAuth 2.0 PKCE callback (SECURED via signed state)
 async function handleGarminCallback(req: ApiRequest) {
@@ -111,7 +111,7 @@ async function handleGarminCallback(req: ApiRequest) {
         throw new Error('No access_token in Garmin token response');
       }
 
-      // Fetch Garmin user profile
+      // Fetch Garmin user identifier from wellness API.
       const profileResponse = await fetch(GARMIN_PROFILE_URL, {
         headers: {
           'Authorization': `Bearer ${tokenData.access_token}`
@@ -119,16 +119,22 @@ async function handleGarminCallback(req: ApiRequest) {
       });
 
       const userProfile = profileResponse.ok ? await profileResponse.json() : null;
+      const profileUserId =
+        (typeof userProfile === 'object' && userProfile !== null && (
+          (userProfile as { userId?: string | number }).userId ??
+          (userProfile as { id?: string | number }).id
+        )) ??
+        (typeof userProfile === 'string' ? userProfile : null);
 
       // Return device data to client for Dexie.js storage (PWA "thin backend" pattern)
       // Tokens are stored client-side in IndexedDB (browser sandbox isolation)
       const deviceData = {
         userId,
         type: 'garmin' as const,
-        deviceId: userProfile?.userId
-          ? `garmin-${userProfile.userId}`
+        deviceId: profileUserId
+          ? `garmin-${profileUserId}`
           : `garmin-${userId}-${Date.now()}`,
-        name: userProfile?.displayName || 'Garmin Device',
+        name: 'Garmin Device',
         connectionStatus: 'connected' as const,
         lastSync: new Date(),
         authTokens: {

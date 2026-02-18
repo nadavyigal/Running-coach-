@@ -3,8 +3,6 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 const GARMIN_API_BASE = 'https://apis.garmin.com';
-const GARMIN_CONNECT_BASE = 'https://connect.garmin.com';
-const GARMIN_CONNECT_API_BASE = 'https://connectapi.garmin.com';
 const GARMIN_MAX_WINDOW_SECONDS = 86400;
 
 interface EndpointResult {
@@ -37,9 +35,7 @@ async function testEndpoint(token: string, url: string): Promise<EndpointResult>
   }
 }
 
-// GET - Diagnose Garmin API access for the authenticated user's token
-// Client passes the access token via Authorization: Bearer <token>
-// Returns raw API responses from Garmin for debugging purposes
+// GET - Diagnose Garmin API access for the current Bearer token.
 export async function GET(req: Request) {
   const authHeader = req.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) {
@@ -52,26 +48,26 @@ export async function GET(req: Request) {
   const endTime = Math.floor(Date.now() / 1000);
   const startTime = Math.max(0, endTime - GARMIN_MAX_WINDOW_SECONDS + 1);
 
-  const [activitiesUpload, activitiesWindow, activitiesConnectApi, sleep, profile] = await Promise.all([
+  const [profile, activitiesUpload, activitiesBackfill, sleepUpload, sleepBackfill] = await Promise.all([
+    testEndpoint(
+      accessToken,
+      `${GARMIN_API_BASE}/wellness-api/rest/user/id`
+    ),
     testEndpoint(
       accessToken,
       `${GARMIN_API_BASE}/wellness-api/rest/activities?uploadStartTimeInSeconds=${startTime}&uploadEndTimeInSeconds=${endTime}`
     ),
     testEndpoint(
       accessToken,
-      `${GARMIN_API_BASE}/wellness-api/rest/activities?startTimeInSeconds=${startTime}&endTimeInSeconds=${endTime}`
+      `${GARMIN_API_BASE}/wellness-api/rest/backfill/activities?summaryStartTimeInSeconds=${startTime}&summaryEndTimeInSeconds=${endTime}`
     ),
     testEndpoint(
       accessToken,
-      `${GARMIN_CONNECT_API_BASE}/activitylist-service/activities/search/activities?start=0&limit=5`
+      `${GARMIN_API_BASE}/wellness-api/rest/sleep?uploadStartTimeInSeconds=${startTime}&uploadEndTimeInSeconds=${endTime}`
     ),
     testEndpoint(
       accessToken,
-      `${GARMIN_API_BASE}/wellness-api/rest/sleep?startTimeInSeconds=${startTime}&endTimeInSeconds=${endTime}`
-    ),
-    testEndpoint(
-      accessToken,
-      `${GARMIN_CONNECT_BASE}/userprofile-service/userprofile`
+      `${GARMIN_API_BASE}/wellness-api/rest/backfill/sleep?summaryStartTimeInSeconds=${startTime}&summaryEndTimeInSeconds=${endTime}`
     ),
   ]);
 
@@ -84,6 +80,6 @@ export async function GET(req: Request) {
       startIso: new Date(startTime * 1000).toISOString(),
       endIso: new Date(endTime * 1000).toISOString(),
     },
-    results: { profile, activitiesUpload, activitiesWindow, activitiesConnectApi, sleep },
+    results: { profile, activitiesUpload, activitiesBackfill, sleepUpload, sleepBackfill },
   });
 }

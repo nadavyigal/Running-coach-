@@ -12,7 +12,7 @@ describe("/api/devices/garmin/sleep", () => {
     vi.restoreAllMocks();
   });
 
-  it("chunks multi-day requests into <= 86400-second windows and deduplicates sleep summaries", async () => {
+  it("chunks multi-day requests into <= 86400-second upload windows and deduplicates sleep summaries", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -64,19 +64,69 @@ describe("/api/devices/garmin/sleep", () => {
 
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
+    expect(body.source).toBe("sleep-upload");
     expect(Array.isArray(body.sleep)).toBe(true);
     expect(body.sleep).toHaveLength(2);
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
     const windows = fetchMock.mock.calls.map(([url]) => {
       const parsed = new URL(String(url));
-      const start = Number(parsed.searchParams.get("startTimeInSeconds"));
-      const end = Number(parsed.searchParams.get("endTimeInSeconds"));
+      const start = Number(parsed.searchParams.get("uploadStartTimeInSeconds"));
+      const end = Number(parsed.searchParams.get("uploadEndTimeInSeconds"));
       return { start, end };
     });
 
     expect(windows[0].end - windows[0].start).toBeLessThanOrEqual(86399);
     expect(windows[1].end - windows[1].start).toBeLessThanOrEqual(86399);
     expect(windows[1].start).toBe(windows[0].end + 1);
+  });
+
+  it("retries via backfill summary params when upload mode returns InvalidPullTokenException", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ errorMessage: "InvalidPullTokenException failure" }),
+          { status: 400 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              sleepSummaryId: "sb1",
+              calendarDate: "2026-02-17",
+              startTimeInSeconds: 1771363200,
+              durationInSeconds: 28000,
+            },
+          ]),
+          { status: 200 }
+        )
+      );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const req = new Request(
+      "http://localhost/api/devices/garmin/sleep?userId=42&days=1",
+      {
+        headers: { authorization: "Bearer test-token" },
+      }
+    );
+
+    const res = await GET(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.source).toBe("sleep-backfill");
+    expect(body.sleep).toHaveLength(1);
+
+    const firstUrl = String(fetchMock.mock.calls[0]?.[0] ?? "");
+    const secondUrl = String(fetchMock.mock.calls[1]?.[0] ?? "");
+    expect(firstUrl).toContain("/wellness-api/rest/sleep");
+    expect(firstUrl).toContain("uploadStartTimeInSeconds");
+    expect(secondUrl).toContain("/wellness-api/rest/backfill/sleep");
+    expect(secondUrl).toContain("summaryStartTimeInSeconds");
+    expect(secondUrl).toContain("summaryEndTimeInSeconds");
   });
 });

@@ -6,14 +6,12 @@ export const dynamic = 'force-dynamic';
 // Garmin Health API (Developer Program)
 // Docs: https://developer.garmin.com/health-api/overview/
 const GARMIN_API_BASE = 'https://apis.garmin.com';
-const GARMIN_CONNECT_API_BASE = 'https://connectapi.garmin.com';
 const GARMIN_MAX_WINDOW_SECONDS = 86400;
 const MAX_DAYS = 30;
 const DEFAULT_DAYS = 14;
-const CONNECT_PAGE_SIZE = 100;
-const CONNECT_MAX_PAGES = 20;
-type GarminSource = 'wellness-upload' | 'wellness-window' | 'connectapi';
-type GarminActivityQueryMode = 'upload' | 'window';
+
+type GarminSource = 'wellness-upload' | 'wellness-backfill';
+type GarminActivityQueryMode = 'upload' | 'backfill';
 
 class GarminUpstreamError extends Error {
   status: number;
@@ -82,8 +80,13 @@ function isInvalidPullToken(body: string): boolean {
   return /InvalidPullTokenException|invalid pull token/i.test(body);
 }
 
+function isMissingTimeRange(body: string): boolean {
+  return /Missing time range parameters/i.test(body);
+}
+
 function isAuthError(status: number, body: string): boolean {
-  if (status === 401 || status === 403) return true;
+  if (status === 401) return true;
+  if (status !== 403) return false;
   return /Unable to read oAuth header|invalid[_ ]token|expired|unauthorized/i.test(body);
 }
 
@@ -108,19 +111,24 @@ async function fetchWellnessActivities(
   endTime: number,
   mode: GarminActivityQueryMode
 ): Promise<any[]> {
-  const source: GarminSource = mode === 'upload' ? 'wellness-upload' : 'wellness-window';
+  const source: GarminSource = mode === 'upload' ? 'wellness-upload' : 'wellness-backfill';
   const rawChunks: any[] = [];
   let windowStart = startTime;
 
   while (windowStart <= endTime) {
     const windowEnd = Math.min(windowStart + GARMIN_MAX_WINDOW_SECONDS - 1, endTime);
-    const url = new URL(`${GARMIN_API_BASE}/wellness-api/rest/activities`);
+    const path =
+      mode === 'upload'
+        ? '/wellness-api/rest/activities'
+        : '/wellness-api/rest/backfill/activities';
+    const url = new URL(`${GARMIN_API_BASE}${path}`);
+
     if (mode === 'upload') {
       url.searchParams.set('uploadStartTimeInSeconds', String(windowStart));
       url.searchParams.set('uploadEndTimeInSeconds', String(windowEnd));
     } else {
-      url.searchParams.set('startTimeInSeconds', String(windowStart));
-      url.searchParams.set('endTimeInSeconds', String(windowEnd));
+      url.searchParams.set('summaryStartTimeInSeconds', String(windowStart));
+      url.searchParams.set('summaryEndTimeInSeconds', String(windowEnd));
     }
 
     const response = await fetch(url.toString(), {
@@ -140,51 +148,6 @@ async function fetchWellnessActivities(
   }
 
   return dedupeActivities(rawChunks);
-}
-
-async function fetchConnectApiActivities(accessToken: string, startTime: number, endTime: number): Promise<any[]> {
-  const activities: any[] = [];
-
-  for (let page = 0; page < CONNECT_MAX_PAGES; page++) {
-    const start = page * CONNECT_PAGE_SIZE;
-    const url = new URL(`${GARMIN_CONNECT_API_BASE}/activitylist-service/activities/search/activities`);
-    url.searchParams.set('start', String(start));
-    url.searchParams.set('limit', String(CONNECT_PAGE_SIZE));
-
-    const response = await fetch(url.toString(), {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: 'application/json',
-      },
-    });
-
-    const responseText = await response.text();
-    if (!response.ok) {
-      throw new GarminUpstreamError('connectapi', response.status, responseText);
-    }
-
-    const pageRows = parseJsonArray(responseText);
-    if (pageRows.length === 0) break;
-
-    const inRange = pageRows.filter((row: any) => {
-      const startedAt = getActivityStartSeconds(row);
-      if (startedAt == null) return true;
-      return startedAt >= startTime && startedAt <= endTime;
-    });
-    activities.push(...inRange);
-
-    const timestamps = pageRows
-      .map((row: any) => getActivityStartSeconds(row))
-      .filter((value: number | null): value is number => value != null);
-    if (timestamps.length > 0) {
-      const oldestInPage = Math.min(...timestamps);
-      if (oldestInPage < startTime) break;
-    }
-
-    if (pageRows.length < CONNECT_PAGE_SIZE) break;
-  }
-
-  return dedupeActivities(activities);
 }
 
 function toRunSmartActivity(activity: any) {
@@ -224,8 +187,8 @@ function toRunSmartActivity(activity: any) {
 }
 
 // GET - Fetch Garmin activities via Wellness API.
-// Some Garmin apps return InvalidPullTokenException when using upload* query params;
-// in that case we retry once with start/end query params before requesting reauth.
+// If upload-window params fail (InvalidPullTokenException or related 400/404),
+// retry via backfill/summary-window params before requesting reconnect.
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -258,49 +221,17 @@ export async function GET(req: Request) {
       if (
         error instanceof GarminUpstreamError &&
         error.source === 'wellness-upload' &&
-        isInvalidPullToken(error.body)
-      ) {
-        logger.warn('Garmin wellness-api returned InvalidPullTokenException for upload-window params, retrying with start/end params');
-        try {
-          source = 'wellness-window';
-          rawActivities = await fetchWellnessActivities(accessToken, startTime, endTime, 'window');
-        } catch (retryError) {
-          if (
-            retryError instanceof GarminUpstreamError &&
-            retryError.source === 'wellness-window' &&
-            isInvalidPullToken(retryError.body)
-          ) {
-            logger.warn(
-              'Garmin wellness-api returned InvalidPullTokenException for both query modes; falling back to connectapi activitylist-service'
-            );
-            source = 'connectapi';
-            rawActivities = await fetchConnectApiActivities(accessToken, startTime, endTime);
-            // Fallback succeeded, continue response path.
-          } else if (
-            retryError instanceof GarminUpstreamError &&
-            retryError.source === 'wellness-window' &&
-            isFallbackWorthyWellnessStatus(retryError.status)
-          ) {
-            logger.warn(
-              `Garmin wellness-api window-param request failed with ${retryError.status}; falling back to connectapi activitylist-service`
-            );
-            source = 'connectapi';
-            rawActivities = await fetchConnectApiActivities(accessToken, startTime, endTime);
-          }
-          else {
-            throw retryError;
-          }
-        }
-      } else if (
-        error instanceof GarminUpstreamError &&
-        error.source === 'wellness-upload' &&
-        isFallbackWorthyWellnessStatus(error.status)
+        (
+          isInvalidPullToken(error.body) ||
+          isMissingTimeRange(error.body) ||
+          isFallbackWorthyWellnessStatus(error.status)
+        )
       ) {
         logger.warn(
-          `Garmin wellness-api upload-param request failed with ${error.status}; falling back to connectapi activitylist-service`
+          `Garmin upload-window activities request failed (${error.status}); retrying with backfill summary-window params`
         );
-        source = 'connectapi';
-        rawActivities = await fetchConnectApiActivities(accessToken, startTime, endTime);
+        source = 'wellness-backfill';
+        rawActivities = await fetchWellnessActivities(accessToken, startTime, endTime, 'backfill');
       } else {
         throw error;
       }
@@ -320,24 +251,28 @@ export async function GET(req: Request) {
     });
   } catch (error) {
     if (error instanceof GarminUpstreamError) {
-      if (isAuthError(error.status, error.body)) {
+      const detail = summarizeUpstreamBody(error.body);
+      const needsReauth = isAuthError(error.status, error.body);
+
+      if (needsReauth) {
         return NextResponse.json(
           {
             success: false,
-            error: 'Authentication expired or invalid, please reconnect Garmin',
+            error: 'Garmin authentication expired or invalid, please reconnect Garmin',
             needsReauth: true,
-            detail: summarizeUpstreamBody(error.body),
+            source: error.source,
+            detail,
           },
           { status: 401 }
         );
       }
 
-      const detail = summarizeUpstreamBody(error.body);
       logger.error(`Garmin ${error.source} activities API error ${error.status}:`, detail);
       return NextResponse.json(
         {
           success: false,
           error: `Garmin API returned ${error.status}`,
+          source: error.source,
           detail,
         },
         { status: 502 }
