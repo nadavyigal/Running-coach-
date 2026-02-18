@@ -216,16 +216,17 @@ export async function syncGarminSleep(
         userId,
         deviceId: device.deviceId,
         sleepDate,
-        bedTime: s.sleepStartTimestampGMT ? new Date(s.sleepStartTimestampGMT) : undefined,
-        wakeTime: s.sleepEndTimestampGMT ? new Date(s.sleepEndTimestampGMT) : undefined,
         totalSleepTime: totalMinutes,
-        deepSleepTime: deepMinutes,
-        lightSleepTime: lightMinutes,
-        remSleepTime: remMinutes,
         sleepEfficiency,
-        sleepScore: s.sleepScores?.overall?.value ?? undefined,
         createdAt: new Date(),
         updatedAt: new Date(),
+        // Spread optional fields only when they have a value (exactOptionalPropertyTypes)
+        ...(s.sleepStartTimestampGMT && { bedTime: new Date(s.sleepStartTimestampGMT) }),
+        ...(s.sleepEndTimestampGMT && { wakeTime: new Date(s.sleepEndTimestampGMT) }),
+        ...(deepMinutes != null && { deepSleepTime: deepMinutes }),
+        ...(lightMinutes != null && { lightSleepTime: lightMinutes }),
+        ...(remMinutes != null && { remSleepTime: remMinutes }),
+        ...(s.sleepScores?.overall?.value != null && { sleepScore: s.sleepScores.overall.value }),
       }
 
       await db.sleepData.add(record as SleepData)
