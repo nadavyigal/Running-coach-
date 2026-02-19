@@ -1,24 +1,24 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { useToast } from "@/hooks/use-toast"
-import { db } from "@/lib/db"
-import { syncGarminActivities, syncGarminSleep } from "@/lib/garminSync"
+import { useCallback, useEffect, useState } from "react"
 import {
-  RefreshCw,
   Activity,
-  Moon,
-  CheckCircle,
   AlertCircle,
-  Loader2,
-  Watch,
   ChevronDown,
   ChevronUp,
+  CheckCircle,
+  Loader2,
+  Moon,
+  RefreshCw,
   Stethoscope,
+  Watch,
 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useToast } from "@/hooks/use-toast"
+import { db } from "@/lib/db"
+import { GARMIN_HISTORY_CAP_DAYS, syncGarminActivities, syncGarminSleep } from "@/lib/garminSync"
 
 interface GarminSyncPanelProps {
   userId: number
@@ -48,11 +48,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
   const [showDiagnose, setShowDiagnose] = useState(false)
   const { toast } = useToast()
 
-  useEffect(() => {
-    loadDevice()
-  }, [userId])
-
-  const loadDevice = async () => {
+  const loadDevice = useCallback(async () => {
     const d = await db.wearableDevices
       .where('[userId+type]' as any)
       .equals([userId, 'garmin'])
@@ -68,13 +64,17 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
     } else {
       setDevice(null)
     }
-  }
+  }, [userId])
+
+  useEffect(() => {
+    void loadDevice()
+  }, [loadDevice])
 
   const handleSyncActivities = async () => {
     setIsSyncingActivities(true)
     setActivityError(null)
     try {
-      const result = await syncGarminActivities(userId, 14)
+      const result = await syncGarminActivities(userId, GARMIN_HISTORY_CAP_DAYS)
 
       if (result.needsReauth) {
         toast({
@@ -105,7 +105,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
           description:
             result.activitiesImported > 0
               ? `${result.activitiesImported} new run${result.activitiesImported !== 1 ? "s" : ""} added${result.activitiesSkipped > 0 ? `, ${result.activitiesSkipped} already existed` : ""}.`
-              : "No new activities found in the last 14 days.",
+              : `No new activities found in the last ${GARMIN_HISTORY_CAP_DAYS} days.`,
         })
       }
 
@@ -119,7 +119,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
     setIsSyncingSleep(true)
     setSleepError(null)
     try {
-      const result = await syncGarminSleep(userId, 7)
+      const result = await syncGarminSleep(userId, GARMIN_HISTORY_CAP_DAYS)
 
       if (result.needsReauth) {
         toast({
@@ -150,7 +150,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
           description:
             result.sleepImported > 0
               ? `${result.sleepImported} night${result.sleepImported !== 1 ? "s" : ""} of sleep data added.`
-              : "No new sleep data found in the last 7 days.",
+              : `No new sleep data found in the last ${GARMIN_HISTORY_CAP_DAYS} days.`,
         })
       }
     } finally {
@@ -232,7 +232,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
                   <Activity className="h-4 w-4 text-muted-foreground" />
                   <div>
                     <div className="font-medium">Activities</div>
-                    <div className="text-xs text-muted-foreground">Last 14 days of runs</div>
+                    <div className="text-xs text-muted-foreground">Last {GARMIN_HISTORY_CAP_DAYS} days of runs</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -272,7 +272,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
                   <Moon className="h-4 w-4 text-muted-foreground" />
                   <div>
                     <div className="font-medium">Sleep</div>
-                    <div className="text-xs text-muted-foreground">Last 7 nights</div>
+                    <div className="text-xs text-muted-foreground">Last {GARMIN_HISTORY_CAP_DAYS} days</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

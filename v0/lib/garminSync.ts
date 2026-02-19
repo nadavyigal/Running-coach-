@@ -12,6 +12,8 @@
 
 import { db, type Run, type SleepData, type WearableDevice } from '@/lib/db'
 
+export const GARMIN_HISTORY_CAP_DAYS = 30
+
 export interface GarminSyncResult {
   activitiesImported: number
   activitiesSkipped: number   // already existed
@@ -47,6 +49,11 @@ async function getConnectedGarminDevice(userId: number): Promise<WearableDevice 
   return device as WearableDevice
 }
 
+function clampSyncDays(days: number): number {
+  if (!Number.isFinite(days) || days <= 0) return GARMIN_HISTORY_CAP_DAYS
+  return Math.min(Math.floor(days), GARMIN_HISTORY_CAP_DAYS)
+}
+
 function summarizeGarminDetail(detail: unknown): string {
   if (detail == null) return ''
 
@@ -79,9 +86,10 @@ function summarizeGarminDetail(detail: unknown): string {
 
 export async function syncGarminActivities(
   userId: number,
-  days = 14
+  days = GARMIN_HISTORY_CAP_DAYS
 ): Promise<Pick<GarminSyncResult, 'activitiesImported' | 'activitiesSkipped' | 'needsReauth' | 'errors'>> {
   const result = { activitiesImported: 0, activitiesSkipped: 0, needsReauth: false, errors: [] as string[] }
+  const syncDays = clampSyncDays(days)
 
   const device = await getConnectedGarminDevice(userId)
   if (!device) {
@@ -97,7 +105,7 @@ export async function syncGarminActivities(
   }
 
   try {
-    const res = await fetch(`/api/devices/garmin/activities?userId=${userId}&days=${days}`, {
+    const res = await fetch(`/api/devices/garmin/activities?userId=${userId}&days=${syncDays}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
     const data = await res.json()
@@ -128,7 +136,7 @@ export async function syncGarminActivities(
 
     // Filter to requested date range
     const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - days)
+    cutoff.setDate(cutoff.getDate() - syncDays)
 
     for (const act of data.activities) {
       const activityId = String(act.activityId)
@@ -186,9 +194,10 @@ export async function syncGarminActivities(
 
 export async function syncGarminSleep(
   userId: number,
-  days = 7
+  days = GARMIN_HISTORY_CAP_DAYS
 ): Promise<Pick<GarminSyncResult, 'sleepImported' | 'sleepSkipped' | 'needsReauth' | 'errors'>> {
   const result = { sleepImported: 0, sleepSkipped: 0, needsReauth: false, errors: [] as string[] }
+  const syncDays = clampSyncDays(days)
 
   const device = await getConnectedGarminDevice(userId)
   if (!device) {
@@ -204,7 +213,7 @@ export async function syncGarminSleep(
   }
 
   try {
-    const res = await fetch(`/api/devices/garmin/sleep?userId=${userId}&days=${days}`, {
+    const res = await fetch(`/api/devices/garmin/sleep?userId=${userId}&days=${syncDays}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
     const data = await res.json()
@@ -231,10 +240,14 @@ export async function syncGarminSleep(
       return result
     }
 
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - syncDays)
+
     for (const s of data.sleep) {
       if (!s?.date) continue
 
       const sleepDate = new Date(s.date)
+      if (sleepDate < cutoff) continue
 
       // Deduplicate: one record per date per device
       const existing = await db.sleepData
@@ -289,8 +302,8 @@ export async function syncGarminSleep(
 
 export async function syncAllGarminData(userId: number): Promise<GarminSyncResult> {
   const [actResult, sleepResult] = await Promise.all([
-    syncGarminActivities(userId, 14),
-    syncGarminSleep(userId, 7),
+    syncGarminActivities(userId, GARMIN_HISTORY_CAP_DAYS),
+    syncGarminSleep(userId, GARMIN_HISTORY_CAP_DAYS),
   ])
 
   return {

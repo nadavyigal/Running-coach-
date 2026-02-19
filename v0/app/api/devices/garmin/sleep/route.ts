@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 const GARMIN_API_BASE = 'https://apis.garmin.com';
 const GARMIN_MAX_WINDOW_SECONDS = 86400;
 const MAX_DAYS = 30;
-const DEFAULT_DAYS = 7;
+const DEFAULT_DAYS = 30;
 
 type GarminSleepSource = 'permissions' | 'sleep-upload' | 'sleep-backfill';
 type GarminSleepQueryMode = 'upload' | 'backfill';

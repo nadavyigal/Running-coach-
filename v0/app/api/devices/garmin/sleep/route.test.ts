@@ -212,4 +212,43 @@ describe("/api/devices/garmin/sleep", () => {
     expect(body.requiredPermissions).toEqual(["HEALTH_EXPORT", "HISTORICAL_DATA_EXPORT"]);
     expect(body.needsReauth).toBeUndefined();
   });
+
+  it("defaults to a 30-day window when days is omitted", async () => {
+    const fetchMock = vi.fn((url: RequestInfo | URL) => {
+      const parsed = new URL(String(url));
+
+      if (parsed.pathname.endsWith("/wellness-api/rest/user/permissions")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ permissions: ["HEALTH_EXPORT", "HISTORICAL_DATA_EXPORT"] }),
+            { status: 200 }
+          )
+        );
+      }
+
+      return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const req = new Request("http://localhost/api/devices/garmin/sleep?userId=42", {
+      headers: { authorization: "Bearer test-token" },
+    });
+
+    const res = await GET(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.success).toBe(true);
+    // 1 permissions call + 30 one-day sleep windows
+    expect(fetchMock).toHaveBeenCalledTimes(31);
+
+    const firstWindowUrl = new URL(String(fetchMock.mock.calls[1]?.[0]));
+    const lastWindowUrl = new URL(String(fetchMock.mock.calls[30]?.[0]));
+    const expectedEnd = Math.floor(new Date("2026-02-18T12:00:00.000Z").getTime() / 1000);
+    const expectedStart = expectedEnd - 30 * 86400 + 1;
+
+    expect(Number(firstWindowUrl.searchParams.get("uploadStartTimeInSeconds"))).toBe(expectedStart);
+    expect(Number(lastWindowUrl.searchParams.get("uploadEndTimeInSeconds"))).toBe(expectedEnd);
+  });
 });
