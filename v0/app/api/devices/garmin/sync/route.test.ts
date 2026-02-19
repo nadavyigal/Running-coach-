@@ -262,6 +262,71 @@ describe('/api/devices/garmin/sync', () => {
     expect(body.notices.some((notice: string) => notice.includes('Health datasets skipped'))).toBe(true)
   })
 
+  it('falls back to direct Garmin activity pull when webhook activity rows are empty', async () => {
+    readRowsMock.mockResolvedValue({
+      ok: true,
+      storeAvailable: true,
+      rows: [],
+    })
+
+    const fetchMock = vi.fn((url: RequestInfo | URL) => {
+      const parsed = new URL(String(url))
+
+      if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
+        return Promise.resolve(
+          new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HISTORICAL_DATA_EXPORT']), { status: 200 })
+        )
+      }
+      if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
+        return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
+      }
+      if (parsed.pathname.endsWith('/wellness-api/rest/activities')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ errorMessage: 'InvalidPullTokenException failure' }), { status: 400 })
+        )
+      }
+      if (parsed.pathname.endsWith('/wellness-api/rest/backfill/activities')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                activityId: 'fallback-run-1',
+                activityType: 'running',
+                startTimeInSeconds: 1771400000,
+                durationInSeconds: 1900,
+                distanceInMeters: 5100,
+              },
+            ]),
+            { status: 200 }
+          )
+        )
+      }
+
+      return Promise.resolve(new Response('not-found', { status: 404 }))
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const req = new Request('http://localhost/api/devices/garmin/sync', {
+      method: 'POST',
+      headers: { authorization: 'Bearer test-token' },
+    })
+
+    const { POST } = await loadRoute()
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.success).toBe(true)
+    expect(body.activities).toHaveLength(1)
+    expect(body.activities[0].activityId).toBe('fallback-run-1')
+    expect(
+      body.notices.some((notice: string) =>
+        notice.includes('RunSmart pulled 1 activities directly from Garmin wellness-backfill')
+      )
+    ).toBe(true)
+  })
+
   it('returns needsReauth when Garmin token is invalid', async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(

@@ -11,6 +11,7 @@ import {
 export const dynamic = 'force-dynamic'
 
 const GARMIN_API_BASE = 'https://apis.garmin.com'
+const GARMIN_MAX_WINDOW_SECONDS = 86400
 const SYNC_NAME = 'RunSmart Garmin Export Sync'
 
 type GarminPermission = 'ACTIVITY_EXPORT' | 'HEALTH_EXPORT'
@@ -62,6 +63,20 @@ class GarminUpstreamError extends Error {
   constructor(source: 'permissions' | 'profile', status: number, body: string) {
     super(`Garmin ${source} returned ${status}`)
     this.name = 'GarminUpstreamError'
+    this.status = status
+    this.body = body
+    this.source = source
+  }
+}
+
+class GarminActivitiesFallbackError extends Error {
+  status: number
+  body: string
+  source: 'wellness-upload' | 'wellness-backfill'
+
+  constructor(source: 'wellness-upload' | 'wellness-backfill', status: number, body: string) {
+    super(`Garmin ${source} returned ${status}`)
+    this.name = 'GarminActivitiesFallbackError'
     this.status = status
     this.body = body
     this.source = source
@@ -224,6 +239,131 @@ function isAuthError(status: number, body: string): boolean {
   if (status === 401) return true
   if (status !== 403) return false
   return /Unable to read oAuth header|invalid[_ ]token|expired|unauthorized/i.test(body)
+}
+
+function parseJsonArray(text: string): Record<string, unknown>[] {
+  if (!text) return []
+  const parsed: unknown = JSON.parse(text)
+  return Array.isArray(parsed)
+    ? parsed
+        .map((entry) => asRecord(entry))
+        .filter((entry) => Object.keys(entry).length > 0)
+    : []
+}
+
+function isInvalidPullToken(body: string): boolean {
+  return /InvalidPullTokenException|invalid pull token/i.test(body)
+}
+
+function isMissingTimeRange(body: string): boolean {
+  return /Missing time range parameters/i.test(body)
+}
+
+function isFallbackWorthyWellnessStatus(status: number): boolean {
+  return status === 400 || status === 404
+}
+
+function isActivityBackfillNotProvisioned(body: string): boolean {
+  return /Endpoint not enabled for summary type:\s*CONNECT_ACTIVITY/i.test(body)
+}
+
+function dedupeActivities(rawActivities: Record<string, unknown>[]): Record<string, unknown>[] {
+  const seen = new Set<string>()
+  const deduped: Record<string, unknown>[] = []
+
+  for (const activity of rawActivities) {
+    const fallbackId = `${activity.startTimeInSeconds ?? activity.startTimeGMT ?? 'none'}-${activity.durationInSeconds ?? activity.duration ?? 'none'}-${activity.activityType ?? asRecord(activity.activityType).typeKey ?? 'unknown'}`
+    const id = String(activity.activityId ?? activity.summaryId ?? fallbackId)
+    if (seen.has(id)) continue
+    seen.add(id)
+    deduped.push(activity)
+  }
+
+  return deduped
+}
+
+async function fetchWellnessActivities(
+  accessToken: string,
+  startTime: number,
+  endTime: number,
+  mode: 'upload' | 'backfill'
+): Promise<Record<string, unknown>[]> {
+  const source = mode === 'upload' ? 'wellness-upload' : 'wellness-backfill'
+  const rawChunks: Record<string, unknown>[] = []
+  let windowStart = startTime
+
+  while (windowStart <= endTime) {
+    const windowEnd = Math.min(windowStart + GARMIN_MAX_WINDOW_SECONDS - 1, endTime)
+    const path = mode === 'upload' ? '/wellness-api/rest/activities' : '/wellness-api/rest/backfill/activities'
+    const url = new URL(`${GARMIN_API_BASE}${path}`)
+
+    if (mode === 'upload') {
+      url.searchParams.set('uploadStartTimeInSeconds', String(windowStart))
+      url.searchParams.set('uploadEndTimeInSeconds', String(windowEnd))
+    } else {
+      url.searchParams.set('summaryStartTimeInSeconds', String(windowStart))
+      url.searchParams.set('summaryEndTimeInSeconds', String(windowEnd))
+    }
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    })
+
+    const responseText = await response.text()
+    if (!response.ok) {
+      throw new GarminActivitiesFallbackError(source, response.status, responseText)
+    }
+
+    rawChunks.push(...parseJsonArray(responseText))
+    windowStart = windowEnd + 1
+  }
+
+  return dedupeActivities(rawChunks)
+}
+
+async function fetchRecentGarminRunningActivities(
+  accessToken: string,
+  permissions: string[]
+): Promise<{
+  activities: ReturnType<typeof toRunSmartActivity>[]
+  source: 'wellness-upload' | 'wellness-backfill'
+}> {
+  const endTime = Math.floor(Date.now() / 1000)
+  const startTime = Math.max(0, endTime - GARMIN_HISTORY_DAYS * 86400 + 1)
+
+  let source: 'wellness-upload' | 'wellness-backfill' = 'wellness-upload'
+  let rawActivities: Record<string, unknown>[]
+
+  try {
+    rawActivities = await fetchWellnessActivities(accessToken, startTime, endTime, 'upload')
+  } catch (uploadError) {
+    if (
+      uploadError instanceof GarminActivitiesFallbackError &&
+      uploadError.source === 'wellness-upload' &&
+      (isInvalidPullToken(uploadError.body) ||
+        isMissingTimeRange(uploadError.body) ||
+        isFallbackWorthyWellnessStatus(uploadError.status))
+    ) {
+      if (!permissions.includes('HISTORICAL_DATA_EXPORT')) {
+        throw uploadError
+      }
+
+      source = 'wellness-backfill'
+      rawActivities = await fetchWellnessActivities(accessToken, startTime, endTime, 'backfill')
+    } else {
+      throw uploadError
+    }
+  }
+
+  const mapped = rawActivities.map((activity) => toRunSmartActivity(activity))
+  const running = mapped.filter(
+    (activity) => activity.activityType.includes('running') || activity.activityType.includes('run')
+  )
+
+  return { activities: running, source }
 }
 
 function getActivityStartSeconds(activity: Record<string, unknown>): number | null {
@@ -552,6 +692,44 @@ export async function POST(req: Request) {
       uniqueActivities.push(activity)
     }
 
+    let activitiesForSync = uniqueActivities
+    const hasWebhookActivityRows = activityRows.length > 0
+
+    if (activitiesForSync.length === 0 && permissions.includes('ACTIVITY_EXPORT')) {
+      try {
+        const fallbackResult = await fetchRecentGarminRunningActivities(accessToken, permissions)
+        if (fallbackResult.activities.length > 0) {
+          activitiesForSync = fallbackResult.activities
+          notices.push(
+            `Activity webhook feeds were empty, so RunSmart pulled ${fallbackResult.activities.length} activities directly from Garmin ${fallbackResult.source}.`
+          )
+        } else if (!hasWebhookActivityRows) {
+          notices.push('No running activities found from Garmin in the last 30 days.')
+        }
+      } catch (fallbackError) {
+        if (fallbackError instanceof GarminActivitiesFallbackError) {
+          if (
+            fallbackError.source === 'wellness-backfill' &&
+            isActivityBackfillNotProvisioned(fallbackError.body)
+          ) {
+            notices.push(
+              'Activity webhook feeds were empty and Garmin activity backfill is not provisioned for this app.'
+            )
+          } else {
+            notices.push(
+              `Activity webhook feeds were empty and direct Garmin pull failed (${fallbackError.status} ${fallbackError.source}).`
+            )
+          }
+          logger.warn(
+            `Garmin activity fallback error (${fallbackError.status} ${fallbackError.source}): ${summarizeUpstreamBody(fallbackError.body)}`
+          )
+        } else {
+          notices.push('Activity webhook feeds were empty and direct Garmin pull failed.')
+          logger.warn('Garmin activity fallback error:', fallbackError)
+        }
+      }
+    }
+
     const sleep = datasets.sleeps
       .map((entry) => toRunSmartSleepRecord(entry))
       .filter((entry): entry is NonNullable<typeof entry> => entry != null)
@@ -565,7 +743,7 @@ export async function POST(req: Request) {
       ingestion,
       datasets,
       datasetCounts,
-      activities: uniqueActivities,
+      activities: activitiesForSync,
       sleep,
       notices,
     })
