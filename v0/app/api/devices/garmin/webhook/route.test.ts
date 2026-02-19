@@ -150,4 +150,36 @@ describe('/api/devices/garmin/webhook', () => {
     expect(body.ok).toBe(false)
     expect(storeRowsMock).not.toHaveBeenCalled()
   })
+
+  it('accepts requests when webhook secret is provided via query parameter', async () => {
+    process.env.GARMIN_WEBHOOK_SECRET = 'secret-123'
+    storeRowsMock.mockResolvedValue({
+      ok: true,
+      storeAvailable: true,
+      storedRows: 1,
+      droppedRows: 0,
+    })
+
+    const req = new Request('http://localhost/api/devices/garmin/webhook?secret=secret-123', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        activities: [
+          {
+            userId: 'garmin-user-1',
+            activityId: 'run-1',
+            activityType: 'running',
+          },
+        ],
+      }),
+    })
+
+    const { POST } = await loadRoute()
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(storeRowsMock).toHaveBeenCalledTimes(1)
+  })
 })

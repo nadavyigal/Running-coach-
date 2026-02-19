@@ -17,7 +17,7 @@ describe("/api/devices/garmin/activities", () => {
       .fn()
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ permissions: ["ACTIVITY_EXPORT", "HISTORICAL_DATA_EXPORT"] }),
+          JSON.stringify(["ACTIVITY_EXPORT", "HISTORICAL_DATA_EXPORT"]),
           { status: 200 }
         )
       )
@@ -93,7 +93,7 @@ describe("/api/devices/garmin/activities", () => {
       .fn()
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ permissions: ["ACTIVITY_EXPORT", "HISTORICAL_DATA_EXPORT"] }),
+          JSON.stringify(["ACTIVITY_EXPORT", "HISTORICAL_DATA_EXPORT"]),
           { status: 200 }
         )
       )
@@ -150,7 +150,7 @@ describe("/api/devices/garmin/activities", () => {
       .fn()
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ permissions: ["HEALTH_EXPORT"] }),
+          JSON.stringify(["HEALTH_EXPORT"]),
           { status: 200 }
         )
       );
@@ -179,7 +179,7 @@ describe("/api/devices/garmin/activities", () => {
       .fn()
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ permissions: ["ACTIVITY_EXPORT", "HISTORICAL_DATA_EXPORT"] }),
+          JSON.stringify(["ACTIVITY_EXPORT", "HISTORICAL_DATA_EXPORT"]),
           { status: 200 }
         )
       )
@@ -224,7 +224,7 @@ describe("/api/devices/garmin/activities", () => {
       if (parsed.pathname.endsWith("/wellness-api/rest/user/permissions")) {
         return Promise.resolve(
           new Response(
-            JSON.stringify({ permissions: ["ACTIVITY_EXPORT", "HISTORICAL_DATA_EXPORT"] }),
+            JSON.stringify(["ACTIVITY_EXPORT", "HISTORICAL_DATA_EXPORT"]),
             { status: 200 }
           )
         );

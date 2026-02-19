@@ -509,6 +509,9 @@ export async function POST(req: Request) {
   try {
     const { permissions, capabilities, datasets, datasetCounts, ingestion } = await computeCatalog(accessToken)
     const notices: string[] = []
+    const webhookEndpointHint = process.env.GARMIN_WEBHOOK_SECRET?.trim()
+      ? '/api/devices/garmin/webhook/<GARMIN_WEBHOOK_SECRET>'
+      : '/api/devices/garmin/webhook'
 
     if (!ingestion.storeAvailable) {
       notices.push(ingestion.storeError ?? 'RunSmart Garmin webhook storage is unavailable.')
@@ -525,7 +528,7 @@ export async function POST(req: Request) {
     const totalRows = Object.values(datasetCounts).reduce((sum, value) => sum + value, 0)
     if (ingestion.storeAvailable && totalRows === 0) {
       notices.push(
-        'No Garmin export records received in the last 30 days. Ensure Garmin ping/pull or push notifications point to /api/devices/garmin/webhook.'
+        `No Garmin export records received in the last 30 days. Ensure Garmin ping/pull or push notifications point to ${webhookEndpointHint}.`
       )
     }
 

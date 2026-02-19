@@ -347,7 +347,8 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
                     {catalog.ingestion.recordsInWindow}.
                   </p>
                   <p className="mt-1">
-                    Webhook endpoint: <code>/api/devices/garmin/webhook</code>
+                    Webhook endpoint: <code>/api/devices/garmin/webhook</code> (or{" "}
+                    <code>/api/devices/garmin/webhook/&lt;GARMIN_WEBHOOK_SECRET&gt;</code> when secret-protected)
                   </p>
                   {catalog.ingestion.latestReceivedAt ? (
                     <p className="mt-1">

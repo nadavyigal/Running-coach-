@@ -93,7 +93,7 @@ describe('/api/devices/garmin/sync', () => {
       const parsed = new URL(String(url))
       if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
         return Promise.resolve(
-          new Response(JSON.stringify({ permissions: ['ACTIVITY_EXPORT', 'HEALTH_EXPORT', 'WORKOUT_IMPORT'] }), {
+          new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HEALTH_EXPORT', 'WORKOUT_IMPORT']), {
             status: 200,
           })
         )
@@ -194,7 +194,7 @@ describe('/api/devices/garmin/sync', () => {
       const parsed = new URL(String(url))
       if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
         return Promise.resolve(
-          new Response(JSON.stringify({ permissions: ['ACTIVITY_EXPORT', 'HEALTH_EXPORT'] }), { status: 200 })
+          new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HEALTH_EXPORT']), { status: 200 })
         )
       }
       if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
@@ -235,7 +235,7 @@ describe('/api/devices/garmin/sync', () => {
     const fetchMock = vi.fn((url: RequestInfo | URL) => {
       const parsed = new URL(String(url))
       if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
-        return Promise.resolve(new Response(JSON.stringify({ permissions: ['ACTIVITY_EXPORT'] }), { status: 200 }))
+        return Promise.resolve(new Response(JSON.stringify(['ACTIVITY_EXPORT']), { status: 200 }))
       }
       if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
         return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))

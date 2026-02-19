@@ -98,7 +98,7 @@ export async function GET(req: Request) {
   const origin = new URL(req.url).origin
   const configuredSecret = process.env.GARMIN_WEBHOOK_SECRET?.trim()
   const webhookUrl = configuredSecret
-    ? `${origin}/api/devices/garmin/webhook?secret=${encodeURIComponent(configuredSecret)}`
+    ? `${origin}/api/devices/garmin/webhook/${encodeURIComponent(configuredSecret)}`
     : `${origin}/api/devices/garmin/webhook`
 
   const blockers: string[] = []

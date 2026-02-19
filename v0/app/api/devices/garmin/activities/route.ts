@@ -121,9 +121,14 @@ async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
   }
 
   try {
-    const parsed = JSON.parse(responseText) as { permissions?: unknown };
-    return Array.isArray(parsed.permissions)
-      ? parsed.permissions.filter((entry): entry is string => typeof entry === 'string')
+    const parsed: unknown = JSON.parse(responseText);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((entry): entry is string => typeof entry === 'string');
+    }
+
+    const permissions = (parsed as { permissions?: unknown })?.permissions;
+    return Array.isArray(permissions)
+      ? permissions.filter((entry): entry is string => typeof entry === 'string')
       : [];
   } catch {
     return [];
