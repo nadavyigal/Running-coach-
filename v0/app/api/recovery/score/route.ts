@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { RecoveryEngine } from '../../../../lib/recoveryEngine';
 import { logger } from '@/lib/logger';
+import { RecoveryEngine } from '../../../../lib/recoveryEngine';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
         subjectiveWellnessScore: 50,
         trainingLoadImpact: 0,
         stressLevel: 50,
+        readinessScore: 50,
         recommendations: [
           "Get adequate sleep (7-9 hours) for optimal recovery",
           "Stay hydrated throughout the day",

@@ -58,6 +58,7 @@ export interface RecoveryScore {
   hrvScore: number; // 0-100
   restingHRScore: number; // 0-100
   subjectiveWellnessScore: number; // 0-100
+  trainingLoadImpact: number; // negative values lower readiness
   stressLevel: number; // 0-100
   readinessScore: number; // 0-100
   confidence: number; // 0-100
@@ -1772,4 +1773,3 @@ export const badgeTypes: { [key: number]: 'bronze' | 'silver' | 'gold' } = {
   7: 'silver',
   30: 'gold',
 };
-

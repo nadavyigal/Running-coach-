@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { RecoveryEngine } from '../../../../lib/recoveryEngine';
 import { logger } from '@/lib/logger';
+import { RecoveryEngine } from '../../../../lib/recoveryEngine';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
           subjectiveWellnessScore: 45 + Math.random() * 30,
           trainingLoadImpact: -Math.random() * 10,
           stressLevel: 30 + Math.random() * 40,
+          readinessScore: 45 + Math.random() * 30,
           recommendations: ["Sample recommendation"],
           confidence: 40 + Math.random() * 40,
           createdAt: date,

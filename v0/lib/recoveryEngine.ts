@@ -1,4 +1,5 @@
-import { db, SleepData, HRVMeasurement, RecoveryScore, SubjectiveWellness } from './db';
+import { db, SleepData, HRVMeasurement, RecoveryScore, SubjectiveWellness, type GarminSummaryRecord } from './db';
+import { deriveGarminRecoverySignals, getGarminRecoveryDatasets, type GarminRecoverySignals } from './garminRecoverySignals';
 import {
   calculateBaselinePace,
   estimatePaceEffort,
@@ -71,6 +72,15 @@ export interface RecoveryFactors {
  * subjective wellness reports, and training load calculations.
  */
 export class RecoveryEngine {
+  private static getHrvValue(hrvData: HRVMeasurement | null): number | null {
+    if (!hrvData) return null;
+    const candidate = typeof hrvData.hrvValue === 'number' ? hrvData.hrvValue : null;
+    if (candidate != null && Number.isFinite(candidate)) return candidate;
+
+    const legacy = (hrvData as unknown as { rmssd?: unknown }).rmssd;
+    return typeof legacy === 'number' && Number.isFinite(legacy) ? legacy : null;
+  }
+
   /**
    * Calculates a comprehensive recovery score (0-100) based on multiple physiological and subjective factors.
    * 
@@ -117,15 +127,20 @@ export class RecoveryEngine {
       const loadIncreasePct = await this.calculateWeeklyLoadIncrease(userId, date);
       const behavioralScore = await this.calculateBehavioralScore(userId, date);
       const hasWearableSignals = await this.hasHeartRateData(userId, date);
+      const garminSignals = await this.getGarminRecoverySignalsForDate(userId, date);
       
       // Calculate individual scores
       const sleepScore = this.calculateSleepScore(sleepData, baseline);
       const hrvScore = this.calculateHRVScore(hrvData, baseline);
-      const restingHRScore = await this.calculateRestingHRScore(userId, baseline);
+      const restingHRScore = await this.calculateRestingHRScore(
+        userId,
+        baseline,
+        garminSignals.restingHeartRate
+      );
       const subjectiveScore = this.calculateSubjectiveScore(subjectiveData);
-      const trainingLoadImpact = this.calculateTrainingLoadImpact(trainingLoad);
-      const stressLevel = this.calculateStressLevel(sleepData, hrvData, subjectiveData);
-      const phoneOnly = !hrvData && !hasWearableSignals;
+      const trainingLoadImpact = this.calculateTrainingLoadImpact(trainingLoad, garminSignals);
+      const stressLevel = this.calculateStressLevel(sleepData, hrvData, subjectiveData, garminSignals);
+      const phoneOnly = !hrvData && !hasWearableSignals && !garminSignals.hasSignals;
       
       // Calculate overall score with weighted factors
       const overallScore = this.calculateOverallScore({
@@ -152,7 +167,7 @@ export class RecoveryEngine {
       });
       
       // Calculate confidence based on data availability
-      const confidence = this.calculateConfidence(sleepData, hrvData, subjectiveData);
+      const confidence = this.calculateConfidence(sleepData, hrvData, subjectiveData, garminSignals);
       
       const recoveryScore: RecoveryScore = {
         userId,
@@ -165,6 +180,7 @@ export class RecoveryEngine {
         subjectiveWellnessScore: subjectiveScore,
         trainingLoadImpact,
         stressLevel,
+        readinessScore: overallScore,
         recommendations,
         confidence,
         createdAt: new Date(),
@@ -173,7 +189,7 @@ export class RecoveryEngine {
       
       // Save to database
       const id = await db.recoveryScores.add(recoveryScore);
-      return { ...recoveryScore, id };
+      return typeof id === 'number' ? { ...recoveryScore, id } : recoveryScore;
       
     } catch (error) {
       console.error('Error calculating recovery score:', error);
@@ -272,8 +288,9 @@ export class RecoveryEngine {
    */
   static calculateHRVScore(hrvData: HRVMeasurement | null, baseline: RecoveryBaseline): number {
     if (!hrvData) return 50; // Neutral score when no measurement available
-    
-    const currentHRV = hrvData.rmssd;
+
+    const currentHRV = this.getHrvValue(hrvData);
+    if (currentHRV == null) return 50;
     const baselineHRV = baseline.avgHRV;
     
     // Calculate ratio of current HRV to personal baseline
@@ -289,8 +306,24 @@ export class RecoveryEngine {
     return 20; // Very poor - 30%+ below baseline (severe stress/overreaching)
   }
   
+  private static scoreRestingHeartRateValue(restingHeartRate: number, baselineRestingHeartRate: number): number {
+    const hrDiff = restingHeartRate - baselineRestingHeartRate;
+
+    // Lower-than-baseline resting HR typically indicates better recovery.
+    if (hrDiff <= -5) return 90;
+    if (hrDiff <= 0) return 80;
+    if (hrDiff <= 5) return 70;
+    if (hrDiff <= 10) return 60;
+    if (hrDiff <= 15) return 40;
+    return 20;
+  }
+
   // Calculate resting heart rate score
-  static async calculateRestingHRScore(userId: number, baseline: RecoveryBaseline): Promise<number> {
+  static async calculateRestingHRScore(
+    userId: number,
+    baseline: RecoveryBaseline,
+    garminRestingHeartRate?: number | null
+  ): Promise<number> {
     try {
       // Get recent runs first, then their heart rate data
       const recentRuns = await db.runs
@@ -298,31 +331,41 @@ export class RecoveryEngine {
         .reverse()
         .limit(5)
         .toArray();
-      
-      if (recentRuns.length === 0) return 50; // Default score if no runs
-      
-      const runIds = recentRuns.map(run => run.id!);
-      const recentHRData = await db.heartRateData
-        .where('runId')
-        .anyOf(runIds)
-        .toArray();
-      
-      if (recentHRData.length === 0) return 50; // Default score if no HR data
-      
-      // Calculate average resting HR from recent data (use lowest values as proxy for resting)
-      const sortedHR = recentHRData.map(data => data.heartRate).sort((a, b) => a - b);
-      const restingHREstimate = sortedHR.slice(0, Math.max(1, Math.floor(sortedHR.length * 0.1))).reduce((sum, hr) => sum + hr, 0) / Math.max(1, Math.floor(sortedHR.length * 0.1));
-      
+
       const baselineHR = baseline.avgRestingHR;
-      const hrDiff = restingHREstimate - baselineHR;
-      
-      // Lower HR is generally better for recovery
-      if (hrDiff <= -5) return 90; // Excellent - lower than baseline
-      if (hrDiff <= 0) return 80; // Good - at or below baseline
-      if (hrDiff <= 5) return 70; // Fair - slightly above baseline
-      if (hrDiff <= 10) return 60; // Below average
-      if (hrDiff <= 15) return 40; // Poor
-      return 20; // Very poor
+      let runDerivedScore: number | null = null;
+
+      if (recentRuns.length > 0) {
+        const runIds = recentRuns.map(run => run.id).filter((id): id is number => typeof id === 'number');
+        if (runIds.length > 0) {
+          const recentHRData = await db.heartRateData
+            .where('runId')
+            .anyOf(runIds)
+            .toArray();
+
+          if (recentHRData.length > 0) {
+            // Use lowest 10% HR samples as a proxy for resting HR.
+            const sortedHR = recentHRData.map(data => data.heartRate).sort((a, b) => a - b);
+            const lowSampleCount = Math.max(1, Math.floor(sortedHR.length * 0.1));
+            const restingHREstimate =
+              sortedHR.slice(0, lowSampleCount).reduce((sum, hr) => sum + hr, 0) / lowSampleCount;
+            runDerivedScore = this.scoreRestingHeartRateValue(restingHREstimate, baselineHR);
+          }
+        }
+      }
+
+      const garminScore =
+        typeof garminRestingHeartRate === 'number' && Number.isFinite(garminRestingHeartRate)
+          ? this.scoreRestingHeartRateValue(garminRestingHeartRate, baselineHR)
+          : null;
+
+      if (runDerivedScore != null && garminScore != null) {
+        return Math.round(runDerivedScore * 0.6 + garminScore * 0.4);
+      }
+
+      if (runDerivedScore != null) return runDerivedScore;
+      if (garminScore != null) return garminScore;
+      return 50; // Default score when no resting HR signals are available.
     } catch (error) {
       console.error('Error calculating resting HR score:', error);
       return 50; // Default fallback score
@@ -359,20 +402,34 @@ export class RecoveryEngine {
   }
   
   // Calculate training load impact on recovery
-  static calculateTrainingLoadImpact(trainingLoad: number): number {
+  static calculateTrainingLoadImpact(
+    trainingLoad: number,
+    garminSignals?: GarminRecoverySignals
+  ): number {
     // Training load impact is negative - higher load reduces recovery
-    if (trainingLoad <= 20) return 0; // Low load, no impact
-    if (trainingLoad <= 40) return -5; // Moderate load
-    if (trainingLoad <= 60) return -10; // High load
-    if (trainingLoad <= 80) return -15; // Very high load
-    return -20; // Extreme load
+    let impact = 0;
+    if (trainingLoad <= 20) impact = 0; // Low load, no impact
+    else if (trainingLoad <= 40) impact = -5; // Moderate load
+    else if (trainingLoad <= 60) impact = -10; // High load
+    else if (trainingLoad <= 80) impact = -15; // Very high load
+    else impact = -20; // Extreme load
+
+    // Add Garmin-derived active-time load from epochs/dailies.
+    if (garminSignals?.activeMinutes != null) {
+      if (garminSignals.activeMinutes >= 180) impact -= 6;
+      else if (garminSignals.activeMinutes >= 120) impact -= 4;
+      else if (garminSignals.activeMinutes >= 90) impact -= 2;
+    }
+
+    return Math.max(-25, impact);
   }
   
   // Calculate stress level based on multiple factors
   static calculateStressLevel(
     sleepData: SleepData | null,
     hrvData: HRVMeasurement | null,
-    subjectiveData: SubjectiveWellness | null
+    subjectiveData: SubjectiveWellness | null,
+    garminSignals?: GarminRecoverySignals
   ): number {
     let stressFactors = 0;
     let factorCount = 0;
@@ -386,9 +443,12 @@ export class RecoveryEngine {
     
     // HRV stress factor
     if (hrvData) {
-      if (hrvData.rmssd < 30) stressFactors += 25; // Very low HRV
-      else if (hrvData.rmssd < 40) stressFactors += 15; // Low HRV
-      factorCount++;
+      const hrvValue = this.getHrvValue(hrvData);
+      if (hrvValue != null) {
+        if (hrvValue < 30) stressFactors += 25; // Very low HRV
+        else if (hrvValue < 40) stressFactors += 15; // Low HRV
+        factorCount++;
+      }
     }
     
     // Subjective stress factor
@@ -398,7 +458,29 @@ export class RecoveryEngine {
       stressFactors += (subjectiveStress / 10) * 30;
       factorCount++;
     }
-    
+
+    if (garminSignals?.stressLevel != null) {
+      stressFactors += garminSignals.stressLevel;
+      factorCount++;
+    }
+
+    // Elevated respiration can indicate autonomic strain or poor recovery.
+    if (garminSignals?.respirationRate != null) {
+      if (garminSignals.respirationRate >= 20) stressFactors += 80;
+      else if (garminSignals.respirationRate >= 18) stressFactors += 65;
+      else if (garminSignals.respirationRate >= 16) stressFactors += 50;
+      else stressFactors += 35;
+      factorCount++;
+    }
+
+    if (garminSignals?.activeMinutes != null) {
+      if (garminSignals.activeMinutes >= 180) stressFactors += 75;
+      else if (garminSignals.activeMinutes >= 120) stressFactors += 65;
+      else if (garminSignals.activeMinutes >= 90) stressFactors += 55;
+      else stressFactors += 45;
+      factorCount++;
+    }
+
     return factorCount > 0 ? Math.round(stressFactors / factorCount) : 50;
   }
   
@@ -497,7 +579,8 @@ export class RecoveryEngine {
   static calculateConfidence(
     sleepData: SleepData | null,
     hrvData: HRVMeasurement | null,
-    subjectiveData: SubjectiveWellness | null
+    subjectiveData: SubjectiveWellness | null,
+    garminSignals?: GarminRecoverySignals
   ): number {
     let confidence = 0;
     let dataPoints = 0;
@@ -514,6 +597,11 @@ export class RecoveryEngine {
     
     if (subjectiveData) {
       confidence += 25;
+      dataPoints++;
+    }
+
+    if (garminSignals?.hasSignals) {
+      confidence += 20;
       dataPoints++;
     }
     
@@ -545,14 +633,14 @@ export class RecoveryEngine {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
     
-    return await db.sleepData
+    return (await db.sleepData
       .where('userId').equals(userId)
       .and((sleep) => {
         const sleepDate = sleep.sleepDate ?? sleep.date;
         if (!sleepDate) return false;
         return sleepDate >= startOfDay && sleepDate <= endOfDay;
       })
-      .first();
+      .first()) ?? null;
   }
   
   // Get HRV data for a specific date
@@ -562,10 +650,10 @@ export class RecoveryEngine {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
     
-    return await db.hrvMeasurements
+    return (await db.hrvMeasurements
       .where('userId').equals(userId)
       .and(hrv => hrv.measurementDate >= startOfDay && hrv.measurementDate <= endOfDay)
-      .first();
+      .first()) ?? null;
   }
   
   // Get subjective wellness data for a specific date
@@ -575,14 +663,36 @@ export class RecoveryEngine {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
     
-    return await db.subjectiveWellness
+    return (await db.subjectiveWellness
       .where('userId').equals(userId)
       .and((wellness) => {
         const wellnessDate = wellness.assessmentDate ?? wellness.date;
         if (!wellnessDate) return false;
         return wellnessDate >= startOfDay && wellnessDate <= endOfDay;
       })
-      .first();
+      .first()) ?? null;
+  }
+
+  static async getGarminRecoverySignalsForDate(
+    userId: number,
+    date: Date
+  ): Promise<GarminRecoverySignals> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const recoveryDatasets = getGarminRecoveryDatasets();
+    const rows = await db.garminSummaryRecords
+      .where('[userId+recordedAt]')
+      .between([userId, startOfDay], [userId, endOfDay], true, true)
+      .toArray();
+
+    const filteredRows = rows.filter((row) =>
+      recoveryDatasets.has(row.datasetKey)
+    ) as GarminSummaryRecord[];
+
+    return deriveGarminRecoverySignals(filteredRows);
   }
   
   // Calculate training load for a specific date
@@ -706,32 +816,35 @@ export class RecoveryEngine {
   static async saveSleepData(sleepData: Omit<SleepData, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
     const now = new Date();
     const resolvedSleepDate = sleepData.sleepDate ?? sleepData.date ?? now;
-    return await db.sleepData.add({
+    const id = await db.sleepData.add({
       ...sleepData,
       sleepDate: resolvedSleepDate,
       date: sleepData.date ?? resolvedSleepDate,
       createdAt: now,
       updatedAt: now
     });
+    return typeof id === 'number' ? id : 0;
   }
   
   // Save HRV measurement
   static async saveHRVMeasurement(hrvData: Omit<HRVMeasurement, 'id' | 'createdAt'>): Promise<number> {
-    return await db.hrvMeasurements.add({
+    const id = await db.hrvMeasurements.add({
       ...hrvData,
       createdAt: new Date()
     });
+    return typeof id === 'number' ? id : 0;
   }
   
   // Save subjective wellness data
   static async saveSubjectiveWellness(wellnessData: Omit<SubjectiveWellness, 'id' | 'createdAt'>): Promise<number> {
     const resolvedDate = wellnessData.assessmentDate ?? wellnessData.date ?? new Date();
-    return await db.subjectiveWellness.add({
+    const id = await db.subjectiveWellness.add({
       ...wellnessData,
       assessmentDate: resolvedDate,
       date: wellnessData.date ?? resolvedDate,
       createdAt: new Date()
     });
+    return typeof id === 'number' ? id : 0;
   }
   
   // Get recovery score for a specific date
@@ -741,14 +854,14 @@ export class RecoveryEngine {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
     
-    return await db.recoveryScores
+    return (await db.recoveryScores
       .where('userId').equals(userId)
       .and((score) => {
         const scoreDate = score.scoreDate ?? score.date;
         if (!scoreDate) return false;
         return scoreDate >= startOfDay && scoreDate <= endOfDay;
       })
-      .first();
+      .first()) ?? null;
   }
   
   // Get recovery trends over time
@@ -775,7 +888,7 @@ export class RecoveryEngine {
    * @returns Personalized recommendations
    */
   static async generatePersonalizedRecommendations(
-    userId: number,
+    _userId: number,
     recoveryScore: RecoveryScore,
     context: PersonalizationContext
   ): Promise<string[]> {
@@ -928,7 +1041,7 @@ export class RecoveryEngine {
   ): string {
     if (motivations.length === 0) return '';
 
-    const firstMotivation = motivations[0].toLowerCase();
+    const firstMotivation = (motivations[0] ?? '').toLowerCase();
 
     if (firstMotivation.includes('health')) {
       return '💚 For your health:';

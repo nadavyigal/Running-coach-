@@ -1,5 +1,6 @@
-import { type User, type Plan, type Run, type Goal } from './db';
 import { dbUtils } from '@/lib/dbUtils';
+import { type User, type Plan, type Run, type Goal } from './db';
+import { RecoveryEngine } from './recoveryEngine';
 
 export interface UserContext {
   goal: 'habit' | 'distance' | 'speed';
@@ -24,6 +25,14 @@ export interface AdaptationTrigger {
   type: 'completion' | 'goal_update' | 'feedback' | 'manual';
   data?: any;
   timestamp: Date;
+}
+
+interface RecoveryReadinessAnalysis {
+  available: boolean;
+  score: number | null;
+  stressLevel: number | null;
+  trend: 'improving' | 'declining' | 'stable' | 'insufficient_data';
+  delta: number;
 }
 
 export class PlanAdaptationEngine {
@@ -67,12 +76,16 @@ export class PlanAdaptationEngine {
       // Analyze performance trends
       const performanceAnalysis = this.analyzePerformanceTrends(recentRuns);
 
+      // Analyze current recovery/readiness (now includes Garmin wellness signals when available)
+      const recoveryAnalysis = await this.analyzeRecoveryReadiness(userId);
+
       // Determine adaptation type and confidence
       const assessment = this.determineAdaptationType(
         completionAnalysis,
         goalAnalysis,
         performanceAnalysis,
-        user
+        user,
+        recoveryAnalysis
       );
 
       return assessment;
@@ -315,6 +328,57 @@ Generate a plan that will help this runner overcome their barriers and achieve t
     };
   }
 
+  private async analyzeRecoveryReadiness(userId: number): Promise<RecoveryReadinessAnalysis> {
+    try {
+      const today = new Date();
+      let currentScore = await RecoveryEngine.getRecoveryScore(userId, today);
+      if (!currentScore) {
+        currentScore = await RecoveryEngine.calculateRecoveryScore(userId, today);
+      }
+
+      const trends = await RecoveryEngine.getRecoveryTrends(userId, 7);
+      if (!currentScore) {
+        return {
+          available: false,
+          score: null,
+          stressLevel: null,
+          trend: 'insufficient_data',
+          delta: 0,
+        };
+      }
+
+      let trend: RecoveryReadinessAnalysis['trend'] = 'insufficient_data';
+      let delta = 0;
+      if (trends.length >= 2) {
+        const oldest = trends[0];
+        const latest = trends[trends.length - 1];
+        if (oldest && latest) {
+          delta = latest.overallScore - oldest.overallScore;
+          if (delta >= 5) trend = 'improving';
+          else if (delta <= -5) trend = 'declining';
+          else trend = 'stable';
+        }
+      }
+
+      return {
+        available: true,
+        score: currentScore.overallScore,
+        stressLevel: currentScore.stressLevel,
+        trend,
+        delta,
+      };
+    } catch (error) {
+      console.warn('[plan-adaptation] Unable to derive recovery readiness:', error);
+      return {
+        available: false,
+        score: null,
+        stressLevel: null,
+        trend: 'insufficient_data',
+        delta: 0,
+      };
+    }
+  }
+
   /**
    * Determines the type of adaptation needed based on analysis
    * 
@@ -328,7 +392,8 @@ Generate a plan that will help this runner overcome their barriers and achieve t
     completionAnalysis: any,
     goalAnalysis: any,
     performanceAnalysis: any,
-    user: User
+    user: User,
+    recoveryAnalysis: RecoveryReadinessAnalysis
   ): AdaptationAssessment {
     let shouldAdapt = false;
     let reason = '';
@@ -336,49 +401,122 @@ Generate a plan that will help this runner overcome their barriers and achieve t
     let confidence = 0;
     const recommendedChanges: string[] = [];
 
+    const pushChange = (change: string) => {
+      if (!recommendedChanges.includes(change)) {
+        recommendedChanges.push(change);
+      }
+    };
+
+    const applyDecision = (
+      nextType: 'progressive' | 'regressive',
+      nextReason: string,
+      nextConfidence: number,
+      change: string
+    ) => {
+      shouldAdapt = true;
+      pushChange(change);
+      if (nextConfidence >= confidence) {
+        confidence = nextConfidence;
+        adaptationType = nextType;
+        reason = nextReason;
+      }
+    };
+
     // Check for completion issues
     if (completionAnalysis.completionRate < 0.6) {
-      shouldAdapt = true;
-      reason = 'Low completion rate indicates plan may be too challenging';
-      adaptationType = 'regressive';
-      confidence = 80;
-      recommendedChanges.push('Reduce workout intensity or frequency');
+      applyDecision(
+        'regressive',
+        'Low completion rate indicates plan may be too challenging',
+        80,
+        'Reduce workout intensity or frequency'
+      );
     }
 
     // Check for goal progress issues
     if (goalAnalysis.goalsBehind > goalAnalysis.goalsAhead) {
-      shouldAdapt = true;
-      reason = 'Goals are behind schedule';
-      adaptationType = 'regressive';
-      confidence = Math.max(confidence, 70);
-      recommendedChanges.push('Adjust goal timelines or reduce difficulty');
+      applyDecision(
+        'regressive',
+        'Goals are behind schedule',
+        70,
+        'Adjust goal timelines or reduce difficulty'
+      );
     }
 
     // Check for performance improvements
     if (performanceAnalysis.trend === 'improving' && completionAnalysis.trend === 'improving') {
-      shouldAdapt = true;
-      reason = 'Consistent improvement suggests readiness for progression';
-      adaptationType = 'progressive';
-      confidence = Math.max(confidence, 75);
-      recommendedChanges.push('Increase workout intensity or volume');
+      applyDecision(
+        'progressive',
+        'Consistent improvement suggests readiness for progression',
+        75,
+        'Increase workout intensity or volume'
+      );
     }
 
     // Check for performance decline
     if (performanceAnalysis.trend === 'declining' && completionAnalysis.trend === 'declining') {
-      shouldAdapt = true;
-      reason = 'Performance decline suggests overtraining or injury risk';
-      adaptationType = 'regressive';
-      confidence = Math.max(confidence, 85);
-      recommendedChanges.push('Reduce intensity and add recovery days');
+      applyDecision(
+        'regressive',
+        'Performance decline suggests overtraining or injury risk',
+        85,
+        'Reduce intensity and add recovery days'
+      );
     }
 
     // Consider user experience level
     if (user.experience === 'beginner' && completionAnalysis.completionRate < 0.8) {
-      shouldAdapt = true;
-      reason = 'Beginner struggling with current plan';
-      adaptationType = 'regressive';
-      confidence = Math.max(confidence, 90);
-      recommendedChanges.push('Simplify workouts and add more rest days');
+      applyDecision(
+        'regressive',
+        'Beginner struggling with current plan',
+        90,
+        'Simplify workouts and add more rest days'
+      );
+    }
+
+    // Recovery/readiness-aware adaptation (includes Garmin wellness signals in recovery engine).
+    if (recoveryAnalysis.available && recoveryAnalysis.score != null) {
+      if (recoveryAnalysis.score < 45) {
+        applyDecision(
+          'regressive',
+          `Low readiness score (${recoveryAnalysis.score}/100) indicates elevated recovery risk`,
+          92,
+          'Replace next hard workout with an easy run or full recovery day'
+        );
+      } else if (
+        recoveryAnalysis.score < 60 &&
+        recoveryAnalysis.trend === 'declining'
+      ) {
+        applyDecision(
+          'regressive',
+          `Readiness is trending down (${Math.round(recoveryAnalysis.delta)} pts over 7 days)`,
+          88,
+          'Hold volume steady and reduce intensity for 2-3 sessions'
+        );
+      } else if (
+        recoveryAnalysis.score >= 82 &&
+        recoveryAnalysis.trend === 'improving' &&
+        completionAnalysis.completionRate >= 0.7 &&
+        performanceAnalysis.trend !== 'declining'
+      ) {
+        applyDecision(
+          'progressive',
+          'High and improving readiness supports safe progression',
+          78,
+          'Progress one quality session with a small volume increase'
+        );
+      }
+    }
+
+    if (recoveryAnalysis.available && recoveryAnalysis.stressLevel != null && recoveryAnalysis.stressLevel > 70) {
+      applyDecision(
+        'regressive',
+        `High stress load detected (${recoveryAnalysis.stressLevel}/100)`,
+        89,
+        'Add mobility, sleep, and low-intensity recovery work before next key session'
+      );
+    }
+
+    if (!shouldAdapt) {
+      reason = 'No significant adaptation trigger detected';
     }
 
     return {
