@@ -38,6 +38,16 @@ interface DeviceInfo {
 }
 
 function capabilityBadgeClass(capability: GarminDatasetCapability): string {
+  const reason = capability.reason?.toLowerCase() ?? ""
+
+  if (reason.includes("no garmin export notifications")) {
+    return "bg-amber-100 text-amber-700"
+  }
+
+  if (reason.includes("webhook storage")) {
+    return "bg-red-100 text-red-700"
+  }
+
   if (capability.enabledForSync) {
     return "bg-green-100 text-green-700"
   }
@@ -54,6 +64,16 @@ function capabilityBadgeClass(capability: GarminDatasetCapability): string {
 }
 
 function capabilityStatus(capability: GarminDatasetCapability): string {
+  const reason = capability.reason?.toLowerCase() ?? ""
+
+  if (reason.includes("no garmin export notifications")) {
+    return "Waiting for data"
+  }
+
+  if (reason.includes("webhook storage")) {
+    return "Setup needed"
+  }
+
   if (capability.enabledForSync) {
     return "Enabled"
   }
@@ -120,7 +140,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
       }
 
       if (result.errors.length > 0) {
-        setCatalogError(result.errors[0])
+        setCatalogError(result.errors[0] ?? null)
         return
       }
 
@@ -160,7 +180,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
       setCatalog(result)
 
       if (result.errors.length > 0) {
-        setSyncError(result.errors[0])
+        setSyncError(result.errors[0] ?? null)
         toast({
           title: "Sync failed",
           description: result.errors[0],
@@ -292,7 +312,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
                 <div>
                   <p className="text-sm font-medium">{catalog?.syncName ?? "RunSmart Garmin Export Sync"}</p>
                   <p className="text-xs text-muted-foreground">
-                    Sync only datasets Garmin currently enables for this app and user.
+                    Sync Garmin-exported datasets from the last 30 days using Garmin notification feeds.
                   </p>
                 </div>
                 <Button
@@ -318,6 +338,30 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
                   {syncSummary}
                 </div>
               )}
+
+              {catalog?.ingestion ? (
+                <div className="mt-3 rounded border bg-slate-50 p-2 text-xs text-slate-700">
+                  <p className="font-medium">Garmin export feed status</p>
+                  <p className="mt-1">
+                    Window: last {catalog.ingestion.lookbackDays} days. Records in window:{" "}
+                    {catalog.ingestion.recordsInWindow}.
+                  </p>
+                  <p className="mt-1">
+                    Webhook endpoint: <code>/api/devices/garmin/webhook</code>
+                  </p>
+                  {catalog.ingestion.latestReceivedAt ? (
+                    <p className="mt-1">
+                      Last Garmin feed received:{" "}
+                      {new Date(catalog.ingestion.latestReceivedAt).toLocaleString()}
+                    </p>
+                  ) : null}
+                  {!catalog.ingestion.storeAvailable ? (
+                    <p className="mt-1 text-red-700">
+                      Store unavailable: {catalog.ingestion.storeError ?? "Unknown storage error."}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
 
               {datasetImportSummary.length > 0 ? (
                 <div className="mt-3 rounded border bg-slate-50 p-2 text-xs text-slate-700">

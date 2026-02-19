@@ -45,6 +45,13 @@ export interface GarminSyncCatalogResult {
   permissions: string[]
   availableToEnable: GarminEnablementItem[]
   capabilities: GarminDatasetCapability[]
+  ingestion?: {
+    lookbackDays: number
+    storeAvailable: boolean
+    storeError?: string
+    recordsInWindow: number
+    latestReceivedAt: string | null
+  }
   needsReauth: boolean
   errors: string[]
 }
@@ -66,6 +73,7 @@ interface GarminSyncApiResponse {
   permissions?: unknown
   availableToEnable?: unknown
   capabilities?: unknown
+  ingestion?: unknown
   datasets?: unknown
   datasetCounts?: unknown
   activities?: unknown
@@ -208,12 +216,13 @@ function parseSleep(value: unknown): GarminSleepPayload[] {
 
   return value
     .map((entry) => asRecord(entry))
-    .map((entry) => {
+    .map((entry): GarminSleepPayload | null => {
       const date = getString(entry.date)
       if (!date) return null
 
       const sleepScoresRecord = asRecord(entry.sleepScores)
       const overallRecord = asRecord(sleepScoresRecord.overall)
+      const overallValue = getNumber(overallRecord.value)
 
       return {
         date,
@@ -226,11 +235,7 @@ function parseSleep(value: unknown): GarminSleepPayload[] {
         awakeSleepSeconds: getNumber(entry.awakeSleepSeconds),
         sleepScores:
           Object.keys(overallRecord).length > 0
-            ? {
-                overall: {
-                  value: getNumber(overallRecord.value) ?? undefined,
-                },
-              }
+            ? { overall: { ...(overallValue != null ? { value: overallValue } : {}) } }
             : null,
       }
     })
@@ -258,6 +263,25 @@ function parseDatasetRows(value: unknown): Record<string, Record<string, unknown
 function parseNotices(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+}
+
+function parseIngestion(value: unknown): GarminSyncCatalogResult['ingestion'] {
+  const record = asRecord(value)
+  const lookbackDays = getNumber(record.lookbackDays)
+  const recordsInWindow = getNumber(record.recordsInWindow)
+  const storeAvailable = typeof record.storeAvailable === 'boolean' ? record.storeAvailable : null
+
+  if (lookbackDays == null || recordsInWindow == null || storeAvailable == null) {
+    return undefined
+  }
+
+  return {
+    lookbackDays,
+    storeAvailable,
+    ...(getString(record.storeError) ? { storeError: String(record.storeError) } : {}),
+    recordsInWindow,
+    latestReceivedAt: getString(record.latestReceivedAt),
+  }
 }
 
 function summarizeGarminDetail(detail: unknown): string {
@@ -439,11 +463,13 @@ async function runGarminSyncRequest(
 }
 
 function buildCatalogResult(data: GarminSyncApiResponse): Omit<GarminSyncCatalogResult, 'needsReauth' | 'errors'> {
+  const ingestion = parseIngestion(data.ingestion)
   return {
     syncName: typeof data.syncName === 'string' ? data.syncName : 'RunSmart Garmin Export Sync',
     permissions: parseStringArray(data.permissions),
     availableToEnable: parseEnablementItems(data.availableToEnable),
     capabilities: parseCapabilities(data.capabilities),
+    ...(ingestion !== undefined ? { ingestion } : {}),
   }
 }
 
@@ -480,7 +506,7 @@ async function importGarminSummaryRows(params: {
     let skipped = 0
 
     for (let index = 0; index < rows.length; index += 1) {
-      const row = rows[index]
+      const row: Record<string, unknown> = rows[index] ?? {}
       const summaryId = buildSummaryId(datasetKey, row, index)
 
       const existing = await db.garminSummaryRecords

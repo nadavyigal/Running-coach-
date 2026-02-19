@@ -76,20 +76,21 @@ async function handleGarminCallback(req: ApiRequest) {
       }, { status: 503 });
     }
 
-    // Exchange authorization code for access token using OAuth 2.0 PKCE
-    // POST to Garmin token endpoint with code_verifier (PKCE proof)
+    // Exchange authorization code for access token using OAuth 2.0 PKCE.
+    // Garmin spec requires client_id and client_secret in the POST body (not Basic auth).
+    // Ref: https://developerportal.garmin.com/sites/default/files/OAuth2PKCE_2.pdf
     try {
       const tokenResponse = await fetch(GARMIN_TOKEN_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`
         },
         body: new URLSearchParams({
           grant_type: 'authorization_code',
           code,
           redirect_uri: redirectUri,
           client_id: clientId,
+          client_secret: clientSecret,
           code_verifier: codeVerifier,
         })
       });

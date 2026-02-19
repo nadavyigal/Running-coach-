@@ -289,8 +289,8 @@ export class BackgroundSyncManager {
       throw new Error('No access token available');
     }
 
-    const response = await fetch('/api/devices/garmin/activities', {
-      method: 'GET',
+    const response = await fetch('/api/devices/garmin/sync', {
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${device.authTokens.accessToken}`,
         'Content-Type': 'application/json'
@@ -307,13 +307,14 @@ export class BackgroundSyncManager {
     }
 
     // Process and store activities
-    for (const activity of data.activities) {
+    const activities = Array.isArray(data.activities) ? data.activities : [];
+    for (const activity of activities) {
       await this.processGarminActivity(activity, device.userId);
     }
 
     await db.syncJobs.update(job.id!, {
       progress: 33,
-      metadata: { activitiesProcessed: data.activities.length },
+      metadata: { activitiesProcessed: activities.length },
       updatedAt: new Date()
     });
   }

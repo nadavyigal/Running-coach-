@@ -427,6 +427,15 @@ This iterative process ensures each edit doesn't create new problems while respe
 
 ---
 
+## Recursive Quality Control Pass
+
+Before finalizing recommendations or deliverables, run at least one scored rewrite pass:
+1. Score the current draft against a rubric tied to this skill's output.
+2. Run adversarial critique (skeptical buyer, competitor reviewer, distracted scroller).
+3. Diagnose root causes, rewrite, and re-score.
+4. Ship only if all thresholds pass and no high-severity issues remain.
+
+Use the shared protocol and templates in [../../references/recursive-quality-control.md](../../references/recursive-quality-control.md).
 ## Related Skills
 
 - **copywriting**: For writing new copy from scratch (use this skill to edit after your first draft is complete)

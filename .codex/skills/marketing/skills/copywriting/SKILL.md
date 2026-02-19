@@ -242,6 +242,15 @@ For headlines and CTAs, provide 2-3 options:
 
 ---
 
+## Recursive Quality Control Pass
+
+Before finalizing recommendations or deliverables, run at least one scored rewrite pass:
+1. Score the current draft against a rubric tied to this skill's output.
+2. Run adversarial critique (skeptical buyer, competitor reviewer, distracted scroller).
+3. Diagnose root causes, rewrite, and re-score.
+4. Ship only if all thresholds pass and no high-severity issues remain.
+
+Use the shared protocol and templates in [../../references/recursive-quality-control.md](../../references/recursive-quality-control.md).
 ## Related Skills
 
 - **copy-editing**: For polishing existing copy (use after your draft)

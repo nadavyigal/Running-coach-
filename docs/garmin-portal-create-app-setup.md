@@ -71,16 +71,29 @@ Copy credentials from Garmin portal and set:
 GARMIN_CLIENT_ID=<from-garmin-portal>
 GARMIN_CLIENT_SECRET=<from-garmin-portal>
 GARMIN_OAUTH_REDIRECT_URI=https://runsmart-ai.com/garmin/callback
+GARMIN_WEBHOOK_SECRET=<random-long-secret>
 ```
 
 Add these to:
 - `v0/.env.local`
 - Vercel project environment variables
 
-## 9) Smoke Test
+## 9) Garmin Notification Endpoint (Required For Export Sync)
+
+RunSmart export sync now relies on Garmin notification delivery (Ping/Pull or Push).
+
+- Configure Garmin callback/notification URL to:
+  - `https://runsmart-ai.com/api/devices/garmin/webhook?secret=<GARMIN_WEBHOOK_SECRET>`
+- Route source:
+  - `v0/app/api/devices/garmin/webhook/route.ts`
+- Sync consumer route:
+  - `v0/app/api/devices/garmin/sync/route.ts`
+
+## 10) Smoke Test
 
 1. Open RunSmart while logged in.
 2. Go to profile/device settings and click Connect Garmin.
 3. Complete Garmin consent.
 4. Confirm redirect lands on `/garmin/callback` and returns to profile.
-5. Trigger activity sync and verify runs are imported.
+5. Create/update a Garmin activity (or wait for Garmin export ping/push).
+6. Trigger Garmin sync in RunSmart and verify records are imported.

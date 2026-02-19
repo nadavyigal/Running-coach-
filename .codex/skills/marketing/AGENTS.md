@@ -206,3 +206,7 @@ When using any skill from this repository:
 ## Skill Categories
 
 See `README.md` for the current list of skills organized by category. When adding new skills, follow the naming patterns of existing skills in that category.
+## Shared Quality Standard
+
+When editing or adding skills under `skills/`, include a quality loop (score -> critique -> rewrite -> re-score) for user-facing outputs.
+Prefer linking to `references/recursive-quality-control.md` instead of rewriting the full protocol in every skill.

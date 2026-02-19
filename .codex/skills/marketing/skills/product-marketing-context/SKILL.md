@@ -238,3 +238,13 @@ After gathering information, create `.claude/product-marketing-context.md` with 
 - **Ask for examples**: "Can you give me an example?" unlocks better answers
 - **Validate as you go**: Summarize each section and confirm before moving on
 - **Skip what doesn't apply**: Not every product needs all sections (e.g., Personas for B2C)
+
+## Recursive Quality Control Pass
+
+Before finalizing recommendations or deliverables, run at least one scored rewrite pass:
+1. Score the current draft against a rubric tied to this skill's output.
+2. Run adversarial critique (skeptical buyer, competitor reviewer, distracted scroller).
+3. Diagnose root causes, rewrite, and re-score.
+4. Ship only if all thresholds pass and no high-severity issues remain.
+
+Use the shared protocol and templates in [../../references/recursive-quality-control.md](../../references/recursive-quality-control.md).

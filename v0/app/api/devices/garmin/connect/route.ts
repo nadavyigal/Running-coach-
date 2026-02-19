@@ -86,9 +86,9 @@ async function handleGarminConnect(req: ApiRequest) {
     authUrl.searchParams.append('client_id', clientId);
     authUrl.searchParams.append('response_type', 'code');
     authUrl.searchParams.append('redirect_uri', parsedRedirectUri.toString());
-    // Garmin Health API scopes: activity (runs), sleep, workout, heart_rate
-    // Full list: https://developer.garmin.com/health-api/overview/
-    authUrl.searchParams.append('scope', 'activity workout heart_rate sleep');
+    // NOTE: Garmin OAuth2 PKCE does not use a scope parameter in the authorization request.
+    // Data access is controlled via API Configuration in the Garmin Developer Portal.
+    // Ref: https://developerportal.garmin.com/sites/default/files/OAuth2PKCE_2.pdf
     authUrl.searchParams.append('state', state);
     authUrl.searchParams.append('code_challenge', codeChallenge);
     authUrl.searchParams.append('code_challenge_method', 'S256');

@@ -2,12 +2,20 @@ import { Queue, QueueEvents } from 'bullmq';
 import { logger } from '@/lib/logger';
 
 // Redis connection configuration
-const getConnection = () => ({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-  tls: process.env.REDIS_TLS === 'true' ? {} : undefined
-});
+const getConnection = () => {
+  const base: {
+    host: string;
+    port: number;
+    password?: string;
+    tls?: Record<string, never>;
+  } = {
+    host: process.env.REDIS_HOST ?? 'localhost',
+    port: parseInt(process.env.REDIS_PORT ?? '6379'),
+  };
+  if (process.env.REDIS_PASSWORD) base.password = process.env.REDIS_PASSWORD;
+  if (process.env.REDIS_TLS === 'true') base.tls = {};
+  return base;
+};
 
 // Job data types
 export interface GarminSyncJobData {
@@ -42,7 +50,8 @@ function getGarminSyncQueue(): Queue<GarminSyncJobData> | null {
 
   if (!garminSyncQueue) {
     try {
-      garminSyncQueue = new Queue<GarminSyncJobData>('garmin-sync', {
+      // Type assertion needed: BullMQ Queue generics are incompatible with exactOptionalPropertyTypes
+      garminSyncQueue = new Queue('garmin-sync', {
         connection: getConnection(),
         defaultJobOptions: {
           attempts: 3,
@@ -58,7 +67,7 @@ function getGarminSyncQueue(): Queue<GarminSyncJobData> | null {
             count: 50, // Keep last 50 failed jobs for debugging
           },
         },
-      });
+      }) as Queue<GarminSyncJobData>;
 
       logger.log('[Queue] Garmin sync queue initialized');
     } catch (error) {
@@ -78,7 +87,8 @@ function getAiActivityQueue(): Queue<AiActivityJobData> | null {
 
   if (!aiActivityQueue) {
     try {
-      aiActivityQueue = new Queue<AiActivityJobData>('ai-activity', {
+      // Type assertion needed: BullMQ Queue generics are incompatible with exactOptionalPropertyTypes
+      aiActivityQueue = new Queue('ai-activity', {
         connection: getConnection(),
         defaultJobOptions: {
           attempts: 3,
@@ -94,7 +104,7 @@ function getAiActivityQueue(): Queue<AiActivityJobData> | null {
             count: 50,
           },
         },
-      });
+      }) as Queue<AiActivityJobData>;
 
       logger.log('[Queue] AI activity queue initialized');
     } catch (error) {
@@ -156,9 +166,12 @@ export async function getQueueHealth(): Promise<{
   garminSync: { available: boolean; waiting?: number; active?: number };
   aiActivity: { available: boolean; waiting?: number; active?: number };
 }> {
-  const result = {
-    garminSync: { available: false as boolean, waiting: undefined as number | undefined, active: undefined as number | undefined },
-    aiActivity: { available: false as boolean, waiting: undefined as number | undefined, active: undefined as number | undefined },
+  const result: {
+    garminSync: { available: boolean; waiting?: number; active?: number };
+    aiActivity: { available: boolean; waiting?: number; active?: number };
+  } = {
+    garminSync: { available: false },
+    aiActivity: { available: false },
   };
 
   const garminQueue = getGarminSyncQueue();
@@ -167,8 +180,8 @@ export async function getQueueHealth(): Promise<{
       const counts = await garminQueue.getJobCounts('waiting', 'active');
       result.garminSync = {
         available: true,
-        waiting: counts.waiting,
-        active: counts.active,
+        ...(counts.waiting !== undefined ? { waiting: counts.waiting } : {}),
+        ...(counts.active !== undefined ? { active: counts.active } : {}),
       };
     } catch {
       result.garminSync.available = false;
@@ -181,8 +194,8 @@ export async function getQueueHealth(): Promise<{
       const counts = await aiQueue.getJobCounts('waiting', 'active');
       result.aiActivity = {
         available: true,
-        waiting: counts.waiting,
-        active: counts.active,
+        ...(counts.waiting !== undefined ? { waiting: counts.waiting } : {}),
+        ...(counts.active !== undefined ? { active: counts.active } : {}),
       };
     } catch {
       result.aiActivity.available = false;
