@@ -580,8 +580,9 @@ export async function syncGarminEnabledData(userId: number): Promise<GarminEnabl
     }
 
     const existingCount = await db.runs
-      .where('importRequestId')
-      .equals(activity.activityId)
+      .where('userId')
+      .equals(userId)
+      .and((run) => run.importRequestId === activity.activityId)
       .count()
 
     if (existingCount > 0) {
