@@ -1,4 +1,4 @@
-import Dexie, { type EntityTable } from 'dexie';
+﻿import Dexie, { type EntityTable } from 'dexie';
 
 // Recovery and wellness interfaces
 export interface SleepData {
@@ -465,6 +465,17 @@ export interface WearableDevice {
   updatedAt: Date;
 }
 
+export interface GarminSummaryRecord {
+  id?: number;
+  userId: number;
+  datasetKey: string;
+  summaryId: string;
+  source: 'garmin';
+  recordedAt: Date;
+  payload: string;
+  importedAt: Date;
+}
+
 export interface HeartRateData {
   id?: number;
   runId: number;
@@ -808,7 +819,7 @@ export interface Plan {
     dailyPromptsDuring: string[];       // Mid-run cues (future audio)
     dailyPromptsAfter: string[];        // Post-run reflection
     microLessons: string[];             // N "why this matters" lessons (N = durationDays)
-    progressionArc: string;             // Day 1 → N transformation story
+    progressionArc: string;             // Day 1 ג†’ N transformation story
     coachTone: 'gentle' | 'tough_love' | 'analytical' | 'calm';
   };
   // Timezone handling for UTC plan activation
@@ -1159,6 +1170,7 @@ export class RunSmartDB extends Dexie {
   advancedMetrics!: EntityTable<AdvancedMetrics, 'id'>;
   runningDynamicsData!: EntityTable<RunningDynamicsData, 'id'>;
   syncJobs!: EntityTable<SyncJob, 'id'>;
+  garminSummaryRecords!: EntityTable<GarminSummaryRecord, 'id'>;
   // Onboarding and conversation tables
   onboardingSessions!: EntityTable<OnboardingSession, 'id'>;
   conversationMessages!: EntityTable<ConversationMessage, 'id'>;
@@ -1290,6 +1302,9 @@ export class RunSmartDB extends Dexie {
       // Sync Jobs: Optimized for status and priority queries
       syncJobs: '++id, userId, deviceId, type, status, priority, createdAt, [userId+status], [status+priority], [userId+deviceId+type]',
 
+      // Garmin Summary Records: Optimized for dedupe and timeline queries
+      garminSummaryRecords: '++id, userId, datasetKey, summaryId, source, recordedAt, importedAt, [userId+datasetKey], [userId+datasetKey+summaryId], [userId+recordedAt]',
+
       // Onboarding Sessions: Optimized for conversation tracking
       onboardingSessions: '++id, userId, conversationId, goalDiscoveryPhase, isCompleted, createdAt, [userId+isCompleted], [conversationId+goalDiscoveryPhase]',
 
@@ -1346,7 +1361,7 @@ export class RunSmartDB extends Dexie {
     });
 
     this.version(2).stores({}).upgrade(async (trans) => {
-      console.log('🔄 Upgrading database to version 2: Adding map fields to routes');
+      console.log('נ”„ Upgrading database to version 2: Adding map fields to routes');
 
       // Update existing routes with default map values
       const routes = await trans.table('routes').toArray();
@@ -1359,11 +1374,11 @@ export class RunSmartDB extends Dexie {
         });
       }
 
-      console.log(`✓ Database upgrade complete: Updated ${routes.length} routes with map fields`);
+      console.log(`ג“ Database upgrade complete: Updated ${routes.length} routes with map fields`);
     });
 
     this.version(3).stores({}).upgrade(async (trans) => {
-      console.log('🔄 Upgrading database to version 3: Adding subscription fields to users');
+      console.log('נ”„ Upgrading database to version 3: Adding subscription fields to users');
 
       // Update existing users with trial period (14 days from now)
       const users = await trans.table('users').toArray();
@@ -1380,7 +1395,7 @@ export class RunSmartDB extends Dexie {
         });
       }
 
-      console.log(`✓ Database upgrade complete: Updated ${users.length} users with subscription fields`);
+      console.log(`ג“ Database upgrade complete: Updated ${users.length} users with subscription fields`);
     });
 
     this.version(4).stores({
@@ -1390,23 +1405,30 @@ export class RunSmartDB extends Dexie {
     this.version(5).stores({
       activeRecordingSessions: '++id, userId, status, startedAt, lastCheckpointAt, [userId+status]',
     }).upgrade(async (_trans) => {
-      console.log('🔄 Upgrading database to version 5: Adding active recording sessions table');
-      console.log('✓ Database upgrade complete: Active recording sessions table added');
+      console.log('נ”„ Upgrading database to version 5: Adding active recording sessions table');
+      console.log('ג“ Database upgrade complete: Active recording sessions table added');
     });
 
     this.version(6).stores({
       challengeTemplates: '++id, slug, category, difficulty, durationDays, isActive, isFeatured, sortOrder, createdAt, [category+difficulty], [isActive+isFeatured], [isActive+sortOrder]',
       challengeProgress: '++id, userId, challengeTemplateId, planId, status, currentDay, createdAt, [userId+status], [userId+challengeTemplateId], [planId+status]',
     }).upgrade(async (_trans) => {
-      console.log('🔄 Upgrading database to version 6: Adding challenge tables for Challenge-Led Growth Engine');
-      console.log('✓ Database upgrade complete: Challenge tables added');
+      console.log('נ”„ Upgrading database to version 6: Adding challenge tables for Challenge-Led Growth Engine');
+      console.log('ג“ Database upgrade complete: Challenge tables added');
     });
 
     this.version(7).stores({
       locationQuality: '++id, location, [lat+lng], lastRun, runsRecorded',
     }).upgrade(async (_trans) => {
-      console.log('נ”„ Upgrading database to version 7: Adding location quality tracking');
-      console.log('ג“ Database upgrade complete: Location quality table added');
+      console.log('׳ ֲג€ג€ Upgrading database to version 7: Adding location quality tracking');
+      console.log('׳’ֲג€ Database upgrade complete: Location quality table added');
+    });
+
+    this.version(8).stores({
+      garminSummaryRecords: '++id, userId, datasetKey, summaryId, source, recordedAt, importedAt, [userId+datasetKey], [userId+datasetKey+summaryId], [userId+recordedAt]',
+    }).upgrade(async (_trans) => {
+      console.log('Upgrading database to version 8: Adding Garmin summary records table');
+      console.log('Database upgrade complete: Garmin summary records table added');
     });
 
   }
@@ -1454,7 +1476,7 @@ async function checkStorageQuota(): Promise<void> {
         console.log(`[db:init] Storage: ${percentUsed.toFixed(1)}% used (${(estimate.usage / 1024 / 1024).toFixed(2)}MB / ${(estimate.quota / 1024 / 1024).toFixed(2)}MB)`);
 
         if (percentUsed > 90) {
-          console.warn('[db:init] ⚠️ Storage quota nearly full - may cause issues');
+          console.warn('[db:init] ג ן¸ Storage quota nearly full - may cause issues');
         }
       }
     } catch (error) {
@@ -1466,14 +1488,14 @@ async function checkStorageQuota(): Promise<void> {
 function createDatabaseInstance(): RunSmartDB | null {
   try {
     if (!checkIndexedDBSupport()) {
-      console.warn('⚠️ IndexedDB not supported, database functionality will be limited');
+      console.warn('ג ן¸ IndexedDB not supported, database functionality will be limited');
       return null;
     }
 
     // Check storage quota (async but don't block initialization)
     checkStorageQuota().catch(err => console.warn('[db:init] Storage check failed:', err));
 
-    console.log('✅ IndexedDB support confirmed, initializing database...');
+    console.log('ג… IndexedDB support confirmed, initializing database...');
     const db = new RunSmartDB();
     
     // Skip Dexie event wiring and transaction monkey-patching to avoid
@@ -1488,30 +1510,30 @@ function createDatabaseInstance(): RunSmartDB | null {
     // all event wiring in a defensive try/catch and continue on failure.
     try {
       db.on('blocked', (event: any) => {
-        console.warn('⚠️ Database blocked - handling concurrent access:', event);
+        console.warn('ג ן¸ Database blocked - handling concurrent access:', event);
         
         // Attempt to close other connections after a delay
         setTimeout(() => {
           try {
-            console.log('🔄 Attempting to resolve database blocking...');
+            console.log('נ”„ Attempting to resolve database blocking...');
             // Force close and reopen can help resolve blocking
             if (db.isOpen()) {
               db.close();
               setTimeout(() => {
                 db.open().catch(reopenError => {
-                  console.error('❌ Failed to reopen database after blocking:', reopenError);
+                  console.error('ג Failed to reopen database after blocking:', reopenError);
                 });
               }, 1000);
             }
           } catch (blockResolveError) {
-            console.error('❌ Error resolving database blocking:', blockResolveError);
+            console.error('ג Error resolving database blocking:', blockResolveError);
           }
         }, 2000);
       });
       
       // Handle version changes gracefully
       db.on('versionchange', (event: any) => {
-        console.log('🔄 Database version changed, handling gracefully...', event);
+        console.log('נ”„ Database version changed, handling gracefully...', event);
         // Close the database but don't immediately reopen to prevent conflicts
         db.close();
         
@@ -1520,7 +1542,7 @@ function createDatabaseInstance(): RunSmartDB | null {
           localStorage.setItem('db-version-change', Date.now().toString());
           window.addEventListener('storage', (e) => {
             if (e.key === 'db-version-change') {
-              console.log('🔄 Database version change detected across tabs');
+              console.log('נ”„ Database version change detected across tabs');
             }
           });
         }
@@ -1528,14 +1550,14 @@ function createDatabaseInstance(): RunSmartDB | null {
       
     } catch (eventWireError) {
       console.warn(
-        '⚠️ Failed to attach Dexie event handlers; continuing with basic database instance:',
+        'ג ן¸ Failed to attach Dexie event handlers; continuing with basic database instance:',
         eventWireError
       );
     }
 
     return db;
   } catch (error) {
-    console.error('❌ Failed to create database instance:', error);
+    console.error('ג Failed to create database instance:', error);
     return null;
   }
 }
@@ -1611,7 +1633,7 @@ export async function safeDbOperation<T>(
     // Check if we're on the server
     if (typeof window === 'undefined') {
       if (fallbackValue !== undefined) {
-        console.log(`🔄 Server-side: Using fallback value for '${operationName}'`);
+        console.log(`נ”„ Server-side: Using fallback value for '${operationName}'`);
         return fallbackValue;
       }
       throw new Error(`Database operation '${operationName}' not available on server`);
@@ -1619,7 +1641,7 @@ export async function safeDbOperation<T>(
     
     if (!isDatabaseAvailable()) {
       if (fallbackValue !== undefined) {
-        console.log(`🔄 Database unavailable: Using fallback value for '${operationName}'`);
+        console.log(`נ”„ Database unavailable: Using fallback value for '${operationName}'`);
         return fallbackValue;
       }
       throw new Error('Database not available');
@@ -1627,10 +1649,10 @@ export async function safeDbOperation<T>(
     
     return await operation();
   } catch (error) {
-    console.error(`❌ Database operation '${operationName}' failed:`, error);
+    console.error(`ג Database operation '${operationName}' failed:`, error);
     
     if (fallbackValue !== undefined) {
-      console.log(`🔄 Using fallback value for '${operationName}'`);
+      console.log(`נ”„ Using fallback value for '${operationName}'`);
       return fallbackValue;
     }
     
@@ -1750,3 +1772,4 @@ export const badgeTypes: { [key: number]: 'bronze' | 'silver' | 'gold' } = {
   7: 'silver',
   30: 'gold',
 };
+

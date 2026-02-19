@@ -1,6 +1,6 @@
 "use client"
 
-import { db, type Run, type SleepData, type WearableDevice } from '@/lib/db'
+import { db, type GarminSummaryRecord, type Run, type SleepData, type WearableDevice } from '@/lib/db'
 
 export interface GarminEnablementItem {
   key: string
@@ -10,13 +10,34 @@ export interface GarminEnablementItem {
 }
 
 export interface GarminDatasetCapability {
-  key: 'activities' | 'sleep' | 'heartRate' | 'workoutImport'
+  key:
+    | 'activities'
+    | 'manuallyUpdatedActivities'
+    | 'activityDetails'
+    | 'dailies'
+    | 'epochs'
+    | 'sleeps'
+    | 'bodyComps'
+    | 'stressDetails'
+    | 'userMetrics'
+    | 'pulseox'
+    | 'allDayRespiration'
+    | 'healthSnapshot'
+    | 'hrv'
+    | 'bloodPressures'
+    | 'skinTemp'
+    | 'workoutImport'
   label: string
   permissionGranted: boolean
   endpointReachable: boolean
   enabledForSync: boolean
   supportedByRunSmart: boolean
   reason?: string
+}
+
+export interface GarminDatasetImportStat {
+  imported: number
+  skipped: number
 }
 
 export interface GarminSyncCatalogResult {
@@ -33,6 +54,9 @@ export interface GarminEnabledSyncResult extends GarminSyncCatalogResult {
   activitiesSkipped: number
   sleepImported: number
   sleepSkipped: number
+  additionalSummaryImported: number
+  additionalSummarySkipped: number
+  datasetImports: Record<string, GarminDatasetImportStat>
   notices: string[]
 }
 
@@ -42,6 +66,8 @@ interface GarminSyncApiResponse {
   permissions?: unknown
   availableToEnable?: unknown
   capabilities?: unknown
+  datasets?: unknown
+  datasetCounts?: unknown
   activities?: unknown
   sleep?: unknown
   notices?: unknown
@@ -114,7 +140,24 @@ function parseEnablementItems(value: unknown): GarminEnablementItem[] {
 function parseCapabilities(value: unknown): GarminDatasetCapability[] {
   if (!Array.isArray(value)) return []
 
-  const validKeys = new Set(['activities', 'sleep', 'heartRate', 'workoutImport'])
+  const validKeys = new Set([
+    'activities',
+    'manuallyUpdatedActivities',
+    'activityDetails',
+    'dailies',
+    'epochs',
+    'sleeps',
+    'bodyComps',
+    'stressDetails',
+    'userMetrics',
+    'pulseox',
+    'allDayRespiration',
+    'healthSnapshot',
+    'hrv',
+    'bloodPressures',
+    'skinTemp',
+    'workoutImport',
+  ])
 
   return value
     .map((entry) => asRecord(entry))
@@ -194,6 +237,24 @@ function parseSleep(value: unknown): GarminSleepPayload[] {
     .filter((entry): entry is GarminSleepPayload => entry != null)
 }
 
+function parseDatasetRows(value: unknown): Record<string, Record<string, unknown>[]> {
+  const parsed: Record<string, Record<string, unknown>[]> = {}
+  if (typeof value !== 'object' || value == null) return parsed
+
+  for (const [key, rows] of Object.entries(value as Record<string, unknown>)) {
+    if (!Array.isArray(rows)) {
+      parsed[key] = []
+      continue
+    }
+
+    parsed[key] = rows
+      .map((entry) => asRecord(entry))
+      .filter((entry) => Object.keys(entry).length > 0)
+  }
+
+  return parsed
+}
+
 function parseNotices(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
@@ -240,6 +301,63 @@ function garminActivityTypeToRunType(typeKey: string): Run['type'] {
     default:
       return 'other'
   }
+}
+
+function simpleHash(value: string): string {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0
+  }
+  return hash.toString(16)
+}
+
+function buildSummaryId(datasetKey: string, row: Record<string, unknown>, index: number): string {
+  const candidateKeys = [
+    'summaryId',
+    'activityId',
+    'sleepSummaryId',
+    'calendarDate',
+    'startTimeInSeconds',
+    'startTimeGMT',
+    'date',
+  ]
+
+  for (const key of candidateKeys) {
+    const value = row[key]
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return `${datasetKey}:${value}`
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return `${datasetKey}:${value}`
+    }
+  }
+
+  return `${datasetKey}:row-${index}-${simpleHash(JSON.stringify(row))}`
+}
+
+function getRecordedAt(row: Record<string, unknown>): Date {
+  const startSeconds = getNumber(row.startTimeInSeconds)
+  if (startSeconds != null) {
+    return new Date(startSeconds * 1000)
+  }
+
+  const calendarDate = getString(row.calendarDate)
+  if (calendarDate) {
+    const parsedDate = new Date(`${calendarDate}T00:00:00`)
+    if (!Number.isNaN(parsedDate.getTime())) {
+      return parsedDate
+    }
+  }
+
+  const startIso = getString(row.startTimeGMT) ?? getString(row.startTimeLocal) ?? getString(row.date)
+  if (startIso) {
+    const parsedIso = new Date(startIso)
+    if (!Number.isNaN(parsedIso.getTime())) {
+      return parsedIso
+    }
+  }
+
+  return new Date()
 }
 
 async function getConnectedGarminDevice(userId: number): Promise<WearableDevice | null> {
@@ -322,7 +440,7 @@ async function runGarminSyncRequest(
 
 function buildCatalogResult(data: GarminSyncApiResponse): Omit<GarminSyncCatalogResult, 'needsReauth' | 'errors'> {
   return {
-    syncName: typeof data.syncName === 'string' ? data.syncName : 'RunSmart Garmin Enablement Sync',
+    syncName: typeof data.syncName === 'string' ? data.syncName : 'RunSmart Garmin Export Sync',
     permissions: parseStringArray(data.permissions),
     availableToEnable: parseEnablementItems(data.availableToEnable),
     capabilities: parseCapabilities(data.capabilities),
@@ -334,7 +452,7 @@ export async function getGarminSyncCatalog(userId: number): Promise<GarminSyncCa
 
   if (!requestResult.data || requestResult.errors.length > 0 || requestResult.needsReauth) {
     return {
-      syncName: 'RunSmart Garmin Enablement Sync',
+      syncName: 'RunSmart Garmin Export Sync',
       permissions: [],
       availableToEnable: [],
       capabilities: [],
@@ -350,12 +468,57 @@ export async function getGarminSyncCatalog(userId: number): Promise<GarminSyncCa
   }
 }
 
+async function importGarminSummaryRows(params: {
+  userId: number
+  datasets: Record<string, Record<string, unknown>[]>
+}): Promise<Record<string, GarminDatasetImportStat>> {
+  const { userId, datasets } = params
+  const result: Record<string, GarminDatasetImportStat> = {}
+
+  for (const [datasetKey, rows] of Object.entries(datasets)) {
+    let imported = 0
+    let skipped = 0
+
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index]
+      const summaryId = buildSummaryId(datasetKey, row, index)
+
+      const existing = await db.garminSummaryRecords
+        .where('[userId+datasetKey+summaryId]')
+        .equals([userId, datasetKey, summaryId])
+        .count()
+
+      if (existing > 0) {
+        skipped += 1
+        continue
+      }
+
+      const record: Omit<GarminSummaryRecord, 'id'> = {
+        userId,
+        datasetKey,
+        summaryId,
+        source: 'garmin',
+        recordedAt: getRecordedAt(row),
+        payload: JSON.stringify(row),
+        importedAt: new Date(),
+      }
+
+      await db.garminSummaryRecords.add(record as GarminSummaryRecord)
+      imported += 1
+    }
+
+    result[datasetKey] = { imported, skipped }
+  }
+
+  return result
+}
+
 export async function syncGarminEnabledData(userId: number): Promise<GarminEnabledSyncResult> {
   const requestResult = await runGarminSyncRequest(userId, 'POST')
 
   if (!requestResult.device || !requestResult.data || requestResult.errors.length > 0 || requestResult.needsReauth) {
     return {
-      syncName: 'RunSmart Garmin Enablement Sync',
+      syncName: 'RunSmart Garmin Export Sync',
       permissions: [],
       availableToEnable: [],
       capabilities: [],
@@ -363,6 +526,9 @@ export async function syncGarminEnabledData(userId: number): Promise<GarminEnabl
       activitiesSkipped: 0,
       sleepImported: 0,
       sleepSkipped: 0,
+      additionalSummaryImported: 0,
+      additionalSummarySkipped: 0,
+      datasetImports: {},
       notices: [],
       needsReauth: requestResult.needsReauth,
       errors: requestResult.errors,
@@ -374,6 +540,7 @@ export async function syncGarminEnabledData(userId: number): Promise<GarminEnabl
 
   const activities = parseActivities(data.activities)
   const sleepEntries = parseSleep(data.sleep)
+  const datasets = parseDatasetRows(data.datasets)
 
   let activitiesImported = 0
   let activitiesSkipped = 0
@@ -445,6 +612,7 @@ export async function syncGarminEnabledData(userId: number): Promise<GarminEnabl
       totalMinutes > 0 && awakeMinutes != null
         ? Math.max(0, Math.min(100, Math.round((totalMinutes / (totalMinutes + awakeMinutes)) * 100)))
         : 85
+
     const overallSleepScore = getNumber(asRecord(asRecord(entry.sleepScores).overall).value)
 
     const record: Omit<SleepData, 'id'> = {
@@ -467,6 +635,19 @@ export async function syncGarminEnabledData(userId: number): Promise<GarminEnabl
     sleepImported += 1
   }
 
+  const datasetImports = await importGarminSummaryRows({ userId, datasets })
+
+  let additionalSummaryImported = 0
+  let additionalSummarySkipped = 0
+
+  for (const [datasetKey, stats] of Object.entries(datasetImports)) {
+    if (datasetKey === 'activities' || datasetKey === 'manuallyUpdatedActivities' || datasetKey === 'activityDetails' || datasetKey === 'sleeps') {
+      continue
+    }
+    additionalSummaryImported += stats.imported
+    additionalSummarySkipped += stats.skipped
+  }
+
   if (device.id) {
     await db.wearableDevices.update(device.id, {
       lastSync: new Date(),
@@ -481,6 +662,9 @@ export async function syncGarminEnabledData(userId: number): Promise<GarminEnabl
     activitiesSkipped,
     sleepImported,
     sleepSkipped,
+    additionalSummaryImported,
+    additionalSummarySkipped,
+    datasetImports,
     notices: parseNotices(data.notices),
     needsReauth: false,
     errors: [],

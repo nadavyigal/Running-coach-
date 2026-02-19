@@ -178,7 +178,7 @@ describe("/api/devices/garmin/sleep", () => {
             timestamp: 1771441495662,
             status: 404,
             error: "Not Found",
-            path: "/wellness-api/rest/sleep",
+            path: "/wellness-api/rest/sleeps",
           }),
           { status: 404 }
         )
@@ -189,7 +189,7 @@ describe("/api/devices/garmin/sleep", () => {
             timestamp: 1771441495691,
             status: 404,
             error: "Not Found",
-            path: "/wellness-api/rest/backfill/sleep",
+            path: "/wellness-api/rest/backfill/sleeps",
           }),
           { status: 404 }
         )

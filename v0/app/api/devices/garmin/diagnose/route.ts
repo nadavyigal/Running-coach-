@@ -109,11 +109,11 @@ export async function GET(req: Request) {
       ),
       testEndpoint(
         accessToken,
-        `${GARMIN_API_BASE}/wellness-api/rest/sleep?uploadStartTimeInSeconds=${startTime}&uploadEndTimeInSeconds=${endTime}`
+        `${GARMIN_API_BASE}/wellness-api/rest/sleeps?uploadStartTimeInSeconds=${startTime}&uploadEndTimeInSeconds=${endTime}`
       ),
       testEndpoint(
         accessToken,
-        `${GARMIN_API_BASE}/wellness-api/rest/backfill/sleep?summaryStartTimeInSeconds=${startTime}&summaryEndTimeInSeconds=${endTime}`
+        `${GARMIN_API_BASE}/wellness-api/rest/backfill/sleeps?summaryStartTimeInSeconds=${startTime}&summaryEndTimeInSeconds=${endTime}`
       ),
     ]);
 

@@ -170,14 +170,16 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
         return
       }
 
-      const importedTotal = result.activitiesImported + result.sleepImported
-      const skippedTotal = result.activitiesSkipped + result.sleepSkipped
+      const importedTotal =
+        result.activitiesImported + result.sleepImported + result.additionalSummaryImported
+      const skippedTotal =
+        result.activitiesSkipped + result.sleepSkipped + result.additionalSummarySkipped
 
       toast({
         title: importedTotal > 0 ? "Garmin sync complete" : "No new Garmin data",
         description:
           importedTotal > 0
-            ? `Imported ${result.activitiesImported} activities and ${result.sleepImported} sleep summaries.`
+            ? `Imported ${result.activitiesImported} activities, ${result.sleepImported} sleep summaries, and ${result.additionalSummaryImported} additional Garmin summaries.`
             : `No new records were imported${skippedTotal > 0 ? ` (${skippedTotal} already existed).` : "."}`,
       })
 
@@ -231,7 +233,15 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
   const syncSummary = useMemo(() => {
     if (!lastResult) return null
 
-    return `Imported ${lastResult.activitiesImported} activities and ${lastResult.sleepImported} sleep summaries. Skipped ${lastResult.activitiesSkipped + lastResult.sleepSkipped} existing records.`
+    return `Imported ${lastResult.activitiesImported} activities, ${lastResult.sleepImported} sleep summaries, and ${lastResult.additionalSummaryImported} additional Garmin summaries. Skipped ${lastResult.activitiesSkipped + lastResult.sleepSkipped + lastResult.additionalSummarySkipped} existing records.`
+  }, [lastResult])
+
+  const datasetImportSummary = useMemo(() => {
+    if (!lastResult) return []
+    return Object.entries(lastResult.datasetImports)
+      .filter(([, stats]) => stats.imported > 0 || stats.skipped > 0)
+      .sort((a, b) => b[1].imported - a[1].imported)
+      .slice(0, 6)
   }, [lastResult])
 
   if (!device) return null
@@ -280,7 +290,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
             <div className="rounded-md border p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium">{catalog?.syncName ?? "RunSmart Garmin Enablement Sync"}</p>
+                  <p className="text-sm font-medium">{catalog?.syncName ?? "RunSmart Garmin Export Sync"}</p>
                   <p className="text-xs text-muted-foreground">
                     Sync only datasets Garmin currently enables for this app and user.
                   </p>
@@ -308,6 +318,18 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
                   {syncSummary}
                 </div>
               )}
+
+              {datasetImportSummary.length > 0 ? (
+                <div className="mt-3 rounded border bg-slate-50 p-2 text-xs text-slate-700">
+                  <p className="font-medium">Imported dataset records</p>
+                  {datasetImportSummary.map(([datasetKey, stats]) => (
+                    <p key={datasetKey} className="mt-1">
+                      {datasetKey}: +{stats.imported}
+                      {stats.skipped > 0 ? ` (${stats.skipped} existing)` : ""}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
 
               {lastResult?.notices.length ? (
                 <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">

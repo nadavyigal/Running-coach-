@@ -82,7 +82,7 @@ function isFallbackWorthyWellnessStatus(status: number): boolean {
 
 function isSleepEndpointNotProvisioned(status: number, body: string): boolean {
   if (/Endpoint not enabled for summary type:\s*CONNECT_SLEEP/i.test(body)) return true;
-  if (status === 404 && /\/wellness-api\/rest\/(backfill\/)?sleep/i.test(body)) return true;
+  if (status === 404 && /\/wellness-api\/rest\/(backfill\/)?sleeps/i.test(body)) return true;
   return false;
 }
 
@@ -121,7 +121,7 @@ async function fetchSleepData(
 
   while (windowStart <= endTime) {
     const windowEnd = Math.min(windowStart + GARMIN_MAX_WINDOW_SECONDS - 1, endTime);
-    const path = mode === 'upload' ? '/wellness-api/rest/sleep' : '/wellness-api/rest/backfill/sleep';
+    const path = mode === 'upload' ? '/wellness-api/rest/sleeps' : '/wellness-api/rest/backfill/sleeps';
     const url = new URL(`${GARMIN_API_BASE}${path}`);
 
     if (mode === 'upload') {
