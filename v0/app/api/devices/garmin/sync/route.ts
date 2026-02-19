@@ -324,7 +324,7 @@ async function fetchWellnessActivities(
   return dedupeActivities(rawChunks)
 }
 
-async function fetchRecentGarminRunningActivities(
+async function fetchRecentGarminActivities(
   accessToken: string,
   permissions: string[]
 ): Promise<{
@@ -359,11 +359,7 @@ async function fetchRecentGarminRunningActivities(
   }
 
   const mapped = rawActivities.map((activity) => toRunSmartActivity(activity))
-  const running = mapped.filter(
-    (activity) => activity.activityType.includes('running') || activity.activityType.includes('run')
-  )
-
-  return { activities: running, source }
+  return { activities: mapped, source }
 }
 
 function getActivityStartSeconds(activity: Record<string, unknown>): number | null {
@@ -678,9 +674,7 @@ export async function POST(req: Request) {
       ...datasets.activityDetails,
     ]
 
-    const mappedActivities = activityRows
-      .map((entry) => toRunSmartActivity(entry))
-      .filter((activity) => activity.activityType.includes('run'))
+    const mappedActivities = activityRows.map((entry) => toRunSmartActivity(entry))
 
     const uniqueActivities: typeof mappedActivities = []
     const seenActivityIds = new Set<string>()
@@ -695,16 +689,16 @@ export async function POST(req: Request) {
     let activitiesForSync = uniqueActivities
     const hasWebhookActivityRows = activityRows.length > 0
 
-    if (activitiesForSync.length === 0 && permissions.includes('ACTIVITY_EXPORT')) {
+    if (activitiesForSync.length === 0 && !hasWebhookActivityRows && permissions.includes('ACTIVITY_EXPORT')) {
       try {
-        const fallbackResult = await fetchRecentGarminRunningActivities(accessToken, permissions)
+        const fallbackResult = await fetchRecentGarminActivities(accessToken, permissions)
         if (fallbackResult.activities.length > 0) {
           activitiesForSync = fallbackResult.activities
           notices.push(
             `Activity webhook feeds were empty, so RunSmart pulled ${fallbackResult.activities.length} activities directly from Garmin ${fallbackResult.source}.`
           )
         } else if (!hasWebhookActivityRows) {
-          notices.push('No running activities found from Garmin in the last 30 days.')
+          notices.push('No activities found from Garmin in the last 30 days.')
         }
       } catch (fallbackError) {
         if (fallbackError instanceof GarminActivitiesFallbackError) {
