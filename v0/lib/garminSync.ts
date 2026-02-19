@@ -1,29 +1,231 @@
 "use client"
 
-/**
- * garminSync.ts — Client-side Garmin data sync library
- *
- * Reads the access token from Dexie.js (wearableDevices), calls the server
- * proxy routes (/api/devices/garmin/activities and /api/devices/garmin/sleep),
- * deduplicates, and saves imported records into db.runs and db.sleepData.
- *
- * Called from GarminSyncPanel (user-triggered) or background sync.
- */
-
 import { db, type Run, type SleepData, type WearableDevice } from '@/lib/db'
 
-export const GARMIN_HISTORY_CAP_DAYS = 30
+export interface GarminEnablementItem {
+  key: string
+  permission: string
+  description: string
+  supportedByRunSmart: boolean
+}
 
-export interface GarminSyncResult {
-  activitiesImported: number
-  activitiesSkipped: number   // already existed
-  sleepImported: number
-  sleepSkipped: number
+export interface GarminDatasetCapability {
+  key: 'activities' | 'sleep' | 'heartRate' | 'workoutImport'
+  label: string
+  permissionGranted: boolean
+  endpointReachable: boolean
+  enabledForSync: boolean
+  supportedByRunSmart: boolean
+  reason?: string
+}
+
+export interface GarminSyncCatalogResult {
+  syncName: string
+  permissions: string[]
+  availableToEnable: GarminEnablementItem[]
+  capabilities: GarminDatasetCapability[]
   needsReauth: boolean
   errors: string[]
 }
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
+export interface GarminEnabledSyncResult extends GarminSyncCatalogResult {
+  activitiesImported: number
+  activitiesSkipped: number
+  sleepImported: number
+  sleepSkipped: number
+  notices: string[]
+}
+
+interface GarminSyncApiResponse {
+  success?: boolean
+  syncName?: string
+  permissions?: unknown
+  availableToEnable?: unknown
+  capabilities?: unknown
+  activities?: unknown
+  sleep?: unknown
+  notices?: unknown
+  error?: string
+  detail?: unknown
+  needsReauth?: boolean
+}
+
+interface GarminActivityPayload {
+  activityId: string | null
+  activityName: string
+  activityType: string
+  startTimeGMT: string | null
+  distance: number
+  duration: number
+  averageHR: number | null
+  calories: number | null
+  averagePace: number | null
+}
+
+interface GarminSleepPayload {
+  date: string
+  sleepStartTimestampGMT: number | null
+  sleepEndTimestampGMT: number | null
+  totalSleepSeconds: number | null
+  deepSleepSeconds: number | null
+  lightSleepSeconds: number | null
+  remSleepSeconds: number | null
+  awakeSleepSeconds: number | null
+  sleepScores:
+    | {
+        overall?: {
+          value?: number
+        }
+      }
+    | null
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+}
+
+function getString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null
+}
+
+function getNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function parseStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((entry): entry is string => typeof entry === 'string')
+}
+
+function parseEnablementItems(value: unknown): GarminEnablementItem[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((entry) => asRecord(entry))
+    .map((entry) => ({
+      key: String(entry.key ?? ''),
+      permission: String(entry.permission ?? ''),
+      description: String(entry.description ?? ''),
+      supportedByRunSmart: Boolean(entry.supportedByRunSmart),
+    }))
+    .filter((entry) => entry.key.length > 0 && entry.permission.length > 0)
+}
+
+function parseCapabilities(value: unknown): GarminDatasetCapability[] {
+  if (!Array.isArray(value)) return []
+
+  const validKeys = new Set(['activities', 'sleep', 'heartRate', 'workoutImport'])
+
+  return value
+    .map((entry) => asRecord(entry))
+    .map((entry) => {
+      const key = String(entry.key ?? '')
+      if (!validKeys.has(key)) return null
+
+      return {
+        key: key as GarminDatasetCapability['key'],
+        label: String(entry.label ?? key),
+        permissionGranted: Boolean(entry.permissionGranted),
+        endpointReachable: Boolean(entry.endpointReachable),
+        enabledForSync: Boolean(entry.enabledForSync),
+        supportedByRunSmart: Boolean(entry.supportedByRunSmart),
+        ...(getString(entry.reason) ? { reason: String(entry.reason) } : {}),
+      }
+    })
+    .filter((entry): entry is GarminDatasetCapability => entry != null)
+}
+
+function parseActivities(value: unknown): GarminActivityPayload[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((entry) => asRecord(entry))
+    .map((entry) => {
+      const activityType = String(entry.activityType ?? '')
+      if (!activityType) return null
+
+      const activityIdRaw = entry.activityId
+      return {
+        activityId: activityIdRaw == null ? null : String(activityIdRaw),
+        activityName: String(entry.activityName ?? 'Garmin activity'),
+        activityType,
+        startTimeGMT: getString(entry.startTimeGMT),
+        distance: getNumber(entry.distance) ?? 0,
+        duration: Math.max(0, Math.round(getNumber(entry.duration) ?? 0)),
+        averageHR: getNumber(entry.averageHR),
+        calories: getNumber(entry.calories),
+        averagePace: getNumber(entry.averagePace),
+      }
+    })
+    .filter((entry): entry is GarminActivityPayload => entry != null)
+}
+
+function parseSleep(value: unknown): GarminSleepPayload[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((entry) => asRecord(entry))
+    .map((entry) => {
+      const date = getString(entry.date)
+      if (!date) return null
+
+      const sleepScoresRecord = asRecord(entry.sleepScores)
+      const overallRecord = asRecord(sleepScoresRecord.overall)
+
+      return {
+        date,
+        sleepStartTimestampGMT: getNumber(entry.sleepStartTimestampGMT),
+        sleepEndTimestampGMT: getNumber(entry.sleepEndTimestampGMT),
+        totalSleepSeconds: getNumber(entry.totalSleepSeconds),
+        deepSleepSeconds: getNumber(entry.deepSleepSeconds),
+        lightSleepSeconds: getNumber(entry.lightSleepSeconds),
+        remSleepSeconds: getNumber(entry.remSleepSeconds),
+        awakeSleepSeconds: getNumber(entry.awakeSleepSeconds),
+        sleepScores:
+          Object.keys(overallRecord).length > 0
+            ? {
+                overall: {
+                  value: getNumber(overallRecord.value) ?? undefined,
+                },
+              }
+            : null,
+      }
+    })
+    .filter((entry): entry is GarminSleepPayload => entry != null)
+}
+
+function parseNotices(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+}
+
+function summarizeGarminDetail(detail: unknown): string {
+  if (detail == null) return ''
+
+  const raw = typeof detail === 'string' ? detail : JSON.stringify(detail)
+  const trimmed = raw.trim()
+  if (!trimmed) return ''
+
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      errorMessage?: unknown
+      message?: unknown
+      error?: unknown
+    }
+    const message = [parsed.errorMessage, parsed.message, parsed.error].find(
+      (value): value is string => typeof value === 'string' && value.trim().length > 0
+    )
+    if (message) return message.slice(0, 240)
+  } catch {
+    // Keep original text when body is not JSON.
+  }
+
+  if (/<!doctype html|<html/i.test(trimmed)) {
+    return 'Garmin returned an HTML error page'
+  }
+
+  return trimmed.length > 240 ? `${trimmed.slice(0, 240)}...` : trimmed
+}
 
 function garminActivityTypeToRunType(typeKey: string): Run['type'] {
   switch (typeKey) {
@@ -45,273 +247,242 @@ async function getConnectedGarminDevice(userId: number): Promise<WearableDevice 
     .where('[userId+type]')
     .equals([userId, 'garmin'])
     .first()
+
   if (!device || device.connectionStatus === 'disconnected') return null
   return device as WearableDevice
 }
 
-function clampSyncDays(days: number): number {
-  if (!Number.isFinite(days) || days <= 0) return GARMIN_HISTORY_CAP_DAYS
-  return Math.min(Math.floor(days), GARMIN_HISTORY_CAP_DAYS)
+async function markDeviceForReauth(device: WearableDevice): Promise<void> {
+  if (!device.id) return
+  await db.wearableDevices.update(device.id, {
+    connectionStatus: 'error',
+    updatedAt: new Date(),
+  })
 }
 
-function summarizeGarminDetail(detail: unknown): string {
-  if (detail == null) return ''
-
-  const raw = typeof detail === 'string' ? detail : JSON.stringify(detail)
-  const trimmed = raw.trim()
-  if (!trimmed) return ''
-
-  try {
-    const parsed = JSON.parse(trimmed) as {
-      errorMessage?: unknown
-      message?: unknown
-      error?: unknown
-    }
-    const message = [parsed.errorMessage, parsed.message, parsed.error].find(
-      (value): value is string => typeof value === 'string' && value.trim().length > 0
-    )
-    if (message) return message.slice(0, 240)
-  } catch {
-    // Ignore and continue with text heuristics.
-  }
-
-  if (/<!doctype html|<html/i.test(trimmed)) {
-    return 'Garmin returned an HTML error page'
-  }
-
-  return trimmed.length > 240 ? `${trimmed.slice(0, 240)}...` : trimmed
-}
-
-// ─── activities sync ──────────────────────────────────────────────────────────
-
-export async function syncGarminActivities(
+async function runGarminSyncRequest(
   userId: number,
-  days = GARMIN_HISTORY_CAP_DAYS
-): Promise<Pick<GarminSyncResult, 'activitiesImported' | 'activitiesSkipped' | 'needsReauth' | 'errors'>> {
-  const result = { activitiesImported: 0, activitiesSkipped: 0, needsReauth: false, errors: [] as string[] }
-  const syncDays = clampSyncDays(days)
-
+  method: 'GET' | 'POST'
+): Promise<{
+  device: WearableDevice | null
+  data: GarminSyncApiResponse | null
+  needsReauth: boolean
+  errors: string[]
+}> {
   const device = await getConnectedGarminDevice(userId)
   if (!device) {
-    result.errors.push('No connected Garmin device found')
-    return result
+    return { device: null, data: null, needsReauth: false, errors: ['No connected Garmin device found'] }
   }
 
-  const accessToken = (device as any).authTokens?.accessToken
-  if (!accessToken) {
-    result.needsReauth = true
-    result.errors.push('Missing access token — please reconnect Garmin')
-    return result
-  }
-
-  try {
-    const res = await fetch(`/api/devices/garmin/activities?userId=${userId}&days=${syncDays}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-    const data = await res.json()
-
-    if (data.needsReauth) {
-      result.needsReauth = true
-      // Mark device as needing reauth in Dexie
-      if (device.id) {
-        await db.wearableDevices.update(device.id, { connectionStatus: 'error', updatedAt: new Date() })
-      }
-      result.errors.push('Garmin token expired — please reconnect')
-      return result
+  const accessToken = asRecord(device.authTokens).accessToken
+  if (typeof accessToken !== 'string' || accessToken.trim().length === 0) {
+    return {
+      device,
+      data: null,
+      needsReauth: true,
+      errors: ['Missing access token - please reconnect Garmin'],
     }
-
-    if (!data.success || !Array.isArray(data.activities)) {
-      // Surface the actual Garmin error detail if available
-      const detail = summarizeGarminDetail(data.detail)
-      const perms = Array.isArray(data.requiredPermissions) ? ` [required: ${data.requiredPermissions.join(', ')}]` : ''
-      const action = typeof data.action === 'string' && data.action.trim().length > 0 ? ` ${data.action}` : ''
-      result.errors.push(
-        (data.error || 'Failed to fetch activities from Garmin') +
-        perms +
-        (detail ? ` (${detail})` : '') +
-        action
-      )
-      return result
-    }
-
-    // Filter to requested date range
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - syncDays)
-
-    for (const act of data.activities) {
-      const activityId = String(act.activityId)
-      // startTimeGMT is already an ISO string from our route mapping
-      const completedAt = act.startTimeGMT ? new Date(act.startTimeGMT) : new Date()
-
-      if (completedAt < cutoff) continue
-
-      // Deduplicate: check if we already have this Garmin activity
-      const existing = await db.runs
-        .where('importRequestId')
-        .equals(activityId)
-        .count()
-
-      if (existing > 0) {
-        result.activitiesSkipped++
-        continue
-      }
-
-      const run: Omit<Run, 'id'> = {
-        userId,
-        type: garminActivityTypeToRunType(act.activityType || ''),
-        distance: act.distance ?? 0,                        // km
-        duration: Math.round(act.duration ?? 0),            // seconds
-        pace: act.averagePace ?? undefined,                 // s/km
-        heartRate: act.averageHR ?? undefined,
-        calories: act.calories ?? undefined,
-        notes: act.activityName || 'Garmin activity',
-        importSource: 'garmin',
-        importRequestId: activityId,
-        completedAt,
-        createdAt: new Date(),
-      }
-
-      await db.runs.add(run as Run)
-      result.activitiesImported++
-    }
-
-    // Update lastSync on device
-    if (device.id) {
-      await db.wearableDevices.update(device.id, {
-        lastSync: new Date(),
-        connectionStatus: 'connected',
-        updatedAt: new Date(),
-      })
-    }
-  } catch (err) {
-    result.errors.push(err instanceof Error ? err.message : 'Unknown error syncing activities')
-  }
-
-  return result
-}
-
-// ─── sleep sync ───────────────────────────────────────────────────────────────
-
-export async function syncGarminSleep(
-  userId: number,
-  days = GARMIN_HISTORY_CAP_DAYS
-): Promise<Pick<GarminSyncResult, 'sleepImported' | 'sleepSkipped' | 'needsReauth' | 'errors'>> {
-  const result = { sleepImported: 0, sleepSkipped: 0, needsReauth: false, errors: [] as string[] }
-  const syncDays = clampSyncDays(days)
-
-  const device = await getConnectedGarminDevice(userId)
-  if (!device) {
-    result.errors.push('No connected Garmin device found')
-    return result
-  }
-
-  const accessToken = (device as any).authTokens?.accessToken
-  if (!accessToken) {
-    result.needsReauth = true
-    result.errors.push('Missing access token — please reconnect Garmin')
-    return result
   }
 
   try {
-    const res = await fetch(`/api/devices/garmin/sleep?userId=${userId}&days=${syncDays}`, {
+    const res = await fetch('/api/devices/garmin/sync', {
+      method,
       headers: { Authorization: `Bearer ${accessToken}` },
     })
-    const data = await res.json()
 
-    if (data.needsReauth) {
-      result.needsReauth = true
-      if (device.id) {
-        await db.wearableDevices.update(device.id, { connectionStatus: 'error', updatedAt: new Date() })
+    const data = (await res.json()) as GarminSyncApiResponse
+    const needsReauth = Boolean(data.needsReauth) || res.status === 401
+
+    if (needsReauth) {
+      await markDeviceForReauth(device)
+      return {
+        device,
+        data,
+        needsReauth: true,
+        errors: ['Garmin token expired - please reconnect'],
       }
-      result.errors.push('Garmin token expired — please reconnect')
-      return result
     }
 
-    if (!data.success || !Array.isArray(data.sleep)) {
+    if (!data.success) {
       const detail = summarizeGarminDetail(data.detail)
-      const perms = Array.isArray(data.requiredPermissions) ? ` [required: ${data.requiredPermissions.join(', ')}]` : ''
-      const action = typeof data.action === 'string' && data.action.trim().length > 0 ? ` ${data.action}` : ''
-      result.errors.push(
-        (data.error || 'Failed to fetch sleep data from Garmin') +
-        perms +
-        (detail ? ` (${detail})` : '') +
-        action
-      )
-      return result
+      const message = [data.error || 'Garmin sync request failed', detail].filter(Boolean).join(' ')
+      return { device, data, needsReauth: false, errors: [message] }
     }
 
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - syncDays)
-
-    for (const s of data.sleep) {
-      if (!s?.date) continue
-
-      const sleepDate = new Date(s.date)
-      if (sleepDate < cutoff) continue
-
-      // Deduplicate: one record per date per device
-      const existing = await db.sleepData
-        .where('[userId+sleepDate]')
-        .equals([userId, sleepDate])
-        .count()
-
-      if (existing > 0) {
-        result.sleepSkipped++
-        continue
-      }
-
-      const totalMinutes = s.totalSleepSeconds ? Math.round(s.totalSleepSeconds / 60) : 0
-      const deepMinutes = s.deepSleepSeconds ? Math.round(s.deepSleepSeconds / 60) : undefined
-      const lightMinutes = s.lightSleepSeconds ? Math.round(s.lightSleepSeconds / 60) : undefined
-      const remMinutes = s.remSleepSeconds ? Math.round(s.remSleepSeconds / 60) : undefined
-      const awakeMinutes = s.awakeSleepSeconds ? Math.round(s.awakeSleepSeconds / 60) : undefined
-
-      const sleepEfficiency =
-        totalMinutes && awakeMinutes != null
-          ? Math.round(((totalMinutes) / (totalMinutes + awakeMinutes)) * 100)
-          : 85 // fallback
-
-      const record: Omit<SleepData, 'id'> = {
-        userId,
-        deviceId: device.deviceId,
-        sleepDate,
-        totalSleepTime: totalMinutes,
-        sleepEfficiency,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        // Spread optional fields only when they have a value (exactOptionalPropertyTypes)
-        ...(s.sleepStartTimestampGMT && { bedTime: new Date(s.sleepStartTimestampGMT) }),
-        ...(s.sleepEndTimestampGMT && { wakeTime: new Date(s.sleepEndTimestampGMT) }),
-        ...(deepMinutes != null && { deepSleepTime: deepMinutes }),
-        ...(lightMinutes != null && { lightSleepTime: lightMinutes }),
-        ...(remMinutes != null && { remSleepTime: remMinutes }),
-        ...(s.sleepScores?.overall?.value != null && { sleepScore: s.sleepScores.overall.value }),
-      }
-
-      await db.sleepData.add(record as SleepData)
-      result.sleepImported++
+    return { device, data, needsReauth: false, errors: [] }
+  } catch (error) {
+    return {
+      device,
+      data: null,
+      needsReauth: false,
+      errors: [error instanceof Error ? error.message : 'Unknown Garmin sync error'],
     }
-  } catch (err) {
-    result.errors.push(err instanceof Error ? err.message : 'Unknown error syncing sleep')
   }
-
-  return result
 }
 
-// ─── combined sync ────────────────────────────────────────────────────────────
+function buildCatalogResult(data: GarminSyncApiResponse): Omit<GarminSyncCatalogResult, 'needsReauth' | 'errors'> {
+  return {
+    syncName: typeof data.syncName === 'string' ? data.syncName : 'RunSmart Garmin Enablement Sync',
+    permissions: parseStringArray(data.permissions),
+    availableToEnable: parseEnablementItems(data.availableToEnable),
+    capabilities: parseCapabilities(data.capabilities),
+  }
+}
 
-export async function syncAllGarminData(userId: number): Promise<GarminSyncResult> {
-  const [actResult, sleepResult] = await Promise.all([
-    syncGarminActivities(userId, GARMIN_HISTORY_CAP_DAYS),
-    syncGarminSleep(userId, GARMIN_HISTORY_CAP_DAYS),
-  ])
+export async function getGarminSyncCatalog(userId: number): Promise<GarminSyncCatalogResult> {
+  const requestResult = await runGarminSyncRequest(userId, 'GET')
+
+  if (!requestResult.data || requestResult.errors.length > 0 || requestResult.needsReauth) {
+    return {
+      syncName: 'RunSmart Garmin Enablement Sync',
+      permissions: [],
+      availableToEnable: [],
+      capabilities: [],
+      needsReauth: requestResult.needsReauth,
+      errors: requestResult.errors,
+    }
+  }
 
   return {
-    activitiesImported: actResult.activitiesImported,
-    activitiesSkipped: actResult.activitiesSkipped,
-    sleepImported: sleepResult.sleepImported,
-    sleepSkipped: sleepResult.sleepSkipped,
-    needsReauth: actResult.needsReauth || sleepResult.needsReauth,
-    errors: [...actResult.errors, ...sleepResult.errors],
+    ...buildCatalogResult(requestResult.data),
+    needsReauth: false,
+    errors: [],
+  }
+}
+
+export async function syncGarminEnabledData(userId: number): Promise<GarminEnabledSyncResult> {
+  const requestResult = await runGarminSyncRequest(userId, 'POST')
+
+  if (!requestResult.device || !requestResult.data || requestResult.errors.length > 0 || requestResult.needsReauth) {
+    return {
+      syncName: 'RunSmart Garmin Enablement Sync',
+      permissions: [],
+      availableToEnable: [],
+      capabilities: [],
+      activitiesImported: 0,
+      activitiesSkipped: 0,
+      sleepImported: 0,
+      sleepSkipped: 0,
+      notices: [],
+      needsReauth: requestResult.needsReauth,
+      errors: requestResult.errors,
+    }
+  }
+
+  const device = requestResult.device
+  const data = requestResult.data
+
+  const activities = parseActivities(data.activities)
+  const sleepEntries = parseSleep(data.sleep)
+
+  let activitiesImported = 0
+  let activitiesSkipped = 0
+  let sleepImported = 0
+  let sleepSkipped = 0
+
+  for (const activity of activities) {
+    if (!activity.activityId) {
+      activitiesSkipped += 1
+      continue
+    }
+
+    const existingCount = await db.runs
+      .where('importRequestId')
+      .equals(activity.activityId)
+      .count()
+
+    if (existingCount > 0) {
+      activitiesSkipped += 1
+      continue
+    }
+
+    const completedAt = activity.startTimeGMT ? new Date(activity.startTimeGMT) : new Date()
+
+    const run: Omit<Run, 'id'> = {
+      userId,
+      type: garminActivityTypeToRunType(activity.activityType),
+      distance: activity.distance,
+      duration: activity.duration,
+      ...(activity.averagePace != null ? { pace: activity.averagePace } : {}),
+      ...(activity.averageHR != null ? { heartRate: activity.averageHR } : {}),
+      ...(activity.calories != null ? { calories: activity.calories } : {}),
+      notes: activity.activityName,
+      importSource: 'garmin',
+      importRequestId: activity.activityId,
+      completedAt,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+
+    await db.runs.add(run as Run)
+    activitiesImported += 1
+  }
+
+  for (const entry of sleepEntries) {
+    const sleepDate = new Date(`${entry.date}T00:00:00`)
+    if (Number.isNaN(sleepDate.getTime())) {
+      sleepSkipped += 1
+      continue
+    }
+
+    const existingCount = await db.sleepData
+      .where('[userId+sleepDate]')
+      .equals([userId, sleepDate])
+      .count()
+
+    if (existingCount > 0) {
+      sleepSkipped += 1
+      continue
+    }
+
+    const totalMinutes = entry.totalSleepSeconds != null ? Math.round(entry.totalSleepSeconds / 60) : 0
+    const deepMinutes = entry.deepSleepSeconds != null ? Math.round(entry.deepSleepSeconds / 60) : undefined
+    const lightMinutes = entry.lightSleepSeconds != null ? Math.round(entry.lightSleepSeconds / 60) : undefined
+    const remMinutes = entry.remSleepSeconds != null ? Math.round(entry.remSleepSeconds / 60) : undefined
+    const awakeMinutes = entry.awakeSleepSeconds != null ? Math.round(entry.awakeSleepSeconds / 60) : undefined
+
+    const sleepEfficiency =
+      totalMinutes > 0 && awakeMinutes != null
+        ? Math.max(0, Math.min(100, Math.round((totalMinutes / (totalMinutes + awakeMinutes)) * 100)))
+        : 85
+    const overallSleepScore = getNumber(asRecord(asRecord(entry.sleepScores).overall).value)
+
+    const record: Omit<SleepData, 'id'> = {
+      userId,
+      deviceId: device.deviceId,
+      sleepDate,
+      totalSleepTime: totalMinutes,
+      sleepEfficiency,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...(entry.sleepStartTimestampGMT != null ? { bedTime: new Date(entry.sleepStartTimestampGMT) } : {}),
+      ...(entry.sleepEndTimestampGMT != null ? { wakeTime: new Date(entry.sleepEndTimestampGMT) } : {}),
+      ...(deepMinutes != null ? { deepSleepTime: deepMinutes } : {}),
+      ...(lightMinutes != null ? { lightSleepTime: lightMinutes } : {}),
+      ...(remMinutes != null ? { remSleepTime: remMinutes } : {}),
+      ...(overallSleepScore != null ? { sleepScore: overallSleepScore } : {}),
+    }
+
+    await db.sleepData.add(record as SleepData)
+    sleepImported += 1
+  }
+
+  if (device.id) {
+    await db.wearableDevices.update(device.id, {
+      lastSync: new Date(),
+      connectionStatus: 'connected',
+      updatedAt: new Date(),
+    })
+  }
+
+  return {
+    ...buildCatalogResult(data),
+    activitiesImported,
+    activitiesSkipped,
+    sleepImported,
+    sleepSkipped,
+    notices: parseNotices(data.notices),
+    needsReauth: false,
+    errors: [],
   }
 }
