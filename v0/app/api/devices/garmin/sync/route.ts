@@ -864,11 +864,18 @@ export async function runGarminSyncForUser(params: {
       }
     }
 
-    const syncWindow = resolveSyncWindow({
-      lastSyncCursor: oauthState.lastSyncCursor,
-      defaultLookbackDays: options.defaultLookbackDays,
-      requestedSinceIso: options.sinceIso ?? null,
-    })
+    const syncWindow =
+      options.trigger === 'backfill'
+        ? {
+            sinceIso: lookbackStartIso(options.defaultLookbackDays),
+            lookbackDays: options.defaultLookbackDays,
+            source: 'lookback' as const,
+          }
+        : resolveSyncWindow({
+            lastSyncCursor: oauthState.lastSyncCursor,
+            defaultLookbackDays: options.defaultLookbackDays,
+            requestedSinceIso: options.sinceIso ?? null,
+          })
 
     const { permissions, capabilities, datasets, datasetCounts, ingestion } = await computeCatalogWithAutoRefresh({
       userId,
