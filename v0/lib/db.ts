@@ -883,6 +883,8 @@ export interface Run {
   rpe?: number;
   heartRate?: number;
   calories?: number;
+  elevationGain?: number; // metres, from Garmin
+  maxHR?: number; // bpm, from Garmin
   notes?: string;
   route?: string;
   gpsPath?: string; // JSON string of GPS coordinates
@@ -1430,6 +1432,12 @@ export class RunSmartDB extends Dexie {
     }).upgrade(async (_trans) => {
       console.log('Upgrading database to version 8: Adding Garmin summary records table');
       console.log('Database upgrade complete: Garmin summary records table added');
+    });
+
+    this.version(9).stores({
+      runs: '++id, userId, type, distance, duration, completedAt, [userId+completedAt], [userId+type]',
+    }).upgrade(async (_trans) => {
+      console.log('Upgrading database to version 9: Extending run records for Garmin metrics');
     });
 
   }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -15,6 +16,7 @@ import { dbUtils } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
 import { useData } from "@/contexts/DataContext"
 import RecoveryRecommendations from "@/components/recovery-recommendations"
+import { WorkoutCompliancePanel } from "@/components/workout-compliance-panel"
 import { formatLocalizedDate } from "@/lib/timezone-utils"
 import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
 import { getActiveChallenge } from "@/lib/challengeEngine"
@@ -645,6 +647,16 @@ export function PlanScreen() {
 
       {/* Content */}
       {currentView === "monthly" && <MonthlyCalendarView />}
+      {currentView === "monthly" && userId && (
+        <Accordion type="single" collapsible>
+          <AccordionItem value="training-compliance">
+            <AccordionTrigger>Training Compliance</AccordionTrigger>
+            <AccordionContent>
+              <WorkoutCompliancePanel userId={userId} />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      )}
       {currentView === "biweekly" && renderBiweeklyView()}
       {currentView === "progress" && renderProgressView()}
 

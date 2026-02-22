@@ -92,8 +92,10 @@ interface GarminActivityPayload {
   distance: number
   duration: number
   averageHR: number | null
+  maxHR: number | null
   calories: number | null
   averagePace: number | null
+  elevationGain: number | null
 }
 
 interface GarminSleepPayload {
@@ -204,8 +206,10 @@ function parseActivities(value: unknown): GarminActivityPayload[] {
         distance: getNumber(entry.distance) ?? 0,
         duration: Math.max(0, Math.round(getNumber(entry.duration) ?? 0)),
         averageHR: getNumber(entry.averageHR),
+        maxHR: getNumber(entry.maxHR),
         calories: getNumber(entry.calories),
         averagePace: getNumber(entry.averagePace),
+        elevationGain: getNumber(entry.elevationGain),
       }
     })
     .filter((entry): entry is GarminActivityPayload => entry != null)
@@ -529,6 +533,52 @@ async function importGarminSummaryRows(params: {
   return result
 }
 
+async function matchGarminRunToWorkout(userId: number, run: Run): Promise<void> {
+  const runDate = new Date(run.completedAt)
+  if (Number.isNaN(runDate.getTime())) return
+
+  const dayStart = new Date(runDate)
+  dayStart.setDate(dayStart.getDate() - 1)
+  dayStart.setHours(0, 0, 0, 0)
+
+  const dayEnd = new Date(runDate)
+  dayEnd.setDate(dayEnd.getDate() + 1)
+  dayEnd.setHours(23, 59, 59, 999)
+
+  const candidates = await db.workouts
+    .where('[userId+scheduledDate]')
+    .between([userId, dayStart], [userId, dayEnd])
+    .and((workout) => !workout.completed)
+    .toArray()
+
+  if (candidates.length === 0) return
+
+  const match =
+    candidates.find((workout) => {
+      const plannedDistance = Math.max(workout.distance, 0.1)
+      const distRatio = Math.abs(workout.distance - run.distance) / plannedDistance
+      return distRatio < 0.25
+    }) ?? candidates[0]
+
+  if (!match?.id) return
+
+  await db.workouts.update(match.id, {
+    completed: true,
+    completedAt: run.completedAt,
+    actualDistanceKm: run.distance,
+    actualDurationMinutes: Math.round(run.duration / 60),
+    ...(run.pace != null ? { actualPace: run.pace } : {}),
+    updatedAt: new Date(),
+  })
+
+  if (run.id) {
+    await db.runs.update(run.id, {
+      workoutId: match.id,
+      updatedAt: new Date(),
+    })
+  }
+}
+
 export async function syncGarminEnabledData(userId: number): Promise<GarminEnabledSyncResult> {
   const requestResult = await runGarminSyncRequest(userId, 'POST')
 
@@ -589,7 +639,9 @@ export async function syncGarminEnabledData(userId: number): Promise<GarminEnabl
       duration: activity.duration,
       ...(activity.averagePace != null ? { pace: activity.averagePace } : {}),
       ...(activity.averageHR != null ? { heartRate: activity.averageHR } : {}),
+      ...(activity.maxHR != null ? { maxHR: activity.maxHR } : {}),
       ...(activity.calories != null ? { calories: activity.calories } : {}),
+      ...(activity.elevationGain != null ? { elevationGain: activity.elevationGain } : {}),
       notes: activity.activityName,
       importSource: 'garmin',
       importRequestId: activity.activityId,
@@ -598,7 +650,8 @@ export async function syncGarminEnabledData(userId: number): Promise<GarminEnabl
       updatedAt: new Date(),
     }
 
-    await db.runs.add(run as Run)
+    const runId = (await db.runs.add(run as Run)) as number
+    await matchGarminRunToWorkout(userId, { ...run, id: runId })
     activitiesImported += 1
   }
 

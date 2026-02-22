@@ -5,6 +5,7 @@ import type { User, Plan, Goal, Run, Workout } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { syncUserRunData } from "@/lib/run-recording"
 import { restoreUserMemory, syncUserMemory } from "@/lib/userMemory"
+import { useGarminRealtime } from "@/lib/hooks/useGarminRealtime"
 
 // ============================================================================
 // TYPES
@@ -52,6 +53,7 @@ export type DataContextValue = {
   refreshGoals: () => Promise<void>
   refreshRuns: () => Promise<void>
   refreshPlan: () => Promise<void>
+  triggerGarminSyncRefresh: () => Promise<void>
   syncData: () => Promise<{ linkedRuns: number; updatedGoals: number; updatedWorkouts: number }>
 }
 
@@ -127,6 +129,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const memorySyncTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const userId = user?.id ?? null
+  useGarminRealtime(userId)
 
   // Calculate derived stats
   const weeklyStats = useMemo(
@@ -263,6 +266,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [userId, refresh])
 
+  const triggerGarminSyncRefresh = useCallback(async () => {
+    if (!userId) return
+    await Promise.all([refreshRuns(), refreshPlan()])
+  }, [refreshPlan, refreshRuns, userId])
+
   // Initial load
   useEffect(() => {
     const initialize = async () => {
@@ -354,8 +362,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       refreshPlan()
     }
 
+    const handleGarminRunSynced = () => {
+      refreshRuns()
+      refreshPlan()
+    }
+
     window.addEventListener("run-saved", handleRunSaved)
-    return () => window.removeEventListener("run-saved", handleRunSaved)
+    window.addEventListener("garmin-run-synced", handleGarminRunSynced)
+    return () => {
+      window.removeEventListener("run-saved", handleRunSaved)
+      window.removeEventListener("garmin-run-synced", handleGarminRunSynced)
+    }
   }, [refreshRuns, refreshGoals, refreshPlan])
 
   // Listen for goal updates - also sync to recalculate progress from runs
@@ -390,6 +407,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     refreshGoals,
     refreshRuns,
     refreshPlan,
+    triggerGarminSyncRefresh,
     syncData,
   }
 
@@ -432,6 +450,8 @@ export function useData(): DataContextValue {
         refresh: async () => {},
         refreshGoals: async () => {},
         refreshRuns: async () => {},
+        refreshPlan: async () => {},
+        triggerGarminSyncRefresh: async () => {},
         syncData: async () => ({ linkedRuns: 0, updatedGoals: 0, updatedWorkouts: 0 }),
       }
     }

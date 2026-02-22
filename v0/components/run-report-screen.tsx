@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Loader2, Sparkles } from 'lucide-react'
+import { ArrowLeft, Heart, Loader2, Mountain, Sparkles, Watch } from 'lucide-react'
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -66,6 +66,11 @@ type RunInsight = {
 type RunReportPayload = {
   report: CoachNotes | RunInsight
   source: 'ai' | 'fallback'
+}
+
+type GarminInsightResponse = {
+  insight_markdown: string | null
+  confidence?: number | null
 }
 
 const MIN_DISTANCE_FOR_PACE_KM = 0.05
@@ -271,6 +276,8 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   const [run, setRun] = useState<Run | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [garminInsight, setGarminInsight] = useState<GarminInsightResponse | null>(null)
+  const [isGarminInsightLoading, setIsGarminInsightLoading] = useState(false)
 
   const gpsQualityEnabled = ENABLE_AUTO_PAUSE
   const paceChartEnabled = ENABLE_PACE_CHART
@@ -429,6 +436,57 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   }, [loadRun])
 
   useEffect(() => {
+    if (!run || run.importSource !== 'garmin') {
+      setGarminInsight(null)
+      setIsGarminInsightLoading(false)
+      return
+    }
+
+    const completedAt = new Date(run.completedAt)
+    if (Number.isNaN(completedAt.getTime())) {
+      setGarminInsight(null)
+      return
+    }
+
+    const dateParam = completedAt.toISOString().slice(0, 10)
+    const controller = new AbortController()
+
+    const loadGarminInsight = async () => {
+      setIsGarminInsightLoading(true)
+      try {
+        const response = await fetch(
+          `/api/garmin/insights?userId=${encodeURIComponent(String(run.userId))}&date=${encodeURIComponent(dateParam)}&type=post_run`,
+          {
+            signal: controller.signal,
+          }
+        )
+
+        if (!response.ok) {
+          setGarminInsight(null)
+          return
+        }
+
+        const data = (await response.json()) as GarminInsightResponse
+        if (data.insight_markdown) {
+          setGarminInsight(data)
+        } else {
+          setGarminInsight(null)
+        }
+      } catch (error) {
+        if ((error as Error).name === 'AbortError') return
+        console.warn('[run-report] Failed to load Garmin insight:', error)
+        setGarminInsight(null)
+      } finally {
+        setIsGarminInsightLoading(false)
+      }
+    }
+
+    void loadGarminInsight()
+
+    return () => controller.abort()
+  }, [run])
+
+  useEffect(() => {
     if (!runId || !run) return
     if (run.runReport) return
     if (isGenerating) return
@@ -514,6 +572,52 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
           </div>
         </CardContent>
       </Card>
+
+      {run.importSource === 'garmin' && (run.elevationGain != null || run.maxHR != null) && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-center gap-4 text-sm text-foreground/80">
+              {run.elevationGain != null && (
+                <div className="flex items-center gap-1.5">
+                  <Mountain className="h-4 w-4 text-emerald-600" />
+                  <span>Elevation +{Math.round(run.elevationGain)} m</span>
+                </div>
+              )}
+              {run.maxHR != null && (
+                <div className="flex items-center gap-1.5">
+                  <Heart className="h-4 w-4 text-rose-600" />
+                  <span>Max HR {run.maxHR} bpm</span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {run.importSource === 'garmin' && (isGarminInsightLoading || garminInsight?.insight_markdown) && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-medium flex items-center gap-2">
+                <Watch className="h-4 w-4 text-primary" />
+                Coach Analysis
+              </h3>
+              {typeof garminInsight?.confidence === 'number' && (
+                <span className="text-xs rounded-full px-2 py-1 bg-primary/10 text-primary">
+                  Confidence{' '}
+                  {Math.round(garminInsight.confidence <= 1 ? garminInsight.confidence * 100 : garminInsight.confidence)}
+                  %
+                </span>
+              )}
+            </div>
+            {isGarminInsightLoading ? (
+              <div className="text-sm text-foreground/60">Loading Garmin coach insight...</div>
+            ) : (
+              <p className="text-sm text-foreground/80 whitespace-pre-wrap">{garminInsight?.insight_markdown}</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {gpsQualityEnabled && gpsQuality && gpsQualityStyles && (
         <Card>

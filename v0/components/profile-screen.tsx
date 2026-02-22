@@ -56,6 +56,7 @@ import { Share2, Users } from "lucide-react";
 import { JoinCohortModal } from "@/components/join-cohort-modal";
 import { GarminSyncPanel } from "@/components/garmin-sync-panel";
 import { GarminReadinessCard } from "@/components/garmin-readiness-card";
+import { PerformanceManagementChart } from "@/components/performance-management-chart";
 import { CommunityStatsWidget } from "@/components/community-stats-widget";
 import { CoachingInsightsWidget } from "@/components/coaching-insights-widget";
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
@@ -421,14 +422,20 @@ export function ProfileScreen() {
       void loadRuns()
       void loadChallengeData()
     }
+    const onGarminRunSynced = () => {
+      void loadRuns()
+      void loadChallengeData()
+    }
     const onChallengeUpdated = () => {
       void loadChallengeData()
     }
     window.addEventListener('run-saved', onRunSaved)
+    window.addEventListener('garmin-run-synced', onGarminRunSynced)
     window.addEventListener('challenge-updated', onChallengeUpdated)
     return () => {
       cancelled = true
       window.removeEventListener('run-saved', onRunSaved)
+      window.removeEventListener('garmin-run-synced', onGarminRunSynced)
       window.removeEventListener('challenge-updated', onChallengeUpdated)
     }
   }, [userId, loadChallengeData])
@@ -1287,7 +1294,15 @@ export function ProfileScreen() {
                         <span className="text-sm text-foreground/70">{formatPace(run.pace ?? run.duration / run.distance)}/km</span>
                       </div>
                       <div className="text-xs text-foreground/60 truncate">
-                        {new Date(run.completedAt).toLocaleDateString()} • {run.type}
+                        {run.importSource === 'garmin' && (
+                          <Badge variant="secondary" className="text-[10px] me-1 inline-flex items-center gap-1">
+                            <Watch className="h-3 w-3" />
+                            Garmin
+                          </Badge>
+                        )}
+                        {new Date(run.completedAt).toLocaleDateString()} • {run.notes ?? run.type}
+                        {run.elevationGain != null ? ` • Elev +${Math.round(run.elevationGain)}m` : ''}
+                        {run.maxHR != null ? ` • Max HR ${run.maxHR}bpm` : ''}
                         {run.runReport ? ' • report ready' : ''}
                       </div>
                     </div>
@@ -1402,6 +1417,7 @@ export function ProfileScreen() {
           {userId && (
             <div className="space-y-3">
               <GarminReadinessCard userId={userId} />
+              <PerformanceManagementChart userId={userId} days={90} />
               <GarminSyncPanel
                 userId={userId}
                 onReconnect={async () => {
@@ -1703,5 +1719,4 @@ export function ProfileScreen() {
     </div>
   )
 }
-
 

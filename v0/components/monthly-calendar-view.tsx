@@ -300,7 +300,12 @@ export function MonthlyCalendarView() {
                       onDragEnd={handleDragEnd}
                       title="Drag to move workout to another day"
                     >
-                      <div className={`w-full h-1 rounded-full ${workout.color} ${workout.completed ? "" : "opacity-60"} mb-1`} />
+                      <div className="relative w-full mb-1">
+                        <div className={`w-full h-1 rounded-full ${workout.color} ${workout.completed ? "" : "opacity-60"}`} />
+                        {workout.completed && (
+                          <span className="absolute -top-2 -right-1 text-[8px] text-green-600">✓</span>
+                        )}
+                      </div>
                       <span className={`text-xs font-medium ${workout.completed ? "text-gray-800" : "text-gray-600"}`}>
                         {workout.type}
                       </span>
