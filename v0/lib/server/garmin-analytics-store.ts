@@ -55,10 +55,6 @@ interface DailyMetricAccumulator {
   rawJson: Record<string, unknown>
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
-}
-
 function getString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 }
@@ -95,6 +91,22 @@ function getDateFromEpochSeconds(value: unknown): string | null {
 function pickNumber(record: Record<string, unknown>, keys: string[]): number | null {
   for (const key of keys) {
     const value = getNumber(record[key])
+    if (value != null) return value
+  }
+  return null
+}
+
+function pickNestedNumber(record: Record<string, unknown>, paths: string[][]): number | null {
+  for (const path of paths) {
+    let current: unknown = record
+    for (const key of path) {
+      if (!current || typeof current !== 'object') {
+        current = null
+        break
+      }
+      current = (current as Record<string, unknown>)[key]
+    }
+    const value = getNumber(current)
     if (value != null) return value
   }
   return null
@@ -159,6 +171,23 @@ function buildDailyMetricsRows(input: {
     metric.sleepScore = score ?? metric.sleepScore
   }
 
+  for (const sleepRecord of datasets.sleeps ?? []) {
+    const date =
+      getDateString(sleepRecord.calendarDate) ??
+      getDateString(sleepRecord.date) ??
+      getDateFromEpochSeconds(sleepRecord.startTimeInSeconds)
+    if (!date) continue
+
+    const metric = getOrCreateDailyMetric(byDate, date)
+    metric.sleepDurationS =
+      pickNumber(sleepRecord, ['durationInSeconds', 'totalSleepSeconds']) ?? metric.sleepDurationS
+    metric.sleepScore =
+      pickNumber(sleepRecord, ['overallSleepScore', 'sleepScore']) ??
+      pickNestedNumber(sleepRecord, [['sleepScores', 'overall', 'value']]) ??
+      metric.sleepScore
+    addRawDataset(metric, 'sleeps', sleepRecord)
+  }
+
   for (const daily of datasets.dailies ?? []) {
     const date =
       getDateString(daily.calendarDate) ??
@@ -212,7 +241,7 @@ function buildDailyMetricsRows(input: {
     if (!date) continue
 
     const metric = getOrCreateDailyMetric(byDate, date)
-    metric.hrv = pickNumber(hrv, ['hrvValue', 'value', 'dailyAvg']) ?? metric.hrv
+    metric.hrv = pickNumber(hrv, ['hrvValue', 'value', 'dailyAvg', 'lastNightAvg']) ?? metric.hrv
     addRawDataset(metric, 'hrv', hrv)
   }
 

@@ -7,6 +7,32 @@ import { db, type WearableDevice } from "@/lib/db"
 
 type CallbackStatus = "processing" | "success" | "error"
 
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null
+}
+
+function asDate(value: unknown): Date | null {
+  const raw = asString(value)
+  if (!raw) return null
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+}
+
+function asConnectionStatus(value: unknown): WearableDevice["connectionStatus"] {
+  return value === "connected" || value === "disconnected" || value === "syncing" || value === "error"
+    ? value
+    : "connected"
+}
+
 function GarminCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -52,12 +78,20 @@ function GarminCallbackContent() {
 
         if (data.device && typeof data.userId === "number") {
           const { userId, device } = data as { userId: number; device: Record<string, unknown> }
-          const normalizedDevice = {
-            ...device,
-            authTokens: undefined,
-            ...(device.lastSync ? { lastSync: new Date(String(device.lastSync)) } : {}),
-            ...(device.createdAt ? { createdAt: new Date(String(device.createdAt)) } : {}),
-            ...(device.updatedAt ? { updatedAt: new Date(String(device.updatedAt)) } : {}),
+          const now = new Date()
+          const model = asString(device.model)
+          const normalizedDevice: Omit<WearableDevice, "id"> = {
+            userId,
+            type: "garmin",
+            name: asString(device.name) ?? "Garmin Device",
+            ...(model ? { model } : {}),
+            deviceId: asString(device.deviceId) ?? `garmin-${userId}`,
+            connectionStatus: asConnectionStatus(device.connectionStatus),
+            lastSync: asDate(device.lastSync),
+            capabilities: asStringArray(device.capabilities),
+            settings: asRecord(device.settings),
+            createdAt: asDate(device.createdAt) ?? now,
+            updatedAt: asDate(device.updatedAt) ?? now,
           }
 
           const existing = await db.wearableDevices.where({ userId, type: "garmin" }).first()
