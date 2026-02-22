@@ -879,12 +879,7 @@ export async function runGarminSyncForUser(params: {
 
     const nowIso = new Date().toISOString()
     const notices: string[] = []
-    const { value: configuredWebhookSecret } = getGarminWebhookSecret()
     const webhookEndpointHint = '/api/devices/garmin/webhook/<GARMIN_WEBHOOK_SECRET>'
-
-    if (!configuredWebhookSecret && !ingestion.latestReceivedAt) {
-      notices.push('GARMIN_WEBHOOK_SECRET is not configured. Configure it before enabling Garmin webhooks.')
-    }
 
     if (!ingestion.storeAvailable) {
       notices.push(ingestion.storeError ?? 'RunSmart Garmin webhook storage is unavailable.')
