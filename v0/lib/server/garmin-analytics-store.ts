@@ -1,8 +1,8 @@
 import 'server-only'
 
-import { createAdminClient } from '@/lib/supabase/admin'
-import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
 import type { GarminDatasetKey } from '@/lib/server/garmin-export-store'
+import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 interface GarminSyncActivity {
   activityId: string | null
@@ -16,6 +16,14 @@ interface GarminSyncActivity {
   calories: number | null
   averagePace: number | null
   elevationGain: number | null
+  elevationLoss?: number | null
+  maxSpeedMps?: number | null
+  averageCadence?: number | null
+  maxCadence?: number | null
+  lapSummaries?: Record<string, unknown>[]
+  splitSummaries?: Record<string, unknown>[]
+  intervalSummaries?: Record<string, unknown>[]
+  telemetry?: Record<string, unknown>
 }
 
 interface GarminSyncSleepRecord {
@@ -57,6 +65,17 @@ interface DailyMetricAccumulator {
 
 function getString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+}
+
+function asRecordArray(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry) => asRecord(entry))
+    .filter((entry) => Object.keys(entry).length > 0)
 }
 
 function getNumber(value: unknown): number | null {
@@ -300,9 +319,17 @@ export async function persistGarminSyncSnapshot(input: PersistGarminSyncInput): 
       max_hr: activity.maxHR,
       avg_pace: activity.averagePace,
       elevation_gain_m: activity.elevationGain,
+      elevation_loss_m: activity.elevationLoss ?? null,
+      max_speed_mps: activity.maxSpeedMps ?? null,
+      avg_cadence_spm: activity.averageCadence ?? null,
+      max_cadence_spm: activity.maxCadence ?? null,
+      lap_summaries: asRecordArray(activity.lapSummaries),
+      split_summaries: asRecordArray(activity.splitSummaries),
+      interval_summaries: asRecordArray(activity.intervalSummaries),
       calories: activity.calories,
       source: 'garmin_sync',
       raw_json: activity,
+      telemetry_json: asRecord(activity.telemetry),
       updated_at: nowIso,
     })),
     (row) => `${row.user_id}:${row.activity_id}`

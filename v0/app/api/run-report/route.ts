@@ -2,11 +2,10 @@ import { NextResponse } from 'next/server'
 import { openai } from '@ai-sdk/openai'
 import { generateObject } from 'ai'
 import { z } from 'zod'
-
 import { withSecureOpenAI } from '@/lib/apiKeyManager'
 import { logError } from '@/lib/backendMonitoring'
-import { calculateGPSQualityScore, getGPSQualityLevel, type GPSAccuracyData } from '@/lib/gps-monitoring'
 import { ENABLE_AUTO_PAUSE, ENABLE_PACE_CHART } from '@/lib/featureFlags'
+import { calculateGPSQualityScore, getGPSQualityLevel, type GPSAccuracyData } from '@/lib/gps-monitoring'
 import { logger } from '@/lib/logger'
 import { withApiSecurity, type ApiRequest } from '@/lib/security.middleware'
 
@@ -30,6 +29,68 @@ const DerivedMetricsSchema = z
     paceStability: z.string().optional(),
     cadenceNote: z.string().optional(),
     hrNote: z.string().optional(),
+  })
+  .passthrough()
+
+const GarminLapLikeSchema = z
+  .object({
+    index: z.coerce.number().int().positive().optional(),
+    distanceKm: z.coerce.number().min(0).optional(),
+    durationSec: z.coerce.number().min(0).optional(),
+    paceSecPerKm: z.coerce.number().min(0).optional(),
+    avgHr: z.coerce.number().min(0).optional(),
+    avgCadence: z.coerce.number().min(0).optional(),
+    elevationGainM: z.coerce.number().min(0).optional(),
+  })
+  .passthrough()
+
+const GarminTelemetrySchema = z
+  .object({
+    activityId: z.string().optional(),
+    startTime: z.string().optional(),
+    sport: z.string().optional(),
+    distanceKm: z.coerce.number().min(0).optional(),
+    durationSec: z.coerce.number().min(0).optional(),
+    avgHr: z.coerce.number().min(0).optional(),
+    maxHr: z.coerce.number().min(0).optional(),
+    avgPaceSecPerKm: z.coerce.number().min(0).optional(),
+    avgCadenceSpm: z.coerce.number().min(0).optional(),
+    maxCadenceSpm: z.coerce.number().min(0).optional(),
+    elevationGainM: z.coerce.number().optional(),
+    elevationLossM: z.coerce.number().optional(),
+    maxSpeedMps: z.coerce.number().min(0).optional(),
+    calories: z.coerce.number().min(0).optional(),
+    laps: z.array(GarminLapLikeSchema).optional(),
+    splits: z.array(GarminLapLikeSchema).optional(),
+    intervals: z.array(GarminLapLikeSchema).optional(),
+    analytics: z
+      .object({
+        pacing: z
+          .object({
+            count: z.coerce.number().int().min(0).optional(),
+            variabilitySecPerKm: z.coerce.number().min(0).optional(),
+            firstHalfPaceSecPerKm: z.coerce.number().min(0).optional(),
+            secondHalfPaceSecPerKm: z.coerce.number().min(0).optional(),
+            splitDeltaSecPerKm: z.coerce.number().optional(),
+          })
+          .optional(),
+        cadence: z
+          .object({
+            avgSpm: z.coerce.number().min(0).optional(),
+            maxSpm: z.coerce.number().min(0).optional(),
+            driftPct: z.coerce.number().optional(),
+          })
+          .optional(),
+        intervals: z
+          .object({
+            count: z.coerce.number().int().min(0).optional(),
+            fastestPaceSecPerKm: z.coerce.number().min(0).optional(),
+            slowestPaceSecPerKm: z.coerce.number().min(0).optional(),
+            consistencyPct: z.coerce.number().min(0).max(100).optional(),
+          })
+          .optional(),
+      })
+      .optional(),
   })
   .passthrough()
 
@@ -70,6 +131,7 @@ const RunReportRequestSchema = z
       )
       .optional(),
     derivedMetrics: DerivedMetricsSchema.optional(),
+    garminTelemetry: GarminTelemetrySchema.optional(),
     upcomingWorkouts: z.array(WorkoutSchema).optional(),
     userFeedback: z
       .object({
@@ -134,6 +196,7 @@ type NormalizedRunReportInput = {
     cadenceNote?: string
     hrNote?: string
   }
+  garminTelemetry?: z.infer<typeof GarminTelemetrySchema>
   upcomingWorkouts: Array<z.infer<typeof WorkoutSchema>>
   userFeedback?: {
     rpe?: number
@@ -209,15 +272,29 @@ function buildDerivedMetrics(input: {
   gpsPoints: number
   averageAccuracy?: number
   heartRateBpm?: number
+  garminTelemetry?: z.infer<typeof GarminTelemetrySchema>
   override?: z.infer<typeof DerivedMetricsSchema>
 }): { paceStability: string; cadenceNote?: string; hrNote?: string } {
   const override = input.override ?? {}
+  const telemetryHr = input.garminTelemetry?.avgHr
+  const telemetryCadence = input.garminTelemetry?.avgCadenceSpm
+  const cadenceDrift = input.garminTelemetry?.analytics?.cadence?.driftPct
   const hrNote =
     typeof override.hrNote === 'string'
       ? override.hrNote
-      : input.heartRateBpm
-        ? `Avg HR ${Math.round(input.heartRateBpm)} bpm.`
+      : input.heartRateBpm || telemetryHr
+        ? `Avg HR ${Math.round(input.heartRateBpm ?? telemetryHr ?? 0)} bpm.`
         : 'HR data not available; effort based on pace and duration.'
+
+  let cadenceNote: string | undefined
+  if (typeof override.cadenceNote === 'string') {
+    cadenceNote = override.cadenceNote
+  } else if (typeof telemetryCadence === 'number' && telemetryCadence > 0) {
+    cadenceNote =
+      typeof cadenceDrift === 'number'
+        ? `Cadence avg ${Math.round(telemetryCadence)} spm (${cadenceDrift > 0 ? '+' : ''}${cadenceDrift.toFixed(1)}% drift).`
+        : `Cadence avg ${Math.round(telemetryCadence)} spm.`
+  }
 
   const paceStability =
     typeof override.paceStability === 'string'
@@ -232,9 +309,37 @@ function buildDerivedMetrics(input: {
 
   return {
     paceStability,
-    ...(typeof override.cadenceNote === 'string' ? { cadenceNote: override.cadenceNote } : {}),
+    ...(cadenceNote ? { cadenceNote } : {}),
     hrNote,
   }
+}
+
+function normalizeTelemetryPaceData(
+  telemetry?: z.infer<typeof GarminTelemetrySchema>
+): Array<{ distanceKm: number; paceMinPerKm: number }> {
+  if (!telemetry) return []
+  const source = Array.isArray(telemetry.splits) && telemetry.splits.length > 0 ? telemetry.splits : telemetry.laps
+  if (!Array.isArray(source) || source.length === 0) return []
+
+  const normalized: Array<{ distanceKm: number; paceMinPerKm: number }> = []
+  let cumulativeDistance = 0
+
+  for (const row of source) {
+    const rowDistance =
+      typeof row.distanceKm === 'number' && Number.isFinite(row.distanceKm) ? Math.max(0, row.distanceKm) : 0
+    const paceSec =
+      typeof row.paceSecPerKm === 'number' && Number.isFinite(row.paceSecPerKm) && row.paceSecPerKm > 0
+        ? row.paceSecPerKm
+        : null
+    if (rowDistance <= 0 || paceSec == null) continue
+    cumulativeDistance += rowDistance
+    normalized.push({
+      distanceKm: Number(cumulativeDistance.toFixed(3)),
+      paceMinPerKm: paceSec / 60,
+    })
+  }
+
+  return normalized
 }
 
 type PaceSegment = {
@@ -308,7 +413,9 @@ function calculatePaceStats(
   const segments = buildPaceSegments(paceData)
   if (segments.length === 0) return null
 
-  const totalDistanceKm = segments[segments.length - 1].endKm
+  const lastSegment = segments[segments.length - 1]
+  if (!lastSegment) return null
+  const totalDistanceKm = lastSegment.endKm
   if (!Number.isFinite(totalDistanceKm) || totalDistanceKm <= 0) return null
 
   let weightedSum = 0
@@ -352,9 +459,9 @@ function calculatePaceStats(
     minPaceMinPerKm: minPace,
     maxPaceMinPerKm: maxPace,
     variabilityMinPerKm,
-    firstKmPaceMinPerKm,
-    lastKmPaceMinPerKm,
     totalDistanceKm,
+    ...(typeof firstKmPaceMinPerKm === 'number' ? { firstKmPaceMinPerKm } : {}),
+    ...(typeof lastKmPaceMinPerKm === 'number' ? { lastKmPaceMinPerKm } : {}),
   }
 }
 
@@ -376,26 +483,53 @@ function classifyPaceConsistency(stats: PaceStats): RunInsight['paceConsistency'
 
 function normalizeInput(input: z.infer<typeof RunReportRequestSchema>): NormalizedRunReportInput {
   const runType = normalizeRunType(input.run.type)
-  const distanceKm = Number.isFinite(input.run.distanceKm) ? Math.max(0, input.run.distanceKm) : 0
+  const telemetryDistance =
+    typeof input.garminTelemetry?.distanceKm === 'number' && Number.isFinite(input.garminTelemetry.distanceKm)
+      ? input.garminTelemetry.distanceKm
+      : null
+  const telemetryDuration =
+    typeof input.garminTelemetry?.durationSec === 'number' && Number.isFinite(input.garminTelemetry.durationSec)
+      ? input.garminTelemetry.durationSec
+      : null
+  const distanceKm = Number.isFinite(input.run.distanceKm)
+    ? Math.max(0, input.run.distanceKm)
+    : telemetryDistance != null
+      ? Math.max(0, telemetryDistance)
+      : 0
   const durationSeconds = Number.isFinite(input.run.durationSeconds)
     ? Math.max(0, input.run.durationSeconds)
+    : telemetryDuration != null
+      ? Math.max(0, telemetryDuration)
     : 0
   const avgPaceSecondsPerKm =
     typeof input.run.avgPaceSecondsPerKm === 'number' && input.run.avgPaceSecondsPerKm > 0
       ? input.run.avgPaceSecondsPerKm
+      : typeof input.garminTelemetry?.avgPaceSecPerKm === 'number' && input.garminTelemetry.avgPaceSecPerKm > 0
+        ? input.garminTelemetry.avgPaceSecPerKm
       : distanceKm >= MIN_DISTANCE_FOR_PACE_KM && durationSeconds > 0
         ? durationSeconds / distanceKm
         : 0
 
   const gpsPoints = input.gps?.points ?? 0
   const paceData = normalizePaceData(input.paceData)
+  const telemetryPaceData = normalizeTelemetryPaceData(input.garminTelemetry)
+  const mergedPaceData = paceData.length > 0 ? paceData : telemetryPaceData
   const derivedMetrics = buildDerivedMetrics({
     distanceKm,
     gpsPoints,
-    averageAccuracy: input.gps?.averageAccuracy,
-    heartRateBpm: input.run.heartRateBpm,
-    override: input.derivedMetrics,
+    ...(typeof input.gps?.averageAccuracy === 'number' ? { averageAccuracy: input.gps.averageAccuracy } : {}),
+    ...(typeof input.run.heartRateBpm === 'number' ? { heartRateBpm: input.run.heartRateBpm } : {}),
+    ...(input.garminTelemetry ? { garminTelemetry: input.garminTelemetry } : {}),
+    ...(input.derivedMetrics ? { override: input.derivedMetrics } : {}),
   })
+  const normalizedUserFeedback = input.userFeedback
+    ? {
+        ...(typeof input.userFeedback.rpe === 'number' ? { rpe: input.userFeedback.rpe } : {}),
+        ...(typeof input.userFeedback.soreness === 'string' ? { soreness: input.userFeedback.soreness } : {}),
+      }
+    : null
+  const normalizedHeartRateBpm = input.run.heartRateBpm ?? input.garminTelemetry?.avgHr
+  const normalizedCalories = input.run.calories ?? input.garminTelemetry?.calories
 
   return {
     runId: input.run.id ?? 0,
@@ -404,20 +538,23 @@ function normalizeInput(input: z.infer<typeof RunReportRequestSchema>): Normaliz
     durationSeconds,
     avgPaceSecondsPerKm,
     completedAt: normalizeDate(input.run.completedAt),
-    notes: input.run.notes,
-    heartRateBpm: input.run.heartRateBpm,
-    calories: input.run.calories,
-    gpsAccuracyData: input.run.gpsAccuracyData,
+    ...(typeof input.run.notes === 'string' ? { notes: input.run.notes } : {}),
+    ...(typeof normalizedHeartRateBpm === 'number' ? { heartRateBpm: normalizedHeartRateBpm } : {}),
+    ...(typeof normalizedCalories === 'number' ? { calories: normalizedCalories } : {}),
+    ...(typeof input.run.gpsAccuracyData === 'string' ? { gpsAccuracyData: input.run.gpsAccuracyData } : {}),
     gps: {
       points: gpsPoints,
-      startAccuracy: input.gps?.startAccuracy,
-      endAccuracy: input.gps?.endAccuracy,
-      averageAccuracy: input.gps?.averageAccuracy,
+      ...(typeof input.gps?.startAccuracy === 'number' ? { startAccuracy: input.gps.startAccuracy } : {}),
+      ...(typeof input.gps?.endAccuracy === 'number' ? { endAccuracy: input.gps.endAccuracy } : {}),
+      ...(typeof input.gps?.averageAccuracy === 'number' ? { averageAccuracy: input.gps.averageAccuracy } : {}),
     },
-    paceData,
+    paceData: mergedPaceData,
     derivedMetrics,
+    ...(input.garminTelemetry ? { garminTelemetry: input.garminTelemetry } : {}),
     upcomingWorkouts: input.upcomingWorkouts ?? [],
-    userFeedback: input.userFeedback,
+    ...(normalizedUserFeedback && Object.keys(normalizedUserFeedback).length > 0
+      ? { userFeedback: normalizedUserFeedback }
+      : {}),
   }
 }
 
@@ -483,6 +620,29 @@ function buildSkillInput(
         : {}),
       ...(typeof input.calories === 'number' && input.calories > 0 ? { calories: input.calories } : {}),
     },
+    ...(input.garminTelemetry
+      ? {
+          garminTelemetry: {
+            ...(typeof input.garminTelemetry.avgCadenceSpm === 'number'
+              ? { avgCadenceSpm: input.garminTelemetry.avgCadenceSpm }
+              : {}),
+            ...(typeof input.garminTelemetry.maxCadenceSpm === 'number'
+              ? { maxCadenceSpm: input.garminTelemetry.maxCadenceSpm }
+              : {}),
+            ...(typeof input.garminTelemetry.maxHr === 'number' ? { maxHr: input.garminTelemetry.maxHr } : {}),
+            ...(Array.isArray(input.garminTelemetry.laps)
+              ? { lapCount: input.garminTelemetry.laps.length }
+              : {}),
+            ...(Array.isArray(input.garminTelemetry.splits)
+              ? { splitCount: input.garminTelemetry.splits.length }
+              : {}),
+            ...(Array.isArray(input.garminTelemetry.intervals)
+              ? { intervalCount: input.garminTelemetry.intervals.length }
+              : {}),
+            analytics: input.garminTelemetry.analytics ?? {},
+          },
+        }
+      : {}),
     ...(gpsQuality ? { gpsQuality } : {}),
             ...(pacingPayload ? { pacing: pacingPayload } : {}),
     derivedMetrics: input.derivedMetrics,
@@ -508,6 +668,23 @@ function buildFallbackInsight(input: NormalizedRunReportInput): RunInsight {
   if (input.distanceKm >= 7) summary.push('Solid aerobic volume for today.')
   else if (input.distanceKm >= 3) summary.push('Nice consistency-building run.')
   else summary.push('Short run still counts for habit building.')
+
+  const telemetry = input.garminTelemetry
+  if (telemetry?.analytics?.pacing?.splitDeltaSecPerKm != null) {
+    if (telemetry.analytics.pacing.splitDeltaSecPerKm <= -8) {
+      summary.push('Strong finish with a negative split.')
+    } else if (telemetry.analytics.pacing.splitDeltaSecPerKm >= 8) {
+      summary.push('You faded in the second half; start slightly easier next time.')
+    }
+  }
+  if (telemetry?.analytics?.intervals?.count && telemetry.analytics.intervals.count > 0) {
+    const consistency = telemetry.analytics.intervals.consistencyPct
+    if (typeof consistency === 'number') {
+      summary.push(`Interval consistency was ${Math.round(consistency)}%.`)
+    } else {
+      summary.push('Interval work completed; keep rep pacing even across the set.')
+    }
+  }
 
   const effort = selectEffort(input)
 
@@ -558,6 +735,8 @@ function buildFallbackInsight(input: NormalizedRunReportInput): RunInsight {
     nextSessionNudge = 'Next session: rest or gentle cross-training; stop if pain persists.'
   } else if (effort === 'hard') {
     nextSessionNudge = 'Next session: 30-45 min easy or rest if legs feel heavy.'
+  } else if (typeof telemetry?.avgCadenceSpm === 'number' && telemetry.avgCadenceSpm < 162) {
+    nextSessionNudge = 'Next session: easy run with short strides; focus on relaxed, quicker turnover.'
   }
 
   return {

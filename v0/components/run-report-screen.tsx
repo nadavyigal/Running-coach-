@@ -1,16 +1,17 @@
-'use client'
+﻿'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Heart, Loader2, Mountain, Sparkles, Watch } from 'lucide-react'
-
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { PaceChart } from '@/components/pace-chart'
-import { RunMap } from '@/components/maps/RunMap'
+import { ArrowLeft, Gauge, Heart, Loader2, Mountain, Sparkles, Timer, Watch } from 'lucide-react'
 import { MapErrorBoundary } from '@/components/maps/MapErrorBoundary'
+import { RunMap } from '@/components/maps/RunMap'
+import { PaceChart } from '@/components/pace-chart'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
-import { dbUtils } from '@/lib/dbUtils'
+import { trackAnalyticsEvent } from '@/lib/analytics'
 import type { Run } from '@/lib/db'
+import { dbUtils } from '@/lib/dbUtils'
+import { ENABLE_AUTO_PAUSE, ENABLE_PACE_CHART } from '@/lib/featureFlags'
 import type { LatLng } from '@/lib/mapConfig'
 import {
   calculateSegmentPaces,
@@ -19,8 +20,6 @@ import {
   type GPSPoint as PaceGPSPoint,
 } from '@/lib/pace-calculations'
 import { parseGpsPath } from '@/lib/routeUtils'
-import { trackAnalyticsEvent } from '@/lib/analytics'
-import { ENABLE_AUTO_PAUSE, ENABLE_PACE_CHART } from '@/lib/featureFlags'
 
 type GPSQuality = {
   score: number
@@ -73,6 +72,60 @@ type GarminInsightResponse = {
   confidence?: number | null
 }
 
+type GarminTelemetryLap = {
+  index: number
+  distanceKm: number | null
+  durationSec: number | null
+  paceSecPerKm: number | null
+  avgHr: number | null
+  avgCadence: number | null
+  elevationGainM: number | null
+}
+
+type GarminTelemetry = {
+  activityId?: string | null
+  startTime?: string | null
+  sport?: string | null
+  distanceKm?: number | null
+  durationSec?: number | null
+  avgPaceSecPerKm?: number | null
+  avgCadenceSpm?: number | null
+  maxCadenceSpm?: number | null
+  maxHr?: number | null
+  avgHr?: number | null
+  elevationGainM?: number | null
+  elevationLossM?: number | null
+  maxSpeedMps?: number | null
+  calories?: number | null
+  laps?: GarminTelemetryLap[]
+  splits?: GarminTelemetryLap[]
+  intervals?: GarminTelemetryLap[]
+  analytics?: {
+    pacing?: {
+      count?: number | null
+      variabilitySecPerKm?: number | null
+      firstHalfPaceSecPerKm?: number | null
+      secondHalfPaceSecPerKm?: number | null
+      splitDeltaSecPerKm?: number | null
+    }
+    cadence?: {
+      avgSpm?: number | null
+      maxSpm?: number | null
+      driftPct?: number | null
+    }
+    intervals?: {
+      count?: number | null
+      fastestPaceSecPerKm?: number | null
+      slowestPaceSecPerKm?: number | null
+      consistencyPct?: number | null
+    }
+  }
+}
+
+type GarminTelemetryResponse = {
+  telemetry: GarminTelemetry | null
+}
+
 const MIN_DISTANCE_FOR_PACE_KM = 0.05
 
 function formatTime(seconds: number): string {
@@ -93,6 +146,32 @@ function formatVariance(seconds: number): string {
   const mins = Math.floor(seconds / 60)
   const secs = Math.round(seconds % 60)
   return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+function formatDistance(distanceKm: number | null | undefined): string {
+  return typeof distanceKm === 'number' && Number.isFinite(distanceKm) && distanceKm > 0
+    ? `${distanceKm.toFixed(2)} km`
+    : '--'
+}
+
+function formatDuration(seconds: number | null | undefined): string {
+  return typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0 ? formatTime(seconds) : '--:--'
+}
+
+function formatPaceFromTelemetry(secondsPerKm: number | null | undefined): string {
+  return typeof secondsPerKm === 'number' && Number.isFinite(secondsPerKm) && secondsPerKm > 0
+    ? `${formatPace(secondsPerKm)}/km`
+    : '--:--'
+}
+
+function formatOptionalNumber(
+  value: number | null | undefined,
+  options?: { digits?: number; suffix?: string }
+): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
+  const digits = options?.digits ?? 0
+  const suffix = options?.suffix ?? ''
+  return `${value.toFixed(digits)}${suffix}`
 }
 
 function getGpsQualityStyles(level: GPSQuality['level']) {
@@ -278,6 +357,9 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   const [isGenerating, setIsGenerating] = useState(false)
   const [garminInsight, setGarminInsight] = useState<GarminInsightResponse | null>(null)
   const [isGarminInsightLoading, setIsGarminInsightLoading] = useState(false)
+  const [garminTelemetry, setGarminTelemetry] = useState<GarminTelemetry | null>(null)
+  const [isGarminTelemetryLoading, setIsGarminTelemetryLoading] = useState(false)
+  const [garminTelemetryResolved, setGarminTelemetryResolved] = useState(false)
 
   const gpsQualityEnabled = ENABLE_AUTO_PAUSE
   const paceChartEnabled = ENABLE_PACE_CHART
@@ -312,6 +394,18 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   const paceConsistencyBadge = useMemo(
     () => getPaceConsistencyStyles(pacingInsight?.paceConsistency),
     [pacingInsight?.paceConsistency]
+  )
+  const telemetrySplits = useMemo(
+    () => (Array.isArray(garminTelemetry?.splits) ? garminTelemetry.splits.slice(0, 8) : []),
+    [garminTelemetry?.splits]
+  )
+  const telemetryIntervals = useMemo(
+    () => (Array.isArray(garminTelemetry?.intervals) ? garminTelemetry.intervals.slice(0, 8) : []),
+    [garminTelemetry?.intervals]
+  )
+  const telemetryLaps = useMemo(
+    () => (Array.isArray(garminTelemetry?.laps) ? garminTelemetry.laps.slice(0, 8) : []),
+    [garminTelemetry?.laps]
   )
 
   const avgPace = useMemo(() => {
@@ -372,6 +466,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
             averageAccuracy: run.averageAccuracy,
           },
           ...(paceChartEnabled && paceDataPayload.length ? { paceData: paceDataPayload } : {}),
+          ...(garminTelemetry ? { garminTelemetry } : {}),
         }),
       })
 
@@ -425,6 +520,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
     loadRun,
     paceChartEnabled,
     paceDataPayload,
+    garminTelemetry,
     path.length,
     run,
     runId,
@@ -487,11 +583,63 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   }, [run])
 
   useEffect(() => {
+    if (!run || run.importSource !== 'garmin') {
+      setGarminTelemetry(null)
+      setIsGarminTelemetryLoading(false)
+      setGarminTelemetryResolved(true)
+      return
+    }
+
+    const completedAt = new Date(run.completedAt)
+    const dateParam = Number.isNaN(completedAt.getTime()) ? '' : completedAt.toISOString().slice(0, 10)
+    const activityIdParam = typeof run.importRequestId === 'string' ? run.importRequestId.trim() : ''
+    setGarminTelemetryResolved(false)
+    if (!activityIdParam && !dateParam) {
+      setGarminTelemetry(null)
+      setGarminTelemetryResolved(true)
+      return
+    }
+
+    const controller = new AbortController()
+
+    const loadGarminTelemetry = async () => {
+      setIsGarminTelemetryLoading(true)
+      try {
+        const params = new URLSearchParams()
+        params.set('userId', String(run.userId))
+        if (activityIdParam) params.set('activityId', activityIdParam)
+        else if (dateParam) params.set('date', dateParam)
+
+        const response = await fetch(`/api/garmin/activity-telemetry?${params.toString()}`, {
+          signal: controller.signal,
+        })
+        if (!response.ok) {
+          setGarminTelemetry(null)
+          return
+        }
+        const data = (await response.json()) as GarminTelemetryResponse
+        setGarminTelemetry(data.telemetry ?? null)
+      } catch (error) {
+        if ((error as Error).name === 'AbortError') return
+        console.warn('[run-report] Failed to load Garmin telemetry:', error)
+        setGarminTelemetry(null)
+      } finally {
+        setIsGarminTelemetryLoading(false)
+        setGarminTelemetryResolved(true)
+      }
+    }
+
+    void loadGarminTelemetry()
+    return () => controller.abort()
+  }, [run])
+
+  useEffect(() => {
     if (!runId || !run) return
     if (run.runReport) return
     if (isGenerating) return
+    if (run.importSource === 'garmin' && !garminTelemetryResolved) return
     void generateNotes()
-  }, [generateNotes, isGenerating, run, runId])
+  }, [generateNotes, garminTelemetryResolved, isGenerating, run, runId])
 
   if (!runId) {
     return (
@@ -573,20 +721,68 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         </CardContent>
       </Card>
 
-      {run.importSource === 'garmin' && (run.elevationGain != null || run.maxHR != null) && (
+      {run.importSource === 'garmin' && (
         <Card>
           <CardContent className="p-4">
             <div className="flex flex-wrap items-center gap-4 text-sm text-foreground/80">
-              {run.elevationGain != null && (
+              {(run.elevationGain != null || garminTelemetry?.elevationGainM != null) && (
                 <div className="flex items-center gap-1.5">
                   <Mountain className="h-4 w-4 text-emerald-600" />
-                  <span>Elevation +{Math.round(run.elevationGain)} m</span>
+                  <span>
+                    Elevation +{Math.round(garminTelemetry?.elevationGainM ?? run.elevationGain ?? 0)} m
+                  </span>
                 </div>
               )}
-              {run.maxHR != null && (
+              {(run.maxHR != null || garminTelemetry?.maxHr != null) && (
                 <div className="flex items-center gap-1.5">
                   <Heart className="h-4 w-4 text-rose-600" />
-                  <span>Max HR {run.maxHR} bpm</span>
+                  <span>Max HR {Math.round(garminTelemetry?.maxHr ?? run.maxHR ?? 0)} bpm</span>
+                </div>
+              )}
+              {(run.heartRate != null || garminTelemetry?.avgHr != null) && (
+                <div className="flex items-center gap-1.5">
+                  <Heart className="h-4 w-4 text-primary" />
+                  <span>Avg HR {Math.round(garminTelemetry?.avgHr ?? run.heartRate ?? 0)} bpm</span>
+                </div>
+              )}
+              {garminTelemetry?.avgCadenceSpm != null && (
+                <div className="flex items-center gap-1.5">
+                  <Gauge className="h-4 w-4 text-violet-600" />
+                  <span>
+                    Cadence {Math.round(garminTelemetry.avgCadenceSpm)} spm
+                    {garminTelemetry.maxCadenceSpm != null
+                      ? ` (max ${Math.round(garminTelemetry.maxCadenceSpm)})`
+                      : ''}
+                  </span>
+                </div>
+              )}
+              {garminTelemetry?.analytics?.intervals?.count != null &&
+                garminTelemetry.analytics.intervals.count > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <Timer className="h-4 w-4 text-amber-600" />
+                    <span>
+                      Intervals {garminTelemetry.analytics.intervals.count}
+                      {typeof garminTelemetry.analytics.intervals.consistencyPct === 'number'
+                        ? ` • Consistency ${Math.round(garminTelemetry.analytics.intervals.consistencyPct)}%`
+                        : ''}
+                    </span>
+                  </div>
+                )}
+              {garminTelemetry?.elevationLossM != null && (
+                <div className="flex items-center gap-1.5">
+                  <Mountain className="h-4 w-4 text-emerald-700" />
+                  <span>Elevation -{Math.round(garminTelemetry.elevationLossM)} m</span>
+                </div>
+              )}
+              {garminTelemetry?.maxSpeedMps != null && (
+                <div className="flex items-center gap-1.5">
+                  <Gauge className="h-4 w-4 text-sky-600" />
+                  <span>Top speed {formatOptionalNumber(garminTelemetry.maxSpeedMps * 3.6, { digits: 1 })} km/h</span>
+                </div>
+              )}
+              {isGarminTelemetryLoading && (
+                <div className="text-xs text-foreground/60">
+                  Loading telemetry...
                 </div>
               )}
             </div>
@@ -615,6 +811,151 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
             ) : (
               <p className="text-sm text-foreground/80 whitespace-pre-wrap">{garminInsight?.insight_markdown}</p>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {run.importSource === 'garmin' && garminTelemetry?.analytics && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <h3 className="font-medium">Garmin Performance Analytics</h3>
+            <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+              <div className="rounded-md bg-[oklch(var(--surface-3))] p-2">
+                <div className="text-xs text-foreground/60">Pace Variability</div>
+                <div className="font-medium">
+                  {formatOptionalNumber(garminTelemetry.analytics.pacing?.variabilitySecPerKm, {
+                    digits: 0,
+                    suffix: 's',
+                  })}
+                </div>
+              </div>
+              <div className="rounded-md bg-[oklch(var(--surface-3))] p-2">
+                <div className="text-xs text-foreground/60">Split Delta</div>
+                <div className="font-medium">
+                  {formatOptionalNumber(garminTelemetry.analytics.pacing?.splitDeltaSecPerKm, {
+                    digits: 0,
+                    suffix: 's/km',
+                  })}
+                </div>
+              </div>
+              <div className="rounded-md bg-[oklch(var(--surface-3))] p-2">
+                <div className="text-xs text-foreground/60">Cadence Drift</div>
+                <div className="font-medium">
+                  {formatOptionalNumber(garminTelemetry.analytics.cadence?.driftPct, { digits: 1, suffix: '%' })}
+                </div>
+              </div>
+              <div className="rounded-md bg-[oklch(var(--surface-3))] p-2">
+                <div className="text-xs text-foreground/60">Interval Consistency</div>
+                <div className="font-medium">
+                  {formatOptionalNumber(garminTelemetry.analytics.intervals?.consistencyPct, {
+                    digits: 0,
+                    suffix: '%',
+                  })}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {run.importSource === 'garmin' && telemetrySplits.length > 0 && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <h3 className="font-medium">Splits</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-foreground/60">
+                  <tr>
+                    <th className="py-1 text-start font-medium">Split</th>
+                    <th className="py-1 text-start font-medium">Distance</th>
+                    <th className="py-1 text-start font-medium">Time</th>
+                    <th className="py-1 text-start font-medium">Pace</th>
+                    <th className="py-1 text-start font-medium">Avg HR</th>
+                    <th className="py-1 text-start font-medium">Cadence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {telemetrySplits.map((split) => (
+                    <tr key={`split-${split.index}`} className="border-t border-border/50">
+                      <td className="py-1.5">{split.index}</td>
+                      <td className="py-1.5">{formatDistance(split.distanceKm)}</td>
+                      <td className="py-1.5">{formatDuration(split.durationSec)}</td>
+                      <td className="py-1.5">{formatPaceFromTelemetry(split.paceSecPerKm)}</td>
+                      <td className="py-1.5">{formatOptionalNumber(split.avgHr)}</td>
+                      <td className="py-1.5">{formatOptionalNumber(split.avgCadence)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {run.importSource === 'garmin' && telemetryIntervals.length > 0 && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <h3 className="font-medium">Interval Breakdown</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-foreground/60">
+                  <tr>
+                    <th className="py-1 text-start font-medium">Rep</th>
+                    <th className="py-1 text-start font-medium">Distance</th>
+                    <th className="py-1 text-start font-medium">Time</th>
+                    <th className="py-1 text-start font-medium">Pace</th>
+                    <th className="py-1 text-start font-medium">Avg HR</th>
+                    <th className="py-1 text-start font-medium">Cadence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {telemetryIntervals.map((interval) => (
+                    <tr key={`interval-${interval.index}`} className="border-t border-border/50">
+                      <td className="py-1.5">{interval.index}</td>
+                      <td className="py-1.5">{formatDistance(interval.distanceKm)}</td>
+                      <td className="py-1.5">{formatDuration(interval.durationSec)}</td>
+                      <td className="py-1.5">{formatPaceFromTelemetry(interval.paceSecPerKm)}</td>
+                      <td className="py-1.5">{formatOptionalNumber(interval.avgHr)}</td>
+                      <td className="py-1.5">{formatOptionalNumber(interval.avgCadence)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {run.importSource === 'garmin' && telemetryLaps.length > 0 && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <h3 className="font-medium">Laps</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-foreground/60">
+                  <tr>
+                    <th className="py-1 text-start font-medium">Lap</th>
+                    <th className="py-1 text-start font-medium">Distance</th>
+                    <th className="py-1 text-start font-medium">Time</th>
+                    <th className="py-1 text-start font-medium">Pace</th>
+                    <th className="py-1 text-start font-medium">Avg HR</th>
+                    <th className="py-1 text-start font-medium">Cadence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {telemetryLaps.map((lap) => (
+                    <tr key={`lap-${lap.index}`} className="border-t border-border/50">
+                      <td className="py-1.5">{lap.index}</td>
+                      <td className="py-1.5">{formatDistance(lap.distanceKm)}</td>
+                      <td className="py-1.5">{formatDuration(lap.durationSec)}</td>
+                      <td className="py-1.5">{formatPaceFromTelemetry(lap.paceSecPerKm)}</td>
+                      <td className="py-1.5">{formatOptionalNumber(lap.avgHr)}</td>
+                      <td className="py-1.5">{formatOptionalNumber(lap.avgCadence)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -777,4 +1118,5 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
 }
 
 export default RunReportScreen
+
 

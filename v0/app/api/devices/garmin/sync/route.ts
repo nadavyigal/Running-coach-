@@ -235,6 +235,61 @@ function getNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+interface RunSmartActivity {
+  activityId: string | null
+  activityName: string
+  activityType: string
+  startTimeGMT: string | null
+  distance: number
+  duration: number
+  averageHR: number | null
+  maxHR: number | null
+  calories: number | null
+  averagePace: number | null
+  elevationGain: number | null
+  elevationLoss: number | null
+  maxSpeedMps: number | null
+  averageCadence: number | null
+  maxCadence: number | null
+  lapSummaries: Record<string, unknown>[]
+  splitSummaries: Record<string, unknown>[]
+  intervalSummaries: Record<string, unknown>[]
+  telemetry: Record<string, unknown>
+}
+
+function getNestedValue(record: Record<string, unknown>, path: string[]): unknown {
+  let current: unknown = record
+  for (const segment of path) {
+    if (!current || typeof current !== 'object') return null
+    current = (current as Record<string, unknown>)[segment]
+  }
+  return current
+}
+
+function asRecordArray(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry) => asRecord(entry))
+    .filter((entry) => Object.keys(entry).length > 0)
+}
+
+function pickRecordArray(record: Record<string, unknown>, candidatePaths: string[][]): Record<string, unknown>[] {
+  for (const path of candidatePaths) {
+    const found = getNestedValue(record, path)
+    const parsed = asRecordArray(found)
+    if (parsed.length > 0) return parsed
+  }
+  return []
+}
+
+function pickNumberWithPaths(record: Record<string, unknown>, candidatePaths: string[][]): number | null {
+  for (const path of candidatePaths) {
+    const value = getNumber(getNestedValue(record, path))
+    if (value != null) return value
+  }
+  return null
+}
+
 function summarizeUpstreamBody(body: string): string {
   const trimmed = body.trim()
   if (!trimmed) return ''
@@ -403,7 +458,7 @@ function getActivityStartSeconds(activity: Record<string, unknown>): number | nu
   return Math.floor(parsed / 1000)
 }
 
-function toRunSmartActivity(activity: Record<string, unknown>) {
+function toRunSmartActivity(activity: Record<string, unknown>): RunSmartActivity {
   const activityTypeValue = asRecord(activity.activityType).typeKey ?? activity.activityType ?? ''
   const activityTypeRaw = String(activityTypeValue).toLowerCase().trim()
   const normalizedActivityType = activityTypeRaw.replace(/ /g, '_')
@@ -420,6 +475,43 @@ function toRunSmartActivity(activity: Record<string, unknown>) {
   const maxHeartRate = getNumber(activity.maxHeartRateInBeatsPerMinute) ?? getNumber(activity.maxHR)
   const calories = getNumber(activity.activeKilocalories) ?? getNumber(activity.calories)
   const elevationGain = getNumber(activity.totalElevationGainInMeters) ?? getNumber(activity.elevationGain)
+  const elevationLoss = getNumber(activity.totalElevationLossInMeters) ?? getNumber(activity.elevationLoss)
+  const maxSpeedMps =
+    getNumber(activity.maxSpeedInMetersPerSecond) ?? getNumber(activity.maxSpeedMps)
+  const averageCadence = pickNumberWithPaths(activity, [
+    ['averageRunCadenceInStepsPerMinute'],
+    ['averageCadenceInStepsPerMinute'],
+    ['averageCadence'],
+    ['cadence', 'average'],
+  ])
+  const maxCadence = pickNumberWithPaths(activity, [
+    ['maxRunCadenceInStepsPerMinute'],
+    ['maxCadenceInStepsPerMinute'],
+    ['maxCadence'],
+    ['cadence', 'max'],
+  ])
+
+  const lapSummaries = pickRecordArray(activity, [
+    ['lapSummaries'],
+    ['laps'],
+    ['activityLaps'],
+    ['activityDetails', 'laps'],
+    ['activityDetails', 'lapSummaries'],
+  ])
+  const splitSummaries = pickRecordArray(activity, [
+    ['splitSummaries'],
+    ['splits'],
+    ['activitySplits'],
+    ['activityDetails', 'splits'],
+    ['activityDetails', 'splitSummaries'],
+  ])
+  const intervalSummaries = pickRecordArray(activity, [
+    ['intervalSummaries'],
+    ['intervals'],
+    ['activityIntervals'],
+    ['activityDetails', 'intervals'],
+    ['activityDetails', 'intervalSummaries'],
+  ])
 
   const activityName = getString(activity.activityName) ?? (activityTypeRaw || 'Garmin Activity')
   const activityIdRaw = activity.activityId ?? activity.summaryId
@@ -437,23 +529,72 @@ function toRunSmartActivity(activity: Record<string, unknown>) {
     calories,
     averagePace: averageSpeed && averageSpeed > 0 ? Math.round(1000 / averageSpeed) : null,
     elevationGain,
+    elevationLoss,
+    maxSpeedMps,
+    averageCadence,
+    maxCadence,
+    lapSummaries,
+    splitSummaries,
+    intervalSummaries,
+    telemetry: activity,
   }
 }
 
-function dedupeRunSmartActivities(
-  activities: Array<ReturnType<typeof toRunSmartActivity>>
-): Array<ReturnType<typeof toRunSmartActivity>> {
-  const seen = new Set<string>()
-  const deduped: Array<ReturnType<typeof toRunSmartActivity>> = []
+function mergeTelemetryArrays(
+  base: Record<string, unknown>[],
+  candidate: Record<string, unknown>[]
+): Record<string, unknown>[] {
+  if (candidate.length === 0) return base
+  if (base.length === 0) return candidate
+  return candidate.length >= base.length ? candidate : base
+}
+
+function maxNullableNumber(...values: Array<number | null>): number | null {
+  const valid = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  return valid.length > 0 ? Math.max(...valid) : null
+}
+
+function mergeRunSmartActivities(base: RunSmartActivity, candidate: RunSmartActivity): RunSmartActivity {
+  return {
+    ...base,
+    activityName: candidate.activityName || base.activityName,
+    activityType: candidate.activityType || base.activityType,
+    startTimeGMT: candidate.startTimeGMT ?? base.startTimeGMT,
+    distance: candidate.distance > 0 ? candidate.distance : base.distance,
+    duration: candidate.duration > 0 ? candidate.duration : base.duration,
+    averageHR: candidate.averageHR ?? base.averageHR,
+    maxHR: maxNullableNumber(candidate.maxHR, base.maxHR),
+    calories: candidate.calories ?? base.calories,
+    averagePace: candidate.averagePace ?? base.averagePace,
+    elevationGain: candidate.elevationGain ?? base.elevationGain,
+    elevationLoss: candidate.elevationLoss ?? base.elevationLoss,
+    maxSpeedMps: candidate.maxSpeedMps ?? base.maxSpeedMps,
+    averageCadence: candidate.averageCadence ?? base.averageCadence,
+    maxCadence: maxNullableNumber(candidate.maxCadence, base.maxCadence),
+    lapSummaries: mergeTelemetryArrays(base.lapSummaries, candidate.lapSummaries),
+    splitSummaries: mergeTelemetryArrays(base.splitSummaries, candidate.splitSummaries),
+    intervalSummaries: mergeTelemetryArrays(base.intervalSummaries, candidate.intervalSummaries),
+    telemetry:
+      Object.keys(candidate.telemetry).length > Object.keys(base.telemetry).length
+        ? candidate.telemetry
+        : base.telemetry,
+  }
+}
+
+function dedupeRunSmartActivities(activities: RunSmartActivity[]): RunSmartActivity[] {
+  const deduped = new Map<string, RunSmartActivity>()
 
   for (const activity of activities) {
     const dedupeKey = activity.activityId ?? `${activity.startTimeGMT ?? 'unknown'}-${activity.activityName}`
-    if (seen.has(dedupeKey)) continue
-    seen.add(dedupeKey)
-    deduped.push(activity)
+    const existing = deduped.get(dedupeKey)
+    if (!existing) {
+      deduped.set(dedupeKey, activity)
+      continue
+    }
+    deduped.set(dedupeKey, mergeRunSmartActivities(existing, activity))
   }
 
-  return deduped
+  return Array.from(deduped.values())
 }
 
 async function fetchRecentStoredGarminActivities(
@@ -466,7 +607,7 @@ async function fetchRecentStoredGarminActivities(
   const { data, error } = await supabase
     .from('garmin_activities')
     .select(
-      'activity_id, start_time, sport, duration_s, distance_m, avg_hr, max_hr, avg_pace, elevation_gain_m, calories, raw_json, updated_at'
+      'activity_id, start_time, sport, duration_s, distance_m, avg_hr, max_hr, avg_pace, elevation_gain_m, elevation_loss_m, max_speed_mps, avg_cadence_spm, max_cadence_spm, lap_summaries, split_summaries, interval_summaries, telemetry_json, calories, raw_json, updated_at'
     )
     .eq('user_id', userId)
     .order('updated_at', { ascending: false })
@@ -503,6 +644,26 @@ async function fetchRecentStoredGarminActivities(
           getNumber(row.elevation_gain_m) ??
           getNumber(raw.elevationGain) ??
           getNumber(raw.totalElevationGainInMeters),
+        elevationLoss:
+          getNumber(row.elevation_loss_m) ??
+          getNumber(raw.elevationLoss) ??
+          getNumber(raw.totalElevationLossInMeters),
+        maxSpeedMps:
+          getNumber(row.max_speed_mps) ??
+          getNumber(raw.maxSpeedMps) ??
+          getNumber(raw.maxSpeedInMetersPerSecond),
+        averageCadence:
+          getNumber(row.avg_cadence_spm) ??
+          getNumber(raw.averageCadence) ??
+          getNumber(raw.averageRunCadenceInStepsPerMinute),
+        maxCadence:
+          getNumber(row.max_cadence_spm) ??
+          getNumber(raw.maxCadence) ??
+          getNumber(raw.maxRunCadenceInStepsPerMinute),
+        lapSummaries: asRecordArray(row.lap_summaries),
+        splitSummaries: asRecordArray(row.split_summaries),
+        intervalSummaries: asRecordArray(row.interval_summaries),
+        telemetry: asRecord(row.telemetry_json),
         __updatedAt: updatedAt,
       }
     })
