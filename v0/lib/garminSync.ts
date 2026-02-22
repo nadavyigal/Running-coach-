@@ -416,20 +416,10 @@ async function runGarminSyncRequest(
     return { device: null, data: null, needsReauth: false, errors: ['No connected Garmin device found'] }
   }
 
-  const accessToken = asRecord(device.authTokens).accessToken
-  if (typeof accessToken !== 'string' || accessToken.trim().length === 0) {
-    return {
-      device,
-      data: null,
-      needsReauth: true,
-      errors: ['Missing access token - please reconnect Garmin'],
-    }
-  }
-
   try {
-    const res = await fetch('/api/devices/garmin/sync', {
+    const res = await fetch(`/api/devices/garmin/sync?userId=${encodeURIComponent(String(userId))}`, {
       method,
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { 'x-user-id': String(userId) },
     })
 
     const data = (await res.json()) as GarminSyncApiResponse
@@ -441,7 +431,7 @@ async function runGarminSyncRequest(
         device,
         data,
         needsReauth: true,
-        errors: ['Garmin token expired - please reconnect'],
+        errors: ['Garmin authentication expired - please reconnect'],
       }
     }
 

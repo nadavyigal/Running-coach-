@@ -2,8 +2,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 const TABLE_NAME = 'user_memory_snapshots'
 const DEVICE_PREFIX = 'garmin_export'
+const READ_PAGE_SIZE = 1000
+const MAX_READ_ROWS = 20000
 
-export const GARMIN_HISTORY_DAYS = 30
+export const GARMIN_HISTORY_DAYS = 56
 
 export type GarminDatasetKey =
   | 'activities'
@@ -261,34 +263,52 @@ export async function readGarminExportRows(params: {
   }
 
   const prefix = `${DEVICE_PREFIX}:${normalizeDeviceId(garminUserId)}:%`
-  const { data, error } = await supabase
-    .from(TABLE_NAME)
-    .select('snapshot,updated_at')
-    .like('device_id', prefix)
-    .gte('updated_at', sinceIso)
-    .order('updated_at', { ascending: false })
-    .limit(5000)
+  const allRows: Array<{ snapshot?: unknown; updated_at?: string }> = []
+  let page = 0
 
-  if (error) {
-    if (isMissingTableError(error)) {
+  while (allRows.length < MAX_READ_ROWS) {
+    const from = page * READ_PAGE_SIZE
+    const to = from + READ_PAGE_SIZE - 1
+
+    const { data, error } = await supabase
+      .from(TABLE_NAME)
+      .select('snapshot,updated_at')
+      .like('device_id', prefix)
+      .gte('updated_at', sinceIso)
+      .order('updated_at', { ascending: false })
+      .range(from, to)
+
+    if (error) {
+      if (isMissingTableError(error)) {
+        return {
+          ok: false,
+          storeAvailable: false,
+          storeError: `${TABLE_NAME} table is missing`,
+          rows: [],
+        }
+      }
+
       return {
         ok: false,
-        storeAvailable: false,
-        storeError: `${TABLE_NAME} table is missing`,
+        storeAvailable: true,
+        storeError: error.message,
         rows: [],
       }
     }
 
-    return {
-      ok: false,
-      storeAvailable: true,
-      storeError: error.message,
-      rows: [],
-    }
+    const pageRows = (data ?? []) as Array<{ snapshot?: unknown; updated_at?: string }>
+    allRows.push(...pageRows)
+    if (pageRows.length < READ_PAGE_SIZE) break
+
+    page += 1
+  }
+
+  if (allRows.length >= MAX_READ_ROWS) {
+    allRows.length = MAX_READ_ROWS
   }
 
   const rows: GarminStoredSummaryRow[] = []
-  for (const entry of data ?? []) {
+  for (const entry of allRows) {
     const snapshot = asRecord((entry as { snapshot?: unknown }).snapshot)
     if (snapshot.kind !== 'garmin_export_record') continue
 

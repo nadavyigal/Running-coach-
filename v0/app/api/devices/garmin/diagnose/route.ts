@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server'
 import {
+  getValidGarminAccessToken,
+  markGarminAuthError,
+  refreshGarminAccessToken,
+} from '@/lib/server/garmin-oauth-store'
+import {
   GARMIN_HISTORY_DAYS,
   type GarminStoredSummaryRow,
   groupRowsByDataset,
@@ -65,17 +70,71 @@ function parsePermissions(result: EndpointResult): string[] {
     : []
 }
 
-export async function GET(req: Request) {
-  const authHeader = req.headers.get('authorization')
-  if (!authHeader?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'No Bearer token provided' }, { status: 401 })
+async function safeMarkAuthError(userId: number, message: string): Promise<void> {
+  try {
+    await markGarminAuthError(userId, message)
+  } catch {
+    // Diagnostics should still return even if auth-state persistence fails.
+  }
+}
+
+function parseUserId(req: Request): number | null {
+  const headerValue = req.headers.get('x-user-id')?.trim() ?? ''
+  if (headerValue) {
+    const parsed = Number.parseInt(headerValue, 10)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
   }
 
-  const accessToken = authHeader.slice(7)
+  const { searchParams } = new URL(req.url)
+  const queryValue = searchParams.get('userId')?.trim() ?? ''
+  if (!queryValue) return null
+
+  const parsed = Number.parseInt(queryValue, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+async function runDiagnosticProbe(accessToken: string) {
   const [profile, permissionsResult] = await Promise.all([
     testEndpoint(accessToken, `${GARMIN_API_BASE}/wellness-api/rest/user/id`),
     testEndpoint(accessToken, `${GARMIN_API_BASE}/wellness-api/rest/user/permissions`),
   ])
+  return { profile, permissionsResult }
+}
+
+export async function GET(req: Request) {
+  const userId = parseUserId(req)
+  if (!userId) {
+    return NextResponse.json({ error: 'Valid userId is required' }, { status: 401 })
+  }
+
+  let accessToken = ''
+  try {
+    accessToken = await getValidGarminAccessToken(userId)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Garmin auth unavailable'
+    await safeMarkAuthError(userId, message)
+    return NextResponse.json({ error: message, needsReauth: true }, { status: 401 })
+  }
+
+  let profile: EndpointResult
+  let permissionsResult: EndpointResult
+
+  try {
+    const initial = await runDiagnosticProbe(accessToken)
+    profile = initial.profile
+    permissionsResult = initial.permissionsResult
+
+    const authFailed = [profile, permissionsResult].some((entry) => entry.status === 401 || entry.status === 403)
+    if (authFailed) {
+      const refreshed = await refreshGarminAccessToken(userId)
+      const retried = await runDiagnosticProbe(refreshed.accessToken)
+      profile = retried.profile
+      permissionsResult = retried.permissionsResult
+    }
+  } catch (error) {
+    await safeMarkAuthError(userId, error instanceof Error ? error.message : 'Garmin diagnose failed')
+    return NextResponse.json({ error: 'Failed to run Garmin diagnostics' }, { status: 500 })
+  }
 
   const permissions = parsePermissions(permissionsResult)
   const profileBody = asRecord(profile.body)
@@ -99,7 +158,7 @@ export async function GET(req: Request) {
   const configuredSecret = process.env.GARMIN_WEBHOOK_SECRET?.trim()
   const webhookUrl = configuredSecret
     ? `${origin}/api/devices/garmin/webhook/${encodeURIComponent(configuredSecret)}`
-    : `${origin}/api/devices/garmin/webhook`
+    : `${origin}/api/devices/garmin/webhook/<GARMIN_WEBHOOK_SECRET>`
 
   const blockers: string[] = []
   if (!includesPermission(permissions, 'ACTIVITY_EXPORT')) {
@@ -111,7 +170,10 @@ export async function GET(req: Request) {
   if (!exportRowsResult.storeAvailable) {
     blockers.push(exportRowsResult.storeError ?? 'Garmin webhook storage is unavailable.')
   } else if (exportRowsResult.rows.length === 0) {
-    blockers.push('No Garmin webhook export records found in the last 30 days.')
+    blockers.push(`No Garmin webhook export records found in the last ${GARMIN_HISTORY_DAYS} days.`)
+  }
+  if (!configuredSecret) {
+    blockers.push('GARMIN_WEBHOOK_SECRET is not configured.')
   }
 
   return NextResponse.json({

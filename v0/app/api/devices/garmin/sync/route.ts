@@ -1,21 +1,45 @@
 import { NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
 import {
+  getGarminOAuthState,
+  getValidGarminAccessToken,
+  markGarminAuthError,
+  markGarminSyncState,
+  refreshGarminAccessToken,
+} from '@/lib/server/garmin-oauth-store'
+import {
   GARMIN_HISTORY_DAYS,
   type GarminDatasetKey,
   groupRowsByDataset,
   lookbackStartIso,
   readGarminExportRows,
 } from '@/lib/server/garmin-export-store'
+import { persistGarminSyncSnapshot } from '@/lib/server/garmin-analytics-store'
+import { evaluateGarminSyncRateLimit } from '@/lib/server/garmin-rate-limiter'
+import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
+import { captureServerEvent } from '@/lib/server/posthog'
 
 export const dynamic = 'force-dynamic'
 
 const GARMIN_API_BASE = 'https://apis.garmin.com'
 const GARMIN_MAX_WINDOW_SECONDS = 86400
 const SYNC_NAME = 'RunSmart Garmin Export Sync'
+const DEFAULT_INCREMENTAL_DAYS = 7
+const DEFAULT_ACTIVITY_SYNC_DAYS = 7
+const BACKFILL_DAILY_DAYS = 56
+const BACKFILL_ACTIVITY_DAYS = 21
 
 type GarminPermission = 'ACTIVITY_EXPORT' | 'HEALTH_EXPORT'
 type GarminSyncDatasetKey = GarminDatasetKey | 'workoutImport'
+export type GarminSyncTrigger = 'manual' | 'incremental' | 'nightly' | 'backfill'
+
+export interface GarminSyncExecutionOptions {
+  trigger: GarminSyncTrigger
+  enforceRateLimit: boolean
+  defaultLookbackDays: number
+  activityLookbackDays: number
+  sinceIso?: string | null
+}
 
 interface GarminDatasetConfig {
   key: GarminDatasetKey
@@ -326,13 +350,14 @@ async function fetchWellnessActivities(
 
 async function fetchRecentGarminActivities(
   accessToken: string,
-  permissions: string[]
+  permissions: string[],
+  lookbackDays: number
 ): Promise<{
   activities: ReturnType<typeof toRunSmartActivity>[]
   source: 'wellness-upload' | 'wellness-backfill'
 }> {
   const endTime = Math.floor(Date.now() / 1000)
-  const startTime = Math.max(0, endTime - GARMIN_HISTORY_DAYS * 86400 + 1)
+  const startTime = Math.max(0, endTime - lookbackDays * 86400 + 1)
 
   let source: 'wellness-upload' | 'wellness-backfill' = 'wellness-upload'
   let rawActivities: Record<string, unknown>[]
@@ -502,8 +527,9 @@ function buildCapabilities(params: {
   datasetCounts: Record<GarminDatasetKey, number>
   storeAvailable: boolean
   storeError?: string
+  lookbackDays: number
 }): GarminDatasetCapability[] {
-  const { permissions, datasetCounts, storeAvailable, storeError } = params
+  const { permissions, datasetCounts, storeAvailable, storeError, lookbackDays } = params
 
   const capabilities = DATASET_CONFIGS.map((config) => {
     const permissionGranted = permissions.includes(config.permission)
@@ -515,7 +541,7 @@ function buildCapabilities(params: {
     } else if (!storeAvailable) {
       reason = storeError ?? 'RunSmart Garmin webhook storage is not configured.'
     } else if (rowCount === 0) {
-      reason = 'No Garmin export notifications received for this dataset in the last 30 days.'
+      reason = `No Garmin export notifications received for this dataset in the last ${lookbackDays} days.`
     }
 
     return {
@@ -545,7 +571,12 @@ function buildCapabilities(params: {
   return capabilities
 }
 
-async function computeCatalog(accessToken: string): Promise<GarminCatalogResult> {
+async function computeCatalog(params: {
+  accessToken: string
+  sinceIso: string
+  lookbackDays: number
+}): Promise<GarminCatalogResult> {
+  const { accessToken, sinceIso, lookbackDays } = params
   const [permissions, garminUserId] = await Promise.all([
     fetchGarminPermissions(accessToken),
     fetchGarminUserId(accessToken),
@@ -553,7 +584,7 @@ async function computeCatalog(accessToken: string): Promise<GarminCatalogResult>
 
   const readResult = await readGarminExportRows({
     garminUserId,
-    sinceIso: lookbackStartIso(GARMIN_HISTORY_DAYS),
+    sinceIso,
   })
 
   const datasets = groupRowsByDataset(readResult.rows)
@@ -573,11 +604,12 @@ async function computeCatalog(accessToken: string): Promise<GarminCatalogResult>
       datasetCounts,
       storeAvailable: readResult.storeAvailable,
       storeError: readResult.storeError,
+      lookbackDays,
     }),
     datasets,
     datasetCounts,
     ingestion: {
-      lookbackDays: GARMIN_HISTORY_DAYS,
+      lookbackDays,
       storeAvailable: readResult.storeAvailable,
       ...(readResult.storeError ? { storeError: readResult.storeError } : {}),
       recordsInWindow: readResult.rows.length,
@@ -586,68 +618,188 @@ async function computeCatalog(accessToken: string): Promise<GarminCatalogResult>
   }
 }
 
-function getBearerToken(req: Request): string | null {
-  const authHeader = req.headers.get('authorization')
-  if (!authHeader?.startsWith('Bearer ')) return null
-  return authHeader.slice(7)
-}
-
-export async function GET(req: Request) {
-  const accessToken = getBearerToken(req)
-  if (!accessToken) {
-    return NextResponse.json(
-      { success: false, error: 'Authorization token required', needsReauth: true },
-      { status: 401 }
-    )
+function parseUserId(req: Request): number | null {
+  const headerValue = req.headers.get('x-user-id')?.trim() ?? ''
+  if (headerValue) {
+    const parsed = Number.parseInt(headerValue, 10)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
   }
 
-  try {
-    const { permissions, capabilities, ingestion } = await computeCatalog(accessToken)
+  const { searchParams } = new URL(req.url)
+  const queryValue = searchParams.get('userId')?.trim() ?? ''
+  if (!queryValue) return null
 
-    return NextResponse.json({
-      success: true,
-      syncName: SYNC_NAME,
-      permissions,
-      availableToEnable: AVAILABLE_TO_ENABLE,
-      capabilities,
-      ingestion,
-    })
+  const parsed = Number.parseInt(queryValue, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+async function computeCatalogWithAutoRefresh(params: {
+  userId: number
+  sinceIso: string
+  lookbackDays: number
+}): Promise<GarminCatalogResult> {
+  const { userId, sinceIso, lookbackDays } = params
+  const accessToken = await getValidGarminAccessToken(userId)
+
+  try {
+    return await computeCatalog({ accessToken, sinceIso, lookbackDays })
   } catch (error) {
     if (error instanceof GarminUpstreamError && isAuthError(error.status, error.body)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Garmin authentication expired or invalid, please reconnect Garmin',
-          needsReauth: true,
-          detail: summarizeUpstreamBody(error.body),
-        },
-        { status: 401 }
-      )
+      const refreshed = await refreshGarminAccessToken(userId)
+      return computeCatalog({ accessToken: refreshed.accessToken, sinceIso, lookbackDays })
     }
 
-    logger.error('Garmin sync catalog error:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to load Garmin sync capabilities' },
-      { status: 500 }
-    )
+    throw error
   }
 }
 
-export async function POST(req: Request) {
-  const accessToken = getBearerToken(req)
-  if (!accessToken) {
-    return NextResponse.json(
-      { success: false, error: 'Authorization token required', needsReauth: true },
-      { status: 401 }
-    )
+async function safeMarkAuthError(userId: number, message: string): Promise<void> {
+  try {
+    await markGarminAuthError(userId, message)
+  } catch (error) {
+    logger.warn('Failed to persist Garmin auth error state:', error)
+  }
+}
+
+async function safeMarkSyncState(params: {
+  userId: number
+  lastSyncAt?: string
+  lastSyncCursor?: string | null
+  errorState?: Record<string, unknown> | null
+}): Promise<void> {
+  try {
+    await markGarminSyncState(params)
+  } catch (error) {
+    logger.warn('Failed to persist Garmin sync state:', error)
+  }
+}
+
+function parseValidIso(value: string | null | undefined): string | null {
+  if (!value) return null
+  const parsed = Date.parse(value)
+  if (!Number.isFinite(parsed)) return null
+  return new Date(parsed).toISOString()
+}
+
+function resolveSyncWindow(params: {
+  lastSyncCursor: string | null
+  defaultLookbackDays: number
+  requestedSinceIso?: string | null
+}): { sinceIso: string; lookbackDays: number; source: 'requested' | 'cursor' | 'lookback' } {
+  const requestedIso = parseValidIso(params.requestedSinceIso)
+  if (requestedIso) {
+    return {
+      sinceIso: requestedIso,
+      lookbackDays: params.defaultLookbackDays,
+      source: 'requested',
+    }
   }
 
+  const cursorIso = parseValidIso(params.lastSyncCursor)
+  if (cursorIso) {
+    return {
+      sinceIso: cursorIso,
+      lookbackDays: params.defaultLookbackDays,
+      source: 'cursor',
+    }
+  }
+
+  return {
+    sinceIso: lookbackStartIso(params.defaultLookbackDays),
+    lookbackDays: params.defaultLookbackDays,
+    source: 'lookback',
+  }
+}
+
+function isActivityWithinLookback(activity: { startTimeGMT: string | null }, lookbackDays: number): boolean {
+  if (!activity.startTimeGMT) return true
+  const parsed = Date.parse(activity.startTimeGMT)
+  if (!Number.isFinite(parsed)) return true
+  const cutoffMs = Date.now() - lookbackDays * 24 * 60 * 60 * 1000
+  return parsed >= cutoffMs
+}
+
+function buildExecutionOptions(trigger: GarminSyncTrigger): GarminSyncExecutionOptions {
+  if (trigger === 'backfill') {
+    return {
+      trigger,
+      enforceRateLimit: false,
+      defaultLookbackDays: BACKFILL_DAILY_DAYS,
+      activityLookbackDays: BACKFILL_ACTIVITY_DAYS,
+    }
+  }
+
+  return {
+    trigger,
+    enforceRateLimit: true,
+    defaultLookbackDays: DEFAULT_INCREMENTAL_DAYS,
+    activityLookbackDays: DEFAULT_ACTIVITY_SYNC_DAYS,
+  }
+}
+
+export async function runGarminSyncForUser(params: {
+  userId: number
+  options: GarminSyncExecutionOptions
+}): Promise<{
+  status: number
+  body: Record<string, unknown>
+  headers?: Record<string, string>
+}> {
+  const { userId, options } = params
   try {
-    const { permissions, capabilities, datasets, datasetCounts, ingestion } = await computeCatalog(accessToken)
+    const oauthState = await getGarminOAuthState(userId)
+    if (!oauthState) {
+      return {
+        status: 401,
+        body: {
+          success: false,
+          error: 'No Garmin connection found. Connect Garmin first.',
+          needsReauth: true,
+        },
+      }
+    }
+
+    if (options.enforceRateLimit) {
+      const rateLimit = evaluateGarminSyncRateLimit({
+        userId,
+        lastSyncAt: oauthState.lastSyncAt,
+      })
+      if (!rateLimit.allowed) {
+        return {
+          status: 429,
+          body: {
+            success: false,
+            error: 'Garmin sync rate limit reached. Try again later.',
+            retryAfterSeconds: rateLimit.retryAfterSeconds,
+            reason: rateLimit.reason,
+          },
+          headers: {
+            'Retry-After': String(rateLimit.retryAfterSeconds),
+          },
+        }
+      }
+    }
+
+    const syncWindow = resolveSyncWindow({
+      lastSyncCursor: oauthState.lastSyncCursor,
+      defaultLookbackDays: options.defaultLookbackDays,
+      requestedSinceIso: options.sinceIso ?? null,
+    })
+
+    const { permissions, capabilities, datasets, datasetCounts, ingestion } = await computeCatalogWithAutoRefresh({
+      userId,
+      sinceIso: syncWindow.sinceIso,
+      lookbackDays: syncWindow.lookbackDays,
+    })
+
+    const nowIso = new Date().toISOString()
     const notices: string[] = []
-    const webhookEndpointHint = process.env.GARMIN_WEBHOOK_SECRET?.trim()
-      ? '/api/devices/garmin/webhook/<GARMIN_WEBHOOK_SECRET>'
-      : '/api/devices/garmin/webhook'
+    const configuredWebhookSecret = process.env.GARMIN_WEBHOOK_SECRET?.trim()
+    const webhookEndpointHint = '/api/devices/garmin/webhook/<GARMIN_WEBHOOK_SECRET>'
+
+    if (!configuredWebhookSecret) {
+      notices.push('GARMIN_WEBHOOK_SECRET is not configured. Configure it before enabling Garmin webhooks.')
+    }
 
     if (!ingestion.storeAvailable) {
       notices.push(ingestion.storeError ?? 'RunSmart Garmin webhook storage is unavailable.')
@@ -664,7 +816,7 @@ export async function POST(req: Request) {
     const totalRows = Object.values(datasetCounts).reduce((sum, value) => sum + value, 0)
     if (ingestion.storeAvailable && totalRows === 0) {
       notices.push(
-        `No Garmin export records received in the last 30 days. Ensure Garmin ping/pull or push notifications point to ${webhookEndpointHint}.`
+        `No Garmin export records received in the last ${syncWindow.lookbackDays} days. Ensure Garmin ping/pull or push notifications point to ${webhookEndpointHint}.`
       )
     }
 
@@ -675,11 +827,13 @@ export async function POST(req: Request) {
     ]
 
     const mappedActivities = activityRows.map((entry) => toRunSmartActivity(entry))
+    const filteredActivities = mappedActivities.filter((activity) =>
+      isActivityWithinLookback(activity, options.activityLookbackDays)
+    )
 
-    const uniqueActivities: typeof mappedActivities = []
+    const uniqueActivities: typeof filteredActivities = []
     const seenActivityIds = new Set<string>()
-
-    for (const activity of mappedActivities) {
+    for (const activity of filteredActivities) {
       const dedupeKey = activity.activityId ?? `${activity.startTimeGMT ?? 'unknown'}-${activity.activityName}`
       if (seenActivityIds.has(dedupeKey)) continue
       seenActivityIds.add(dedupeKey)
@@ -687,18 +841,23 @@ export async function POST(req: Request) {
     }
 
     let activitiesForSync = uniqueActivities
-    const hasWebhookActivityRows = activityRows.length > 0
+    const hasWebhookActivityRows = filteredActivities.length > 0
 
     if (activitiesForSync.length === 0 && !hasWebhookActivityRows && permissions.includes('ACTIVITY_EXPORT')) {
       try {
-        const fallbackResult = await fetchRecentGarminActivities(accessToken, permissions)
+        const fallbackAccessToken = await getValidGarminAccessToken(userId)
+        const fallbackResult = await fetchRecentGarminActivities(
+          fallbackAccessToken,
+          permissions,
+          options.activityLookbackDays
+        )
         if (fallbackResult.activities.length > 0) {
           activitiesForSync = fallbackResult.activities
           notices.push(
             `Activity webhook feeds were empty, so RunSmart pulled ${fallbackResult.activities.length} activities directly from Garmin ${fallbackResult.source}.`
           )
         } else if (!hasWebhookActivityRows) {
-          notices.push('No activities found from Garmin in the last 30 days.')
+          notices.push(`No activities found from Garmin in the last ${options.activityLookbackDays} days.`)
         }
       } catch (fallbackError) {
         if (fallbackError instanceof GarminActivitiesFallbackError) {
@@ -728,6 +887,155 @@ export async function POST(req: Request) {
       .map((entry) => toRunSmartSleepRecord(entry))
       .filter((entry): entry is NonNullable<typeof entry> => entry != null)
 
+    let persistence: {
+      activitiesUpserted: number
+      dailyMetricsUpserted: number
+    } = {
+      activitiesUpserted: 0,
+      dailyMetricsUpserted: 0,
+    }
+
+    const deriveQueue: {
+      queued: boolean
+      jobId: string | null
+      reason?: string
+    } = {
+      queued: false,
+      jobId: null,
+    }
+
+    try {
+      persistence = await persistGarminSyncSnapshot({
+        userId,
+        activities: activitiesForSync,
+        sleep,
+        datasets,
+      })
+    } catch (storageError) {
+      notices.push('Garmin analytics storage unavailable; sync data was not persisted to analytics tables.')
+      logger.warn('Garmin analytics storage warning:', storageError)
+    }
+
+    await safeMarkSyncState({
+      userId,
+      lastSyncAt: nowIso,
+      lastSyncCursor: nowIso,
+      errorState: null,
+    })
+
+    try {
+      const queued = await enqueueGarminDeriveJob({
+        userId,
+        ...(oauthState.garminUserId ? { garminUserId: oauthState.garminUserId } : {}),
+        datasetKey: 'post-sync',
+        source: 'sync',
+        requestedAt: nowIso,
+      })
+      deriveQueue.queued = queued.queued
+      deriveQueue.jobId = queued.jobId
+      if (queued.reason) deriveQueue.reason = queued.reason
+      if (!queued.queued) {
+        notices.push(queued.reason ?? 'Garmin derive job was not queued.')
+      }
+    } catch (queueError) {
+      const reason = queueError instanceof Error ? queueError.message : 'Failed to enqueue Garmin derive job'
+      deriveQueue.reason = reason
+      notices.push(reason)
+      logger.warn('Garmin derive enqueue warning:', queueError)
+    }
+
+    await captureServerEvent('garmin_sync_completed', {
+      userId,
+      datasetsCount: totalRows,
+      activitiesCount: activitiesForSync.length,
+      trigger: options.trigger,
+    })
+
+    return {
+      status: 200,
+      body: {
+        success: true,
+        syncName: SYNC_NAME,
+        trigger: options.trigger,
+        syncWindow: {
+          source: syncWindow.source,
+          sinceIso: syncWindow.sinceIso,
+          lookbackDays: syncWindow.lookbackDays,
+          activityLookbackDays: options.activityLookbackDays,
+        },
+        permissions,
+        availableToEnable: AVAILABLE_TO_ENABLE,
+        capabilities,
+        ingestion,
+        datasets,
+        datasetCounts,
+        activities: activitiesForSync,
+        sleep,
+        persistence,
+        deriveQueue,
+        notices,
+        lastSyncCursor: nowIso,
+        lastSyncAt: nowIso,
+      },
+    }
+  } catch (error) {
+    if (error instanceof GarminUpstreamError && isAuthError(error.status, error.body)) {
+      await safeMarkAuthError(userId, summarizeUpstreamBody(error.body))
+      return {
+        status: 401,
+        body: {
+          success: false,
+          error: 'Garmin authentication expired or invalid, please reconnect Garmin',
+          needsReauth: true,
+          detail: summarizeUpstreamBody(error.body),
+        },
+      }
+    }
+
+    if (error instanceof Error && /reconnect garmin|refresh token|no garmin connection/i.test(error.message)) {
+      await safeMarkAuthError(userId, error.message)
+      return {
+        status: 401,
+        body: {
+          success: false,
+          error: 'Garmin authentication expired or invalid, please reconnect Garmin',
+          needsReauth: true,
+          detail: error.message,
+        },
+      }
+    }
+
+    logger.error('Garmin enabled sync error:', error)
+    await safeMarkSyncState({
+      userId,
+      errorState: {
+        message: error instanceof Error ? error.message : 'Unknown Garmin sync error',
+        recordedAt: new Date().toISOString(),
+      },
+    })
+    return {
+      status: 500,
+      body: { success: false, error: 'Failed to run Garmin enabled sync' },
+    }
+  }
+}
+
+export async function GET(req: Request) {
+  const userId = parseUserId(req)
+  if (!userId) {
+    return NextResponse.json(
+      { success: false, error: 'Valid userId is required', needsReauth: true },
+      { status: 401 }
+    )
+  }
+
+  try {
+    const { permissions, capabilities, ingestion } = await computeCatalogWithAutoRefresh({
+      userId,
+      sinceIso: lookbackStartIso(GARMIN_HISTORY_DAYS),
+      lookbackDays: GARMIN_HISTORY_DAYS,
+    })
+
     return NextResponse.json({
       success: true,
       syncName: SYNC_NAME,
@@ -735,14 +1043,10 @@ export async function POST(req: Request) {
       availableToEnable: AVAILABLE_TO_ENABLE,
       capabilities,
       ingestion,
-      datasets,
-      datasetCounts,
-      activities: activitiesForSync,
-      sleep,
-      notices,
     })
   } catch (error) {
     if (error instanceof GarminUpstreamError && isAuthError(error.status, error.body)) {
+      await safeMarkAuthError(userId, summarizeUpstreamBody(error.body))
       return NextResponse.json(
         {
           success: false,
@@ -754,10 +1058,43 @@ export async function POST(req: Request) {
       )
     }
 
-    logger.error('Garmin enabled sync error:', error)
+    if (error instanceof Error && /reconnect garmin|refresh token|no garmin connection/i.test(error.message)) {
+      await safeMarkAuthError(userId, error.message)
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Garmin authentication expired or invalid, please reconnect Garmin',
+          needsReauth: true,
+          detail: error.message,
+        },
+        { status: 401 }
+      )
+    }
+
+    logger.error('Garmin sync catalog error:', error)
     return NextResponse.json(
-      { success: false, error: 'Failed to run Garmin enabled sync' },
+      { success: false, error: 'Failed to load Garmin sync capabilities' },
       { status: 500 }
     )
   }
+}
+
+export async function POST(req: Request) {
+  const userId = parseUserId(req)
+  if (!userId) {
+    return NextResponse.json(
+      { success: false, error: 'Valid userId is required', needsReauth: true },
+      { status: 401 }
+    )
+  }
+
+  const execution = await runGarminSyncForUser({
+    userId,
+    options: buildExecutionOptions('manual'),
+  })
+
+  return NextResponse.json(execution.body, {
+    status: execution.status,
+    ...(execution.headers ? { headers: execution.headers } : {}),
+  })
 }

@@ -2,6 +2,40 @@
 
 const readRowsMock = vi.hoisted(() => vi.fn())
 const lookbackStartIsoMock = vi.hoisted(() => vi.fn(() => '2026-01-20T00:00:00.000Z'))
+const getGarminOAuthStateMock = vi.hoisted(() =>
+  vi.fn(async () => ({
+    userId: 42,
+    authUserId: 'auth-user-1',
+    garminUserId: 'garmin-user-1',
+    scopes: ['ACTIVITY_EXPORT', 'HEALTH_EXPORT'],
+    status: 'connected',
+    connectedAt: '2026-01-01T00:00:00.000Z',
+    lastSyncAt: null,
+    lastSyncCursor: null,
+    errorState: null,
+    accessToken: 'server-access-token',
+    refreshToken: 'refresh-token',
+    expiresAt: '2026-12-01T00:00:00.000Z',
+  }))
+)
+const getValidGarminAccessTokenMock = vi.hoisted(() => vi.fn(async () => 'server-access-token'))
+const refreshGarminAccessTokenMock = vi.hoisted(() => vi.fn(async () => ({ accessToken: 'refreshed-token' })))
+const markGarminAuthErrorMock = vi.hoisted(() => vi.fn(async () => undefined))
+const markGarminSyncStateMock = vi.hoisted(() => vi.fn(async () => undefined))
+const persistGarminSyncSnapshotMock = vi.hoisted(() =>
+  vi.fn(async () => ({ activitiesUpserted: 0, dailyMetricsUpserted: 0 }))
+)
+const enqueueGarminDeriveJobMock = vi.hoisted(() =>
+  vi.fn(async () => ({ queued: true, jobId: 'derive-job-1' }))
+)
+const captureServerEventMock = vi.hoisted(() => vi.fn(async () => undefined))
+
+// garmin-rate-limiter has no server-only import — use the real synchronous implementation.
+// Fake timers (vi.useFakeTimers) make new Date() deterministic so rate-limit logic is testable.
+
+vi.mock('@/lib/server/posthog', () => ({
+  captureServerEvent: captureServerEventMock,
+}))
 
 vi.mock('@/lib/server/garmin-export-store', () => ({
   GARMIN_HISTORY_DAYS: 30,
@@ -36,6 +70,22 @@ vi.mock('@/lib/server/garmin-export-store', () => ({
   },
 }))
 
+vi.mock('@/lib/server/garmin-oauth-store', () => ({
+  getGarminOAuthState: getGarminOAuthStateMock,
+  getValidGarminAccessToken: getValidGarminAccessTokenMock,
+  refreshGarminAccessToken: refreshGarminAccessTokenMock,
+  markGarminAuthError: markGarminAuthErrorMock,
+  markGarminSyncState: markGarminSyncStateMock,
+}))
+
+vi.mock('@/lib/server/garmin-analytics-store', () => ({
+  persistGarminSyncSnapshot: persistGarminSyncSnapshotMock,
+}))
+
+vi.mock('@/lib/server/garmin-sync-queue', () => ({
+  enqueueGarminDeriveJob: enqueueGarminDeriveJobMock,
+}))
+
 async function loadRoute() {
   return import('./route')
 }
@@ -46,6 +96,28 @@ describe('/api/devices/garmin/sync', () => {
     vi.setSystemTime(new Date('2026-02-19T12:00:00.000Z'))
     readRowsMock.mockReset()
     lookbackStartIsoMock.mockClear()
+    getGarminOAuthStateMock.mockClear()
+    getValidGarminAccessTokenMock.mockClear()
+    refreshGarminAccessTokenMock.mockClear()
+    markGarminAuthErrorMock.mockClear()
+    markGarminSyncStateMock.mockClear()
+    persistGarminSyncSnapshotMock.mockClear()
+    enqueueGarminDeriveJobMock.mockClear()
+    captureServerEventMock.mockClear()
+    getGarminOAuthStateMock.mockResolvedValue({
+      userId: 42,
+      authUserId: 'auth-user-1',
+      garminUserId: 'garmin-user-1',
+      scopes: ['ACTIVITY_EXPORT', 'HEALTH_EXPORT'],
+      status: 'connected',
+      connectedAt: '2026-01-01T00:00:00.000Z',
+      lastSyncAt: null,
+      lastSyncCursor: null,
+      errorState: null,
+      accessToken: 'server-access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: '2026-12-01T00:00:00.000Z',
+    })
   })
 
   afterEach(() => {
@@ -109,7 +181,7 @@ describe('/api/devices/garmin/sync', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const req = new Request('http://localhost/api/devices/garmin/sync', {
-      headers: { authorization: 'Bearer test-token' },
+      headers: { 'x-user-id': '42' },
     })
 
     const { GET } = await loadRoute()
@@ -207,7 +279,7 @@ describe('/api/devices/garmin/sync', () => {
 
     const req = new Request('http://localhost/api/devices/garmin/sync', {
       method: 'POST',
-      headers: { authorization: 'Bearer test-token' },
+      headers: { 'x-user-id': '42' },
     })
 
     const { POST } = await loadRoute()
@@ -223,6 +295,21 @@ describe('/api/devices/garmin/sync', () => {
     expect(body.datasetCounts.manuallyUpdatedActivities).toBe(1)
     expect(body.datasetCounts.sleeps).toBe(1)
     expect(body.notices.some((notice: string) => notice.includes('No Garmin export records'))).toBe(false)
+    expect(body.deriveQueue.queued).toBe(true)
+    expect(enqueueGarminDeriveJobMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 42,
+        source: 'sync',
+        datasetKey: 'post-sync',
+      })
+    )
+    expect(markGarminSyncStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 42,
+        lastSyncCursor: '2026-02-19T12:00:00.000Z',
+        lastSyncAt: '2026-02-19T12:00:00.000Z',
+      })
+    )
   })
 
   it('returns notices when no Garmin export rows are available', async () => {
@@ -247,7 +334,7 @@ describe('/api/devices/garmin/sync', () => {
 
     const req = new Request('http://localhost/api/devices/garmin/sync', {
       method: 'POST',
-      headers: { authorization: 'Bearer test-token' },
+      headers: { 'x-user-id': '42' },
     })
 
     const { POST } = await loadRoute()
@@ -309,7 +396,7 @@ describe('/api/devices/garmin/sync', () => {
 
     const req = new Request('http://localhost/api/devices/garmin/sync', {
       method: 'POST',
-      headers: { authorization: 'Bearer test-token' },
+      headers: { 'x-user-id': '42' },
     })
 
     const { POST } = await loadRoute()
@@ -340,7 +427,7 @@ describe('/api/devices/garmin/sync', () => {
 
     const req = new Request('http://localhost/api/devices/garmin/sync', {
       method: 'POST',
-      headers: { authorization: 'Bearer bad-token' },
+      headers: { 'x-user-id': '42' },
     })
 
     const { POST } = await loadRoute()
@@ -350,5 +437,93 @@ describe('/api/devices/garmin/sync', () => {
     expect(res.status).toBe(401)
     expect(body.success).toBe(false)
     expect(body.needsReauth).toBe(true)
+  })
+
+  it('advances cursor using stored last_sync_cursor for incremental pulls', async () => {
+    getGarminOAuthStateMock.mockResolvedValue({
+      userId: 42,
+      authUserId: 'auth-user-1',
+      garminUserId: 'garmin-user-1',
+      scopes: ['ACTIVITY_EXPORT', 'HEALTH_EXPORT'],
+      status: 'connected',
+      connectedAt: '2026-01-01T00:00:00.000Z',
+      lastSyncAt: '2026-02-19T00:00:00.000Z',
+      lastSyncCursor: '2026-02-18T08:00:00.000Z',
+      errorState: null,
+      accessToken: 'server-access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: '2026-12-01T00:00:00.000Z',
+    })
+
+    readRowsMock.mockResolvedValue({
+      ok: true,
+      storeAvailable: true,
+      rows: [],
+    })
+
+    const fetchMock = vi.fn((url: RequestInfo | URL) => {
+      const parsed = new URL(String(url))
+      if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
+        return Promise.resolve(new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HEALTH_EXPORT']), { status: 200 }))
+      }
+      if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
+        return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
+      }
+      return Promise.resolve(new Response('not-found', { status: 404 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const req = new Request('http://localhost/api/devices/garmin/sync', {
+      method: 'POST',
+      headers: { 'x-user-id': '42' },
+    })
+
+    const { POST } = await loadRoute()
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.success).toBe(true)
+    expect(readRowsMock).toHaveBeenCalledWith({
+      garminUserId: 'garmin-user-1',
+      sinceIso: '2026-02-18T08:00:00.000Z',
+    })
+    expect(markGarminSyncStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 42,
+        lastSyncCursor: '2026-02-19T12:00:00.000Z',
+      })
+    )
+  })
+
+  it('returns 429 when last sync was within 10 minutes', async () => {
+    getGarminOAuthStateMock.mockResolvedValue({
+      userId: 42,
+      authUserId: 'auth-user-1',
+      garminUserId: 'garmin-user-1',
+      scopes: ['ACTIVITY_EXPORT', 'HEALTH_EXPORT'],
+      status: 'connected',
+      connectedAt: '2026-01-01T00:00:00.000Z',
+      lastSyncAt: '2026-02-19T11:55:00.000Z',
+      lastSyncCursor: '2026-02-19T11:55:00.000Z',
+      errorState: null,
+      accessToken: 'server-access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: '2026-12-01T00:00:00.000Z',
+    })
+
+    const req = new Request('http://localhost/api/devices/garmin/sync', {
+      method: 'POST',
+      headers: { 'x-user-id': '42' },
+    })
+
+    const { POST } = await loadRoute()
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(429)
+    expect(body.success).toBe(false)
+    expect(body.reason).toBe('cooldown')
+    expect(res.headers.get('Retry-After')).toBe('300')
   })
 })

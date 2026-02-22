@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { GarminSyncStatusBar } from "@/components/garmin-sync-status-bar"
 import { useToast } from "@/hooks/use-toast"
 import { db } from "@/lib/db"
 import {
@@ -34,7 +35,6 @@ interface DeviceInfo {
   name: string
   connectionStatus: string
   lastSync: Date | null
-  authTokens?: { accessToken?: string }
 }
 
 function capabilityBadgeClass(capability: GarminDatasetCapability): string {
@@ -118,7 +118,6 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
       name: d.name,
       connectionStatus: d.connectionStatus,
       lastSync: d.lastSync ?? null,
-      authTokens: (d as any).authTokens,
     })
   }, [userId])
 
@@ -218,22 +217,12 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
   }
 
   const handleDiagnose = async () => {
-    const accessToken = device?.authTokens?.accessToken
-    if (!accessToken) {
-      toast({
-        title: "No token",
-        description: "No access token found - please reconnect Garmin.",
-        variant: "destructive",
-      })
-      return
-    }
-
     setIsDiagnosing(true)
     setDiagnoseResult(null)
 
     try {
-      const res = await fetch("/api/devices/garmin/diagnose", {
-        headers: { Authorization: `Bearer ${accessToken}` },
+      const res = await fetch(`/api/devices/garmin/diagnose?userId=${encodeURIComponent(String(userId))}`, {
+        headers: { "x-user-id": String(userId) },
       })
       const data = await res.json()
       setDiagnoseResult(data)
@@ -263,6 +252,22 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
       .sort((a, b) => b[1].imported - a[1].imported)
       .slice(0, 6)
   }, [lastResult])
+
+  const capabilityStats = useMemo(() => {
+    if (!catalog?.capabilities?.length) {
+      return { enabled: 0, waiting: 0, blocked: 0, supported: 0 }
+    }
+
+    const enabled = catalog.capabilities.filter((capability) => capability.enabledForSync).length
+    const waiting = catalog.capabilities.filter((capability) =>
+      (capability.reason?.toLowerCase() ?? "").includes("no garmin export notifications")
+    ).length
+    const blocked = catalog.capabilities.filter(
+      (capability) => capability.supportedByRunSmart && !capability.enabledForSync && !capability.permissionGranted
+    ).length
+    const supported = catalog.capabilities.filter((capability) => capability.supportedByRunSmart).length
+    return { enabled, waiting, blocked, supported }
+  }, [catalog])
 
   if (!device) return null
 
@@ -308,22 +313,21 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
         ) : (
           <>
             <div className="rounded-md border p-3">
-              <div className="flex items-start justify-between gap-3">
+              <div className="space-y-3">
                 <div>
                   <p className="text-sm font-medium">{catalog?.syncName ?? "RunSmart Garmin Export Sync"}</p>
                   <p className="text-xs text-muted-foreground">
-                    Sync Garmin-exported datasets from the last 30 days using Garmin notification feeds.
+                    Sync Garmin-exported datasets from the last{" "}
+                    {catalog?.ingestion?.lookbackDays ?? "several"} days using Garmin notification feeds.
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleSyncEnabledData}
-                  disabled={isSyncing || isLoadingCatalog}
-                >
-                  {isSyncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                  <span className="ml-1">{isSyncing ? "Syncing..." : "Sync"}</span>
-                </Button>
+                <GarminSyncStatusBar
+                  lastSyncAt={device.lastSync}
+                  onRefresh={handleSyncEnabledData}
+                  isRefreshing={isSyncing}
+                  className="border-slate-200 bg-slate-50"
+                  testId="garmin-sync-panel-status-bar"
+                />
               </div>
 
               {syncError && (
@@ -347,8 +351,8 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
                     {catalog.ingestion.recordsInWindow}.
                   </p>
                   <p className="mt-1">
-                    Webhook endpoint: <code>/api/devices/garmin/webhook</code> (or{" "}
-                    <code>/api/devices/garmin/webhook/&lt;GARMIN_WEBHOOK_SECRET&gt;</code> when secret-protected)
+                    Webhook endpoint:{" "}
+                    <code>/api/devices/garmin/webhook/&lt;GARMIN_WEBHOOK_SECRET&gt;</code>
                   </p>
                   {catalog.ingestion.latestReceivedAt ? (
                     <p className="mt-1">
@@ -386,6 +390,16 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
                   ))}
                 </div>
               ) : null}
+            </div>
+
+            <div className="rounded-md border p-3">
+              <p className="text-sm font-medium">Capability badges</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Badge className="bg-green-100 text-green-700">Enabled {capabilityStats.enabled}</Badge>
+                <Badge className="bg-amber-100 text-amber-700">Waiting {capabilityStats.waiting}</Badge>
+                <Badge className="bg-red-100 text-red-700">Blocked {capabilityStats.blocked}</Badge>
+                <Badge className="bg-slate-100 text-slate-700">Supported {capabilityStats.supported}</Badge>
+              </div>
             </div>
 
             <div className="rounded-md border p-3 space-y-2">

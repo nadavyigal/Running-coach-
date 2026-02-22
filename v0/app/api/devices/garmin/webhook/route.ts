@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
+import { findRunSmartUserIdsByGarminUserId } from '@/lib/server/garmin-oauth-store'
+import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
 import {
   type GarminDatasetKey,
   storeGarminExportRows,
@@ -53,6 +55,55 @@ function parseRows(value: unknown): Record<string, unknown>[] {
   return []
 }
 
+function extractGarminUserIdFromRows(rows: Record<string, unknown>[]): string | null {
+  for (const row of rows) {
+    const userId = getString(row.userId) ?? getString(row.userID) ?? getString(row.ownerUserId)
+    if (userId) return userId
+  }
+  return null
+}
+
+async function enqueueDeriveJobsForWebhook(params: {
+  datasetKey: GarminDatasetKey
+  garminUserId: string | null
+  queuedJobIds: string[]
+  queueErrors: string[]
+}): Promise<void> {
+  const { datasetKey, garminUserId, queuedJobIds, queueErrors } = params
+  const requestedAt = new Date().toISOString()
+
+  if (!garminUserId) return
+
+  try {
+    const mappedUsers = await findRunSmartUserIdsByGarminUserId(garminUserId)
+    if (mappedUsers.length === 0) {
+      const queued = await enqueueGarminDeriveJob({
+        garminUserId,
+        datasetKey,
+        source: 'webhook',
+        requestedAt,
+      })
+      if (queued.queued && queued.jobId) queuedJobIds.push(queued.jobId)
+      else queueErrors.push(queued.reason ?? 'Failed to enqueue Garmin derive job')
+      return
+    }
+
+    for (const userId of mappedUsers) {
+      const queued = await enqueueGarminDeriveJob({
+        userId,
+        garminUserId,
+        datasetKey,
+        source: 'webhook',
+        requestedAt,
+      })
+      if (queued.queued && queued.jobId) queuedJobIds.push(queued.jobId)
+      else queueErrors.push(queued.reason ?? `Failed to enqueue Garmin derive job for user ${userId}`)
+    }
+  } catch (error) {
+    queueErrors.push(error instanceof Error ? error.message : 'Failed to enqueue Garmin derive job')
+  }
+}
+
 function summarizeUpstreamBody(body: string): string {
   const trimmed = body.trim()
   if (!trimmed) return ''
@@ -78,14 +129,29 @@ function summarizeUpstreamBody(body: string): string {
   return trimmed.length > 500 ? `${trimmed.slice(0, 500)}...` : trimmed
 }
 
-function isWebhookAuthorized(req: Request): boolean {
+function getWebhookAuthResult(req: Request): { authorized: boolean; status: number; error?: string } {
   const configuredSecret = process.env.GARMIN_WEBHOOK_SECRET?.trim()
-  if (!configuredSecret) return true
+  if (!configuredSecret) {
+    return {
+      authorized: false,
+      status: 503,
+      error: 'Webhook secret is not configured. Set GARMIN_WEBHOOK_SECRET before enabling Garmin webhooks.',
+    }
+  }
 
   const url = new URL(req.url)
   const querySecret = url.searchParams.get('secret')?.trim()
   const headerSecret = req.headers.get('x-garmin-webhook-secret')?.trim()
-  return querySecret === configuredSecret || headerSecret === configuredSecret
+
+  if (querySecret === configuredSecret || headerSecret === configuredSecret) {
+    return { authorized: true, status: 200 }
+  }
+
+  return {
+    authorized: false,
+    status: 401,
+    error: 'Unauthorized Garmin webhook request',
+  }
 }
 
 async function fetchPingPullRows(callbackUrl: string): Promise<{
@@ -130,8 +196,12 @@ async function fetchPingPullRows(callbackUrl: string): Promise<{
 }
 
 export async function GET(req: Request) {
-  if (!isWebhookAuthorized(req)) {
-    return NextResponse.json({ ok: false, error: 'Unauthorized Garmin webhook request' }, { status: 401 })
+  const authResult = getWebhookAuthResult(req)
+  if (!authResult.authorized) {
+    return NextResponse.json(
+      { ok: false, error: authResult.error ?? 'Unauthorized Garmin webhook request' },
+      { status: authResult.status }
+    )
   }
 
   return NextResponse.json({
@@ -142,8 +212,12 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  if (!isWebhookAuthorized(req)) {
-    return NextResponse.json({ ok: false, error: 'Unauthorized Garmin webhook request' }, { status: 401 })
+  const authResult = getWebhookAuthResult(req)
+  if (!authResult.authorized) {
+    return NextResponse.json(
+      { ok: false, error: authResult.error ?? 'Unauthorized Garmin webhook request' },
+      { status: authResult.status }
+    )
   }
 
   let payload: unknown
@@ -156,6 +230,8 @@ export async function POST(req: Request) {
   const payloadRecord = asRecord(payload)
   const storeErrors: string[] = []
   const callbackErrors: string[] = []
+  const queuedDeriveJobIds: string[] = []
+  const deriveQueueErrors: string[] = []
   let acceptedRows = 0
   let droppedRows = 0
 
@@ -186,6 +262,14 @@ export async function POST(req: Request) {
         if (!storeResult.ok) {
           storeErrors.push(storeResult.storeError ?? `${datasetKey}: failed to store rows`)
         }
+        if (storeResult.storedRows > 0) {
+          await enqueueDeriveJobsForWebhook({
+            datasetKey,
+            garminUserId: fallbackGarminUserId ?? extractGarminUserIdFromRows(pulled.rows),
+            queuedJobIds: queuedDeriveJobIds,
+            queueErrors: deriveQueueErrors,
+          })
+        }
         continue
       }
 
@@ -201,6 +285,14 @@ export async function POST(req: Request) {
       if (!storeResult.ok) {
         storeErrors.push(storeResult.storeError ?? `${datasetKey}: failed to store rows`)
       }
+      if (storeResult.storedRows > 0) {
+        await enqueueDeriveJobsForWebhook({
+          datasetKey,
+          garminUserId: fallbackGarminUserId ?? extractGarminUserIdFromRows([entry]),
+          queuedJobIds: queuedDeriveJobIds,
+          queueErrors: deriveQueueErrors,
+        })
+      }
     }
   }
 
@@ -210,6 +302,9 @@ export async function POST(req: Request) {
   if (callbackErrors.length > 0) {
     logger.warn('Garmin webhook callbackURL errors:', callbackErrors)
   }
+  if (deriveQueueErrors.length > 0) {
+    logger.warn('Garmin webhook derive queue errors:', deriveQueueErrors)
+  }
 
   return NextResponse.json({
     ok: storeErrors.length === 0,
@@ -217,5 +312,10 @@ export async function POST(req: Request) {
     droppedRows,
     callbackErrors,
     storeErrors,
+    deriveQueue: {
+      queued: queuedDeriveJobIds.length,
+      jobIds: queuedDeriveJobIds,
+      errors: deriveQueueErrors,
+    },
   })
 }

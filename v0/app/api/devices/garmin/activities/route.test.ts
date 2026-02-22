@@ -1,5 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GET } from "./route";
+
+const getValidGarminAccessTokenMock = vi.hoisted(() => vi.fn(async () => "server-access-token"));
+const markGarminAuthErrorMock = vi.hoisted(() => vi.fn(async () => undefined));
+
+vi.mock("@/lib/server/garmin-oauth-store", () => ({
+  getValidGarminAccessToken: getValidGarminAccessTokenMock,
+  markGarminAuthError: markGarminAuthErrorMock,
+}));
+
+async function loadRoute() {
+  return import("./route");
+}
+
+async function callGet(req: Request) {
+  const { GET } = await loadRoute();
+  return GET(req);
+}
 
 describe("/api/devices/garmin/activities", () => {
   beforeEach(() => {
@@ -66,7 +82,7 @@ describe("/api/devices/garmin/activities", () => {
       }
     );
 
-    const res = await GET(req);
+    const res = await callGet(req);
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -127,7 +143,7 @@ describe("/api/devices/garmin/activities", () => {
       }
     );
 
-    const res = await GET(req);
+    const res = await callGet(req);
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -164,7 +180,7 @@ describe("/api/devices/garmin/activities", () => {
       }
     );
 
-    const res = await GET(req);
+    const res = await callGet(req);
     const body = await res.json();
 
     expect(res.status).toBe(403);
@@ -208,7 +224,7 @@ describe("/api/devices/garmin/activities", () => {
       }
     );
 
-    const res = await GET(req);
+    const res = await callGet(req);
     const body = await res.json();
 
     expect(res.status).toBe(403);
@@ -239,7 +255,7 @@ describe("/api/devices/garmin/activities", () => {
       headers: { authorization: "Bearer test-token" },
     });
 
-    const res = await GET(req);
+    const res = await callGet(req);
     const body = await res.json();
 
     expect(res.status).toBe(200);
