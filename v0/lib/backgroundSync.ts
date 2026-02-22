@@ -285,38 +285,33 @@ export class BackgroundSyncManager {
   }
 
   private async syncGarminActivities(job: SyncJob, device: any) {
-    if (!device.authTokens?.accessToken) {
-      throw new Error('No access token available');
-    }
-
-    const response = await fetch('/api/devices/garmin/sync', {
+    const response = await fetch(`/api/devices/garmin/sync?userId=${encodeURIComponent(String(job.userId))}`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${device.authTokens.accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
+        'x-user-id': String(job.userId),
+      },
+    })
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch Garmin activities: ${response.status}`);
+      throw new Error(`Failed to fetch Garmin activities: ${response.status}`)
     }
 
-    const data = await response.json();
+    const data = await response.json()
     if (!data.success) {
-      throw new Error(data.error || 'Failed to fetch activities');
+      throw new Error(data.error || 'Failed to fetch activities')
     }
 
     // Process and store activities
-    const activities = Array.isArray(data.activities) ? data.activities : [];
+    const activities = Array.isArray(data.activities) ? data.activities : []
     for (const activity of activities) {
-      await this.processGarminActivity(activity, device.userId);
+      await this.processGarminActivity(activity, device.userId)
     }
 
     await db.syncJobs.update(job.id!, {
       progress: 33,
       metadata: { activitiesProcessed: activities.length },
       updatedAt: new Date()
-    });
+    })
   }
 
   private async syncAppleWatchActivities(job: SyncJob, _device: any) {

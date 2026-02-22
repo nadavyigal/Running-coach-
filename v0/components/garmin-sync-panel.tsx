@@ -34,7 +34,6 @@ interface DeviceInfo {
   name: string
   connectionStatus: string
   lastSync: Date | null
-  authTokens?: { accessToken?: string }
 }
 
 function capabilityBadgeClass(capability: GarminDatasetCapability): string {
@@ -118,7 +117,6 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
       name: d.name,
       connectionStatus: d.connectionStatus,
       lastSync: d.lastSync ?? null,
-      authTokens: (d as any).authTokens,
     })
   }, [userId])
 
@@ -218,22 +216,12 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
   }
 
   const handleDiagnose = async () => {
-    const accessToken = device?.authTokens?.accessToken
-    if (!accessToken) {
-      toast({
-        title: "No token",
-        description: "No access token found - please reconnect Garmin.",
-        variant: "destructive",
-      })
-      return
-    }
-
     setIsDiagnosing(true)
     setDiagnoseResult(null)
 
     try {
-      const res = await fetch("/api/devices/garmin/diagnose", {
-        headers: { Authorization: `Bearer ${accessToken}` },
+      const res = await fetch(`/api/devices/garmin/diagnose?userId=${encodeURIComponent(String(userId))}`, {
+        headers: { "x-user-id": String(userId) },
       })
       const data = await res.json()
       setDiagnoseResult(data)
@@ -312,7 +300,8 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
                 <div>
                   <p className="text-sm font-medium">{catalog?.syncName ?? "RunSmart Garmin Export Sync"}</p>
                   <p className="text-xs text-muted-foreground">
-                    Sync Garmin-exported datasets from the last 30 days using Garmin notification feeds.
+                    Sync Garmin-exported datasets from the last{" "}
+                    {catalog?.ingestion?.lookbackDays ?? "several"} days using Garmin notification feeds.
                   </p>
                 </div>
                 <Button
@@ -347,8 +336,8 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
                     {catalog.ingestion.recordsInWindow}.
                   </p>
                   <p className="mt-1">
-                    Webhook endpoint: <code>/api/devices/garmin/webhook</code> (or{" "}
-                    <code>/api/devices/garmin/webhook/&lt;GARMIN_WEBHOOK_SECRET&gt;</code> when secret-protected)
+                    Webhook endpoint:{" "}
+                    <code>/api/devices/garmin/webhook/&lt;GARMIN_WEBHOOK_SECRET&gt;</code>
                   </p>
                   {catalog.ingestion.latestReceivedAt ? (
                     <p className="mt-1">

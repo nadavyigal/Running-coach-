@@ -193,12 +193,11 @@ export function AdvancedMetricsDashboard({
         .toArray()
 
       for (const device of devices) {
-        if (device.type === 'garmin' && device.authTokens?.accessToken) {
-          // Trigger Garmin data sync
+        if (device.type === 'garmin') {
           const response = await fetch(`/api/devices/${device.id}/sync`, {
             method: 'POST'
           })
-          
+
           if (!response.ok) {
             throw new Error(`Failed to sync ${device.name}`)
           }

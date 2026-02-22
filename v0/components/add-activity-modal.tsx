@@ -121,7 +121,10 @@ export function AddActivityModal({
           }
           const response = await fetch("/api/devices/garmin/connect", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "x-user-id": String(user.id),
+            },
             body: JSON.stringify({
               userId: user.id,
               redirectUri: `${window.location.origin}/garmin/callback`,

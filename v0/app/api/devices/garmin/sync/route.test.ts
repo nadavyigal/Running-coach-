@@ -2,6 +2,13 @@
 
 const readRowsMock = vi.hoisted(() => vi.fn())
 const lookbackStartIsoMock = vi.hoisted(() => vi.fn(() => '2026-01-20T00:00:00.000Z'))
+const getValidGarminAccessTokenMock = vi.hoisted(() => vi.fn(async () => 'server-access-token'))
+const refreshGarminAccessTokenMock = vi.hoisted(() => vi.fn(async () => ({ accessToken: 'refreshed-token' })))
+const markGarminAuthErrorMock = vi.hoisted(() => vi.fn(async () => undefined))
+const markGarminSyncStateMock = vi.hoisted(() => vi.fn(async () => undefined))
+const persistGarminSyncSnapshotMock = vi.hoisted(() =>
+  vi.fn(async () => ({ activitiesUpserted: 0, dailyMetricsUpserted: 0 }))
+)
 
 vi.mock('@/lib/server/garmin-export-store', () => ({
   GARMIN_HISTORY_DAYS: 30,
@@ -36,6 +43,17 @@ vi.mock('@/lib/server/garmin-export-store', () => ({
   },
 }))
 
+vi.mock('@/lib/server/garmin-oauth-store', () => ({
+  getValidGarminAccessToken: getValidGarminAccessTokenMock,
+  refreshGarminAccessToken: refreshGarminAccessTokenMock,
+  markGarminAuthError: markGarminAuthErrorMock,
+  markGarminSyncState: markGarminSyncStateMock,
+}))
+
+vi.mock('@/lib/server/garmin-analytics-store', () => ({
+  persistGarminSyncSnapshot: persistGarminSyncSnapshotMock,
+}))
+
 async function loadRoute() {
   return import('./route')
 }
@@ -46,6 +64,11 @@ describe('/api/devices/garmin/sync', () => {
     vi.setSystemTime(new Date('2026-02-19T12:00:00.000Z'))
     readRowsMock.mockReset()
     lookbackStartIsoMock.mockClear()
+    getValidGarminAccessTokenMock.mockClear()
+    refreshGarminAccessTokenMock.mockClear()
+    markGarminAuthErrorMock.mockClear()
+    markGarminSyncStateMock.mockClear()
+    persistGarminSyncSnapshotMock.mockClear()
   })
 
   afterEach(() => {
@@ -109,7 +132,7 @@ describe('/api/devices/garmin/sync', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const req = new Request('http://localhost/api/devices/garmin/sync', {
-      headers: { authorization: 'Bearer test-token' },
+      headers: { 'x-user-id': '42' },
     })
 
     const { GET } = await loadRoute()
@@ -207,7 +230,7 @@ describe('/api/devices/garmin/sync', () => {
 
     const req = new Request('http://localhost/api/devices/garmin/sync', {
       method: 'POST',
-      headers: { authorization: 'Bearer test-token' },
+      headers: { 'x-user-id': '42' },
     })
 
     const { POST } = await loadRoute()
@@ -247,7 +270,7 @@ describe('/api/devices/garmin/sync', () => {
 
     const req = new Request('http://localhost/api/devices/garmin/sync', {
       method: 'POST',
-      headers: { authorization: 'Bearer test-token' },
+      headers: { 'x-user-id': '42' },
     })
 
     const { POST } = await loadRoute()
@@ -309,7 +332,7 @@ describe('/api/devices/garmin/sync', () => {
 
     const req = new Request('http://localhost/api/devices/garmin/sync', {
       method: 'POST',
-      headers: { authorization: 'Bearer test-token' },
+      headers: { 'x-user-id': '42' },
     })
 
     const { POST } = await loadRoute()
@@ -340,7 +363,7 @@ describe('/api/devices/garmin/sync', () => {
 
     const req = new Request('http://localhost/api/devices/garmin/sync', {
       method: 'POST',
-      headers: { authorization: 'Bearer bad-token' },
+      headers: { 'x-user-id': '42' },
     })
 
     const { POST } = await loadRoute()

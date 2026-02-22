@@ -17,18 +17,18 @@ describe('/api/devices/garmin/webhook', () => {
     delete process.env.GARMIN_WEBHOOK_SECRET
   })
 
-  it('returns endpoint health for authorized webhook request', async () => {
+  it('requires webhook secret configuration', async () => {
     const req = new Request('http://localhost/api/devices/garmin/webhook')
     const { GET } = await loadRoute()
     const res = await GET(req)
     const body = await res.json()
 
-    expect(res.status).toBe(200)
-    expect(body.ok).toBe(true)
-    expect(Array.isArray(body.supportedDatasets)).toBe(true)
+    expect(res.status).toBe(503)
+    expect(body.ok).toBe(false)
   })
 
   it('processes ping/pull callback payload and stores pulled rows', async () => {
+    process.env.GARMIN_WEBHOOK_SECRET = 'secret-123'
     storeRowsMock.mockResolvedValue({
       ok: true,
       storeAvailable: true,
@@ -53,7 +53,7 @@ describe('/api/devices/garmin/webhook', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    const req = new Request('http://localhost/api/devices/garmin/webhook', {
+    const req = new Request('http://localhost/api/devices/garmin/webhook?secret=secret-123', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -91,6 +91,7 @@ describe('/api/devices/garmin/webhook', () => {
   })
 
   it('processes push payload without callbackURL', async () => {
+    process.env.GARMIN_WEBHOOK_SECRET = 'secret-123'
     storeRowsMock.mockResolvedValue({
       ok: true,
       storeAvailable: true,
@@ -98,7 +99,7 @@ describe('/api/devices/garmin/webhook', () => {
       droppedRows: 0,
     })
 
-    const req = new Request('http://localhost/api/devices/garmin/webhook', {
+    const req = new Request('http://localhost/api/devices/garmin/webhook?secret=secret-123', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({

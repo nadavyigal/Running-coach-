@@ -13,11 +13,24 @@ vi.mock('@/lib/security.middleware', () => ({
 vi.mock('@/lib/logger', () => ({
   logger: {
     error: vi.fn(),
+    warn: vi.fn(),
   },
 }))
 
 vi.mock('../oauth-state', () => ({
   verifyAndParseState: verifyAndParseStateMock,
+}))
+
+vi.mock('@/lib/supabase/server', () => ({
+  getCurrentUser: vi.fn(async () => null),
+}))
+
+const upsertGarminConnectionMock = vi.hoisted(() => vi.fn(async () => undefined))
+const upsertGarminTokensMock = vi.hoisted(() => vi.fn(async () => undefined))
+
+vi.mock('@/lib/server/garmin-oauth-store', () => ({
+  upsertGarminConnection: upsertGarminConnectionMock,
+  upsertGarminTokens: upsertGarminTokensMock,
 }))
 
 async function loadRoute() {
@@ -50,6 +63,9 @@ describe('/api/devices/garmin/callback', () => {
         )
       )
       .mockResolvedValueOnce(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HEALTH_EXPORT']), { status: 200 })
+      )
 
     vi.stubGlobal('fetch', fetchMock)
 
@@ -65,7 +81,9 @@ describe('/api/devices/garmin/callback', () => {
 
     expect(res.status).toBe(200)
     expect(body.success).toBe(true)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(upsertGarminConnectionMock).toHaveBeenCalledTimes(1)
+    expect(upsertGarminTokensMock).toHaveBeenCalledTimes(1)
 
     const [tokenUrl, tokenInit] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(tokenUrl).toBe('https://diauth.garmin.com/di-oauth2-service/oauth/token')

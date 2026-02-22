@@ -140,6 +140,7 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-user-id': String(userId),
         },
         body: JSON.stringify({
           userId,
@@ -212,19 +213,30 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
     }
   }
 
-  const disconnectDevice = async (deviceId: number) => {
+  const disconnectDevice = async (device: WearableDevice) => {
     try {
-      const response = await fetch(`/api/devices/${deviceId}`, {
-        method: 'DELETE'
-      })
+      const response =
+        device.type === 'garmin'
+          ? await fetch('/api/devices/garmin/disconnect', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-user-id': String(userId),
+              },
+              body: JSON.stringify({ userId }),
+            })
+          : await fetch(`/api/devices/${device.id}`, {
+              method: 'DELETE',
+            })
 
       const data = await response.json()
 
       if (data.success) {
         // Update device status in Dexie.js client-side
-        await db.wearableDevices.update(deviceId, {
+        await db.wearableDevices.update(device.id!, {
           connectionStatus: 'disconnected',
           lastSync: null,
+          authTokens: undefined,
           updatedAt: new Date()
         })
 
@@ -333,7 +345,7 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => disconnectDevice(device.id!)}
+                    onClick={() => disconnectDevice(device)}
                   >
                     Disconnect
                   </Button>

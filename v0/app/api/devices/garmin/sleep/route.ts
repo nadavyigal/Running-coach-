@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { getValidGarminAccessToken, markGarminAuthError } from '@/lib/server/garmin-oauth-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -167,15 +168,19 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
     }
 
+    const parsedUserId = Number.parseInt(userId, 10);
     const authHeader = req.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
+    const accessTokenFromHeader = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const accessToken =
+      accessTokenFromHeader ??
+      (Number.isFinite(parsedUserId) && parsedUserId > 0 ? await getValidGarminAccessToken(parsedUserId) : null);
+
+    if (!accessToken) {
       return NextResponse.json(
         { success: false, error: 'Authorization token required', needsReauth: true },
         { status: 401 }
       );
     }
-
-    const accessToken = authHeader.slice(7);
     const permissions = await fetchGarminPermissions(accessToken);
     const hasHealthExport = permissions.includes('HEALTH_EXPORT');
     const hasHistoricalExport = permissions.includes('HISTORICAL_DATA_EXPORT');
@@ -306,11 +311,31 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ success: true, source, sleep: sleepRecords, permissions });
   } catch (error) {
+    if (error instanceof Error && /reconnect garmin|refresh token|no garmin connection/i.test(error.message)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message,
+          needsReauth: true,
+        },
+        { status: 401 }
+      );
+    }
+
     if (error instanceof GarminSleepUpstreamError) {
       const detail = summarizeUpstreamBody(error.body);
       const needsReauth = isAuthError(error.status, error.body);
 
       if (needsReauth) {
+        const { searchParams } = new URL(req.url);
+        const userId = Number.parseInt(searchParams.get('userId') ?? '', 10);
+        if (Number.isFinite(userId) && userId > 0) {
+          try {
+            await markGarminAuthError(userId, detail || 'Garmin sleep auth failure');
+          } catch {
+            // Continue returning auth error even if state persistence fails.
+          }
+        }
         return NextResponse.json(
           {
             success: false,

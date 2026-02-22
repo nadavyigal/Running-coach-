@@ -78,14 +78,29 @@ function summarizeUpstreamBody(body: string): string {
   return trimmed.length > 500 ? `${trimmed.slice(0, 500)}...` : trimmed
 }
 
-function isWebhookAuthorized(req: Request): boolean {
+function getWebhookAuthResult(req: Request): { authorized: boolean; status: number; error?: string } {
   const configuredSecret = process.env.GARMIN_WEBHOOK_SECRET?.trim()
-  if (!configuredSecret) return true
+  if (!configuredSecret) {
+    return {
+      authorized: false,
+      status: 503,
+      error: 'Webhook secret is not configured. Set GARMIN_WEBHOOK_SECRET before enabling Garmin webhooks.',
+    }
+  }
 
   const url = new URL(req.url)
   const querySecret = url.searchParams.get('secret')?.trim()
   const headerSecret = req.headers.get('x-garmin-webhook-secret')?.trim()
-  return querySecret === configuredSecret || headerSecret === configuredSecret
+
+  if (querySecret === configuredSecret || headerSecret === configuredSecret) {
+    return { authorized: true, status: 200 }
+  }
+
+  return {
+    authorized: false,
+    status: 401,
+    error: 'Unauthorized Garmin webhook request',
+  }
 }
 
 async function fetchPingPullRows(callbackUrl: string): Promise<{
@@ -130,8 +145,12 @@ async function fetchPingPullRows(callbackUrl: string): Promise<{
 }
 
 export async function GET(req: Request) {
-  if (!isWebhookAuthorized(req)) {
-    return NextResponse.json({ ok: false, error: 'Unauthorized Garmin webhook request' }, { status: 401 })
+  const authResult = getWebhookAuthResult(req)
+  if (!authResult.authorized) {
+    return NextResponse.json(
+      { ok: false, error: authResult.error ?? 'Unauthorized Garmin webhook request' },
+      { status: authResult.status }
+    )
   }
 
   return NextResponse.json({
@@ -142,8 +161,12 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  if (!isWebhookAuthorized(req)) {
-    return NextResponse.json({ ok: false, error: 'Unauthorized Garmin webhook request' }, { status: 401 })
+  const authResult = getWebhookAuthResult(req)
+  if (!authResult.authorized) {
+    return NextResponse.json(
+      { ok: false, error: authResult.error ?? 'Unauthorized Garmin webhook request' },
+      { status: authResult.status }
+    )
   }
 
   let payload: unknown

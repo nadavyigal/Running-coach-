@@ -1,8 +1,13 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 
 function getEncryptionKey() {
-  const baseKey = process.env.ENCRYPTION_KEY || 'dev-encryption-key-change-in-production';
-  return createHash('sha256').update(baseKey).digest();
+  const baseKey = process.env.ENCRYPTION_KEY;
+  if (!baseKey && process.env.NODE_ENV === 'production') {
+    throw new Error('ENCRYPTION_KEY must be configured in production');
+  }
+
+  const resolvedKey = baseKey || 'dev-encryption-key-change-in-production';
+  return createHash('sha256').update(resolvedKey).digest();
 }
 
 function encryptToken(token: string) {

@@ -1,6 +1,10 @@
 import type { GarminSummaryRecord } from './db'
 
-type GarminRecoveryDatasetKey = 'dailies' | 'stressDetails' | 'epochs' | 'allDayRespiration'
+export type GarminRecoveryDatasetKey =
+  | 'dailies'
+  | 'stressDetails'
+  | 'epochs'
+  | 'allDayRespiration'
 
 export interface GarminRecoverySignals {
   restingHeartRate: number | null
@@ -170,14 +174,15 @@ export function deriveGarminRecoverySignals(records: GarminSummaryRecord[]): Gar
     }
 
     if (datasetKey === 'epochs') {
-      const epochSeconds = pickFirstNumber(payload, [
+      const explicitEpochSeconds = pickFirstNumber(payload, [
         'activeTimeInSeconds',
         'activityTimeInSeconds',
-        'moderateIntensityDurationInSeconds',
-        'vigorousIntensityDurationInSeconds',
       ])
-      if (epochSeconds != null) {
-        activeMinutes += epochSeconds / 60
+      const moderateSeconds = pickFirstNumber(payload, ['moderateIntensityDurationInSeconds'])
+      const vigorousSeconds = pickFirstNumber(payload, ['vigorousIntensityDurationInSeconds'])
+      const derivedEpochSeconds = explicitEpochSeconds ?? ((moderateSeconds ?? 0) + (vigorousSeconds ?? 0))
+      if (derivedEpochSeconds > 0) {
+        activeMinutes += derivedEpochSeconds / 60
       }
     }
 

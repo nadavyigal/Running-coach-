@@ -205,6 +205,7 @@ describe('DeviceConnectionScreen', () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'x-user-id': String(mockUserId),
           },
           body: JSON.stringify({
             userId: mockUserId,
