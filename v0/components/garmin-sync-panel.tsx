@@ -11,10 +11,10 @@ import {
   Stethoscope,
   Watch,
 } from "lucide-react"
+import { GarminSyncStatusBar } from "@/components/garmin-sync-status-bar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { GarminSyncStatusBar } from "@/components/garmin-sync-status-bar"
 import { useToast } from "@/hooks/use-toast"
 import { db } from "@/lib/db"
 import {
@@ -253,6 +253,33 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
       .slice(0, 6)
   }, [lastResult])
 
+  const noticeGroups = useMemo(() => {
+    const setupIndicators = [
+      'garmin_webhook_secret',
+      'webhook',
+      'derive queue',
+      'redis',
+      'analytics storage unavailable',
+      'storage unavailable',
+      'no garmin export records',
+      'direct garmin pull failed',
+    ]
+
+    const setup: string[] = []
+    const dataset: string[] = []
+
+    for (const notice of lastResult?.notices ?? []) {
+      const normalized = notice.toLowerCase()
+      if (setupIndicators.some((token) => normalized.includes(token))) {
+        setup.push(notice)
+      } else {
+        dataset.push(notice)
+      }
+    }
+
+    return { setup, dataset }
+  }, [lastResult])
+
   const capabilityStats = useMemo(() => {
     if (!catalog?.capabilities?.length) {
       return { enabled: 0, waiting: 0, blocked: 0, supported: 0 }
@@ -380,10 +407,21 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
                 </div>
               ) : null}
 
-              {lastResult?.notices.length ? (
+              {noticeGroups.setup.length ? (
+                <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                  <p className="font-medium">Sync setup warnings</p>
+                  {noticeGroups.setup.map((notice) => (
+                    <p key={notice} className="mt-1">
+                      {notice}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+
+              {noticeGroups.dataset.length ? (
                 <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
                   <p className="font-medium">Skipped datasets</p>
-                  {lastResult.notices.map((notice) => (
+                  {noticeGroups.dataset.map((notice) => (
                     <p key={notice} className="mt-1">
                       {notice}
                     </p>

@@ -29,6 +29,7 @@ const enqueueGarminDeriveJobMock = vi.hoisted(() =>
   vi.fn(async () => ({ queued: true, jobId: 'derive-job-1' }))
 )
 const captureServerEventMock = vi.hoisted(() => vi.fn(async () => undefined))
+const createAdminClientMock = vi.hoisted(() => vi.fn())
 
 // garmin-rate-limiter has no server-only import — use the real synchronous implementation.
 // Fake timers (vi.useFakeTimers) make new Date() deterministic so rate-limit logic is testable.
@@ -86,6 +87,10 @@ vi.mock('@/lib/server/garmin-sync-queue', () => ({
   enqueueGarminDeriveJob: enqueueGarminDeriveJobMock,
 }))
 
+vi.mock('@/lib/supabase/admin', () => ({
+  createAdminClient: createAdminClientMock,
+}))
+
 async function loadRoute() {
   return import('./route')
 }
@@ -104,6 +109,19 @@ describe('/api/devices/garmin/sync', () => {
     persistGarminSyncSnapshotMock.mockClear()
     enqueueGarminDeriveJobMock.mockClear()
     captureServerEventMock.mockClear()
+    createAdminClientMock.mockClear()
+
+    const adminQueryBuilder = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn(async () => ({ data: [], error: null })),
+    }
+    createAdminClientMock.mockReturnValue({
+      from: vi.fn(() => adminQueryBuilder),
+    })
+
     getGarminOAuthStateMock.mockResolvedValue({
       userId: 42,
       authUserId: 'auth-user-1',
@@ -412,6 +430,94 @@ describe('/api/devices/garmin/sync', () => {
         notice.includes('RunSmart pulled 1 activities directly from Garmin wellness-backfill')
       )
     ).toBe(true)
+  })
+
+  it('imports cached garmin_activities rows when webhook and direct pull are unavailable', async () => {
+    readRowsMock.mockResolvedValue({
+      ok: true,
+      storeAvailable: true,
+      rows: [],
+    })
+
+    const adminQueryBuilder = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn(async () => ({
+        data: [
+          {
+            activity_id: 'cached-run-1',
+            start_time: '2026-02-18T10:00:00.000Z',
+            sport: 'running',
+            duration_s: 2100,
+            distance_m: 6200,
+            avg_hr: 152,
+            max_hr: 171,
+            avg_pace: 339,
+            elevation_gain_m: 45,
+            calories: 490,
+            raw_json: {
+              activityName: 'Morning Run',
+            },
+          },
+        ],
+        error: null,
+      })),
+    }
+    createAdminClientMock.mockReturnValue({
+      from: vi.fn(() => adminQueryBuilder),
+    })
+
+    const fetchMock = vi.fn((url: RequestInfo | URL) => {
+      const parsed = new URL(String(url))
+
+      if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
+        return Promise.resolve(
+          new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HISTORICAL_DATA_EXPORT']), { status: 200 })
+        )
+      }
+      if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
+        return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
+      }
+      if (parsed.pathname.endsWith('/wellness-api/rest/activities')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ errorMessage: 'InvalidPullTokenException failure' }), { status: 400 })
+        )
+      }
+      if (parsed.pathname.endsWith('/wellness-api/rest/backfill/activities')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ errorMessage: 'Endpoint not enabled for summary type: CONNECT_ACTIVITY' }), { status: 409 })
+        )
+      }
+
+      return Promise.resolve(new Response('not-found', { status: 404 }))
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const req = new Request('http://localhost/api/devices/garmin/sync', {
+      method: 'POST',
+      headers: { 'x-user-id': '42' },
+    })
+
+    const { POST } = await loadRoute()
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.success).toBe(true)
+    expect(body.activities).toHaveLength(1)
+    expect(body.activities[0].activityId).toBe('cached-run-1')
+    expect(body.activities[0].distance).toBe(6.2)
+    expect(
+      body.notices.some((notice: string) =>
+        notice.includes('Webhook feeds were empty, so RunSmart imported 1 cached Garmin activities')
+      )
+    ).toBe(true)
+    expect(
+      body.notices.some((notice: string) => notice.includes('direct Garmin pull failed'))
+    ).toBe(false)
   })
 
   it('returns needsReauth when Garmin token is invalid', async () => {

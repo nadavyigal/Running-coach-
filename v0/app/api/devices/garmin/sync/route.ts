@@ -1,12 +1,6 @@
 import { NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
-import {
-  getGarminOAuthState,
-  getValidGarminAccessToken,
-  markGarminAuthError,
-  markGarminSyncState,
-  refreshGarminAccessToken,
-} from '@/lib/server/garmin-oauth-store'
+import { persistGarminSyncSnapshot } from '@/lib/server/garmin-analytics-store'
 import {
   GARMIN_HISTORY_DAYS,
   type GarminDatasetKey,
@@ -14,10 +8,17 @@ import {
   lookbackStartIso,
   readGarminExportRows,
 } from '@/lib/server/garmin-export-store'
-import { persistGarminSyncSnapshot } from '@/lib/server/garmin-analytics-store'
+import {
+  getGarminOAuthState,
+  getValidGarminAccessToken,
+  markGarminAuthError,
+  markGarminSyncState,
+  refreshGarminAccessToken,
+} from '@/lib/server/garmin-oauth-store'
 import { evaluateGarminSyncRateLimit } from '@/lib/server/garmin-rate-limiter'
 import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
 import { captureServerEvent } from '@/lib/server/posthog'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -438,6 +439,77 @@ function toRunSmartActivity(activity: Record<string, unknown>) {
   }
 }
 
+function dedupeRunSmartActivities(
+  activities: Array<ReturnType<typeof toRunSmartActivity>>
+): Array<ReturnType<typeof toRunSmartActivity>> {
+  const seen = new Set<string>()
+  const deduped: Array<ReturnType<typeof toRunSmartActivity>> = []
+
+  for (const activity of activities) {
+    const dedupeKey = activity.activityId ?? `${activity.startTimeGMT ?? 'unknown'}-${activity.activityName}`
+    if (seen.has(dedupeKey)) continue
+    seen.add(dedupeKey)
+    deduped.push(activity)
+  }
+
+  return deduped
+}
+
+async function fetchRecentStoredGarminActivities(
+  userId: number,
+  lookbackDays: number
+): Promise<Array<ReturnType<typeof toRunSmartActivity>>> {
+  const supabase = createAdminClient()
+  const startTime = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data, error } = await supabase
+    .from('garmin_activities')
+    .select(
+      'activity_id, start_time, sport, duration_s, distance_m, avg_hr, max_hr, avg_pace, elevation_gain_m, calories, raw_json'
+    )
+    .eq('user_id', userId)
+    .gte('start_time', startTime)
+    .order('start_time', { ascending: false })
+    .limit(200)
+
+  if (error) {
+    throw new Error(`Failed to query garmin_activities cache: ${error.message}`)
+  }
+
+  const mapped = (data ?? [])
+    .map((row) => asRecord(row))
+    .map((row) => {
+      const raw = asRecord(row.raw_json)
+      const activityType = getString(row.sport) ?? getString(raw.activityType) ?? 'running'
+      const distanceMeters =
+        getNumber(row.distance_m) ?? getNumber(raw.distanceInMeters) ?? getNumber(raw.distance) ?? 0
+      const durationSeconds =
+        getNumber(row.duration_s) ?? getNumber(raw.durationInSeconds) ?? getNumber(raw.duration) ?? 0
+
+      return {
+        activityId: getString(row.activity_id) ?? getString(raw.activityId),
+        activityName: getString(raw.activityName) ?? getString(raw.activity_name) ?? activityType,
+        activityType: activityType.toLowerCase().replace(/ /g, '_'),
+        startTimeGMT: getString(row.start_time) ?? getString(raw.startTimeGMT),
+        distance: distanceMeters / 1000,
+        duration: durationSeconds > 100_000 ? Math.round(durationSeconds / 1000) : Math.round(durationSeconds),
+        averageHR: getNumber(row.avg_hr) ?? getNumber(raw.averageHR) ?? getNumber(raw.averageHeartRateInBeatsPerMinute),
+        maxHR: getNumber(row.max_hr) ?? getNumber(raw.maxHR) ?? getNumber(raw.maxHeartRateInBeatsPerMinute),
+        calories: getNumber(row.calories) ?? getNumber(raw.calories),
+        averagePace: getNumber(row.avg_pace) ?? getNumber(raw.averagePace),
+        elevationGain:
+          getNumber(row.elevation_gain_m) ??
+          getNumber(raw.elevationGain) ??
+          getNumber(raw.totalElevationGainInMeters),
+      }
+    })
+    .filter((entry) => (entry.activityType.includes('run') ? true : false))
+
+  return dedupeRunSmartActivities(mapped).filter((activity) =>
+    isActivityWithinLookback(activity, lookbackDays)
+  )
+}
+
 function toRunSmartSleepRecord(entry: Record<string, unknown>) {
   const calendarDate = getString(entry.calendarDate)
   if (!calendarDate) return null
@@ -831,17 +903,11 @@ export async function runGarminSyncForUser(params: {
       isActivityWithinLookback(activity, options.activityLookbackDays)
     )
 
-    const uniqueActivities: typeof filteredActivities = []
-    const seenActivityIds = new Set<string>()
-    for (const activity of filteredActivities) {
-      const dedupeKey = activity.activityId ?? `${activity.startTimeGMT ?? 'unknown'}-${activity.activityName}`
-      if (seenActivityIds.has(dedupeKey)) continue
-      seenActivityIds.add(dedupeKey)
-      uniqueActivities.push(activity)
-    }
+    const uniqueActivities = dedupeRunSmartActivities(filteredActivities)
 
     let activitiesForSync = uniqueActivities
     const hasWebhookActivityRows = filteredActivities.length > 0
+    let fallbackFailureNotice: string | null = null
 
     if (activitiesForSync.length === 0 && !hasWebhookActivityRows && permissions.includes('ACTIVITY_EXPORT')) {
       try {
@@ -865,22 +931,39 @@ export async function runGarminSyncForUser(params: {
             fallbackError.source === 'wellness-backfill' &&
             isActivityBackfillNotProvisioned(fallbackError.body)
           ) {
-            notices.push(
+            fallbackFailureNotice =
               'Activity webhook feeds were empty and Garmin activity backfill is not provisioned for this app.'
-            )
           } else {
-            notices.push(
+            fallbackFailureNotice =
               `Activity webhook feeds were empty and direct Garmin pull failed (${fallbackError.status} ${fallbackError.source}).`
-            )
           }
           logger.warn(
             `Garmin activity fallback error (${fallbackError.status} ${fallbackError.source}): ${summarizeUpstreamBody(fallbackError.body)}`
           )
         } else {
-          notices.push('Activity webhook feeds were empty and direct Garmin pull failed.')
+          fallbackFailureNotice = 'Activity webhook feeds were empty and direct Garmin pull failed.'
           logger.warn('Garmin activity fallback error:', fallbackError)
         }
       }
+    }
+
+    if (activitiesForSync.length === 0) {
+      try {
+        const cachedActivities = await fetchRecentStoredGarminActivities(userId, options.activityLookbackDays)
+        if (cachedActivities.length > 0) {
+          activitiesForSync = cachedActivities
+          notices.push(
+            `Webhook feeds were empty, so RunSmart imported ${cachedActivities.length} cached Garmin activities from analytics storage.`
+          )
+          fallbackFailureNotice = null
+        }
+      } catch (cachedReadError) {
+        logger.warn('Garmin stored activity cache fallback warning:', cachedReadError)
+      }
+    }
+
+    if (fallbackFailureNotice) {
+      notices.push(fallbackFailureNotice)
     }
 
     const sleep = datasets.sleeps
