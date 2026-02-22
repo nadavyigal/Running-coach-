@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { db } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
+import { GarminWellnessDashboard } from "@/components/garmin-wellness-dashboard"
 
 // Align with DB types; deviceId is string in db.AdvancedMetrics
 interface AdvancedMetrics {
@@ -409,10 +410,11 @@ export function AdvancedMetricsDashboard({
 
       {/* Detailed Metrics Tabs */}
       <Tabs defaultValue="performance" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="dynamics">Running Dynamics</TabsTrigger>
           <TabsTrigger value="predictions">Race Predictions</TabsTrigger>
+          <TabsTrigger value="wellness">Wellness</TabsTrigger>
         </TabsList>
 
         <TabsContent value="performance" className="space-y-4">
@@ -609,6 +611,10 @@ export function AdvancedMetricsDashboard({
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="wellness" className="space-y-4">
+          <GarminWellnessDashboard userId={userId} />
         </TabsContent>
       </Tabs>
 

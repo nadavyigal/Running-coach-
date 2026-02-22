@@ -55,6 +55,7 @@ import { ShareBadgeModal } from "@/components/share-badge-modal";
 import { Share2, Users } from "lucide-react";
 import { JoinCohortModal } from "@/components/join-cohort-modal";
 import { GarminSyncPanel } from "@/components/garmin-sync-panel";
+import { GarminReadinessCard } from "@/components/garmin-readiness-card";
 import { CommunityStatsWidget } from "@/components/community-stats-widget";
 import { CoachingInsightsWidget } from "@/components/coaching-insights-widget";
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
@@ -1399,38 +1400,41 @@ export function ProfileScreen() {
 
           {/* Garmin Sync Panel — shown when Garmin is connected */}
           {userId && (
-            <GarminSyncPanel
-              userId={userId}
-              onReconnect={async () => {
-                try {
-                  const response = await fetch('/api/devices/garmin/connect', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'x-user-id': String(userId),
-                    },
-                    body: JSON.stringify({
-                      userId,
-                      redirectUri: `${window.location.origin}/garmin/callback`,
-                    }),
-                  })
+            <div className="space-y-3">
+              <GarminReadinessCard userId={userId} />
+              <GarminSyncPanel
+                userId={userId}
+                onReconnect={async () => {
+                  try {
+                    const response = await fetch('/api/devices/garmin/connect', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'x-user-id': String(userId),
+                      },
+                      body: JSON.stringify({
+                        userId,
+                        redirectUri: `${window.location.origin}/garmin/callback`,
+                      }),
+                    })
 
-                  const data = await response.json()
-                  if (!response.ok || !data?.success || !data?.authUrl) {
-                    throw new Error(data?.error || 'Failed to initiate Garmin reconnect')
+                    const data = await response.json()
+                    if (!response.ok || !data?.success || !data?.authUrl) {
+                      throw new Error(data?.error || 'Failed to initiate Garmin reconnect')
+                    }
+
+                    window.location.href = data.authUrl
+                  } catch (reconnectError) {
+                    console.error('Garmin reconnect initiation failed:', reconnectError)
+                    toast({
+                      title: 'Reconnect failed',
+                      description: 'Could not start Garmin reconnect. Please try again.',
+                      variant: 'destructive',
+                    })
                   }
-
-                  window.location.href = data.authUrl
-                } catch (reconnectError) {
-                  console.error('Garmin reconnect initiation failed:', reconnectError)
-                  toast({
-                    title: 'Reconnect failed',
-                    description: 'Could not start Garmin reconnect. Please try again.',
-                    variant: 'destructive',
-                  })
-                }
-              }}
-            />
+                }}
+              />
+            </div>
           )}
 
           {/* Devices & Apps */}

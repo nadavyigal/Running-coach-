@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { GarminSyncStatusBar } from "@/components/garmin-sync-status-bar"
 import { useToast } from "@/hooks/use-toast"
 import { db } from "@/lib/db"
 import {
@@ -252,6 +253,22 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
       .slice(0, 6)
   }, [lastResult])
 
+  const capabilityStats = useMemo(() => {
+    if (!catalog?.capabilities?.length) {
+      return { enabled: 0, waiting: 0, blocked: 0, supported: 0 }
+    }
+
+    const enabled = catalog.capabilities.filter((capability) => capability.enabledForSync).length
+    const waiting = catalog.capabilities.filter((capability) =>
+      (capability.reason?.toLowerCase() ?? "").includes("no garmin export notifications")
+    ).length
+    const blocked = catalog.capabilities.filter(
+      (capability) => capability.supportedByRunSmart && !capability.enabledForSync && !capability.permissionGranted
+    ).length
+    const supported = catalog.capabilities.filter((capability) => capability.supportedByRunSmart).length
+    return { enabled, waiting, blocked, supported }
+  }, [catalog])
+
   if (!device) return null
 
   const isError = device.connectionStatus === "error"
@@ -296,7 +313,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
         ) : (
           <>
             <div className="rounded-md border p-3">
-              <div className="flex items-start justify-between gap-3">
+              <div className="space-y-3">
                 <div>
                   <p className="text-sm font-medium">{catalog?.syncName ?? "RunSmart Garmin Export Sync"}</p>
                   <p className="text-xs text-muted-foreground">
@@ -304,15 +321,13 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
                     {catalog?.ingestion?.lookbackDays ?? "several"} days using Garmin notification feeds.
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleSyncEnabledData}
-                  disabled={isSyncing || isLoadingCatalog}
-                >
-                  {isSyncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                  <span className="ml-1">{isSyncing ? "Syncing..." : "Sync"}</span>
-                </Button>
+                <GarminSyncStatusBar
+                  lastSyncAt={device.lastSync}
+                  onRefresh={handleSyncEnabledData}
+                  isRefreshing={isSyncing}
+                  className="border-slate-200 bg-slate-50"
+                  testId="garmin-sync-panel-status-bar"
+                />
               </div>
 
               {syncError && (
@@ -375,6 +390,16 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
                   ))}
                 </div>
               ) : null}
+            </div>
+
+            <div className="rounded-md border p-3">
+              <p className="text-sm font-medium">Capability badges</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Badge className="bg-green-100 text-green-700">Enabled {capabilityStats.enabled}</Badge>
+                <Badge className="bg-amber-100 text-amber-700">Waiting {capabilityStats.waiting}</Badge>
+                <Badge className="bg-red-100 text-red-700">Blocked {capabilityStats.blocked}</Badge>
+                <Badge className="bg-slate-100 text-slate-700">Supported {capabilityStats.supported}</Badge>
+              </div>
             </div>
 
             <div className="rounded-md border p-3 space-y-2">
