@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
 import { persistGarminSyncSnapshot } from '@/lib/server/garmin-analytics-store'
+import { runGarminDeriveForPayload } from '@/lib/server/garmin-derive-worker'
 import {
   GARMIN_HISTORY_DAYS,
   type GarminDatasetKey,
@@ -1010,6 +1011,13 @@ export async function runGarminSyncForUser(params: {
       queued: boolean
       jobId: string | null
       reason?: string
+      inlineFallback?: {
+        executed: boolean
+        processedUsers: number
+        skippedUsers: number
+        failed: boolean
+        error?: string
+      }
     } = {
       queued: false,
       jobId: null,
@@ -1034,17 +1042,41 @@ export async function runGarminSyncForUser(params: {
       errorState: null,
     })
 
+    const derivePayload = {
+      userId,
+      ...(oauthState.garminUserId ? { garminUserId: oauthState.garminUserId } : {}),
+      datasetKey: 'post-sync',
+      source: 'sync' as const,
+      requestedAt: nowIso,
+    }
+
     try {
-      const queued = await enqueueGarminDeriveJob({
-        userId,
-        ...(oauthState.garminUserId ? { garminUserId: oauthState.garminUserId } : {}),
-        datasetKey: 'post-sync',
-        source: 'sync',
-        requestedAt: nowIso,
-      })
+      const queued = await enqueueGarminDeriveJob(derivePayload)
       deriveQueue.queued = queued.queued
       deriveQueue.jobId = queued.jobId
       if (queued.reason) deriveQueue.reason = queued.reason
+      if (!queued.queued && isOptionalDeriveQueueNotice(queued.reason)) {
+        try {
+          const inlineResult = await runGarminDeriveForPayload(derivePayload)
+          deriveQueue.inlineFallback = {
+            executed: true,
+            processedUsers: inlineResult.processedUsers,
+            skippedUsers: inlineResult.skippedUsers,
+            failed: false,
+          }
+        } catch (inlineError) {
+          const inlineErrorMessage =
+            inlineError instanceof Error ? inlineError.message : 'Inline derive fallback failed'
+          deriveQueue.inlineFallback = {
+            executed: true,
+            processedUsers: 0,
+            skippedUsers: 0,
+            failed: true,
+            error: inlineErrorMessage,
+          }
+          logger.warn('Garmin inline derive fallback warning:', inlineError)
+        }
+      }
       if (!queued.queued && !isOptionalDeriveQueueNotice(queued.reason)) {
         notices.push(queued.reason ?? 'Garmin derive job was not queued.')
       }

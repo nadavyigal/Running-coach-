@@ -25,6 +25,9 @@ const markGarminSyncStateMock = vi.hoisted(() => vi.fn(async () => undefined))
 const persistGarminSyncSnapshotMock = vi.hoisted(() =>
   vi.fn(async () => ({ activitiesUpserted: 0, dailyMetricsUpserted: 0 }))
 )
+const runGarminDeriveForPayloadMock = vi.hoisted(() =>
+  vi.fn(async () => ({ processedUsers: 1, skippedUsers: 0, summaries: [] }))
+)
 const enqueueGarminDeriveJobMock = vi.hoisted(() =>
   vi.fn(async () => ({ queued: true, jobId: 'derive-job-1' }))
 )
@@ -83,6 +86,10 @@ vi.mock('@/lib/server/garmin-analytics-store', () => ({
   persistGarminSyncSnapshot: persistGarminSyncSnapshotMock,
 }))
 
+vi.mock('@/lib/server/garmin-derive-worker', () => ({
+  runGarminDeriveForPayload: runGarminDeriveForPayloadMock,
+}))
+
 vi.mock('@/lib/server/garmin-sync-queue', () => ({
   enqueueGarminDeriveJob: enqueueGarminDeriveJobMock,
 }))
@@ -107,6 +114,7 @@ describe('/api/devices/garmin/sync', () => {
     markGarminAuthErrorMock.mockClear()
     markGarminSyncStateMock.mockClear()
     persistGarminSyncSnapshotMock.mockClear()
+    runGarminDeriveForPayloadMock.mockClear()
     enqueueGarminDeriveJobMock.mockClear()
     captureServerEventMock.mockClear()
     createAdminClientMock.mockClear()
@@ -365,6 +373,55 @@ describe('/api/devices/garmin/sync', () => {
     expect(body.sleep).toHaveLength(0)
     expect(body.notices.some((notice: string) => notice.includes('No Garmin export records'))).toBe(true)
     expect(body.notices.some((notice: string) => notice.includes('Health datasets skipped'))).toBe(true)
+  })
+
+  it('runs inline derive fallback when Redis queue is unavailable', async () => {
+    readRowsMock.mockResolvedValue({
+      ok: true,
+      storeAvailable: true,
+      rows: [],
+    })
+    enqueueGarminDeriveJobMock.mockResolvedValue({
+      queued: false,
+      jobId: null,
+      reason: 'Garmin derive queue unavailable (Redis not configured)',
+    })
+
+    const fetchMock = vi.fn((url: RequestInfo | URL) => {
+      const parsed = new URL(String(url))
+      if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
+        return Promise.resolve(new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HEALTH_EXPORT']), { status: 200 }))
+      }
+      if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
+        return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
+      }
+      return Promise.resolve(new Response('not-found', { status: 404 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const req = new Request('http://localhost/api/devices/garmin/sync', {
+      method: 'POST',
+      headers: { 'x-user-id': '42' },
+    })
+
+    const { POST } = await loadRoute()
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.success).toBe(true)
+    expect(body.deriveQueue.queued).toBe(false)
+    expect(body.deriveQueue.reason).toContain('Redis not configured')
+    expect(body.deriveQueue.inlineFallback).toMatchObject({
+      executed: true,
+      failed: false,
+      processedUsers: 1,
+      skippedUsers: 0,
+    })
+    expect(
+      body.notices.some((notice: string) => notice.includes('Garmin derive queue unavailable'))
+    ).toBe(false)
+    expect(runGarminDeriveForPayloadMock).toHaveBeenCalledTimes(1)
   })
 
   it('falls back to direct Garmin activity pull when webhook activity rows are empty', async () => {
