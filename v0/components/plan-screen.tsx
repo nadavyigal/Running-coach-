@@ -41,6 +41,7 @@ export function PlanScreen() {
   const [plan, setPlan] = useState<Plan | null>(null)
   const [workouts, setWorkouts] = useState<Workout[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [garminRefreshKey, setGarminRefreshKey] = useState(0)
   const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate; dailyData: DailyChallengeData } | null>(null)
   const [recommendedChallenge, setRecommendedChallenge] = useState<ChallengeTemplate | null>(null)
   const { toast } = useToast()
@@ -271,7 +272,18 @@ export function PlanScreen() {
     }
 
     loadWorkouts()
-  }, [userId, plan?.id, toast])
+  }, [userId, plan?.id, toast, garminRefreshKey])
+
+  // Reload workouts when Garmin sync completes
+  useEffect(() => {
+    const refresh = () => setGarminRefreshKey((k) => k + 1)
+    window.addEventListener('garmin-run-synced', refresh)
+    window.addEventListener('plan-updated', refresh)
+    return () => {
+      window.removeEventListener('garmin-run-synced', refresh)
+      window.removeEventListener('plan-updated', refresh)
+    }
+  }, [])
 
   // Organize workouts by week
   const organizeWorkoutsByWeek = () => {

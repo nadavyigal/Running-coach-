@@ -6,7 +6,8 @@ import { extractGarminBodyBatteryTimeseries } from '@/lib/garminBodyBattery'
 import { computeGarminReadiness } from '@/lib/garminReadinessComputer'
 import { extractGarminWellnessDays, type GarminDailyMetricsRow } from '@/lib/garminWellnessExtractor'
 import { logger } from '@/lib/logger'
-import { findRunSmartUserIdsByGarminUserId, getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
+import { downloadFitFile, parseFitBuffer } from '@/lib/server/garmin-fit-processor'
+import { findRunSmartUserIdsByGarminUserId, getGarminOAuthState, getValidGarminAccessToken } from '@/lib/server/garmin-oauth-store'
 import {
   enqueueAiInsightsJob,
   type GarminDeriveJobPayload,
@@ -345,12 +346,163 @@ async function computeAndPersistForUser(params: {
   }
 }
 
+// ─── Activity Files (FIT binary) processor ───────────────────────────────────
+
+async function processActivityFilesForUser(userId: number): Promise<void> {
+  const supabase = createAdminClient()
+
+  const { data: pendingFiles, error: fetchError } = await supabase
+    .from('garmin_activity_files')
+    .select('id, activity_id, summary_id, callback_url, start_time_seconds')
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true })
+    .limit(5)
+
+  if (fetchError) {
+    logger.warn(`FIT processor: failed to fetch pending files for user ${userId}:`, fetchError)
+    return
+  }
+
+  if (!pendingFiles || pendingFiles.length === 0) return
+
+  let accessToken: string
+  try {
+    accessToken = await getValidGarminAccessToken(userId)
+  } catch (err) {
+    logger.error(`FIT processor: cannot get access token for user ${userId}:`, err)
+    return
+  }
+
+  const nowIso = new Date().toISOString()
+
+  for (const fileRow of pendingFiles) {
+    // Mark as downloading to prevent double-processing
+    await supabase
+      .from('garmin_activity_files')
+      .update({ status: 'downloading' })
+      .eq('id', fileRow.id)
+
+    try {
+      // 1. Download binary FIT file from Garmin Activity API
+      const fitBuffer = await downloadFitFile(fileRow.callback_url, accessToken)
+
+      // 2. Parse FIT → structured activity data
+      const parsed = await parseFitBuffer(fitBuffer)
+      const { session, laps, kmSplits, records } = parsed
+
+      // 3. Store raw FIT binary in Supabase Storage
+      const fitPath = `${userId}/${fileRow.activity_id}.fit`
+      const { error: storageError } = await supabase.storage
+        .from('garmin-fit-files')
+        .upload(fitPath, fitBuffer, {
+          upsert: true,
+          contentType: 'application/octet-stream',
+        })
+
+      if (storageError) {
+        // Non-fatal: log but continue with DB enrichment
+        logger.warn(`FIT processor: storage upload failed for ${fitPath}:`, storageError)
+      }
+
+      // 4. UPSERT garmin_activities with enriched FIT data
+      const { error: activityError } = await supabase
+        .from('garmin_activities')
+        .upsert(
+          {
+            user_id: userId,
+            activity_id: fileRow.activity_id,
+            sport: session.sportType,
+            start_time: session.startTime,
+            duration_s: session.totalElapsedS != null ? Math.round(session.totalElapsedS) : null,
+            distance_m: session.totalDistanceM,
+            avg_hr: session.avgHeartRate,
+            max_hr: session.maxHeartRate,
+            avg_cadence_spm: session.avgCadenceSpm,
+            elevation_gain_m: session.totalAscent,
+            elevation_loss_m: session.totalDescent,
+            calories: session.totalCalories,
+            max_speed_mps: session.maxSpeedMps,
+            lap_summaries: laps,
+            split_summaries: kmSplits,
+            telemetry_json: {
+              records,            // per-5s timeseries: HR, cadence, speed, altitude, GPS
+              lapCount: laps.length,
+              splitCount: kmSplits.length,
+            },
+            fit_parsed_at: nowIso,
+            source: 'garmin_activity_file',
+            updated_at: nowIso,
+          },
+          { onConflict: 'user_id,activity_id' }
+        )
+
+      if (activityError) {
+        throw new Error(`garmin_activities upsert failed: ${activityError.message}`)
+      }
+
+      // 5. Mark file record as done
+      await supabase
+        .from('garmin_activity_files')
+        .update({
+          status: 'done',
+          fit_file_path: fitPath,
+          downloaded_at: nowIso,
+          parsed_at: nowIso,
+        })
+        .eq('id', fileRow.id)
+
+      // 6. Enqueue post-run AI insight using the enriched FIT data
+      const activityDate = session.startTime
+        ? session.startTime.slice(0, 10)
+        : new Date((fileRow.start_time_seconds ?? 0) * 1000).toISOString().slice(0, 10)
+
+      const insightResult = await enqueueAiInsightsJob({
+        userId,
+        insightType: 'post_run',
+        activityId: fileRow.activity_id,
+        activityDate,
+        requestedAt: nowIso,
+      })
+
+      logger.info(
+        `FIT processor: enriched activity ${fileRow.activity_id} for user ${userId}` +
+          ` (${laps.length} laps, ${kmSplits.length} km splits, ${records.length} records)` +
+          ` — insight queued: ${insightResult.queued}`
+      )
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      logger.error(`FIT processor: failed for activity ${fileRow.activity_id}, user ${userId}:`, err)
+      await supabase
+        .from('garmin_activity_files')
+        .update({ status: 'error', error_message: errorMessage })
+        .eq('id', fileRow.id)
+    }
+  }
+}
+
 export async function runGarminDeriveForPayload(payload: GarminDeriveJobPayload): Promise<GarminDeriveJobResult> {
   const userIds = await resolveTargetUsers(payload)
   if (userIds.length === 0) {
     logger.warn('Garmin derive worker received payload with no resolvable users:', payload)
     return {
       processedUsers: 0,
+      skippedUsers: 0,
+      summaries: [],
+    }
+  }
+
+  // Activity Files (FIT binary) — separate pipeline from ACWR/readiness derive
+  if (payload.datasetKey === 'activityFiles') {
+    for (const userId of userIds) {
+      try {
+        await processActivityFilesForUser(userId)
+      } catch (err) {
+        logger.error(`FIT processor: unexpected error for user ${userId}:`, err)
+      }
+    }
+    return {
+      processedUsers: userIds.length,
       skippedUsers: 0,
       summaries: [],
     }

@@ -7,6 +7,7 @@ import {
 import { findRunSmartUserIdsByGarminUserId } from '@/lib/server/garmin-oauth-store'
 import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
 import { getGarminWebhookSecret } from '@/lib/server/garmin-webhook-secret'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +35,15 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function getString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+}
+
+function getNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const n = Number(value)
+    return Number.isFinite(n) ? n : null
+  }
+  return null
 }
 
 function parseRows(value: unknown): Record<string, unknown>[] {
@@ -294,6 +304,85 @@ export async function POST(req: Request) {
           queueErrors: deriveQueueErrors,
         })
       }
+    }
+  }
+
+  // ─── Activity Files (FIT binary push notifications) ────────────────────────
+  // These are from the Garmin Activity API, distinct from the Wellness API.
+  // The callbackURL is a binary FIT file download — do NOT call fetchPingPullRows.
+  const activityFileEntries = parseRows(payloadRecord['activityFiles'])
+  if (activityFileEntries.length > 0) {
+    const admin = createAdminClient()
+    const activityFilesAccepted: number[] = []
+    const activityFilesErrors: string[] = []
+
+    for (const entry of activityFileEntries) {
+      const garminUserId = getString(entry.userId)
+      const summaryId = getString(entry.summaryId)
+      const callbackUrl = getString(entry.callbackURL) ?? getString(entry.callbackUrl)
+      const activityId = getString(entry.activityId) ?? String(getNumber(entry.activityId) ?? '')
+
+      if (!summaryId || !callbackUrl) {
+        activityFilesErrors.push(`activityFiles: missing summaryId or callbackURL in entry`)
+        continue
+      }
+
+      // Resolve internal user IDs from garminUserId
+      const userIds: number[] = garminUserId
+        ? await findRunSmartUserIdsByGarminUserId(garminUserId).catch(() => [])
+        : []
+
+      if (userIds.length === 0) {
+        activityFilesErrors.push(
+          `activityFiles: no RunSmart user found for garminUserId=${garminUserId ?? 'unknown'}`
+        )
+        continue
+      }
+
+      for (const userId of userIds) {
+        const { error: upsertError } = await admin
+          .from('garmin_activity_files')
+          .upsert(
+            {
+              user_id: userId,
+              activity_id: activityId || summaryId,
+              summary_id: summaryId,
+              file_type: getString(entry.fileType) ?? 'FIT',
+              callback_url: callbackUrl,
+              start_time_seconds: getNumber(entry.startTimeInSeconds),
+              manual: Boolean(entry.manual),
+              status: 'pending',
+            },
+            { onConflict: 'summary_id' }
+          )
+
+        if (upsertError) {
+          activityFilesErrors.push(`activityFiles: upsert failed for userId=${userId}: ${upsertError.message}`)
+          continue
+        }
+
+        // Enqueue derive job so the worker downloads and parses the FIT file
+        const queued = await enqueueGarminDeriveJob({
+          userId,
+          datasetKey: 'activityFiles',
+          source: 'webhook',
+          requestedAt: new Date().toISOString(),
+        })
+
+        if (queued.queued && queued.jobId) {
+          activityFilesAccepted.push(userId)
+          queuedDeriveJobIds.push(queued.jobId)
+        } else {
+          deriveQueueErrors.push(queued.reason ?? `activityFiles: failed to enqueue derive job for userId=${userId}`)
+        }
+      }
+    }
+
+    if (activityFilesErrors.length > 0) {
+      logger.warn('Garmin webhook activityFiles errors:', activityFilesErrors)
+    }
+    if (activityFilesAccepted.length > 0) {
+      logger.info(`Garmin webhook activityFiles: queued FIT download for ${activityFilesAccepted.length} user(s)`)
     }
   }
 

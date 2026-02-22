@@ -367,6 +367,44 @@ export async function buildInsightSummaryForUser(
   }
 }
 
+async function loadFitTelemetryContext(params: {
+  userId: number
+  activityId: string | null | undefined
+}): Promise<string | null> {
+  const { userId, activityId } = params
+  if (!activityId) return null
+
+  const supabase = createAdminClient()
+  const { data: act } = await supabase
+    .from("garmin_activities")
+    .select("lap_summaries,split_summaries,avg_hr,max_hr,avg_cadence_spm,elevation_gain_m,distance_m,duration_s")
+    .eq("user_id", userId)
+    .eq("activity_id", activityId)
+    .maybeSingle()
+
+  if (!act) return null
+
+  const laps = Array.isArray(act.lap_summaries) ? act.lap_summaries.slice(0, 8) : []
+  const splits = Array.isArray(act.split_summaries) ? act.split_summaries : []
+  const distKm = act.distance_m != null ? (act.distance_m / 1000).toFixed(1) : "?"
+  const durMin = act.duration_s != null ? Math.round(act.duration_s / 60) : "?"
+
+  const lines: string[] = [
+    `Activity: ${distKm}km in ${durMin}min`,
+    `HR: avg ${act.avg_hr ?? "—"}bpm, max ${act.max_hr ?? "—"}bpm`,
+    `Cadence: avg ${act.avg_cadence_spm ?? "—"} spm`,
+    `Elevation: +${act.elevation_gain_m ?? 0}m`,
+  ]
+
+  if (laps.length > 0) {
+    lines.push(`Laps (${laps.length}): ${JSON.stringify(laps)}`)
+  } else if (splits.length > 0) {
+    lines.push(`Km splits (${splits.length}): ${JSON.stringify(splits)}`)
+  }
+
+  return lines.filter(Boolean).join("\n")
+}
+
 export async function generateInsightForUser(
   request: GenerateGarminInsightRequest
 ): Promise<GeneratedGarminInsight | null> {
@@ -374,14 +412,30 @@ export async function generateInsightForUser(
   if (!summary) return null
 
   const prompts = buildInsightPrompts(summary)
+
+  // For post_run insights, enrich the prompt with FIT telemetry data (laps, HR, cadence)
+  let enrichedUserPrompt = prompts.userPrompt
+  if (request.insightType === "post_run") {
+    const fitContext = await loadFitTelemetryContext({
+      userId: request.userId,
+      activityId: request.activityId,
+    }).catch(() => null)
+
+    if (fitContext) {
+      enrichedUserPrompt +=
+        `\n\nFIT telemetry data:\n${fitContext}` +
+        `\n\nGive specific, data-driven coaching referencing exact lap splits, HR zones, and cadence. Be concise.`
+    }
+  }
+
   const result = await generateText({
     model: openai(DEFAULT_MODEL),
     messages: [
       { role: "system", content: prompts.systemPrompt },
-      { role: "user", content: prompts.userPrompt },
+      { role: "user", content: enrichedUserPrompt },
     ],
     temperature: 0.35,
-    maxOutputTokens: 220,
+    maxOutputTokens: 280,
   })
 
   return {

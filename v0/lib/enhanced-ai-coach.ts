@@ -69,6 +69,9 @@ interface GarminActivityRow {
   sport: string | null
   distance_m: number | null
   avg_hr: number | null
+  max_hr: number | null
+  avg_cadence_spm: number | null
+  elevation_gain_m: number | null
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -169,7 +172,7 @@ export async function buildGarminContext(userId: number): Promise<GarminCoachCon
         .limit(14),
       supabase
         .from("garmin_activities")
-        .select("start_time,sport,distance_m,avg_hr")
+        .select("start_time,sport,distance_m,avg_hr,max_hr,avg_cadence_spm,elevation_gain_m")
         .eq("user_id", userId)
         .order("start_time", { ascending: false })
         .limit(12),
@@ -251,6 +254,10 @@ export async function buildGarminContext(userId: number): Promise<GarminCoachCon
         sport: getString(activity.sport)?.toLowerCase() ?? "running",
         km: round((activity.distance_m as number) / 1000, 1),
         type: activityType(activity),
+        avgHr: getNumber(activity.avg_hr),
+        maxHr: getNumber(activity.max_hr),
+        cadenceSpm: getNumber(activity.avg_cadence_spm),
+        elevGainM: getNumber(activity.elevation_gain_m) != null ? Math.round(getNumber(activity.elevation_gain_m) as number) : null,
       }))
 
     if (workouts.length > 0) {

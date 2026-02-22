@@ -9,6 +9,10 @@ export interface GarminWorkoutSummary {
   sport: string
   km: number
   type?: string
+  avgHr?: number | null
+  maxHr?: number | null
+  cadenceSpm?: number | null
+  elevGainM?: number | null
 }
 
 export interface GarminCoachContext {
@@ -317,7 +321,14 @@ export function formatGarminContextForPrompt(
   if (context.lastWorkouts && context.lastWorkouts.length > 0) {
     const workouts = context.lastWorkouts
       .slice(0, 3)
-      .map((run) => `${run.date} ${run.sport} ${toFixed(run.km, 1)}km${run.type ? ` ${run.type}` : ""}`)
+      .map((run) => {
+        let line = `${run.date} ${run.sport} ${toFixed(run.km, 1)}km${run.type ? ` ${run.type}` : ""}`
+        if (run.avgHr != null) line += ` avgHR ${run.avgHr}bpm`
+        if (run.maxHr != null) line += ` maxHR ${run.maxHr}bpm`
+        if (run.cadenceSpm != null) line += ` cad ${run.cadenceSpm}spm`
+        if (run.elevGainM != null && run.elevGainM > 0) line += ` +${run.elevGainM}m elev`
+        return line
+      })
       .join("; ")
     lines.push(`- Last workouts: ${workouts}`)
   }

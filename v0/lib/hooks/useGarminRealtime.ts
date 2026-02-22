@@ -2,11 +2,62 @@
 
 import { useEffect, useRef } from 'react'
 import { useToast } from '@/hooks/use-toast'
+import { db } from '@/lib/db'
+import { updateRun } from '@/lib/dbUtils'
 import { syncGarminEnabledData } from '@/lib/garminSync'
 import { createClient } from '@/lib/supabase/client'
 
 function isLocalDevelopmentHost(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+}
+
+async function triggerRunReportsForNewGarminRuns(userId: number): Promise<void> {
+  try {
+    const garminRuns = await db.runs
+      .where('userId')
+      .equals(userId)
+      .filter((run) => run.importSource === 'garmin' && !run.runReport)
+      .toArray()
+
+    const recentRuns = garminRuns
+      .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
+      .slice(0, 3)
+
+    for (const run of recentRuns) {
+      if (!run.id) continue
+
+      fetch('/api/run-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          run: {
+            id: run.id,
+            type: run.type,
+            distanceKm: run.distance,
+            durationSeconds: run.duration,
+            completedAt: run.completedAt,
+            heartRateBpm: run.heartRate ?? null,
+            calories: run.calories ?? null,
+          },
+        }),
+      })
+        .then((r) => r.json())
+        .then(async (data: { report: unknown; source: string }) => {
+          if (!run.id) return
+          await updateRun(run.id, {
+            runReport: JSON.stringify(data.report),
+            runReportSource: data.source as 'ai' | 'fallback',
+            runReportCreatedAt: new Date(),
+          })
+          window.dispatchEvent(new CustomEvent('run-report-ready', { detail: { runId: run.id } }))
+        })
+        .catch((err) => {
+          console.warn('[useGarminRealtime] Failed to generate run report:', err)
+        })
+    }
+  } catch (err) {
+    console.warn('[useGarminRealtime] Failed to query Garmin runs for report generation:', err)
+  }
 }
 
 export function useGarminRealtime(userId: number | null) {
@@ -61,6 +112,10 @@ export function useGarminRealtime(userId: number | null) {
                 description: 'Your latest activity is now in RunSmart.',
               })
               window.dispatchEvent(new Event('garmin-run-synced'))
+              window.dispatchEvent(new Event('plan-updated'))
+
+              // Auto-generate run reports for newly imported Garmin runs that don't have one yet
+              void triggerRunReportsForNewGarminRuns(userId)
             } catch (error) {
               console.warn('[useGarminRealtime] Failed to sync Garmin activity:', error)
             } finally {
