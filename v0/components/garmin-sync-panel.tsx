@@ -163,7 +163,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
     setSyncError(null)
 
     try {
-      const result = await syncGarminEnabledData(userId)
+      const result = await syncGarminEnabledData(userId, { trigger: "backfill" })
 
       if (result.needsReauth) {
         toast({
@@ -208,6 +208,10 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
           description: result.notices[0],
           duration: 9000,
         })
+      }
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("garmin-run-synced"))
       }
 
       await loadDevice()

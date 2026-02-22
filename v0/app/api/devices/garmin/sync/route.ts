@@ -17,7 +17,6 @@ import {
 } from '@/lib/server/garmin-oauth-store'
 import { evaluateGarminSyncRateLimit } from '@/lib/server/garmin-rate-limiter'
 import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
-import { getGarminWebhookSecret } from '@/lib/server/garmin-webhook-secret'
 import { captureServerEvent } from '@/lib/server/posthog'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -29,7 +28,7 @@ const SYNC_NAME = 'RunSmart Garmin Export Sync'
 const DEFAULT_INCREMENTAL_DAYS = 7
 const DEFAULT_ACTIVITY_SYNC_DAYS = 7
 const BACKFILL_DAILY_DAYS = 56
-const BACKFILL_ACTIVITY_DAYS = 21
+const BACKFILL_ACTIVITY_DAYS = 56
 
 type GarminPermission = 'ACTIVITY_EXPORT' | 'HEALTH_EXPORT'
 type GarminSyncDatasetKey = GarminDatasetKey | 'workoutImport'
@@ -1187,9 +1186,13 @@ export async function POST(req: Request) {
     )
   }
 
+  const { searchParams } = new URL(req.url)
+  const triggerParam = searchParams.get('trigger')?.toLowerCase()
+  const trigger: GarminSyncTrigger = triggerParam === 'backfill' ? 'backfill' : 'manual'
+
   const execution = await runGarminSyncForUser({
     userId,
-    options: buildExecutionOptions('manual'),
+    options: buildExecutionOptions(trigger),
   })
 
   return NextResponse.json(execution.body, {

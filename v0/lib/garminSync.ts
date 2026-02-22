@@ -84,6 +84,10 @@ interface GarminSyncApiResponse {
   needsReauth?: boolean
 }
 
+interface GarminSyncRequestOptions {
+  trigger?: 'manual' | 'backfill'
+}
+
 interface GarminActivityPayload {
   activityId: string | null
   activityName: string
@@ -408,7 +412,8 @@ async function markDeviceForReauth(device: WearableDevice): Promise<void> {
 
 async function runGarminSyncRequest(
   userId: number,
-  method: 'GET' | 'POST'
+  method: 'GET' | 'POST',
+  options?: GarminSyncRequestOptions
 ): Promise<{
   device: WearableDevice | null
   data: GarminSyncApiResponse | null
@@ -421,7 +426,15 @@ async function runGarminSyncRequest(
   }
 
   try {
-    const res = await fetch(`/api/devices/garmin/sync?userId=${encodeURIComponent(String(userId))}`, {
+    const params = new URLSearchParams({
+      userId: String(userId),
+    })
+
+    if (method === 'POST' && options?.trigger === 'backfill') {
+      params.set('trigger', 'backfill')
+    }
+
+    const res = await fetch(`/api/devices/garmin/sync?${params.toString()}`, {
       method,
       headers: { 'x-user-id': String(userId) },
     })
@@ -579,8 +592,11 @@ async function matchGarminRunToWorkout(userId: number, run: Run): Promise<void> 
   }
 }
 
-export async function syncGarminEnabledData(userId: number): Promise<GarminEnabledSyncResult> {
-  const requestResult = await runGarminSyncRequest(userId, 'POST')
+export async function syncGarminEnabledData(
+  userId: number,
+  options?: GarminSyncRequestOptions
+): Promise<GarminEnabledSyncResult> {
+  const requestResult = await runGarminSyncRequest(userId, 'POST', options)
 
   if (!requestResult.device || !requestResult.data || requestResult.errors.length > 0 || requestResult.needsReauth) {
     return {
