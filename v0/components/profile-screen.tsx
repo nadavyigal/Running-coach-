@@ -1305,7 +1305,7 @@ export function ProfileScreen() {
               ) : recentRuns.length === 0 ? (
                 <p className="text-sm text-foreground/70">No runs in the last 14 days.</p>
               ) : (
-                recentRuns.slice(0, 5).map((run) => (
+                recentRuns.map((run) => (
                   <div key={run.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-white">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
