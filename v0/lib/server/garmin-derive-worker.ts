@@ -21,6 +21,7 @@ type QueueConnection = {
 }
 
 interface GarminActivityRow {
+  activity_id: string | null
   start_time: string | null
   duration_s: number | null
   avg_hr: number | null
@@ -117,7 +118,7 @@ async function fetchGarminWindowData(params: {
   const [activitiesQuery, dailyQuery] = await Promise.all([
     supabase
       .from('garmin_activities')
-      .select('start_time,duration_s,avg_hr,distance_m')
+      .select('activity_id,start_time,duration_s,avg_hr,distance_m')
       .eq('user_id', userId)
       .gte('start_time', startDateIso)
       .lte('start_time', endDateIso),
@@ -256,7 +257,7 @@ async function computeAndPersistForUser(params: {
     throw new Error(`Failed to upsert training_derived_metrics: ${upsertError.message}`)
   }
 
-  const aiInsightsQueued = await enqueueAiInsightsJob({
+  const dailyInsightQueueResult = await enqueueAiInsightsJob({
     userId,
     insightType: 'daily',
     requestedAt: nowIso,
@@ -269,12 +270,68 @@ async function computeAndPersistForUser(params: {
     },
   })
 
-  if (!aiInsightsQueued.queued) {
+  if (!dailyInsightQueueResult.queued) {
     logger.warn(
       `Garmin derive worker could not enqueue ai-insights job for user ${userId}: ${
-        aiInsightsQueued.reason ?? 'unknown error'
+        dailyInsightQueueResult.reason ?? 'unknown error'
       }`
     )
+  }
+
+  const todayUtcDay = new Date(`${dateIso}T00:00:00.000Z`).getUTCDay()
+  if (todayUtcDay === 0) {
+    const weeklyQueueResult = await enqueueAiInsightsJob({
+      userId,
+      insightType: 'weekly',
+      requestedAt: nowIso,
+      derivedSummary: {
+        acwr: acwr.acwr,
+        readinessScore: readiness.score,
+        readinessLabel: readiness.label,
+        confidence: combinedConfidence,
+        flags: combinedFlags,
+      },
+    })
+    if (!weeklyQueueResult.queued) {
+      logger.warn(
+        `Garmin derive worker could not enqueue weekly ai-insight for user ${userId}: ${
+          weeklyQueueResult.reason ?? 'unknown error'
+        }`
+      )
+    }
+  }
+
+  const latestActivity = activities
+    .filter((activity) => activity.start_time != null)
+    .sort((a, b) => {
+      const aMs = Date.parse(a.start_time ?? '')
+      const bMs = Date.parse(b.start_time ?? '')
+      return bMs - aMs
+    })[0]
+
+  if (latestActivity?.start_time) {
+    const postRunQueueResult = await enqueueAiInsightsJob({
+      userId,
+      insightType: 'post_run',
+      requestedAt: nowIso,
+      activityId: latestActivity.activity_id,
+      activityDate: latestActivity.start_time.slice(0, 10),
+      derivedSummary: {
+        acwr: acwr.acwr,
+        readinessScore: readiness.score,
+        readinessLabel: readiness.label,
+        confidence: combinedConfidence,
+        flags: combinedFlags,
+      },
+    })
+
+    if (!postRunQueueResult.queued) {
+      logger.warn(
+        `Garmin derive worker could not enqueue post-run ai-insight for user ${userId}: ${
+          postRunQueueResult.reason ?? 'unknown error'
+        }`
+      )
+    }
   }
 
   return {
@@ -284,7 +341,7 @@ async function computeAndPersistForUser(params: {
     readinessScore: readiness.score,
     confidence: combinedConfidence,
     flags: combinedFlags,
-    aiInsightsQueued: aiInsightsQueued.queued,
+    aiInsightsQueued: dailyInsightQueueResult.queued,
   }
 }
 

@@ -92,10 +92,28 @@ export function GarminWellnessDashboard({ userId }: GarminWellnessDashboardProps
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [rangeDays, setRangeDays] = useState<RangeDays>(7)
+  const [weeklyInsightText, setWeeklyInsightText] = useState<string | null>(null)
 
   const loadDashboard = useCallback(async () => {
     const nextData = await loadGarminDashboardData(userId)
     setData(nextData)
+  }, [userId])
+
+  const loadWeeklyInsight = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/ai/garmin-insights?userId=${userId}&type=weekly`)
+      if (!response.ok) {
+        setWeeklyInsightText(null)
+        return
+      }
+      const payload = (await response.json()) as {
+        insight?: { text?: string | null } | null
+      }
+      const text = payload?.insight?.text?.trim()
+      setWeeklyInsightText(text && text.length > 0 ? text : null)
+    } catch {
+      setWeeklyInsightText(null)
+    }
   }, [userId])
 
   useEffect(() => {
@@ -104,7 +122,7 @@ export function GarminWellnessDashboard({ userId }: GarminWellnessDashboardProps
     const run = async () => {
       setIsLoading(true)
       try {
-        const nextData = await loadGarminDashboardData(userId)
+        const [nextData] = await Promise.all([loadGarminDashboardData(userId), loadWeeklyInsight()])
         if (!cancelled) {
           setData(nextData)
         }
@@ -120,17 +138,17 @@ export function GarminWellnessDashboard({ userId }: GarminWellnessDashboardProps
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [loadWeeklyInsight, userId])
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
     try {
       await syncGarminEnabledData(userId)
-      await loadDashboard()
+      await Promise.all([loadDashboard(), loadWeeklyInsight()])
     } finally {
       setIsRefreshing(false)
     }
-  }, [loadDashboard, userId])
+  }, [loadDashboard, loadWeeklyInsight, userId])
 
   const windowed = useMemo(() => {
     if (!data) return null
@@ -206,12 +224,20 @@ export function GarminWellnessDashboard({ userId }: GarminWellnessDashboardProps
       {reportSummary ? (
         <details className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
           <summary className="cursor-pointer font-medium">Weekly report card (AI-generated)</summary>
-          <p className="mt-2">{reportSummary.headline}</p>
-          {reportSummary.details.map((detail) => (
-            <p key={detail} className="mt-1 text-xs">
-              {detail}
+          {weeklyInsightText ? (
+            <p className="mt-2" data-testid="weekly-ai-insight-text">
+              {weeklyInsightText}
             </p>
-          ))}
+          ) : (
+            <>
+              <p className="mt-2">{reportSummary.headline}</p>
+              {reportSummary.details.map((detail) => (
+                <p key={detail} className="mt-1 text-xs">
+                  {detail}
+                </p>
+              ))}
+            </>
+          )}
         </details>
       ) : null}
 

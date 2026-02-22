@@ -34,7 +34,7 @@ async function seedGarminDashboardData(page: Page): Promise<void> {
     const db = await waitForDb()
 
     const tx = db.transaction(
-      ["users", "wearableDevices", "garminSummaryRecords", "sleepData", "hrvMeasurements", "runs"],
+      ["users", "wearableDevices", "garminSummaryRecords", "sleepData", "hrvMeasurements", "runs", "plans", "workouts"],
       "readwrite"
     )
 
@@ -44,6 +44,8 @@ async function seedGarminDashboardData(page: Page): Promise<void> {
     const sleepData = tx.objectStore("sleepData")
     const hrv = tx.objectStore("hrvMeasurements")
     const runs = tx.objectStore("runs")
+    const plans = tx.objectStore("plans")
+    const workouts = tx.objectStore("workouts")
 
     const firstUser = await new Promise<any | null>((resolve, reject) => {
       const request = users.openCursor()
@@ -112,6 +114,8 @@ async function seedGarminDashboardData(page: Page): Promise<void> {
     await clearByUser(sleepData)
     await clearByUser(hrv)
     await clearByUser(runs)
+    await clearByUser(plans)
+    await clearByUser(workouts)
 
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
 
@@ -260,6 +264,46 @@ async function seedGarminDashboardData(page: Page): Promise<void> {
       )
     }
 
+    const planId = Number(
+      await requestToPromise(
+        plans.add({
+          userId,
+          title: "Garmin Test Plan",
+          description: "Synthetic plan for Garmin UX tests",
+          startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+          endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          totalWeeks: 3,
+          isActive: true,
+          planType: "basic",
+          createdAt: now,
+          updatedAt: now,
+        })
+      )
+    )
+
+    const workoutDays = ["Mon", "Wed", "Sat"]
+    const workoutTypes = ["easy", "tempo", "long"]
+    for (let index = 0; index < 3; index += 1) {
+      const scheduledDate = new Date()
+      scheduledDate.setDate(scheduledDate.getDate() + index)
+      scheduledDate.setHours(6, 0, 0, 0)
+
+      await requestToPromise(
+        workouts.add({
+          userId,
+          planId,
+          week: 1,
+          day: workoutDays[index],
+          type: workoutTypes[index],
+          distance: index === 2 ? 14 : index === 1 ? 8 : 6,
+          completed: false,
+          scheduledDate,
+          createdAt: now,
+          updatedAt: now,
+        })
+      )
+    }
+
     await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => resolve()
       tx.onerror = () => reject(tx.error)
@@ -344,5 +388,116 @@ test.describe("PR05 Garmin UX dashboards", () => {
 
     await expect.poll(() => syncCalls).toBeGreaterThan(0)
     await expect.poll(async () => (await readinessSyncStatus.textContent()) ?? "").toMatch(/just now|1m ago/i)
+  })
+
+  test("chat mentions readiness when user asks how am I doing", async ({ page }) => {
+    await page.route("**/api/chat", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ messages: [], conversationId: "default" }),
+        })
+        return
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "text/plain; charset=utf-8",
+        body: '0:{"textDelta":"Your readiness is 84 today. Keep the quality session short and controlled."}\n',
+      })
+    })
+
+    await page.goto("/")
+    await page.waitForTimeout(2500)
+    await seedGarminDashboardData(page)
+
+    await page.goto("/?screen=chat")
+    await page.getByPlaceholder(/Ask your running coach anything/i).fill("how am i doing")
+    await page.getByRole("button", { name: /send message/i }).click()
+
+    await expect(page.getByText(/readiness is 84/i)).toBeVisible({ timeout: 20_000 })
+  })
+
+  test("weekly report card renders AI insight text", async ({ page }) => {
+    await page.route("**/api/devices/garmin/connect**", async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ success: false, error: "disabled in e2e test" }),
+      })
+    })
+
+    await page.route("**/api/ai/garmin-insights**", async (route) => {
+      const url = route.request().url()
+      if (url.includes("type=weekly")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            insight: {
+              type: "weekly",
+              text: "Load: You trained 42km this week. Recovery: sleep averaged 7.2h. Focus: keep one quality session.",
+            },
+          }),
+        })
+        return
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ success: true, insight: null }),
+      })
+    })
+
+    await page.goto("/")
+    await page.waitForTimeout(2500)
+    await seedGarminDashboardData(page)
+
+    await page.goto("/?screen=profile")
+    await expect(page.getByTestId("garmin-readiness-card")).toBeVisible({ timeout: 20_000 })
+    await expect(page.getByTestId("weekly-ai-insight-text")).toContainText("Load: You trained 42km this week", {
+      timeout: 20_000,
+    })
+  })
+
+  test("post-run insight shows in run detail view", async ({ page }) => {
+    await page.route("**/api/ai/garmin-insights**", async (route) => {
+      const url = route.request().url()
+      if (url.includes("type=post_run")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            insight: {
+              type: "post_run",
+              text: "Strong effort. Your next 2 days should stay easy to absorb this load.",
+            },
+          }),
+        })
+        return
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ success: true, insight: null }),
+      })
+    })
+
+    await page.goto("/")
+    await page.waitForTimeout(2500)
+    await seedGarminDashboardData(page)
+
+    await page.goto("/?screen=plan")
+    await page.getByRole("button", { name: /biweekly/i }).click()
+    await page.getByRole("button", { name: /view workout details/i }).first().click()
+
+    await expect(page.getByTestId("post-run-ai-insight")).toContainText("next 2 days should stay easy", {
+      timeout: 20_000,
+    })
   })
 })

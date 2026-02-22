@@ -31,10 +31,28 @@ export function GarminReadinessCard({ userId }: GarminReadinessCardProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
+  const [weeklyInsightText, setWeeklyInsightText] = useState<string | null>(null)
 
   const loadCard = useCallback(async () => {
     const nextData = await loadGarminDashboardData(userId)
     setData(nextData)
+  }, [userId])
+
+  const loadWeeklyInsight = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/ai/garmin-insights?userId=${userId}&type=weekly`)
+      if (!response.ok) {
+        setWeeklyInsightText(null)
+        return
+      }
+      const payload = (await response.json()) as {
+        insight?: { text?: string | null } | null
+      }
+      const text = payload?.insight?.text?.trim()
+      setWeeklyInsightText(text && text.length > 0 ? text : null)
+    } catch {
+      setWeeklyInsightText(null)
+    }
   }, [userId])
 
   useEffect(() => {
@@ -43,7 +61,7 @@ export function GarminReadinessCard({ userId }: GarminReadinessCardProps) {
     const run = async () => {
       setIsLoading(true)
       try {
-        const nextData = await loadGarminDashboardData(userId)
+        const [nextData] = await Promise.all([loadGarminDashboardData(userId), loadWeeklyInsight()])
         if (!cancelled) setData(nextData)
       } finally {
         if (!cancelled) setIsLoading(false)
@@ -55,17 +73,17 @@ export function GarminReadinessCard({ userId }: GarminReadinessCardProps) {
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [loadWeeklyInsight, userId])
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
     try {
       await syncGarminEnabledData(userId)
-      await loadCard()
+      await Promise.all([loadCard(), loadWeeklyInsight()])
     } finally {
       setIsRefreshing(false)
     }
-  }, [loadCard, userId])
+  }, [loadCard, loadWeeklyInsight, userId])
 
   const summary = useMemo(() => {
     if (!data) return null
@@ -142,6 +160,15 @@ export function GarminReadinessCard({ userId }: GarminReadinessCardProps) {
           <p className="text-sm font-medium">{summary.whyLine}</p>
           <p className="mt-1 text-xs text-muted-foreground">{data.readiness.label}</p>
         </div>
+
+        {weeklyInsightText ? (
+          <div className="rounded-lg border border-blue-200 bg-blue-50/80 p-3">
+            <p className="text-xs font-medium text-blue-900">Weekly report card (AI-generated)</p>
+            <p className="mt-1 text-sm text-blue-900" data-testid="weekly-ai-insight-text">
+              {weeklyInsightText}
+            </p>
+          </div>
+        ) : null}
 
         <p className="text-sm text-muted-foreground">
           Your body may indicate this readiness based on recent recovery signals. Consider adjusting intensity if

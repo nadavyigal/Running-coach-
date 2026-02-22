@@ -29,6 +29,8 @@ export interface AiInsightsJobPayload {
   userId: number
   insightType: 'daily' | 'weekly' | 'post_run'
   requestedAt: string
+  activityId?: string | null
+  activityDate?: string | null
   derivedSummary?: {
     acwr?: number | null
     readinessScore?: number | null
@@ -222,7 +224,14 @@ export async function enqueueAiInsightsJob(payload: AiInsightsJobPayload): Promi
     }
   }
 
-  const jobId = `ai-insights:${payload.userId}:${payload.insightType}`
+  const requestedDate = payload.requestedAt.slice(0, 10)
+  const uniqueKey =
+    payload.insightType === 'post_run'
+      ? payload.activityId ?? payload.activityDate ?? requestedDate
+      : payload.insightType === 'weekly'
+        ? `week-${requestedDate}`
+        : requestedDate
+  const jobId = `ai-insights:${payload.userId}:${payload.insightType}:${uniqueKey}`
   await queue.add('ai-insights', payload, {
     jobId,
   })

@@ -44,10 +44,12 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
   const [breakdown, setBreakdown] = useState<any>(null)
   const [structuredWorkout, setStructuredWorkout] = useState<StructuredWorkout | null>(null)
   const [showGarminManualExport, setShowGarminManualExport] = useState(false)
+  const [postRunInsight, setPostRunInsight] = useState<string | null>(null)
 
   // Fetch workout breakdown and structured workout based on user experience
   useEffect(() => {
     if (isOpen && workout) {
+      setPostRunInsight(null)
       const fetchBreakdown = async () => {
         try {
           const user = await getCurrentUser()
@@ -56,6 +58,21 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
           const experience = await getUserExperience(user.id)
           const workoutBreakdown = getRunBreakdown(workout.type, experience)
           setBreakdown(workoutBreakdown)
+
+          try {
+            const response = await fetch(`/api/ai/garmin-insights?userId=${user.id}&type=post_run`)
+            if (response.ok) {
+              const payload = (await response.json()) as {
+                insight?: { text?: string | null } | null
+              }
+              const text = payload?.insight?.text?.trim()
+              setPostRunInsight(text && text.length > 0 ? text : null)
+            } else {
+              setPostRunInsight(null)
+            }
+          } catch {
+            setPostRunInsight(null)
+          }
 
           // Load structured workout with pace zones
           const paceZones = await getUserPaceZones(user.id)
@@ -232,6 +249,15 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
               </div>
             )}
           </div>
+
+          {postRunInsight ? (
+            <Card data-testid="post-run-ai-insight">
+              <CardContent className="p-4">
+                <h3 className="font-medium">Post-run insight</h3>
+                <p className="mt-2 text-sm text-gray-700">{postRunInsight}</p>
+              </CardContent>
+            </Card>
+          ) : null}
 
           {/* Start Workout Button */}
           <div className="flex gap-3">

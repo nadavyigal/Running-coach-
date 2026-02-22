@@ -17,6 +17,7 @@ import {
 import { persistGarminSyncSnapshot } from '@/lib/server/garmin-analytics-store'
 import { evaluateGarminSyncRateLimit } from '@/lib/server/garmin-rate-limiter'
 import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
+import { captureServerEvent } from '@/lib/server/posthog'
 
 export const dynamic = 'force-dynamic'
 
@@ -942,6 +943,13 @@ export async function runGarminSyncForUser(params: {
       notices.push(reason)
       logger.warn('Garmin derive enqueue warning:', queueError)
     }
+
+    await captureServerEvent('garmin_sync_completed', {
+      userId,
+      datasetsCount: totalRows,
+      activitiesCount: activitiesForSync.length,
+      trigger: options.trigger,
+    })
 
     return {
       status: 200,
