@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-
+import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
@@ -45,11 +46,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { data, error } = await supabase
+  const oauthState = await getGarminOAuthState(userId)
+  if (!oauthState || oauthState.authUserId !== user.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const admin = createAdminClient()
+
+  const { data, error } = await admin
     .from('ai_insights')
     .select('insight_markdown, confidence, period_start, period_end, created_at')
     .eq('user_id', userId)
-    .eq('auth_user_id', user.id)
     .eq('type', 'post_run')
     .lte('period_start', date)
     .gte('period_end', date)

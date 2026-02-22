@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
@@ -58,6 +60,12 @@ function parseUserId(value: string | null): number | null {
   if (!value) return null
   const parsed = Number.parseInt(value, 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function parseFiniteNumber(value: string | null): number | null {
+  if (!value) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 function normalizeLapLikeRow(entry: Record<string, unknown>, index: number): GarminLapLike {
@@ -144,6 +152,9 @@ export async function GET(request: NextRequest) {
   const userId = parseUserId(searchParams.get('userId'))
   const activityId = searchParams.get('activityId')?.trim() ?? ''
   const date = searchParams.get('date')?.trim() ?? ''
+  const expectedDistanceKm = parseFiniteNumber(searchParams.get('distanceKm'))
+  const expectedDurationSec = parseFiniteNumber(searchParams.get('durationSec'))
+  const completedAtIso = searchParams.get('completedAt')?.trim() ?? ''
 
   if (!userId) {
     return NextResponse.json({ error: 'Valid userId is required' }, { status: 400 })
@@ -163,16 +174,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  let query = supabase
+  const oauthState = await getGarminOAuthState(userId)
+  if (!oauthState || oauthState.authUserId !== user.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const admin = createAdminClient()
+
+  let query = admin
     .from('garmin_activities')
     .select(
       'activity_id,start_time,sport,duration_s,distance_m,avg_hr,max_hr,avg_pace,elevation_gain_m,elevation_loss_m,max_speed_mps,avg_cadence_spm,max_cadence_spm,calories,lap_summaries,split_summaries,interval_summaries,telemetry_json,raw_json,updated_at'
     )
     .eq('user_id', userId)
-    .eq('auth_user_id', user.id)
     .order('start_time', { ascending: false })
     .order('updated_at', { ascending: false })
-    .limit(1)
+    .limit(activityId ? 5 : 60)
 
   if (activityId) {
     query = query.eq('activity_id', activityId)
@@ -180,18 +197,48 @@ export async function GET(request: NextRequest) {
     query = query.gte('start_time', `${date}T00:00:00.000Z`).lte('start_time', `${date}T23:59:59.999Z`)
   }
 
-  const { data, error } = await query.maybeSingle()
+  const { data, error } = await query
 
   if (error) {
     console.error('[api/garmin/activity-telemetry] Query failed:', error)
     return NextResponse.json({ error: 'Failed to fetch Garmin telemetry' }, { status: 500 })
   }
 
-  if (!data) {
+  if (!data || data.length === 0) {
     return NextResponse.json({ telemetry: null })
   }
 
-  const row = asRecord(data)
+  const scored = data
+    .map((entry) => asRecord(entry))
+    .map((row) => {
+      let score = 0
+      const distanceMeters = getNumber(row.distance_m)
+      const duration = getNumber(row.duration_s)
+      const rowStart = getString(row.start_time)
+
+      if (expectedDistanceKm != null && distanceMeters != null) {
+        score += Math.abs(distanceMeters / 1000 - expectedDistanceKm) * 2
+      }
+      if (expectedDurationSec != null && duration != null) {
+        score += Math.abs(duration - expectedDurationSec) / 120
+      }
+      if (completedAtIso && rowStart) {
+        const completedTs = Date.parse(completedAtIso)
+        const rowTs = Date.parse(rowStart)
+        if (Number.isFinite(completedTs) && Number.isFinite(rowTs)) {
+          score += Math.abs(completedTs - rowTs) / (1000 * 60 * 30)
+        }
+      }
+
+      return { row, score }
+    })
+    .sort((a, b) => a.score - b.score)
+
+  const row = scored[0]?.row
+  if (!row) {
+    return NextResponse.json({ telemetry: null })
+  }
+
   const rawJson = asRecord(row.raw_json)
   const telemetryJson = asRecord(row.telemetry_json)
   const merged = { ...rawJson, ...telemetryJson }
@@ -287,4 +334,3 @@ export async function GET(request: NextRequest) {
     },
   })
 }
-

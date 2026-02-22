@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Gauge, Heart, Loader2, Mountain, Sparkles, Timer, Watch } from 'lucide-react'
 import { MapErrorBoundary } from '@/components/maps/MapErrorBoundary'
 import { RunMap } from '@/components/maps/RunMap'
@@ -360,6 +360,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   const [garminTelemetry, setGarminTelemetry] = useState<GarminTelemetry | null>(null)
   const [isGarminTelemetryLoading, setIsGarminTelemetryLoading] = useState(false)
   const [garminTelemetryResolved, setGarminTelemetryResolved] = useState(false)
+  const autoRegeneratedRunRef = useRef<number | null>(null)
 
   const gpsQualityEnabled = ENABLE_AUTO_PAUSE
   const paceChartEnabled = ENABLE_PACE_CHART
@@ -412,6 +413,14 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
     if (!run) return 0
     return run.distance >= MIN_DISTANCE_FOR_PACE_KM ? run.duration / run.distance : 0
   }, [run])
+  const isGarminCandidateRun = useMemo(
+    () => Boolean(run && (run.importSource === 'garmin' || run.importRequestId)),
+    [run]
+  )
+  const hasGarminData = useMemo(
+    () => isGarminCandidateRun || Boolean(garminTelemetry),
+    [garminTelemetry, isGarminCandidateRun]
+  )
   const gpsQualityStyles = gpsQuality ? getGpsQualityStyles(gpsQuality.level) : null
 
   const loadRun = useCallback(async () => {
@@ -532,7 +541,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   }, [loadRun])
 
   useEffect(() => {
-    if (!run || run.importSource !== 'garmin') {
+    if (!run || !hasGarminData) {
       setGarminInsight(null)
       setIsGarminInsightLoading(false)
       return
@@ -580,10 +589,10 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
     void loadGarminInsight()
 
     return () => controller.abort()
-  }, [run])
+  }, [hasGarminData, run])
 
   useEffect(() => {
-    if (!run || run.importSource !== 'garmin') {
+    if (!run) {
       setGarminTelemetry(null)
       setIsGarminTelemetryLoading(false)
       setGarminTelemetryResolved(true)
@@ -609,6 +618,12 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         params.set('userId', String(run.userId))
         if (activityIdParam) params.set('activityId', activityIdParam)
         else if (dateParam) params.set('date', dateParam)
+        params.set('distanceKm', String(run.distance))
+        params.set('durationSec', String(run.duration))
+        const completedAtDate = new Date(run.completedAt)
+        if (!Number.isNaN(completedAtDate.getTime())) {
+          params.set('completedAt', completedAtDate.toISOString())
+        }
 
         const response = await fetch(`/api/garmin/activity-telemetry?${params.toString()}`, {
           signal: controller.signal,
@@ -637,9 +652,23 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
     if (!runId || !run) return
     if (run.runReport) return
     if (isGenerating) return
-    if (run.importSource === 'garmin' && !garminTelemetryResolved) return
+    if (isGarminCandidateRun && !garminTelemetryResolved) return
     void generateNotes()
-  }, [generateNotes, garminTelemetryResolved, isGenerating, run, runId])
+  }, [generateNotes, garminTelemetryResolved, isGarminCandidateRun, isGenerating, run, runId])
+
+  useEffect(() => {
+    if (!run?.id) return
+    if (!garminTelemetryResolved || !garminTelemetry) return
+    if (isGenerating) return
+
+    const shouldRegenerate = hasGarminData && (run.runReportSource !== 'ai' || !run.runReportCreatedAt)
+
+    if (!shouldRegenerate) return
+    if (autoRegeneratedRunRef.current === run.id) return
+
+    autoRegeneratedRunRef.current = run.id
+    void generateNotes()
+  }, [garminTelemetryResolved, garminTelemetry, generateNotes, hasGarminData, isGenerating, run])
 
   if (!runId) {
     return (
@@ -721,7 +750,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         </CardContent>
       </Card>
 
-      {run.importSource === 'garmin' && (
+      {hasGarminData && (
         <Card>
           <CardContent className="p-4">
             <div className="flex flex-wrap items-center gap-4 text-sm text-foreground/80">
@@ -790,7 +819,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         </Card>
       )}
 
-      {run.importSource === 'garmin' && (isGarminInsightLoading || garminInsight?.insight_markdown) && (
+      {hasGarminData && (isGarminInsightLoading || garminInsight?.insight_markdown) && (
         <Card>
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
@@ -815,7 +844,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         </Card>
       )}
 
-      {run.importSource === 'garmin' && garminTelemetry?.analytics && (
+      {garminTelemetry?.analytics && (
         <Card>
           <CardContent className="p-4 space-y-3">
             <h3 className="font-medium">Garmin Performance Analytics</h3>
@@ -858,7 +887,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         </Card>
       )}
 
-      {run.importSource === 'garmin' && telemetrySplits.length > 0 && (
+      {telemetrySplits.length > 0 && (
         <Card>
           <CardContent className="p-4 space-y-3">
             <h3 className="font-medium">Splits</h3>
@@ -892,7 +921,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         </Card>
       )}
 
-      {run.importSource === 'garmin' && telemetryIntervals.length > 0 && (
+      {telemetryIntervals.length > 0 && (
         <Card>
           <CardContent className="p-4 space-y-3">
             <h3 className="font-medium">Interval Breakdown</h3>
@@ -926,7 +955,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         </Card>
       )}
 
-      {run.importSource === 'garmin' && telemetryLaps.length > 0 && (
+      {telemetryLaps.length > 0 && (
         <Card>
           <CardContent className="p-4 space-y-3">
             <h3 className="font-medium">Laps</h3>
