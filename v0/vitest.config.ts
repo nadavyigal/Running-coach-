@@ -47,6 +47,8 @@ export default defineConfig({
       '@/lib': path.resolve(__dirname, 'lib'),
       '@/components': path.resolve(__dirname, 'components'),
       '@/components/ui': path.resolve(__dirname, 'components/ui'),
+      // Mock server-only so API route tests can import server modules without throwing
+      'server-only': path.resolve(__dirname, 'lib/__mocks__/server-only.ts'),
     },
   },
 }); 

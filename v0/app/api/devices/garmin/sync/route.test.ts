@@ -28,6 +28,14 @@ const persistGarminSyncSnapshotMock = vi.hoisted(() =>
 const enqueueGarminDeriveJobMock = vi.hoisted(() =>
   vi.fn(async () => ({ queued: true, jobId: 'derive-job-1' }))
 )
+const captureServerEventMock = vi.hoisted(() => vi.fn(async () => undefined))
+
+// garmin-rate-limiter has no server-only import — use the real synchronous implementation.
+// Fake timers (vi.useFakeTimers) make new Date() deterministic so rate-limit logic is testable.
+
+vi.mock('@/lib/server/posthog', () => ({
+  captureServerEvent: captureServerEventMock,
+}))
 
 vi.mock('@/lib/server/garmin-export-store', () => ({
   GARMIN_HISTORY_DAYS: 30,
@@ -95,6 +103,7 @@ describe('/api/devices/garmin/sync', () => {
     markGarminSyncStateMock.mockClear()
     persistGarminSyncSnapshotMock.mockClear()
     enqueueGarminDeriveJobMock.mockClear()
+    captureServerEventMock.mockClear()
     getGarminOAuthStateMock.mockResolvedValue({
       userId: 42,
       authUserId: 'auth-user-1',
