@@ -76,6 +76,7 @@ type ChallengeTemplateSeed = ReturnType<typeof getActiveChallengeTemplates>[numb
 
 export function ProfileScreen() {
   const router = useRouter()
+  const recentRunsWindowDays = 14
 
   // Get shared data from context
   const {
@@ -116,13 +117,30 @@ export function ProfileScreen() {
   const [isSwitchingPrimary, setIsSwitchingPrimary] = useState(false)
   const [joiningChallengeSlug, setJoiningChallengeSlug] = useState<string | null>(null)
 
+  const filterRunsToRecentWindow = useCallback((runs: Run[]): Run[] => {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - recentRunsWindowDays)
+    cutoff.setHours(0, 0, 0, 0)
+
+    return runs
+      .filter((run) => {
+        const runDate = new Date(run.completedAt ?? run.createdAt)
+        return runDate >= cutoff
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.completedAt ?? b.createdAt).getTime() -
+          new Date(a.completedAt ?? a.createdAt).getTime()
+      )
+  }, [recentRunsWindowDays])
+
   // Sync from context
   useEffect(() => {
     if (contextUserId) setUserId(contextUserId)
     if (contextPrimaryGoal) setPrimaryGoal(contextPrimaryGoal)
     if (activeGoals.length > 0) setGoals(activeGoals)
-    if (contextRecentRuns.length > 0) setRecentRuns(contextRecentRuns)
-  }, [contextUserId, contextPrimaryGoal, activeGoals, contextRecentRuns])
+    setRecentRuns(filterRunsToRecentWindow(contextRecentRuns))
+  }, [contextUserId, contextPrimaryGoal, activeGoals, contextRecentRuns, filterRunsToRecentWindow])
 
   // Load goal progress using GoalProgressEngine for consistency with GoalProgressDashboard
   useEffect(() => {
@@ -407,8 +425,12 @@ export function ProfileScreen() {
     const loadRuns = async () => {
       setIsRunsLoading(true)
       try {
-        const runs = await dbUtils.getUserRuns(userId, 10)
-        if (!cancelled) setRecentRuns(runs)
+        const endDate = new Date()
+        const startDate = new Date(endDate)
+        startDate.setDate(endDate.getDate() - recentRunsWindowDays)
+        startDate.setHours(0, 0, 0, 0)
+        const runs = await dbUtils.getRunsInTimeRange(userId, startDate, endDate)
+        if (!cancelled) setRecentRuns(filterRunsToRecentWindow(runs))
       } catch (err) {
         console.warn('[ProfileScreen] Failed to load runs:', err)
       } finally {
@@ -438,7 +460,7 @@ export function ProfileScreen() {
       window.removeEventListener('garmin-run-synced', onGarminRunSynced)
       window.removeEventListener('challenge-updated', onChallengeUpdated)
     }
-  }, [userId, loadChallengeData])
+  }, [userId, loadChallengeData, filterRunsToRecentWindow, recentRunsWindowDays])
 
   useEffect(() => {
     const loadUserData = async (retryCount = 0) => {
@@ -1272,7 +1294,7 @@ export function ProfileScreen() {
           {/* Recent Runs */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Recent Runs</CardTitle>
+              <CardTitle className="text-base">Recent Runs (Last 14 Days)</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {isRunsLoading ? (
@@ -1281,7 +1303,7 @@ export function ProfileScreen() {
                   Loading runs...
                 </div>
               ) : recentRuns.length === 0 ? (
-                <p className="text-sm text-foreground/70">No runs yet.</p>
+                <p className="text-sm text-foreground/70">No runs in the last 14 days.</p>
               ) : (
                 recentRuns.slice(0, 5).map((run) => (
                   <div key={run.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-white">
@@ -1303,6 +1325,8 @@ export function ProfileScreen() {
                         {new Date(run.completedAt).toLocaleDateString()} • {run.notes ?? run.type}
                         {run.elevationGain != null ? ` • Elev +${Math.round(run.elevationGain)}m` : ''}
                         {run.maxHR != null ? ` • Max HR ${run.maxHR}bpm` : ''}
+                        {run.heartRate != null ? ` • Avg HR ${Math.round(run.heartRate)}bpm` : ''}
+                        {run.calories != null ? ` • ${Math.round(run.calories)} kcal` : ''}
                         {run.runReport ? ' • report ready' : ''}
                       </div>
                     </div>

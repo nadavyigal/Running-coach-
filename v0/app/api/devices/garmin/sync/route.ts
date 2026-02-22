@@ -821,6 +821,12 @@ function buildExecutionOptions(trigger: GarminSyncTrigger): GarminSyncExecutionO
   }
 }
 
+function isOptionalDeriveQueueNotice(reason: string | null | undefined): boolean {
+  const normalized = (reason ?? '').toLowerCase()
+  if (!normalized) return false
+  return normalized.includes('redis not configured') || normalized.includes('derive queue unavailable')
+}
+
 export async function runGarminSyncForUser(params: {
   userId: number
   options: GarminSyncExecutionOptions
@@ -1039,13 +1045,15 @@ export async function runGarminSyncForUser(params: {
       deriveQueue.queued = queued.queued
       deriveQueue.jobId = queued.jobId
       if (queued.reason) deriveQueue.reason = queued.reason
-      if (!queued.queued) {
+      if (!queued.queued && !isOptionalDeriveQueueNotice(queued.reason)) {
         notices.push(queued.reason ?? 'Garmin derive job was not queued.')
       }
     } catch (queueError) {
       const reason = queueError instanceof Error ? queueError.message : 'Failed to enqueue Garmin derive job'
       deriveQueue.reason = reason
-      notices.push(reason)
+      if (!isOptionalDeriveQueueNotice(reason)) {
+        notices.push(reason)
+      }
       logger.warn('Garmin derive enqueue warning:', queueError)
     }
 
