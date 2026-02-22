@@ -16,6 +16,7 @@ import {
 } from '@/lib/server/garmin-export-store'
 import { persistGarminSyncSnapshot } from '@/lib/server/garmin-analytics-store'
 import { evaluateGarminSyncRateLimit } from '@/lib/server/garmin-rate-limiter'
+import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
 
 export const dynamic = 'force-dynamic'
 
@@ -893,6 +894,15 @@ export async function runGarminSyncForUser(params: {
       dailyMetricsUpserted: 0,
     }
 
+    const deriveQueue: {
+      queued: boolean
+      jobId: string | null
+      reason?: string
+    } = {
+      queued: false,
+      jobId: null,
+    }
+
     try {
       persistence = await persistGarminSyncSnapshot({
         userId,
@@ -911,6 +921,27 @@ export async function runGarminSyncForUser(params: {
       lastSyncCursor: nowIso,
       errorState: null,
     })
+
+    try {
+      const queued = await enqueueGarminDeriveJob({
+        userId,
+        ...(oauthState.garminUserId ? { garminUserId: oauthState.garminUserId } : {}),
+        datasetKey: 'post-sync',
+        source: 'sync',
+        requestedAt: nowIso,
+      })
+      deriveQueue.queued = queued.queued
+      deriveQueue.jobId = queued.jobId
+      if (queued.reason) deriveQueue.reason = queued.reason
+      if (!queued.queued) {
+        notices.push(queued.reason ?? 'Garmin derive job was not queued.')
+      }
+    } catch (queueError) {
+      const reason = queueError instanceof Error ? queueError.message : 'Failed to enqueue Garmin derive job'
+      deriveQueue.reason = reason
+      notices.push(reason)
+      logger.warn('Garmin derive enqueue warning:', queueError)
+    }
 
     return {
       status: 200,
@@ -933,6 +964,7 @@ export async function runGarminSyncForUser(params: {
         activities: activitiesForSync,
         sleep,
         persistence,
+        deriveQueue,
         notices,
         lastSyncCursor: nowIso,
         lastSyncAt: nowIso,

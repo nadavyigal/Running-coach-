@@ -25,6 +25,9 @@ const markGarminSyncStateMock = vi.hoisted(() => vi.fn(async () => undefined))
 const persistGarminSyncSnapshotMock = vi.hoisted(() =>
   vi.fn(async () => ({ activitiesUpserted: 0, dailyMetricsUpserted: 0 }))
 )
+const enqueueGarminDeriveJobMock = vi.hoisted(() =>
+  vi.fn(async () => ({ queued: true, jobId: 'derive-job-1' }))
+)
 
 vi.mock('@/lib/server/garmin-export-store', () => ({
   GARMIN_HISTORY_DAYS: 30,
@@ -71,6 +74,10 @@ vi.mock('@/lib/server/garmin-analytics-store', () => ({
   persistGarminSyncSnapshot: persistGarminSyncSnapshotMock,
 }))
 
+vi.mock('@/lib/server/garmin-sync-queue', () => ({
+  enqueueGarminDeriveJob: enqueueGarminDeriveJobMock,
+}))
+
 async function loadRoute() {
   return import('./route')
 }
@@ -87,6 +94,7 @@ describe('/api/devices/garmin/sync', () => {
     markGarminAuthErrorMock.mockClear()
     markGarminSyncStateMock.mockClear()
     persistGarminSyncSnapshotMock.mockClear()
+    enqueueGarminDeriveJobMock.mockClear()
     getGarminOAuthStateMock.mockResolvedValue({
       userId: 42,
       authUserId: 'auth-user-1',
@@ -278,6 +286,14 @@ describe('/api/devices/garmin/sync', () => {
     expect(body.datasetCounts.manuallyUpdatedActivities).toBe(1)
     expect(body.datasetCounts.sleeps).toBe(1)
     expect(body.notices.some((notice: string) => notice.includes('No Garmin export records'))).toBe(false)
+    expect(body.deriveQueue.queued).toBe(true)
+    expect(enqueueGarminDeriveJobMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 42,
+        source: 'sync',
+        datasetKey: 'post-sync',
+      })
+    )
     expect(markGarminSyncStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 42,

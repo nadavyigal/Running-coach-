@@ -29,6 +29,13 @@ export interface AiInsightsJobPayload {
   userId: number
   insightType: 'daily' | 'weekly' | 'post_run'
   requestedAt: string
+  derivedSummary?: {
+    acwr?: number | null
+    readinessScore?: number | null
+    readinessLabel?: string
+    confidence?: 'high' | 'medium' | 'low'
+    flags?: string[]
+  }
 }
 
 interface QueueEnqueueResult {
