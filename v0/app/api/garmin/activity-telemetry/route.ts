@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { lookbackStartIso, readGarminExportRows } from '@/lib/server/garmin-export-store'
 import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
@@ -13,6 +14,15 @@ interface GarminLapLike {
   avgHr: number | null
   avgCadence: number | null
   elevationGainM: number | null
+}
+
+interface GarminSamplePoint {
+  timestampSec: number
+  timerSec: number | null
+  distanceM: number | null
+  heartRate: number | null
+  cadenceSpm: number | null
+  elevationM: number | null
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -147,6 +157,190 @@ function splitHalfPace(values: GarminLapLike[]): { firstHalfSec: number | null; 
   }
 }
 
+function toNumberArray(values: Array<number | null | undefined>): number[] {
+  return values.filter((value): value is number => value != null && Number.isFinite(value))
+}
+
+function normalizeSamplePoints(rows: Record<string, unknown>[]): GarminSamplePoint[] {
+  const normalized: GarminSamplePoint[] = []
+
+  for (const row of rows) {
+    const timestampSec = pickNumber(row, [['startTimeInSeconds'], ['timestamp'], ['timeInSeconds']])
+    if (timestampSec == null) continue
+
+    normalized.push({
+      timestampSec: Math.round(timestampSec),
+      timerSec: pickNumber(row, [['timerDurationInSeconds'], ['elapsedDurationInSeconds'], ['clockDurationInSeconds']]),
+      distanceM: pickNumber(row, [['totalDistanceInMeters'], ['distanceInMeters'], ['distanceMeters'], ['distance_m']]),
+      heartRate: pickNumber(row, [['heartRate'], ['heartRateInBeatsPerMinute'], ['hr']]),
+      cadenceSpm: pickNumber(row, [['stepsPerMinute'], ['averageRunCadenceInStepsPerMinute'], ['cadence']]),
+      elevationM: pickNumber(row, [['elevationInMeters'], ['altitudeInMeters'], ['elevation']]),
+    })
+  }
+
+  return normalized.sort((a, b) => a.timestampSec - b.timestampSec)
+}
+
+function resolveSampleTimer(sample: GarminSamplePoint, baseTimestampSec: number): number {
+  if (sample.timerSec != null && Number.isFinite(sample.timerSec)) return sample.timerSec
+  return Math.max(0, sample.timestampSec - baseTimestampSec)
+}
+
+function computeElevationGainFromSamples(samples: GarminSamplePoint[]): number | null {
+  if (samples.length < 2) return null
+  let gain = 0
+  let previous: number | null = null
+
+  for (const sample of samples) {
+    if (sample.elevationM == null) continue
+    if (previous != null && sample.elevationM > previous) {
+      gain += sample.elevationM - previous
+    }
+    previous = sample.elevationM
+  }
+
+  return gain > 0 ? Number(gain.toFixed(1)) : null
+}
+
+function summarizeSampleSegment(samples: GarminSamplePoint[], index: number): GarminLapLike | null {
+  if (samples.length < 2) return null
+  const firstSample = samples.at(0)
+  const lastSample = samples.at(-1)
+  if (!firstSample || !lastSample) return null
+
+  const baseTimestamp = firstSample.timestampSec
+  const firstWithDistance = samples.find((sample) => sample.distanceM != null) ?? firstSample
+  const lastWithDistance = [...samples].reverse().find((sample) => sample.distanceM != null) ?? lastSample
+
+  const startDistance = firstWithDistance.distanceM
+  const endDistance = lastWithDistance.distanceM
+  const distanceMeters =
+    startDistance != null && endDistance != null && endDistance >= startDistance
+      ? endDistance - startDistance
+      : null
+  const distanceKm = distanceMeters != null ? Number((distanceMeters / 1000).toFixed(2)) : null
+
+  const startTimer = resolveSampleTimer(firstSample, baseTimestamp)
+  const endTimer = resolveSampleTimer(lastSample, baseTimestamp)
+  const durationSec = endTimer >= startTimer ? Math.round(endTimer - startTimer) : null
+
+  const paceSecPerKm =
+    durationSec != null && distanceKm != null && distanceKm > 0 ? Math.round(durationSec / distanceKm) : null
+
+  const avgHr = average(samples.map((sample) => sample.heartRate))
+  const avgCadence = average(samples.map((sample) => sample.cadenceSpm))
+  const elevationGainM = computeElevationGainFromSamples(samples)
+
+  return {
+    index,
+    distanceKm,
+    durationSec,
+    paceSecPerKm,
+    avgHr: avgHr != null ? Math.round(avgHr) : null,
+    avgCadence: avgCadence != null ? Number(avgCadence.toFixed(1)) : null,
+    elevationGainM,
+  }
+}
+
+function deriveSplitsFromSamples(samples: GarminSamplePoint[]): GarminLapLike[] {
+  if (samples.length < 2) return []
+
+  const withDistance = samples.filter((sample) => sample.distanceM != null)
+  const lastWithDistance = withDistance.at(-1)
+  const maxDistance = lastWithDistance?.distanceM ?? 0
+  if (maxDistance < 1000) return []
+
+  const boundaries: number[] = []
+  for (let next = 1000; next <= maxDistance; next += 1000) {
+    boundaries.push(next)
+  }
+  if (boundaries.length === 0) return []
+
+  const firstSample = samples.at(0)
+  if (!firstSample) return []
+  const baseTimestamp = firstSample.timestampSec
+  const splits: GarminLapLike[] = []
+  let previousBoundary = 0
+  let previousBoundaryTimer = 0
+
+  for (const boundary of boundaries) {
+    const boundarySample = withDistance.find((sample) => (sample.distanceM ?? -1) >= boundary)
+    if (!boundarySample) continue
+
+    const boundaryTimer = resolveSampleTimer(boundarySample, baseTimestamp)
+    const segmentSamples = samples.filter((sample) => {
+      const distance = sample.distanceM
+      if (distance == null) return false
+      return distance >= previousBoundary && distance <= boundary
+    })
+    const distanceKm = Number(((boundary - previousBoundary) / 1000).toFixed(2))
+    const durationSec = Math.max(0, Math.round(boundaryTimer - previousBoundaryTimer))
+    const avgHr = average(segmentSamples.map((sample) => sample.heartRate))
+    const avgCadence = average(segmentSamples.map((sample) => sample.cadenceSpm))
+
+    splits.push({
+      index: splits.length + 1,
+      distanceKm,
+      durationSec,
+      paceSecPerKm: distanceKm > 0 ? Math.round(durationSec / distanceKm) : null,
+      avgHr: avgHr != null ? Math.round(avgHr) : null,
+      avgCadence: avgCadence != null ? Number(avgCadence.toFixed(1)) : null,
+      elevationGainM: computeElevationGainFromSamples(segmentSamples),
+    })
+
+    previousBoundary = boundary
+    previousBoundaryTimer = boundaryTimer
+  }
+
+  return splits
+}
+
+function deriveLapsFromSamples(
+  samples: GarminSamplePoint[],
+  lapMarkers: Record<string, unknown>[]
+): GarminLapLike[] {
+  if (samples.length < 2 || lapMarkers.length === 0) return []
+  const lastSample = samples.at(-1)
+  if (!lastSample) return []
+  const markers = lapMarkers
+    .map((marker) => pickNumber(marker, [['startTimeInSeconds'], ['timestamp']]))
+    .filter((value): value is number => value != null && Number.isFinite(value))
+    .map((value) => Math.round(value))
+    .sort((a, b) => a - b)
+
+  if (markers.length === 0) return []
+
+  const laps: GarminLapLike[] = []
+  for (let index = 0; index < markers.length; index += 1) {
+    const start = markers[index]
+    if (start == null) continue
+    const end = markers[index + 1] ?? lastSample.timestampSec + 1
+    const segmentSamples = samples.filter((sample) => sample.timestampSec >= start && sample.timestampSec < end)
+    const lap = summarizeSampleSegment(segmentSamples, laps.length + 1)
+    if (lap) laps.push(lap)
+  }
+
+  return laps
+}
+
+function isEmptyLapLike(value: GarminLapLike): boolean {
+  return (
+    value.distanceKm == null &&
+    value.durationSec == null &&
+    value.paceSecPerKm == null &&
+    value.avgHr == null &&
+    value.avgCadence == null &&
+    value.elevationGainM == null
+  )
+}
+
+function extractActivityIdFromPayload(payload: Record<string, unknown>): string | null {
+  const direct = getString(payload.activityId)
+  if (direct) return direct
+  const summary = asRecord(payload.summary)
+  return getString(summary.activityId)
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
   const userId = parseUserId(searchParams.get('userId'))
@@ -175,7 +369,12 @@ export async function GET(request: NextRequest) {
   }
 
   const oauthState = await getGarminOAuthState(userId)
-  if (!oauthState || oauthState.authUserId !== user.id) {
+  if (!oauthState) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // Older Garmin connections may not have auth_user_id backfilled yet.
+  if (oauthState.authUserId && oauthState.authUserId !== user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -241,7 +440,73 @@ export async function GET(request: NextRequest) {
 
   const rawJson = asRecord(row.raw_json)
   const telemetryJson = asRecord(row.telemetry_json)
-  const merged = { ...rawJson, ...telemetryJson }
+  let merged: Record<string, unknown> = { ...rawJson, ...telemetryJson }
+
+  const mergedSamples = asRecordArray(merged.samples ?? merged.sampleSummaries)
+  if (mergedSamples.length === 0 && oauthState.garminUserId) {
+    try {
+      const exportRows = await readGarminExportRows({
+        garminUserId: oauthState.garminUserId,
+        sinceIso: lookbackStartIso(56),
+      })
+
+      if (exportRows.ok && exportRows.rows.length > 0) {
+        const requestedActivityId = activityId || getString(row.activity_id)
+        const detailCandidates = exportRows.rows
+          .filter((entry) => entry.datasetKey === 'activityDetails')
+          .map((entry) => asRecord(entry.payload))
+          .filter((payload) => Object.keys(payload).length > 0)
+
+        const scoredDetails = detailCandidates
+          .map((payload) => {
+            const summary = asRecord(payload.summary)
+            const candidateActivityId = extractActivityIdFromPayload(payload)
+            const distanceMeters =
+              pickNumber(summary, [['distanceInMeters'], ['distanceMeters']]) ??
+              pickNumber(payload, [['distanceInMeters'], ['distanceMeters']])
+            const durationSec =
+              pickNumber(summary, [['durationInSeconds'], ['durationinseconds']]) ??
+              pickNumber(payload, [['durationInSeconds'], ['durationinseconds']])
+            const startSeconds =
+              pickNumber(summary, [['startTimeInSeconds']]) ??
+              pickNumber(payload, [['startTimeInSeconds']])
+            const startIso =
+              startSeconds != null
+                ? new Date(startSeconds * 1000).toISOString()
+                : getString(summary.startTimeGMT) ?? getString(payload.startTimeGMT)
+
+            let score = 0
+            if (requestedActivityId && candidateActivityId) {
+              score += requestedActivityId === candidateActivityId ? -10_000 : 500
+            }
+            if (expectedDistanceKm != null && distanceMeters != null) {
+              score += Math.abs(distanceMeters / 1000 - expectedDistanceKm) * 3
+            }
+            if (expectedDurationSec != null && durationSec != null) {
+              score += Math.abs(durationSec - expectedDurationSec) / 90
+            }
+            if (completedAtIso && startIso) {
+              const completedTs = Date.parse(completedAtIso)
+              const startTs = Date.parse(startIso)
+              if (Number.isFinite(completedTs) && Number.isFinite(startTs)) {
+                score += Math.abs(completedTs - startTs) / (1000 * 60 * 20)
+              }
+            }
+
+            return { payload, score }
+          })
+          .sort((a, b) => a.score - b.score)
+
+        const bestDetail = scoredDetails[0]?.payload
+        if (bestDetail) {
+          const summary = asRecord(bestDetail.summary)
+          merged = { ...merged, ...summary, ...bestDetail }
+        }
+      }
+    } catch (detailError) {
+      console.warn('[api/garmin/activity-telemetry] Failed to load activityDetails fallback:', detailError)
+    }
+  }
 
   const lapRows = asRecordArray(row.lap_summaries).length
     ? asRecordArray(row.lap_summaries)
@@ -253,9 +518,31 @@ export async function GET(request: NextRequest) {
     ? asRecordArray(row.interval_summaries)
     : asRecordArray(merged.intervalSummaries ?? merged.intervals)
 
-  const laps = lapRows.map((entry, index) => normalizeLapLikeRow(entry, index))
-  const splits = splitRows.map((entry, index) => normalizeLapLikeRow(entry, index))
-  const intervals = intervalRows.map((entry, index) => normalizeLapLikeRow(entry, index))
+  const samplePoints = normalizeSamplePoints(asRecordArray(merged.samples ?? merged.sampleSummaries))
+  const lapMarkers = asRecordArray(merged.laps)
+
+  let laps = lapRows.map((entry, index) => normalizeLapLikeRow(entry, index))
+  let splits = splitRows.map((entry, index) => normalizeLapLikeRow(entry, index))
+  let intervals = intervalRows.map((entry, index) => normalizeLapLikeRow(entry, index))
+
+  if ((laps.length === 0 || laps.every((entry) => isEmptyLapLike(entry))) && samplePoints.length > 1) {
+    const derivedLaps = deriveLapsFromSamples(samplePoints, lapMarkers)
+    if (derivedLaps.length > 0) laps = derivedLaps
+  }
+
+  if ((splits.length === 0 || splits.every((entry) => isEmptyLapLike(entry))) && samplePoints.length > 1) {
+    const derivedSplits = deriveSplitsFromSamples(samplePoints)
+    if (derivedSplits.length > 0) splits = derivedSplits
+  }
+
+  if (
+    (intervals.length === 0 || intervals.every((entry) => isEmptyLapLike(entry))) &&
+    laps.length >= 3 &&
+    laps.length <= 20
+  ) {
+    intervals = laps
+  }
+
   const paceSource = splits.length > 0 ? splits : laps
   const cadenceSource = splits.length > 0 ? splits : laps
 
@@ -287,21 +574,75 @@ export async function GET(request: NextRequest) {
       ? Math.max(0, Math.min(100, Math.round(100 - (intervalStd / Math.max(1, average(intervalPaces) ?? 1)) * 100)))
       : null
 
+  const sampleHrValues = toNumberArray(samplePoints.map((sample) => sample.heartRate))
+  const sampleCadenceValues = toNumberArray(samplePoints.map((sample) => sample.cadenceSpm))
+  const firstSamplePoint = samplePoints.at(0)
+  const lastSamplePoint = samplePoints.at(-1)
+  const sampleDistanceMeters = lastSamplePoint?.distanceM ?? null
+  const sampleBaseTimestamp = firstSamplePoint?.timestampSec ?? 0
+  const sampleDurationSec =
+    firstSamplePoint && lastSamplePoint && samplePoints.length > 1
+      ? Math.max(
+          0,
+          Math.round(
+            resolveSampleTimer(lastSamplePoint, sampleBaseTimestamp) -
+              resolveSampleTimer(firstSamplePoint, sampleBaseTimestamp)
+          )
+        )
+      : null
+
+  const mergedAveragePaceSec =
+    getNumber(merged.averagePace) ??
+    (() => {
+      const minutesPerKm = pickNumber(merged, [['averagePaceInMinutesPerKilometer']])
+      return minutesPerKm != null ? Math.round(minutesPerKm * 60) : null
+    })()
+
   return NextResponse.json({
     telemetry: {
       activityId: getString(row.activity_id),
       startTime: getString(row.start_time),
       sport: getString(row.sport),
       distanceKm:
-        getNumber(row.distance_m) != null ? Number((Number(getNumber(row.distance_m)) / 1000).toFixed(2)) : null,
-      durationSec: getNumber(row.duration_s) != null ? Math.round(Number(getNumber(row.duration_s))) : null,
-      avgHr: getNumber(row.avg_hr) ?? getNumber(merged.averageHR),
-      maxHr: getNumber(row.max_hr) ?? getNumber(merged.maxHR),
-      avgPaceSecPerKm: getNumber(row.avg_pace) ?? getNumber(merged.averagePace),
-      avgCadenceSpm: getNumber(row.avg_cadence_spm) ?? getNumber(merged.averageCadence),
-      maxCadenceSpm: getNumber(row.max_cadence_spm) ?? getNumber(merged.maxCadence),
-      elevationGainM: getNumber(row.elevation_gain_m) ?? getNumber(merged.elevationGain),
-      elevationLossM: getNumber(row.elevation_loss_m) ?? getNumber(merged.elevationLoss),
+        getNumber(row.distance_m) != null
+          ? Number((Number(getNumber(row.distance_m)) / 1000).toFixed(2))
+          : sampleDistanceMeters != null
+            ? Number((sampleDistanceMeters / 1000).toFixed(2))
+            : null,
+      durationSec:
+        getNumber(row.duration_s) != null
+          ? Math.round(Number(getNumber(row.duration_s)))
+          : sampleDurationSec,
+      avgHr:
+        getNumber(row.avg_hr) ??
+        getNumber(merged.averageHR) ??
+        getNumber(merged.averageHeartRateInBeatsPerMinute) ??
+        (sampleHrValues.length > 0 ? average(sampleHrValues) : null),
+      maxHr:
+        getNumber(row.max_hr) ??
+        getNumber(merged.maxHR) ??
+        getNumber(merged.maxHeartRateInBeatsPerMinute) ??
+        (sampleHrValues.length > 0 ? Math.max(...sampleHrValues) : null),
+      avgPaceSecPerKm: getNumber(row.avg_pace) ?? mergedAveragePaceSec,
+      avgCadenceSpm:
+        getNumber(row.avg_cadence_spm) ??
+        getNumber(merged.averageCadence) ??
+        getNumber(merged.averageRunCadenceInStepsPerMinute) ??
+        (sampleCadenceValues.length > 0 ? average(sampleCadenceValues) : null),
+      maxCadenceSpm:
+        getNumber(row.max_cadence_spm) ??
+        getNumber(merged.maxCadence) ??
+        getNumber(merged.maxRunCadenceInStepsPerMinute) ??
+        (sampleCadenceValues.length > 0 ? Math.max(...sampleCadenceValues) : null),
+      elevationGainM:
+        getNumber(row.elevation_gain_m) ??
+        getNumber(merged.elevationGain) ??
+        getNumber(merged.totalElevationGainInMeters) ??
+        computeElevationGainFromSamples(samplePoints),
+      elevationLossM:
+        getNumber(row.elevation_loss_m) ??
+        getNumber(merged.elevationLoss) ??
+        getNumber(merged.totalElevationLossInMeters),
       maxSpeedMps: getNumber(row.max_speed_mps) ?? getNumber(merged.maxSpeedMps),
       calories: getNumber(row.calories) ?? getNumber(merged.calories),
       laps,
