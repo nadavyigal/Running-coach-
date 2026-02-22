@@ -47,7 +47,12 @@ export async function GET(request: NextRequest) {
   }
 
   const oauthState = await getGarminOAuthState(userId)
-  if (!oauthState || oauthState.authUserId !== user.id) {
+  if (!oauthState) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // Older Garmin connections may not have auth_user_id backfilled yet.
+  if (oauthState.authUserId && oauthState.authUserId !== user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
