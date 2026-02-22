@@ -269,6 +269,14 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks
 }
 
+function dedupeByKey<T>(items: T[], keySelector: (item: T) => string): T[] {
+  const deduped = new Map<string, T>()
+  for (const item of items) {
+    deduped.set(keySelector(item), item)
+  }
+  return Array.from(deduped.values())
+}
+
 export async function persistGarminSyncSnapshot(input: PersistGarminSyncInput): Promise<PersistGarminSyncResult> {
   const { userId, activities, sleep, datasets } = input
 
@@ -277,7 +285,8 @@ export async function persistGarminSyncSnapshot(input: PersistGarminSyncInput): 
   const authUserId = oauthState?.authUserId ?? null
   const nowIso = new Date().toISOString()
 
-  const activityRows = activities
+  const activityRows = dedupeByKey(
+    activities
     .filter((activity) => typeof activity.activityId === 'string' && activity.activityId.length > 0)
     .map((activity) => ({
       user_id: userId,
@@ -295,25 +304,30 @@ export async function persistGarminSyncSnapshot(input: PersistGarminSyncInput): 
       source: 'garmin_sync',
       raw_json: activity,
       updated_at: nowIso,
-    }))
+    })),
+    (row) => `${row.user_id}:${row.activity_id}`
+  )
 
-  const dailyRows = buildDailyMetricsRows({ datasets, sleep }).map((row) => ({
-    user_id: userId,
-    auth_user_id: authUserId,
-    date: row.date,
-    steps: row.steps,
-    sleep_score: row.sleepScore,
-    sleep_duration_s: row.sleepDurationS,
-    hrv: row.hrv,
-    resting_hr: row.restingHr,
-    stress: row.stress,
-    body_battery: row.bodyBattery,
-    training_readiness: row.trainingReadiness,
-    vo2max: row.vo2max,
-    weight: row.weight,
-    raw_json: row.rawJson,
-    updated_at: nowIso,
-  }))
+  const dailyRows = dedupeByKey(
+    buildDailyMetricsRows({ datasets, sleep }).map((row) => ({
+      user_id: userId,
+      auth_user_id: authUserId,
+      date: row.date,
+      steps: row.steps,
+      sleep_score: row.sleepScore,
+      sleep_duration_s: row.sleepDurationS,
+      hrv: row.hrv,
+      resting_hr: row.restingHr,
+      stress: row.stress,
+      body_battery: row.bodyBattery,
+      training_readiness: row.trainingReadiness,
+      vo2max: row.vo2max,
+      weight: row.weight,
+      raw_json: row.rawJson,
+      updated_at: nowIso,
+    })),
+    (row) => `${row.user_id}:${row.date}`
+  )
 
   for (const activityChunk of chunk(activityRows, 500)) {
     if (activityChunk.length === 0) continue

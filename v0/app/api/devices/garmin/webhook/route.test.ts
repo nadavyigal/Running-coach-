@@ -1,9 +1,21 @@
-﻿import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const storeRowsMock = vi.hoisted(() => vi.fn())
+const findRunSmartUserIdsByGarminUserIdMock = vi.hoisted(() => vi.fn(async () => [42]))
+const enqueueGarminDeriveJobMock = vi.hoisted(() =>
+  vi.fn(async () => ({ queued: true, jobId: 'derive-job-1' }))
+)
 
 vi.mock('@/lib/server/garmin-export-store', () => ({
   storeGarminExportRows: storeRowsMock,
+}))
+
+vi.mock('@/lib/server/garmin-oauth-store', () => ({
+  findRunSmartUserIdsByGarminUserId: findRunSmartUserIdsByGarminUserIdMock,
+}))
+
+vi.mock('@/lib/server/garmin-sync-queue', () => ({
+  enqueueGarminDeriveJob: enqueueGarminDeriveJobMock,
 }))
 
 async function loadRoute() {
@@ -14,6 +26,8 @@ describe('/api/devices/garmin/webhook', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     storeRowsMock.mockReset()
+    findRunSmartUserIdsByGarminUserIdMock.mockReset()
+    enqueueGarminDeriveJobMock.mockReset()
     delete process.env.GARMIN_WEBHOOK_SECRET
   })
 
@@ -88,6 +102,15 @@ describe('/api/devices/garmin/webhook', () => {
       source: 'ping_pull',
       fallbackGarminUserId: 'garmin-user-1',
     })
+    expect(enqueueGarminDeriveJobMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 42,
+        garminUserId: 'garmin-user-1',
+        datasetKey: 'activities',
+        source: 'webhook',
+      })
+    )
+    expect(body.deriveQueue.queued).toBeGreaterThan(0)
   })
 
   it('processes push payload without callbackURL', async () => {
@@ -184,3 +207,4 @@ describe('/api/devices/garmin/webhook', () => {
     expect(storeRowsMock).toHaveBeenCalledTimes(1)
   })
 })
+

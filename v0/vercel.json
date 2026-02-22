@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/garmin-nightly",
+      "schedule": "0 3 * * *"
+    },
+    {
       "path": "/api/cron/email-sequences",
       "schedule": "0 6 * * *"
     }

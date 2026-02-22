@@ -170,6 +170,25 @@ async function fetchConnectionRow(userId: number): Promise<GarminConnectionRow |
   return (data as GarminConnectionRow | null) ?? null
 }
 
+function parseIsoToMs(value: string | null | undefined): number | null {
+  if (!value) return null
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function selectMonotonicCursor(params: {
+  existingCursor: string | null
+  nextCursor: string | null
+}): string | null {
+  const existingMs = parseIsoToMs(params.existingCursor)
+  const nextMs = parseIsoToMs(params.nextCursor)
+
+  if (existingMs == null && nextMs == null) return params.nextCursor
+  if (existingMs == null) return params.nextCursor
+  if (nextMs == null) return params.existingCursor
+  return nextMs >= existingMs ? params.nextCursor : params.existingCursor
+}
+
 async function fetchTokenRow(userId: number): Promise<GarminTokenRow | null> {
   const supabase = createAdminClient()
   const { data, error } = await supabase
@@ -352,12 +371,75 @@ export async function markGarminSyncState(params: {
   lastSyncCursor?: string | null
   errorState?: Record<string, unknown> | null
 }): Promise<void> {
+  let monotonicCursor: string | null | undefined = params.lastSyncCursor
+  if (params.lastSyncCursor !== undefined) {
+    const currentConnection = await fetchConnectionRow(params.userId)
+    monotonicCursor = selectMonotonicCursor({
+      existingCursor: currentConnection?.last_sync_cursor ?? null,
+      nextCursor: params.lastSyncCursor ?? null,
+    })
+  }
+
   await upsertGarminConnection({
     userId: params.userId,
     ...(params.lastSyncAt !== undefined ? { lastSyncAt: params.lastSyncAt } : {}),
-    ...(params.lastSyncCursor !== undefined ? { lastSyncCursor: params.lastSyncCursor } : {}),
+    ...(params.lastSyncCursor !== undefined ? { lastSyncCursor: monotonicCursor ?? null } : {}),
     ...(params.errorState !== undefined ? { errorState: params.errorState } : {}),
   })
+}
+
+export async function listConnectedGarminUserIds(params?: {
+  limit?: number
+  offset?: number
+}): Promise<number[]> {
+  const supabase = createAdminClient()
+  let query = supabase
+    .from('garmin_connections')
+    .select('user_id')
+    .eq('status', 'connected')
+    .order('user_id', { ascending: true })
+
+  if (params?.limit != null) {
+    const limit = Math.max(1, params.limit)
+    const offset = Math.max(0, params.offset ?? 0)
+    query = query.range(offset, offset + limit - 1)
+  }
+
+  const { data, error } = await query
+  if (error) {
+    throw new Error(`Failed to list connected Garmin users: ${error.message}`)
+  }
+
+  const result: number[] = []
+  for (const row of (data ?? []) as Array<{ user_id?: unknown }>) {
+    if (typeof row.user_id === 'number' && Number.isFinite(row.user_id)) {
+      result.push(row.user_id)
+    }
+  }
+  return result
+}
+
+export async function findRunSmartUserIdsByGarminUserId(garminUserId: string): Promise<number[]> {
+  const normalized = garminUserId.trim()
+  if (!normalized) return []
+
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('garmin_connections')
+    .select('user_id')
+    .eq('garmin_user_id', normalized)
+
+  if (error) {
+    throw new Error(`Failed to map Garmin user to RunSmart user: ${error.message}`)
+  }
+
+  const mappedUserIds = new Set<number>()
+  for (const row of (data ?? []) as Array<{ user_id?: unknown }>) {
+    if (typeof row.user_id === 'number' && Number.isFinite(row.user_id)) {
+      mappedUserIds.add(row.user_id)
+    }
+  }
+  return Array.from(mappedUserIds)
 }
 
 async function revokeTokenUpstream(token: string): Promise<void> {
