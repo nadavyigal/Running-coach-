@@ -17,6 +17,7 @@ import {
 } from '@/lib/server/garmin-oauth-store'
 import { evaluateGarminSyncRateLimit } from '@/lib/server/garmin-rate-limiter'
 import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
+import { getGarminWebhookSecret } from '@/lib/server/garmin-webhook-secret'
 import { captureServerEvent } from '@/lib/server/posthog'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -460,17 +461,16 @@ async function fetchRecentStoredGarminActivities(
   lookbackDays: number
 ): Promise<Array<ReturnType<typeof toRunSmartActivity>>> {
   const supabase = createAdminClient()
-  const startTime = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString()
+  const lookbackCutoff = Date.now() - lookbackDays * 24 * 60 * 60 * 1000
 
   const { data, error } = await supabase
     .from('garmin_activities')
     .select(
-      'activity_id, start_time, sport, duration_s, distance_m, avg_hr, max_hr, avg_pace, elevation_gain_m, calories, raw_json'
+      'activity_id, start_time, sport, duration_s, distance_m, avg_hr, max_hr, avg_pace, elevation_gain_m, calories, raw_json, updated_at'
     )
     .eq('user_id', userId)
-    .gte('start_time', startTime)
-    .order('start_time', { ascending: false })
-    .limit(200)
+    .order('updated_at', { ascending: false })
+    .limit(500)
 
   if (error) {
     throw new Error(`Failed to query garmin_activities cache: ${error.message}`)
@@ -485,12 +485,14 @@ async function fetchRecentStoredGarminActivities(
         getNumber(row.distance_m) ?? getNumber(raw.distanceInMeters) ?? getNumber(raw.distance) ?? 0
       const durationSeconds =
         getNumber(row.duration_s) ?? getNumber(raw.durationInSeconds) ?? getNumber(raw.duration) ?? 0
+      const startTimeGMT = getString(row.start_time) ?? getString(raw.startTimeGMT)
+      const updatedAt = getString(row.updated_at)
 
       return {
         activityId: getString(row.activity_id) ?? getString(raw.activityId),
         activityName: getString(raw.activityName) ?? getString(raw.activity_name) ?? activityType,
         activityType: activityType.toLowerCase().replace(/ /g, '_'),
-        startTimeGMT: getString(row.start_time) ?? getString(raw.startTimeGMT),
+        startTimeGMT,
         distance: distanceMeters / 1000,
         duration: durationSeconds > 100_000 ? Math.round(durationSeconds / 1000) : Math.round(durationSeconds),
         averageHR: getNumber(row.avg_hr) ?? getNumber(raw.averageHR) ?? getNumber(raw.averageHeartRateInBeatsPerMinute),
@@ -501,9 +503,20 @@ async function fetchRecentStoredGarminActivities(
           getNumber(row.elevation_gain_m) ??
           getNumber(raw.elevationGain) ??
           getNumber(raw.totalElevationGainInMeters),
+        __updatedAt: updatedAt,
       }
     })
-    .filter((entry) => (entry.activityType.includes('run') ? true : false))
+    .filter((entry) => entry.activityType.includes('run') || entry.activityName.toLowerCase().includes('run'))
+    .filter((entry) => {
+      const startTs = entry.startTimeGMT ? Date.parse(entry.startTimeGMT) : Number.NaN
+      if (Number.isFinite(startTs)) return startTs >= lookbackCutoff
+
+      const updatedTs = entry.__updatedAt ? Date.parse(entry.__updatedAt) : Number.NaN
+      if (Number.isFinite(updatedTs)) return updatedTs >= lookbackCutoff
+
+      return true
+    })
+    .map(({ __updatedAt: _ignored, ...entry }) => entry)
 
   return dedupeRunSmartActivities(mapped).filter((activity) =>
     isActivityWithinLookback(activity, lookbackDays)
@@ -866,10 +879,10 @@ export async function runGarminSyncForUser(params: {
 
     const nowIso = new Date().toISOString()
     const notices: string[] = []
-    const configuredWebhookSecret = process.env.GARMIN_WEBHOOK_SECRET?.trim()
+    const { value: configuredWebhookSecret } = getGarminWebhookSecret()
     const webhookEndpointHint = '/api/devices/garmin/webhook/<GARMIN_WEBHOOK_SECRET>'
 
-    if (!configuredWebhookSecret) {
+    if (!configuredWebhookSecret && !ingestion.latestReceivedAt) {
       notices.push('GARMIN_WEBHOOK_SECRET is not configured. Configure it before enabling Garmin webhooks.')
     }
 
@@ -886,10 +899,17 @@ export async function runGarminSyncForUser(params: {
     }
 
     const totalRows = Object.values(datasetCounts).reduce((sum, value) => sum + value, 0)
-    if (ingestion.storeAvailable && totalRows === 0) {
+    const latestIngestionTs = ingestion.latestReceivedAt ? Date.parse(ingestion.latestReceivedAt) : Number.NaN
+    const hasRecentIngestion =
+      Number.isFinite(latestIngestionTs) &&
+      latestIngestionTs >= Date.now() - syncWindow.lookbackDays * 24 * 60 * 60 * 1000
+
+    if (ingestion.storeAvailable && totalRows === 0 && syncWindow.source === 'lookback' && !hasRecentIngestion) {
       notices.push(
         `No Garmin export records received in the last ${syncWindow.lookbackDays} days. Ensure Garmin ping/pull or push notifications point to ${webhookEndpointHint}.`
       )
+    } else if (ingestion.storeAvailable && totalRows === 0 && syncWindow.source === 'cursor') {
+      notices.push('No new Garmin export records since the previous sync cursor.')
     }
 
     const activityRows = [
@@ -949,11 +969,12 @@ export async function runGarminSyncForUser(params: {
 
     if (activitiesForSync.length === 0) {
       try {
-        const cachedActivities = await fetchRecentStoredGarminActivities(userId, options.activityLookbackDays)
+        const cachedLookbackDays = Math.max(options.activityLookbackDays, 30)
+        const cachedActivities = await fetchRecentStoredGarminActivities(userId, cachedLookbackDays)
         if (cachedActivities.length > 0) {
           activitiesForSync = cachedActivities
           notices.push(
-            `Webhook feeds were empty, so RunSmart imported ${cachedActivities.length} cached Garmin activities from analytics storage.`
+            `Webhook feeds were empty, so RunSmart imported ${cachedActivities.length} cached Garmin activities from analytics storage (${cachedLookbackDays}-day window).`
           )
           fallbackFailureNotice = null
         }

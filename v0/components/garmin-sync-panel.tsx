@@ -262,6 +262,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
       'analytics storage unavailable',
       'storage unavailable',
       'no garmin export records',
+      'no new garmin export records',
       'direct garmin pull failed',
     ]
 

@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server'
 import {
-  getValidGarminAccessToken,
-  markGarminAuthError,
-  refreshGarminAccessToken,
-} from '@/lib/server/garmin-oauth-store'
-import {
   GARMIN_HISTORY_DAYS,
   type GarminStoredSummaryRow,
   groupRowsByDataset,
   lookbackStartIso,
   readGarminExportRows,
 } from '@/lib/server/garmin-export-store'
+import {
+  getValidGarminAccessToken,
+  markGarminAuthError,
+  refreshGarminAccessToken,
+} from '@/lib/server/garmin-oauth-store'
+import { getGarminWebhookSecret } from '@/lib/server/garmin-webhook-secret'
 
 export const dynamic = 'force-dynamic'
 
@@ -155,12 +156,22 @@ export async function GET(req: Request) {
   const now = new Date()
   const start = new Date(now.getTime() - GARMIN_HISTORY_DAYS * 24 * 60 * 60 * 1000)
   const origin = new URL(req.url).origin
-  const configuredSecret = process.env.GARMIN_WEBHOOK_SECRET?.trim()
+  const { value: configuredSecret, source: configuredSecretSource } = getGarminWebhookSecret()
   const webhookUrl = configuredSecret
     ? `${origin}/api/devices/garmin/webhook/${encodeURIComponent(configuredSecret)}`
     : `${origin}/api/devices/garmin/webhook/<GARMIN_WEBHOOK_SECRET>`
+  const latestReceivedAt = exportRowsResult.rows.reduce<string | null>((latest, row) => {
+    if (!row.receivedAt) return latest
+    if (!latest) return row.receivedAt
+    return Date.parse(row.receivedAt) > Date.parse(latest) ? row.receivedAt : latest
+  }, null)
+  const hasRecentIngestion =
+    latestReceivedAt != null &&
+    Number.isFinite(Date.parse(latestReceivedAt)) &&
+    Date.parse(latestReceivedAt) >= Date.now() - 7 * 24 * 60 * 60 * 1000
 
   const blockers: string[] = []
+  const warnings: string[] = []
   if (!includesPermission(permissions, 'ACTIVITY_EXPORT')) {
     blockers.push('Missing ACTIVITY_EXPORT permission.')
   }
@@ -173,7 +184,13 @@ export async function GET(req: Request) {
     blockers.push(`No Garmin webhook export records found in the last ${GARMIN_HISTORY_DAYS} days.`)
   }
   if (!configuredSecret) {
-    blockers.push('GARMIN_WEBHOOK_SECRET is not configured.')
+    if (hasRecentIngestion) {
+      warnings.push(
+        'GARMIN_WEBHOOK_SECRET is not visible to the diagnostics runtime, but webhook ingestion is active.'
+      )
+    } else {
+      blockers.push('GARMIN_WEBHOOK_SECRET is not configured.')
+    }
   }
 
   return NextResponse.json({
@@ -193,8 +210,10 @@ export async function GET(req: Request) {
     webhook: {
       endpoint: webhookUrl,
       mode: 'Garmin ping/pull + push',
+      secretSource: configuredSecretSource,
     },
     blockers,
+    warnings,
     results: {
       profile,
       permissions: permissionsResult,
@@ -202,6 +221,7 @@ export async function GET(req: Request) {
         storeAvailable: exportRowsResult.storeAvailable,
         storeError: exportRowsResult.storeError ?? null,
         recordCount: exportRowsResult.rows.length,
+        latestReceivedAt,
         datasetCounts,
       },
     },

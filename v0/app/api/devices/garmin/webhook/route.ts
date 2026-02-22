@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
-import { findRunSmartUserIdsByGarminUserId } from '@/lib/server/garmin-oauth-store'
-import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
 import {
   type GarminDatasetKey,
   storeGarminExportRows,
 } from '@/lib/server/garmin-export-store'
+import { findRunSmartUserIdsByGarminUserId } from '@/lib/server/garmin-oauth-store'
+import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
+import { getGarminWebhookSecret } from '@/lib/server/garmin-webhook-secret'
 
 export const dynamic = 'force-dynamic'
 
@@ -130,7 +131,7 @@ function summarizeUpstreamBody(body: string): string {
 }
 
 function getWebhookAuthResult(req: Request): { authorized: boolean; status: number; error?: string } {
-  const configuredSecret = process.env.GARMIN_WEBHOOK_SECRET?.trim()
+  const { value: configuredSecret } = getGarminWebhookSecret()
   if (!configuredSecret) {
     return {
       authorized: false,
