@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ChevronDown, Loader2 } from "lucide-react";
-import { HabitAnalyticsService, type WeeklyRecap } from "@/lib/habitAnalytics";
+import { HabitAnalyticsService, type WeeklyRecap, clearWeeklyRecapCache } from "@/lib/habitAnalytics";
 import { ENABLE_WEEKLY_RECAP } from "@/lib/featureFlags";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { WeeklyRecapModal } from "@/components/weekly-recap-modal";
+import { useData } from "@/contexts/DataContext";
 
 const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -28,6 +29,10 @@ export function WeeklyRecapWidget({
   const [modalOpen, setModalOpen] = useState(false);
   const hasTracked = useRef(false);
 
+  // Track run count from DataContext so we re-fetch when a run is added/synced
+  const { weeklyStats } = useData();
+  const weeklyRunsCount = weeklyStats?.runsCompleted ?? 0;
+
   const shouldRender = ENABLE_WEEKLY_RECAP && Boolean(userId);
   const service = useMemo(() => new HabitAnalyticsService(), []);
   useEffect(() => {
@@ -43,6 +48,9 @@ export function WeeklyRecapWidget({
 
     let isMounted = true;
     const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+
+    // Clear stale localStorage cache before fetching so new runs are always included
+    clearWeeklyRecapCache(userId, weekStart);
 
     setLoading(true);
     service
@@ -62,7 +70,9 @@ export function WeeklyRecapWidget({
     return () => {
       isMounted = false;
     };
-  }, [shouldRender, service, userId]);
+  // weeklyRunsCount added: effect re-runs whenever DataContext run count changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldRender, service, userId, weeklyRunsCount]);
 
   useEffect(() => {
     if (!recap || hasTracked.current) return;

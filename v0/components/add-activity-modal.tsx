@@ -108,36 +108,39 @@ export function AddActivityModal({
     },
     {
       id: "garmin",
-      name: "Connect to Garmin",
+      name: "Sync Last Activity from Garmin",
       icon: Watch,
-      description: "Sync with Garmin Connect",
+      description: "Import your latest Garmin activity",
       action: async () => {
         try {
           const { dbUtils } = await import("@/lib/dbUtils")
           const user = await dbUtils.getCurrentUser()
           if (!user?.id) {
-            toast({ title: "Setup required", description: "Please complete onboarding before connecting Garmin.", variant: "destructive" })
+            toast({ title: "Setup required", description: "Please complete onboarding first.", variant: "destructive" })
             return
           }
-          const response = await fetch("/api/devices/garmin/connect", {
+          // Check if Garmin is connected before attempting sync
+          const { db } = await import("@/lib/db")
+          const device = await (db.wearableDevices as any)
+            .where('[userId+type]')
+            .equals([user.id, 'garmin'])
+            .first()
+          if (!device || device.connectionStatus === 'disconnected') {
+            toast({ title: "Garmin not connected", description: "Go to Profile > Devices & Apps to connect Garmin first.", variant: "destructive" })
+            return
+          }
+          const response = await fetch("/api/garmin/sync-fit", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-user-id": String(user.id),
-            },
-            body: JSON.stringify({
-              userId: user.id,
-              redirectUri: `${window.location.origin}/garmin/callback`,
-            }),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user.id }),
           })
           const data = await response.json()
-          if (data.success) {
-            window.location.href = data.authUrl
-          } else {
-            toast({ title: "Connection failed", description: data.error || "Failed to initiate Garmin connection.", variant: "destructive" })
-          }
+          if (!response.ok) throw new Error((data as { error?: string }).error ?? "Sync failed")
+          toast({ title: (data as { processed?: boolean }).processed ? "Run synced!" : "Up to date", description: (data as { message?: string }).message })
+          if ((data as { processed?: boolean }).processed) onActivityAdded?.()
+          onOpenChange(false)
         } catch {
-          toast({ title: "Connection failed", description: "Failed to initiate Garmin connection. Please try again.", variant: "destructive" })
+          toast({ title: "Sync failed", description: "Could not sync from Garmin. Please try again.", variant: "destructive" })
         }
       },
     },

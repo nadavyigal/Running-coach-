@@ -149,6 +149,16 @@ const setCachedWeeklyRecap = (
   }
 };
 
+export const clearWeeklyRecapCache = (userId: number, weekStartDate: Date): void => {
+  if (!canAccessStorage()) return;
+  try {
+    const cacheKey = buildWeeklyRecapCacheKey(userId, weekStartDate);
+    window.localStorage.removeItem(cacheKey);
+  } catch {
+    // ignore
+  }
+};
+
 export class HabitAnalyticsService {
   private getDatabase() {
     if (Object.prototype.hasOwnProperty.call(globalThis, 'db')) {
