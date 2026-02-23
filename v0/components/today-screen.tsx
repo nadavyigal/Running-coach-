@@ -118,6 +118,7 @@ export function TodayScreen() {
   const [recapOpenSignal, setRecapOpenSignal] = useState(0)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'signup' | 'login'>('signup')
+  const [isGarminFitSyncing, setIsGarminFitSyncing] = useState(false)
   const [authStorageKey, setAuthStorageKey] = useState<string | null>(null)
   const [storedAuthEmail, setStoredAuthEmail] = useState<string | null>(null)
   const [storedAuthUserId, setStoredAuthUserId] = useState<string | null>(null)
@@ -213,6 +214,27 @@ export function TodayScreen() {
     const currentIndex = tips.indexOf(dailyTip)
     const nextIndex = (currentIndex + 1) % tips.length
     setDailyTip(tips.at(nextIndex) ?? tips[0] ?? dailyTip)
+  }
+
+  const handleGarminFitSync = async () => {
+    setIsGarminFitSyncing(true)
+    try {
+      const res = await fetch('/api/garmin/sync-fit', { method: 'POST' })
+      const data = (await res.json()) as { processed?: number; message?: string; error?: string; code?: string }
+
+      if (!res.ok) {
+        if (data.code === 'not_connected') return // Garmin not linked — silently skip
+        toast({ title: 'Sync failed', description: data.error ?? 'Unknown error', variant: 'destructive' })
+        return
+      }
+
+      toast({ title: data.processed ? 'Run synced!' : 'Up to date', description: data.message })
+      if (data.processed) await refreshContext()
+    } catch {
+      toast({ title: 'Sync failed', description: 'Could not reach server. Please try again.', variant: 'destructive' })
+    } finally {
+      setIsGarminFitSyncing(false)
+    }
   }
 
   const getRecoveryLabel = (score: number) => {
@@ -945,6 +967,19 @@ export function TodayScreen() {
                 <div className="rounded-lg border border-emerald-400/30 bg-black/30 p-3">
                   <SyncStatusIndicator />
                 </div>
+                <Button
+                  variant="outline"
+                  className="w-full border-emerald-400/30 bg-white/5 text-emerald-100 hover:bg-white/10"
+                  onClick={() => void handleGarminFitSync()}
+                  disabled={isGarminFitSyncing}
+                >
+                  {isGarminFitSyncing ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                  )}
+                  {isGarminFitSyncing ? 'Syncing...' : 'Sync Latest Garmin Run'}
+                </Button>
               </>
             ) : (
               <>
