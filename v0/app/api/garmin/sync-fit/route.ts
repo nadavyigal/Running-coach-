@@ -1,4 +1,5 @@
-import { type NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runGarminDeriveForPayload } from '@/lib/server/garmin-derive-worker'
 
@@ -7,54 +8,71 @@ export const maxDuration = 55
 
 /**
  * POST /api/garmin/sync-fit
- * Body: { userId: number }
  *
  * Immediately processes any pending Garmin activity file (FIT) rows for the
- * given local userId — no need to wait for the nightly cron.
- * Uses the same integer userId that the rest of the Garmin system uses
- * (local Dexie user ID, stored in garmin_connections.user_id).
+ * authenticated user — no need to wait for the nightly cron.
+ *
+ * Auth: Supabase session cookie (ANON_KEY must be correctly set).
+ * Falls back to `userId` in request body for older sessions where
+ * auth_user_id wasn't yet backfilled in garmin_connections.
  *
  * Returns: { processed: number, message: string }
  */
-export async function POST(request: NextRequest) {
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
-  }
-
-  const userId = (body as Record<string, unknown>)?.userId
-  if (typeof userId !== 'number' || !Number.isInteger(userId) || userId <= 0) {
-    return NextResponse.json({ error: 'Valid userId (integer) is required' }, { status: 400 })
-  }
-
+export async function POST(request: Request) {
   const admin = createAdminClient()
 
-  // Verify a connected garmin account exists for this userId
-  const { data: connection, error: connError } = await admin
-    .from('garmin_connections')
-    .select('user_id, status')
-    .eq('user_id', userId)
-    .eq('status', 'connected')
-    .maybeSingle()
+  // 1. Authenticate via Supabase session cookie
+  const supabase = await createClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-  if (connError) {
-    return NextResponse.json({ error: 'Failed to look up Garmin connection' }, { status: 500 })
+  let garminUserId: number | null = null
+
+  if (!authError && user) {
+    // Primary path: look up garmin connection by Supabase auth UUID
+    const { data: conn } = await admin
+      .from('garmin_connections')
+      .select('user_id')
+      .eq('auth_user_id', user.id)
+      .eq('status', 'connected')
+      .maybeSingle()
+
+    garminUserId = (conn?.user_id as number) ?? null
   }
 
-  if (!connection) {
+  // 2. Fallback: accept userId from request body (for existing sessions
+  //    where auth_user_id wasn't yet populated in garmin_connections)
+  if (garminUserId === null) {
+    let body: unknown
+    try { body = await request.json() } catch { body = null }
+    const candidateId = (body as Record<string, unknown> | null)?.userId
+    if (typeof candidateId === 'number' && Number.isInteger(candidateId) && candidateId > 0) {
+      // Verify this userId has a valid garmin connection before trusting it
+      const { data: conn } = await admin
+        .from('garmin_connections')
+        .select('user_id')
+        .eq('user_id', candidateId)
+        .eq('status', 'connected')
+        .maybeSingle()
+      garminUserId = (conn?.user_id as number) ?? null
+    }
+  }
+
+  if (garminUserId === null) {
+    // No auth session AND no valid userId — return 401 only if truly unauthenticated
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     return NextResponse.json(
       { error: 'Garmin not connected', code: 'not_connected' },
       { status: 404 }
     )
   }
 
-  // Check if there are any pending files before spinning up the full worker
+  // 3. Check for pending files before spinning up the full worker
   const { data: pendingRows } = await admin
     .from('garmin_activity_files')
     .select('id')
-    .eq('user_id', userId)
+    .eq('user_id', garminUserId)
     .eq('status', 'pending')
     .limit(1)
 
@@ -65,10 +83,10 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  // Run the derive worker immediately for this user
+  // 4. Run the derive worker immediately for this user
   try {
     const result = await runGarminDeriveForPayload({
-      userId,
+      userId: garminUserId,
       datasetKey: 'activityFiles',
       source: 'webhook',
       requestedAt: new Date().toISOString(),
