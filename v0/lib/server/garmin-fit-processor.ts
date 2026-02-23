@@ -10,11 +10,14 @@ const FitParserConstructor = require('fit-file-parser').default as new (
 // ─── Raw FIT types (from fit-file-parser output) ─────────────────────────────
 
 interface FitData {
+  // list mode: sessions/laps/records at top level
   sessions?: RawSession[]
   laps?: RawLap[]
   records?: RawRecord[]
   events?: Record<string, unknown>[]
   device_infos?: Record<string, unknown>[]
+  // cascade mode: sessions nested under activity (not used, but present)
+  activity?: Record<string, unknown>
 }
 
 interface RawSession {
@@ -142,7 +145,7 @@ export async function parseFitBuffer(buffer: Buffer): Promise<ParsedFitActivity>
     lengthUnit: 'm',
     temperatureUnit: 'celsius',
     elapsedRecordField: true,
-    mode: 'cascade',       // laps contain their own records array
+    mode: 'list',          // sessions/laps/records at top level
   })
 
   const data: FitData = await parser.parseAsync(buffer)
@@ -152,8 +155,8 @@ export async function parseFitBuffer(buffer: Buffer): Promise<ParsedFitActivity>
 // ─── Transform ────────────────────────────────────────────────────────────────
 
 function transformFitData(data: FitData): ParsedFitActivity {
-  // In cascade mode, session contains laps which contain records.
-  // In some files, laps / records appear at top level too.
+  // In list mode, sessions/laps/records are at top level (not nested).
+  // Fall back gracefully if session doesn't have nested laps.
   const rawSessions = data.sessions ?? []
   const rawSession: RawSession = rawSessions[0] ?? {}
 
