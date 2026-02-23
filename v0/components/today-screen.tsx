@@ -32,7 +32,7 @@ import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
 import ModalErrorBoundary from "@/components/modal-error-boundary"
-import { type Workout, type Route, type Goal, type RecoveryScore, resetDatabaseInstance } from "@/lib/db"
+import { type Workout, type Route, type Goal, type RecoveryScore, resetDatabaseInstance, db } from "@/lib/db"
 import { dbUtils, getUserPaceZones } from "@/lib/dbUtils"
 import { useData, useGoalProgress } from "@/contexts/DataContext"
 import { WorkoutPhasesDisplay } from "@/components/workout-phases-display"
@@ -119,6 +119,7 @@ export function TodayScreen() {
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'signup' | 'login'>('signup')
   const [isGarminFitSyncing, setIsGarminFitSyncing] = useState(false)
+  const [isGarminConnected, setIsGarminConnected] = useState(false)
   const [authStorageKey, setAuthStorageKey] = useState<string | null>(null)
   const [storedAuthEmail, setStoredAuthEmail] = useState<string | null>(null)
   const [storedAuthUserId, setStoredAuthUserId] = useState<string | null>(null)
@@ -193,6 +194,21 @@ export function TodayScreen() {
       setAuthSnapshotChecked(true)
     }
   }, [authUser, authLoading])
+
+  // Check Garmin connection status
+  useEffect(() => {
+    if (!userId) return
+    let mounted = true
+    void db.wearableDevices
+      .where('[userId+type]' as any)
+      .equals([userId, 'garmin'])
+      .first()
+      .then((device) => {
+        if (mounted) setIsGarminConnected(!!device && device.connectionStatus !== 'disconnected')
+      })
+      .catch(() => { /* ignore */ })
+    return () => { mounted = false }
+  }, [userId])
 
   const tips = [
     "Focus on your breathing rhythm today. Try the 3:2 pattern - inhale for 3 steps, exhale for 2 steps.",
@@ -972,19 +988,6 @@ export function TodayScreen() {
                 <div className="rounded-lg border border-emerald-400/30 bg-black/30 p-3">
                   <SyncStatusIndicator />
                 </div>
-                <Button
-                  variant="outline"
-                  className="w-full border-emerald-400/30 bg-white/5 text-emerald-100 hover:bg-white/10"
-                  onClick={() => void handleGarminFitSync()}
-                  disabled={isGarminFitSyncing}
-                >
-                  {isGarminFitSyncing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                  )}
-                  {isGarminFitSyncing ? 'Syncing...' : 'Sync Latest Garmin Run'}
-                </Button>
               </>
             ) : (
               <>
@@ -1286,6 +1289,25 @@ export function TodayScreen() {
           Activity
         </Button>
       </div>
+
+      {/* Sync Last Activity from Garmin — only shown when Garmin is connected */}
+      {isGarminConnected && (
+        <div className="px-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-410">
+          <Button
+            variant="outline"
+            className="w-full h-12 gap-2"
+            onClick={() => void handleGarminFitSync()}
+            disabled={isGarminFitSyncing}
+          >
+            {isGarminFitSyncing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            {isGarminFitSyncing ? 'Syncing...' : 'Sync Last Activity from Garmin'}
+          </Button>
+        </div>
+      )}
 
       {/* Coaching Tip with Gradient Background */}
       <div className="px-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-500">

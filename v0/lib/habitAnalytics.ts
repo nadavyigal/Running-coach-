@@ -257,10 +257,16 @@ export class HabitAnalyticsService {
 
     const weekEndDate = this.getWeekEnd(normalizedWeekStart);
 
-    const currentWeekRuns = await database.runs
-      .where('[userId+completedAt]')
-      .between([userId, normalizedWeekStart], [userId, weekEndDate], true, true)
-      .toArray();
+    // Use in-memory filtering instead of compound index query to handle
+    // cases where completedAt is stored as a string (e.g. Garmin-synced runs
+    // arriving via JSON). IndexedDB range queries on [userId+completedAt]
+    // fail silently when the stored type (string) differs from the query
+    // bound type (Date), returning 0 results.
+    const allUserRuns = await database.runs.where('userId').equals(userId).toArray();
+    const currentWeekRuns = allUserRuns.filter((run: Run) => {
+      const d = new Date(run.completedAt);
+      return d >= normalizedWeekStart && d <= weekEndDate;
+    });
 
     const currentStats = this.summarizeRuns(currentWeekRuns);
     const averagePaceSeconds = calculatePace(currentStats.totalDistance, currentStats.totalDuration);
@@ -268,10 +274,10 @@ export class HabitAnalyticsService {
 
     const previousWeekStart = subDays(normalizedWeekStart, 7);
     const previousWeekEnd = subDays(weekEndDate, 7);
-    const previousWeekRuns = await database.runs
-      .where('[userId+completedAt]')
-      .between([userId, previousWeekStart], [userId, previousWeekEnd], true, true)
-      .toArray();
+    const previousWeekRuns = allUserRuns.filter((run: Run) => {
+      const d = new Date(run.completedAt);
+      return d >= previousWeekStart && d <= previousWeekEnd;
+    });
     const previousStats = this.summarizeRuns(previousWeekRuns);
 
     const workouts = await this.getUserWorkouts(userId);

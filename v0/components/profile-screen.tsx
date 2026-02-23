@@ -30,6 +30,7 @@ import {
   Shield,
   HelpCircle,
   ChevronRight,
+  ChevronDown,
   Loader2,
   AlertCircle,
   Trash2,
@@ -54,16 +55,13 @@ import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db";
 import { ShareBadgeModal } from "@/components/share-badge-modal";
 import { Share2, Users } from "lucide-react";
 import { JoinCohortModal } from "@/components/join-cohort-modal";
-import { GarminSyncPanel } from "@/components/garmin-sync-panel";
-import { GarminReadinessCard } from "@/components/garmin-readiness-card";
-import { PerformanceManagementChart } from "@/components/performance-management-chart";
 import { CommunityStatsWidget } from "@/components/community-stats-widget";
 import { CoachingInsightsWidget } from "@/components/coaching-insights-widget";
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
 import { PerformanceAnalyticsDashboard } from "@/components/performance-analytics-dashboard";
 import { Brain, Target, GitMerge, Star } from "lucide-react";
 import { PlanTemplateFlow } from "@/components/plan-template-flow";
-import { type Goal, type Run } from "@/lib/db";
+import { type Goal, type Run, db } from "@/lib/db";
 import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
@@ -116,6 +114,8 @@ export function ProfileScreen() {
   const [mergeSourceGoal, setMergeSourceGoal] = useState<Goal | null>(null)
   const [isSwitchingPrimary, setIsSwitchingPrimary] = useState(false)
   const [joiningChallengeSlug, setJoiningChallengeSlug] = useState<string | null>(null)
+  const [garminConnected, setGarminConnected] = useState(false)
+  const [recentRunsExpanded, setRecentRunsExpanded] = useState(false)
 
   const filterRunsToRecentWindow = useCallback((runs: Run[]): Run[] => {
     const cutoff = new Date()
@@ -141,6 +141,21 @@ export function ProfileScreen() {
     if (activeGoals.length > 0) setGoals(activeGoals)
     setRecentRuns(filterRunsToRecentWindow(contextRecentRuns))
   }, [contextUserId, contextPrimaryGoal, activeGoals, contextRecentRuns, filterRunsToRecentWindow])
+
+  // Load Garmin connection status
+  useEffect(() => {
+    if (!userId) return
+    let mounted = true
+    void db.wearableDevices
+      .where('[userId+type]' as any)
+      .equals([userId, 'garmin'])
+      .first()
+      .then((device) => {
+        if (mounted) setGarminConnected(!!device && device.connectionStatus !== 'disconnected')
+      })
+      .catch(() => { /* ignore */ })
+    return () => { mounted = false }
+  }, [userId])
 
   // Load goal progress using GoalProgressEngine for consistency with GoalProgressDashboard
   useEffect(() => {
@@ -215,6 +230,25 @@ export function ProfileScreen() {
     if (!goalId) return null
     const progress = goalProgressMap.get(goalId)
     return progress?.trajectory ?? null
+  }
+
+  const handleGarminConnect = async () => {
+    if (!userId) return
+    try {
+      const response = await fetch('/api/devices/garmin/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': String(userId) },
+        body: JSON.stringify({ userId, redirectUri: `${window.location.origin}/garmin/callback` }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data?.success || !data?.authUrl) {
+        throw new Error(data?.error || 'Failed to initiate Garmin connection')
+      }
+      window.location.href = data.authUrl
+    } catch (err) {
+      console.error('Garmin connect failed:', err)
+      toast({ title: 'Connection failed', description: 'Could not start Garmin connection. Please try again.', variant: 'destructive' })
+    }
   }
 
   const handleShareClick = (badgeId: string, badgeName: string) => {
@@ -594,7 +628,6 @@ export function ProfileScreen() {
   const connections = [
     { icon: Footprints, name: "Add Shoes", desc: "Track your running shoes mileage" },
     { icon: Users, name: "Join a Cohort", desc: "Join a community group with an invite code" },
-    { icon: Watch, name: "Connect to Watch", desc: "Sync with Apple Watch, Garmin, etc." },
     { icon: Music, name: "Connect to Spotify", desc: "Sync your running playlists" },
     { icon: Heart, name: "Connect to Fitness Apps", desc: "Sync with Strava, Nike Run Club, etc." },
     { icon: Plus, name: "Connect to Health", desc: "Sync with Apple Health or Google Fit" },
@@ -1291,63 +1324,73 @@ export function ProfileScreen() {
             </Card>
           </div>
 
-          {/* Recent Runs */}
+          {/* Recent Runs — collapsible */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Recent Runs (Last 14 Days)</CardTitle>
+            <CardHeader
+              className="cursor-pointer select-none"
+              onClick={() => setRecentRunsExpanded((prev) => !prev)}
+            >
+              <CardTitle className="text-base flex items-center justify-between">
+                Recent Runs (Last 14 Days)
+                <ChevronDown
+                  className={`h-4 w-4 text-foreground/50 transition-transform duration-200 ${recentRunsExpanded ? 'rotate-180' : ''}`}
+                />
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {isRunsLoading ? (
-                <div className="flex items-center gap-2 text-sm text-foreground/70">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading runs...
-                </div>
-              ) : recentRuns.length === 0 ? (
-                <p className="text-sm text-foreground/70">No runs in the last 14 days.</p>
-              ) : (
-                recentRuns.map((run) => (
-                  <div key={run.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-white">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-foreground">{run.distance.toFixed(2)} km</span>
-                        <span className="text-xs text-foreground/60">•</span>
-                        <span className="text-sm text-foreground/70">{formatTime(run.duration)}</span>
-                        <span className="text-xs text-foreground/60">•</span>
-                        <span className="text-sm text-foreground/70">{formatPace(run.pace ?? run.duration / run.distance)}/km</span>
-                      </div>
-                      <div className="text-xs text-foreground/60 truncate">
-                        {run.importSource === 'garmin' && (
-                          <Badge variant="secondary" className="text-[10px] me-1 inline-flex items-center gap-1">
-                            <Watch className="h-3 w-3" />
-                            Garmin
-                          </Badge>
-                        )}
-                        {new Date(run.completedAt).toLocaleDateString()} • {run.notes ?? run.type}
-                        {run.elevationGain != null ? ` • Elev +${Math.round(run.elevationGain)}m` : ''}
-                        {run.maxHR != null ? ` • Max HR ${run.maxHR}bpm` : ''}
-                        {run.heartRate != null ? ` • Avg HR ${Math.round(run.heartRate)}bpm` : ''}
-                        {run.calories != null ? ` • ${Math.round(run.calories)} kcal` : ''}
-                        {run.runReport ? ' • report ready' : ''}
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        if (!run.id) return
-                        try {
-                          window.dispatchEvent(new CustomEvent('navigate-to-run-report', { detail: { runId: run.id } }))
-                        } catch {
-                          // ignore
-                        }
-                      }}
-                    >
-                      View
-                    </Button>
+            {recentRunsExpanded && (
+              <CardContent className="space-y-3">
+                {isRunsLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-foreground/70">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading runs...
                   </div>
-                ))
-              )}
-            </CardContent>
+                ) : recentRuns.length === 0 ? (
+                  <p className="text-sm text-foreground/70">No runs in the last 14 days.</p>
+                ) : (
+                  recentRuns.map((run) => (
+                    <div key={run.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-white">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-foreground">{run.distance.toFixed(2)} km</span>
+                          <span className="text-xs text-foreground/60">•</span>
+                          <span className="text-sm text-foreground/70">{formatTime(run.duration)}</span>
+                          <span className="text-xs text-foreground/60">•</span>
+                          <span className="text-sm text-foreground/70">{formatPace(run.pace ?? run.duration / run.distance)}/km</span>
+                        </div>
+                        <div className="text-xs text-foreground/60 truncate">
+                          {run.importSource === 'garmin' && (
+                            <Badge variant="secondary" className="text-[10px] me-1 inline-flex items-center gap-1">
+                              <Watch className="h-3 w-3" />
+                              Garmin
+                            </Badge>
+                          )}
+                          {new Date(run.completedAt).toLocaleDateString()} • {run.notes ?? run.type}
+                          {run.elevationGain != null ? ` • Elev +${Math.round(run.elevationGain)}m` : ''}
+                          {run.maxHR != null ? ` • Max HR ${run.maxHR}bpm` : ''}
+                          {run.heartRate != null ? ` • Avg HR ${Math.round(run.heartRate)}bpm` : ''}
+                          {run.calories != null ? ` • ${Math.round(run.calories)} kcal` : ''}
+                          {run.runReport ? ' • report ready' : ''}
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          if (!run.id) return
+                          try {
+                            window.dispatchEvent(new CustomEvent('navigate-to-run-report', { detail: { runId: run.id } }))
+                          } catch {
+                            // ignore
+                          }
+                        }}
+                      >
+                        View
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            )}
           </Card>
 
           {/* Adaptive Coaching Widget */}
@@ -1437,52 +1480,35 @@ export function ProfileScreen() {
             </Card>
           )}
 
-          {/* Garmin Sync Panel — shown when Garmin is connected */}
-          {userId && (
-            <div className="space-y-3">
-              <GarminReadinessCard userId={userId} />
-              <PerformanceManagementChart userId={userId} days={90} />
-              <GarminSyncPanel
-                userId={userId}
-                onReconnect={async () => {
-                  try {
-                    const response = await fetch('/api/devices/garmin/connect', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'x-user-id': String(userId),
-                      },
-                      body: JSON.stringify({
-                        userId,
-                        redirectUri: `${window.location.origin}/garmin/callback`,
-                      }),
-                    })
-
-                    const data = await response.json()
-                    if (!response.ok || !data?.success || !data?.authUrl) {
-                      throw new Error(data?.error || 'Failed to initiate Garmin reconnect')
-                    }
-
-                    window.location.href = data.authUrl
-                  } catch (reconnectError) {
-                    console.error('Garmin reconnect initiation failed:', reconnectError)
-                    toast({
-                      title: 'Reconnect failed',
-                      description: 'Could not start Garmin reconnect. Please try again.',
-                      variant: 'destructive',
-                    })
-                  }
-                }}
-              />
-            </div>
-          )}
-
           {/* Devices & Apps */}
           <Card>
             <CardHeader>
               <CardTitle>Devices & Apps</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              {/* Garmin — dedicated row with connect/details */}
+              <div className="flex items-center justify-between p-3 rounded-lg hover:bg-[oklch(var(--surface-2))]">
+                <div className="flex items-center gap-3">
+                  <Watch className="h-5 w-5 text-foreground/70" />
+                  <div>
+                    <div className="font-medium">Garmin</div>
+                    <div className="text-sm text-foreground/70">
+                      {garminConnected ? 'Connected' : 'Not connected'}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {garminConnected ? (
+                    <Button variant="ghost" size="sm" onClick={() => router.push('/garmin/details')}>
+                      Details
+                    </Button>
+                  ) : (
+                    <Button size="sm" onClick={() => void handleGarminConnect()}>
+                      Connect
+                    </Button>
+                  )}
+                </div>
+              </div>
               {connections.map((connection, index) => {
                 const handleClick = () => {
                   if (connection.name === "Add Shoes") {
