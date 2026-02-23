@@ -217,9 +217,14 @@ export function TodayScreen() {
   }
 
   const handleGarminFitSync = async () => {
+    if (!userId) return
     setIsGarminFitSyncing(true)
     try {
-      const res = await fetch('/api/garmin/sync-fit', { method: 'POST' })
+      const res = await fetch('/api/garmin/sync-fit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      })
       const data = (await res.json()) as { processed?: number; message?: string; error?: string; code?: string }
 
       if (!res.ok) {
