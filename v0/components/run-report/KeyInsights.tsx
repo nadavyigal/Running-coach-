@@ -1,5 +1,5 @@
-import { Card, CardContent } from '@/components/ui/card'
 import { Sparkles, Flame, Activity, Heart, ShieldCheck, ShieldAlert, Cpu } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 
 export interface Insight {
     type: 'effort' | 'pacing' | 'recovery' | 'general'

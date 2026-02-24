@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
+import { Map, Activity, Layers } from 'lucide-react'
 import { MapErrorBoundary } from '@/components/maps/MapErrorBoundary'
 import { RunMap } from '@/components/maps/RunMap'
 import { PaceChart } from '@/components/pace-chart'
+import { Card, CardContent } from '@/components/ui/card'
 import type { LatLng } from '@/lib/mapConfig'
 import type { GPSPoint } from '@/lib/pace-calculations'
-import { Map, Activity, Layers } from 'lucide-react'
 
 interface RouteTimelineProps {
     gpsPath?: LatLng[]

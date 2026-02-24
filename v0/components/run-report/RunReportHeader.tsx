@@ -19,7 +19,6 @@ export function RunReportHeader({
     source,
     isGarminImport,
     gpsQualityLevel,
-    syncFreshness,
 }: RunReportHeaderProps) {
     const date = new Date(completedAt)
     const formattedDate = !isNaN(date.getTime()) ? format(date, 'EEEE, MMM d • h:mm a') : 'Unknown Date'

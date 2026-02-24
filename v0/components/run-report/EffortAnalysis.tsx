@@ -1,5 +1,5 @@
-import { Card, CardContent } from '@/components/ui/card'
 import { Flame, HeartPulse } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 
 // Heart Rate Zone definitions
 type HRZone = {

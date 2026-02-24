@@ -2,17 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Loader2 } from 'lucide-react'
-
-// Import new modular components
-import { RunReportHeader } from './run-report/RunReportHeader'
-import { CoreSummaryCard } from './run-report/CoreSummaryCard'
-import { KeyInsights, type Insight } from './run-report/KeyInsights'
-import { RouteTimeline } from './run-report/RouteTimeline'
-import { EffortAnalysis } from './run-report/EffortAnalysis'
-import { SplitsTable } from './run-report/SplitsTable'
-import { AdvancedDetails } from './run-report/AdvancedDetails'
-import { NextStepCard } from './run-report/NextStepCard'
-import { ShareRunCTA } from './run-report/ShareRunCTA'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
@@ -28,6 +17,15 @@ import {
   type GPSPoint as PaceGPSPoint,
 } from '@/lib/pace-calculations'
 import { parseGpsPath } from '@/lib/routeUtils'
+import { AdvancedDetails } from './run-report/AdvancedDetails'
+import { CoreSummaryCard } from './run-report/CoreSummaryCard'
+import { EffortAnalysis } from './run-report/EffortAnalysis'
+import { KeyInsights, type Insight } from './run-report/KeyInsights'
+import { NextStepCard } from './run-report/NextStepCard'
+import { RouteTimeline } from './run-report/RouteTimeline'
+import { RunReportHeader } from './run-report/RunReportHeader'
+import { ShareRunCTA } from './run-report/ShareRunCTA'
+import { SplitsTable } from './run-report/SplitsTable'
 
 type GPSQuality = {
   score: number
@@ -207,6 +205,17 @@ function safeParseCoachNotes(raw: string | undefined): CoachNotes | null {
   }
 }
 
+function extractEffort(raw: string | undefined): RunInsight['effort'] | undefined {
+  if (!raw) return undefined
+  try {
+    const parsed = JSON.parse(raw)
+    if (isRunInsight(parsed) && parsed.effort) return parsed.effort
+    return undefined
+  } catch {
+    return undefined
+  }
+}
+
 function extractGpsQuality(raw: string | undefined): GPSQuality | null {
   if (!raw) return null
   try {
@@ -318,6 +327,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   )
 
   const coachNotes = useMemo(() => safeParseCoachNotes(run?.runReport), [run?.runReport])
+  const runEffort = useMemo(() => extractEffort(run?.runReport), [run?.runReport])
   const gpsQuality = useMemo(
     () => (gpsQualityEnabled ? extractGpsQuality(run?.runReport) : null),
     [gpsQualityEnabled, run?.runReport]
@@ -677,7 +687,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
           avgHr={(garminTelemetry?.avgHr ?? run.heartRate) as any}
           calories={(garminTelemetry?.calories ?? run.calories) as any}
           cadence={garminTelemetry?.avgCadenceSpm as any}
-          relativeEffort={(isRunInsight(coachNotes) ? (coachNotes as unknown as RunInsight).effort : undefined) as any}
+          relativeEffort={runEffort}
           paceConsistency={pacingInsight?.paceConsistency as any}
           runLoad={undefined}
         />
@@ -711,7 +721,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         <EffortAnalysis
           avgHr={(garminTelemetry?.avgHr ?? run.heartRate) as any}
           maxHr={(garminTelemetry?.maxHr ?? run.maxHR) as any}
-          effortScore={(isRunInsight(coachNotes) ? (coachNotes as unknown as RunInsight).effort : undefined) as any}
+          {...(runEffort !== undefined ? { effortScore: runEffort } : {})}
         />
 
         {/* 7. Actionable Next Step */}

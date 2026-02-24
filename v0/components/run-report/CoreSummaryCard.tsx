@@ -1,5 +1,5 @@
+import { Heart, Target, Flame, Mountain, ActivitySquare, TrendingUp, Zap } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
-import { Heart, Target, Flame, Mountain, ActivitySquare, TrendingUp } from 'lucide-react'
 
 interface CoreSummaryCardProps {
     distanceKm: number
@@ -156,6 +156,19 @@ export function CoreSummaryCard({
                             <div>
                                 <div className="text-sm font-bold capitalize">{paceConsistency.replace('-', ' ')}</div>
                                 <div className="text-[10px] font-semibold uppercase text-muted-foreground">Consistency</div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Calories */}
+                    {calories != null && calories > 0 && (
+                        <div className="flex items-start gap-3">
+                            <div className="p-2 rounded-lg bg-orange-500/10">
+                                <Zap className="w-4 h-4 text-orange-500" />
+                            </div>
+                            <div>
+                                <div className="text-sm font-bold">{Math.round(calories)}<span className="text-xs font-normal text-muted-foreground ml-0.5">kcal</span></div>
+                                <div className="text-[10px] font-semibold uppercase text-muted-foreground">Calories</div>
                             </div>
                         </div>
                     )}

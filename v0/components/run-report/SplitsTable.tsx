@@ -1,5 +1,5 @@
-import { Card, CardContent } from '@/components/ui/card'
 import { Gauge, ArrowDownUp } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 
 interface Split {
     index: number

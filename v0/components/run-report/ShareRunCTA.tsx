@@ -1,5 +1,4 @@
-import { Share2, Map, CheckCircle2, ChevronRight, Share } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Share2, ChevronRight } from 'lucide-react'
 
 interface ShareRunCTAProps {
     onShare: () => void
