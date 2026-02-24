@@ -5,6 +5,7 @@ import { goalProgressEngine } from '@/lib/goalProgressEngine';
 import { planAdaptationEngine } from '@/lib/planAdaptationEngine';
 import { regenerateTrainingPlan } from '@/lib/plan-regeneration';
 import { logger } from '@/lib/logger';
+import { recordPlanAdjustment } from '@/lib/server/plan-adjustments';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -391,6 +392,29 @@ export async function PUT(request: NextRequest) {
               currentPlan.id!,
               `Goal update: ${adaptationAssessment.reason}`
             );
+
+            await recordPlanAdjustment({
+              userId: goal.userId,
+              sessionDate: new Date().toISOString(),
+              oldSession: {
+                planId: currentPlan.id,
+                title: currentPlan.title,
+                description: currentPlan.description,
+              },
+              newSession: {
+                planId: adaptedPlan.id,
+                title: adaptedPlan.title,
+                description: adaptedPlan.description,
+              },
+              reasons: [`Goal update: ${adaptationAssessment.reason}`],
+              evidence: {
+                source: 'api/goals:update',
+                assessment: adaptationAssessment,
+                goalId,
+              },
+            }).catch(() => {
+              // Keep goal update resilient if audit logging fails.
+            });
             
             logger.log('Plan adapted successfully after goal update:', adaptedPlan.title);
           }

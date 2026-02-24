@@ -24,6 +24,7 @@ import type { DailyChallengeData } from "@/lib/challengeEngine"
 import { NextChallengeRecommendation } from "@/components/next-challenge-recommendation"
 import { getNextChallengeRecommendation } from "@/lib/challengeTemplates"
 import { startChallengeAndSyncPlan } from "@/lib/challenge-plan-sync"
+import { PlanAdjustmentNotice } from "@/components/plan/PlanAdjustmentNotice"
 
 export function PlanScreen() {
   // Get shared data from context
@@ -628,6 +629,8 @@ export function PlanScreen() {
           </CardContent>
         </Card>
       )}
+
+      <PlanAdjustmentNotice userId={userId ?? null} />
 
       {/* Challenge Recommendation */}
       {!activeChallenge && recommendedChallenge && (
