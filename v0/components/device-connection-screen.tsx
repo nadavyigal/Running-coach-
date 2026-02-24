@@ -75,6 +75,16 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
     try {
       // Always read from client-side Dexie.js (IndexedDB) — this is a PWA with local storage
       const devices = await db.wearableDevices.where('userId').equals(userId).toArray()
+      await Promise.all(
+        devices
+          .filter((device) => device.type === 'garmin' && Boolean(device.authTokens))
+          .map((device) =>
+            db.wearableDevices.update(device.id!, {
+              authTokens: undefined,
+              updatedAt: new Date(),
+            })
+          )
+      )
       setConnectedDevices(devices as WearableDevice[])
     } catch (error) {
       console.error('Error loading devices:', error)

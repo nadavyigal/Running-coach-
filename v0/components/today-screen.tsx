@@ -61,6 +61,7 @@ import {
 import { ENABLE_WEEKLY_RECAP } from "@/lib/featureFlags"
 import { useAuth } from "@/lib/auth-context"
 import { SyncStatusIndicator } from "@/components/sync-status-indicator"
+import { SyncStatus } from "@/components/garmin/SyncStatus"
 import { useBetaSignupCount } from "@/lib/hooks/useBetaSignupCount"
 import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
 import { ChallengeProgressRing } from "@/components/challenge-progress-ring"
@@ -986,7 +987,10 @@ export function TodayScreen() {
                   </Button>
                 </div>
                 <div className="rounded-lg border border-emerald-400/30 bg-black/30 p-3">
+                  <SyncStatus userId={userId ?? null} />
+                  <div className="mt-2 border-t border-emerald-400/20 pt-2">
                   <SyncStatusIndicator />
+                  </div>
                 </div>
               </>
             ) : (
