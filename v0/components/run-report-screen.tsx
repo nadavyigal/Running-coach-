@@ -364,10 +364,10 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
     [garminTelemetry, isGarminCandidateRun]
   )
 
-  // Full dark Garmin report: only when we have actual telemetry splits to show
+  // Full dark Garmin report: any Garmin-imported run once telemetry fetch has resolved
   const isGarminFullReport = useMemo(
-    () => hasGarminData && telemetrySplits.length > 0,
-    [hasGarminData, telemetrySplits.length]
+    () => isGarminCandidateRun && garminTelemetryResolved,
+    [isGarminCandidateRun, garminTelemetryResolved]
   )
 
   const loadRun = useCallback(async () => {
