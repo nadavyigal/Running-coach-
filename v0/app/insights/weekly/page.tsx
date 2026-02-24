@@ -1,6 +1,7 @@
 'use client'
 
 import { WeeklyReportCard } from '@/components/insights/WeeklyReportCard'
+import { ShareWeeklyButton } from '@/components/insights/ShareWeeklyButton'
 import { useData } from '@/contexts/DataContext'
 
 export default function WeeklyInsightsPage() {
@@ -10,7 +11,10 @@ export default function WeeklyInsightsPage() {
     <main className="mx-auto min-h-screen w-full max-w-3xl space-y-4 p-4">
       <header className="space-y-1">
         <p className="text-xs uppercase tracking-wide text-muted-foreground">Insights</p>
-        <h1 className="text-2xl font-semibold">Weekly Report</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold">Weekly Report</h1>
+          <ShareWeeklyButton userId={userId ?? null} />
+        </div>
       </header>
 
       {userId ? (

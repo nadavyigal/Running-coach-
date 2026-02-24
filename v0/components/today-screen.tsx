@@ -73,6 +73,7 @@ import { RecoveryEngine } from "@/lib/recoveryEngine"
 import { calculateCoachConfidence, type CoachConfidenceResult } from "@/lib/coach-confidence"
 import { InsightsPanelsDashboard } from "@/components/insights/panels/InsightsPanelsDashboard"
 import { PlanAdjustmentNotice } from "@/components/plan/PlanAdjustmentNotice"
+import { WeeklyGoalCard } from "@/components/goals/WeeklyGoalCard"
 
 export function TodayScreen() {
   // Get shared data from context
@@ -866,6 +867,7 @@ export function TodayScreen() {
 
       {userId ? (
         <div className="px-4 space-y-3">
+          <WeeklyGoalCard userId={userId} runsCompleted={totalRuns} plannedRuns={plannedRuns} />
           <PlanAdjustmentNotice userId={userId} />
           <InsightsPanelsDashboard
             userId={userId}
