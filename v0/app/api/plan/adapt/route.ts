@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
 import { planAdaptationEngine } from '@/lib/planAdaptationEngine';
 import { logger } from '@/lib/logger';
+import { recordPlanAdjustment } from '@/lib/server/plan-adjustments';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -46,6 +47,27 @@ export async function POST(request: NextRequest) {
         planId,
         adaptationReason
       );
+
+      await recordPlanAdjustment({
+        userId,
+        sessionDate: new Date().toISOString(),
+        oldSession: {
+          planId: plan.id,
+          title: plan.title,
+          description: plan.description,
+        },
+        newSession: {
+          planId: adaptedPlan.id,
+          title: adaptedPlan.title,
+          description: adaptedPlan.description,
+        },
+        reasons: [adaptationReason],
+        evidence: {
+          source: 'api/plan/adapt:auto',
+        },
+      }).catch(() => {
+        // Do not fail adaptation when logging fails.
+      });
 
       return NextResponse.json({
         success: true,
@@ -97,6 +119,28 @@ export async function POST(request: NextRequest) {
       currentPlan.id!,
       reason
     );
+
+    await recordPlanAdjustment({
+      userId,
+      sessionDate: new Date().toISOString(),
+      oldSession: {
+        planId: currentPlan.id,
+        title: currentPlan.title,
+        description: currentPlan.description,
+      },
+      newSession: {
+        planId: adaptedPlan.id,
+        title: adaptedPlan.title,
+        description: adaptedPlan.description,
+      },
+      reasons: [reason],
+      evidence: {
+        source: 'api/plan/adapt:manual',
+        assessment: adaptationAssessment,
+      },
+    }).catch(() => {
+      // Do not fail adaptation when logging fails.
+    });
 
     return NextResponse.json({
       success: true,

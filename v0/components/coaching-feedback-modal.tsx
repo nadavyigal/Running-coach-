@@ -77,6 +77,41 @@ export function CoachingFeedbackModal({
     improvementSuggestions: [],
   });
 
+  const logPlanAdjustment = async (params: {
+    reason: string
+    currentPlan: { id?: number | undefined; title?: string; description?: string }
+    adaptedPlan: { id?: number | undefined; title?: string; description?: string }
+    source: 'quick_feedback' | 'detailed_feedback'
+  }) => {
+    await fetch('/api/plan/adjustments', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': String(userId),
+      },
+      body: JSON.stringify({
+        userId,
+        sessionDate: new Date().toISOString(),
+        oldSession: {
+          planId: params.currentPlan.id ?? null,
+          title: params.currentPlan.title ?? 'Current plan',
+          description: params.currentPlan.description ?? '',
+        },
+        newSession: {
+          planId: params.adaptedPlan.id ?? null,
+          title: params.adaptedPlan.title ?? 'Adapted plan',
+          description: params.adaptedPlan.description ?? '',
+        },
+        reasons: [params.reason],
+        evidence: {
+          source: `coaching-feedback-modal:${params.source}`,
+        },
+      }),
+    }).catch(() => {
+      // Ignore logging failures in client adaptation flow.
+    })
+  }
+
   const handleQuickFeedback = async (reaction: string) => {
     try {
       setIsSubmitting(true);
@@ -119,6 +154,13 @@ export function CoachingFeedbackModal({
                 currentPlan.id!,
                 `Feedback-based: ${adaptationAssessment.reason}`
               );
+
+              await logPlanAdjustment({
+                reason: `Feedback-based: ${adaptationAssessment.reason}`,
+                currentPlan,
+                adaptedPlan,
+                source: 'quick_feedback',
+              })
               
               console.log('Plan adapted successfully after feedback:', adaptedPlan.title);
               
@@ -203,6 +245,13 @@ export function CoachingFeedbackModal({
                 currentPlan.id!,
                 `Detailed feedback: ${adaptationAssessment.reason}`
               );
+
+              await logPlanAdjustment({
+                reason: `Detailed feedback: ${adaptationAssessment.reason}`,
+                currentPlan,
+                adaptedPlan,
+                source: 'detailed_feedback',
+              })
               
               console.log('Plan adapted successfully after detailed feedback:', adaptedPlan.title);
               
