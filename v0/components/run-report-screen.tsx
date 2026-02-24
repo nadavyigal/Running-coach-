@@ -20,8 +20,10 @@ import { parseGpsPath } from '@/lib/routeUtils'
 import { AdvancedDetails } from './run-report/AdvancedDetails'
 import { CoreSummaryCard } from './run-report/CoreSummaryCard'
 import { EffortAnalysis } from './run-report/EffortAnalysis'
+import { HRZoneWheel } from './run-report/HRZoneWheel'
 import { KeyInsights, type Insight } from './run-report/KeyInsights'
 import { NextStepCard } from './run-report/NextStepCard'
+import { PaceHRDualChart } from './run-report/PaceHRDualChart'
 import { RouteTimeline } from './run-report/RouteTimeline'
 import { RunReportHeader } from './run-report/RunReportHeader'
 import { ShareRunCTA } from './run-report/ShareRunCTA'
@@ -362,6 +364,12 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
     [garminTelemetry, isGarminCandidateRun]
   )
 
+  // Full dark Garmin report: only when we have actual telemetry splits to show
+  const isGarminFullReport = useMemo(
+    () => hasGarminData && telemetrySplits.length > 0,
+    [hasGarminData, telemetrySplits.length]
+  )
+
   const loadRun = useCallback(async () => {
     if (!runId) {
       setRun(null)
@@ -657,100 +665,239 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
     )
   }
 
-  return (
-    <div className="min-h-screen bg-[oklch(var(--surface-2))] p-4 space-y-4 relative">
-      <div className="flex items-center justify-between sticky top-0 z-10 bg-[oklch(var(--surface-2))]/80 backdrop-blur pb-2 pt-2 -mx-4 px-4 bg-gradient-to-b from-[oklch(var(--surface-2))] to-transparent">
-        <Button variant="ghost" size="icon" onClick={onBack} aria-label="Back to Today Screen" className="h-10 w-10 shrink-0">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <h1 className="text-lg font-semibold flex-1 text-center mr-10">Run Report</h1>
-      </div>
+  const source: 'garmin' | 'runsmart' | 'manual' =
+    run.importSource === 'garmin' || run.importRequestId ? 'garmin'
+    : run.importSource === 'manual' ? 'manual'
+    : 'runsmart'
 
-      <div className="max-w-md mx-auto space-y-5 pb-20">
+  // Build metrics object, only including keys that have defined values
+  // (exactOptionalPropertyTypes requires we not assign undefined to optional props)
+  const sharedMetrics: {
+    paceVariabilitySecPerKm?: number
+    splitDeltaSecPerKm?: number
+    cadenceDriftPct?: number
+    intervalConsistencyPct?: number
+    maxSpeedKmph?: number
+    elevationLossM?: number
+  } = {}
+  const _pv = (garminTelemetry?.analytics?.pacing?.variabilitySecPerKm ?? pacingInsight?.paceVariability)
+  if (typeof _pv === 'number') sharedMetrics.paceVariabilitySecPerKm = _pv
+  const _sd = garminTelemetry?.analytics?.pacing?.splitDeltaSecPerKm
+  if (typeof _sd === 'number') sharedMetrics.splitDeltaSecPerKm = _sd
+  const _cd = garminTelemetry?.analytics?.cadence?.driftPct
+  if (typeof _cd === 'number') sharedMetrics.cadenceDriftPct = _cd
+  const _ic = garminTelemetry?.analytics?.intervals?.consistencyPct
+  if (typeof _ic === 'number') sharedMetrics.intervalConsistencyPct = _ic
+  const _ms = garminTelemetry?.maxSpeedMps
+  if (typeof _ms === 'number') sharedMetrics.maxSpeedKmph = _ms * 3.6
+  const _el = garminTelemetry?.elevationLossM
+  if (typeof _el === 'number') sharedMetrics.elevationLossM = _el
 
-        {/* 1. Header & Trust Signals */}
-        <RunReportHeader
-          runType={run.type}
-          completedAt={run.completedAt}
-          source={run.importSource === 'garmin' || run.importRequestId ? 'garmin' : run.importSource === 'manual' ? 'manual' : 'runsmart'}
-          isGarminImport={isGarminCandidateRun}
-          gpsQualityLevel={gpsQuality?.level as any}
-          syncFreshness="Just now"
-        />
+  const onShare = () => toast({ title: 'Share', description: 'Sharing functionality coming soon.' })
+  const onSaveToPlan = () => toast({ title: 'Saved to plan', description: 'Workout added to your schedule.' })
 
-        {/* 2. Core Summary Card */}
-        <CoreSummaryCard
-          distanceKm={run.distance}
-          durationSec={run.duration}
-          avgPaceSecPerKm={avgPace}
-          elevationGainM={(garminTelemetry?.elevationGainM ?? run.elevationGain) as any}
-          avgHr={(garminTelemetry?.avgHr ?? run.heartRate) as any}
-          calories={(garminTelemetry?.calories ?? run.calories) as any}
-          cadence={garminTelemetry?.avgCadenceSpm as any}
-          relativeEffort={runEffort}
-          paceConsistency={pacingInsight?.paceConsistency as any}
-          runLoad={undefined}
-        />
-
-        {/* 3. AI Coach Insights */}
-        <KeyInsights
-          insights={createInsightArray(coachNotes, pacingInsight, garminInsight)}
-          isGenerating={isGenerating || isGarminInsightLoading}
-          onRegenerate={() => void generateNotes()}
-        />
-
-        {/* 4. Route + Linked Timeline */}
-        <RouteTimeline
-          gpsPath={path}
-          pacePath={pacePath}
-          hasPaceChart={paceChartEnabled}
-        />
-
-        {/* 5. Splits & Pacing Analysis */}
-        {telemetrySplits.length > 0 && (
-          <SplitsTable splits={telemetrySplits} type="km" />
-        )}
-        {telemetryIntervals.length > 0 && (
-          <SplitsTable splits={telemetryIntervals} type="interval" />
-        )}
-        {telemetryLaps.length > 0 && (
-          <SplitsTable splits={telemetryLaps} type="lap" />
-        )}
-
-        {/* 6. Effort & Heart Rate */}
-        <EffortAnalysis
-          avgHr={(garminTelemetry?.avgHr ?? run.heartRate) as any}
+  // ─── FULL GARMIN DARK REPORT ────────────────────────────────────────────
+  if (isGarminFullReport) {
+    const sections = [
+      <RunReportHeader
+        key="header"
+        runType={run.type}
+        completedAt={run.completedAt}
+        source={source}
+        isGarminImport={isGarminCandidateRun}
+        gpsQualityLevel={gpsQuality?.level as any}
+        variant="garmin"
+      />,
+      <CoreSummaryCard
+        key="core"
+        distanceKm={run.distance}
+        durationSec={run.duration}
+        avgPaceSecPerKm={avgPace}
+        elevationGainM={(garminTelemetry?.elevationGainM ?? run.elevationGain) as any}
+        avgHr={(garminTelemetry?.avgHr ?? run.heartRate) as any}
+        calories={(garminTelemetry?.calories ?? run.calories) as any}
+        cadence={garminTelemetry?.avgCadenceSpm as any}
+        relativeEffort={runEffort}
+        paceConsistency={pacingInsight?.paceConsistency as any}
+        variant="garmin"
+      />,
+      <EffortAnalysis
+        key="effort"
+        avgHr={(garminTelemetry?.avgHr ?? run.heartRate) as any}
+        maxHr={(garminTelemetry?.maxHr ?? run.maxHR) as any}
+        {...(runEffort !== undefined ? { effortScore: runEffort } : {})}
+        {...(pacingInsight?.paceConsistency ? { paceConsistency: pacingInsight.paceConsistency } : {})}
+        variant="garmin"
+      />,
+      telemetrySplits.length >= 3 && (
+        <PaceHRDualChart key="pace-hr-chart" splits={telemetrySplits} />
+      ),
+      telemetrySplits.length > 0 && (
+        <SplitsTable key="splits-km" splits={telemetrySplits} type="km" variant="garmin" />
+      ),
+      telemetryIntervals.length > 0 && (
+        <SplitsTable key="splits-interval" splits={telemetryIntervals} type="interval" variant="garmin" />
+      ),
+      telemetryLaps.length > 0 && (
+        <SplitsTable key="splits-lap" splits={telemetryLaps} type="lap" variant="garmin" />
+      ),
+      (garminTelemetry?.avgHr ?? run.heartRate) != null && (
+        <HRZoneWheel
+          key="hr-wheel"
+          avgHr={(garminTelemetry?.avgHr ?? run.heartRate) as number}
           maxHr={(garminTelemetry?.maxHr ?? run.maxHR) as any}
-          {...(runEffort !== undefined ? { effortScore: runEffort } : {})}
         />
-
-        {/* 7. Actionable Next Step */}
-        {coachNotes?.suggestedNextWorkout && (
+      ),
+      <AdvancedDetails
+        key="advanced"
+        runId={run.id!}
+        hasGarminData={hasGarminData}
+        gpsQualityScore={gpsQuality?.score as any}
+        metrics={sharedMetrics}
+        variant="garmin"
+      />,
+      <KeyInsights
+        key="insights"
+        insights={createInsightArray(coachNotes, pacingInsight, garminInsight)}
+        isGenerating={isGenerating || isGarminInsightLoading}
+        onRegenerate={() => void generateNotes()}
+        variant="garmin"
+      />,
+      coachNotes?.suggestedNextWorkout && (
+        <div key="next" className="mx-4">
           <NextStepCard
             suggestedRun={coachNotes.suggestedNextWorkout}
             rationale={coachNotes.recoveryNext24h || "Based on today's effort."}
-            onSaveToPlan={() => toast({ title: "Saved to plan", description: "Workout added to your schedule." })}
+            onSaveToPlan={onSaveToPlan}
           />
-        )}
+        </div>
+      ),
+      <div key="share" className="mx-4">
+        <ShareRunCTA onShare={onShare} />
+      </div>,
+    ].filter(Boolean)
 
-        {/* 8. Advanced Metrics & Data Quality */}
-        <AdvancedDetails
-          runId={run.id!}
-          hasGarminData={hasGarminData}
-          gpsQualityScore={gpsQuality?.score as any}
-          metrics={{
-            paceVariabilitySecPerKm: (garminTelemetry?.analytics?.pacing?.variabilitySecPerKm ?? pacingInsight?.paceVariability) as any,
-            splitDeltaSecPerKm: garminTelemetry?.analytics?.pacing?.splitDeltaSecPerKm as any,
-            cadenceDriftPct: garminTelemetry?.analytics?.cadence?.driftPct as any,
-            intervalConsistencyPct: garminTelemetry?.analytics?.intervals?.consistencyPct as any,
-            maxSpeedKmph: (garminTelemetry?.maxSpeedMps ? garminTelemetry.maxSpeedMps * 3.6 : undefined) as any,
-            elevationLossM: garminTelemetry?.elevationLossM as any
-          }}
-        />
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-emerald-950 relative">
+        {/* Sticky dark nav */}
+        <div className="sticky top-0 z-10 bg-slate-950/80 backdrop-blur-md border-b border-white/5 px-4 py-3 flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onBack}
+            aria-label="Back"
+            className="h-9 w-9 text-white/60 hover:text-white hover:bg-white/10"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm font-semibold text-white/50 capitalize">{run.type} Run</span>
+        </div>
 
-        {/* 9. Share CTA */}
-        <ShareRunCTA onShare={() => toast({ title: "Share", description: "Sharing functionality coming soon." })} />
+        {/* Sections with stagger animation */}
+        <div className="max-w-md mx-auto pb-24 space-y-4">
+          {sections.map((section, i) => (
+            <div
+              key={i}
+              className="animate-in fade-in-0 slide-in-from-bottom-4"
+              style={{ animationDelay: `${i * 55}ms`, animationFillMode: 'backwards' }}
+            >
+              {section}
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
+  // ─── LIGHT REPORT ───────────────────────────────────────────────────────
+  const lightSections = [
+    <RunReportHeader
+      key="header"
+      runType={run.type}
+      completedAt={run.completedAt}
+      source={source}
+      isGarminImport={isGarminCandidateRun}
+      gpsQualityLevel={gpsQuality?.level as any}
+      variant="light"
+    />,
+    <CoreSummaryCard
+      key="core"
+      distanceKm={run.distance}
+      durationSec={run.duration}
+      avgPaceSecPerKm={avgPace}
+      elevationGainM={(garminTelemetry?.elevationGainM ?? run.elevationGain) as any}
+      avgHr={(garminTelemetry?.avgHr ?? run.heartRate) as any}
+      calories={(garminTelemetry?.calories ?? run.calories) as any}
+      cadence={garminTelemetry?.avgCadenceSpm as any}
+      relativeEffort={runEffort}
+      paceConsistency={pacingInsight?.paceConsistency as any}
+      variant="light"
+    />,
+    (runEffort || pacingInsight?.paceConsistency || (garminTelemetry?.avgHr ?? run.heartRate)) && (
+      <EffortAnalysis
+        key="effort"
+        avgHr={(garminTelemetry?.avgHr ?? run.heartRate) as any}
+        maxHr={(garminTelemetry?.maxHr ?? run.maxHR) as any}
+        {...(runEffort !== undefined ? { effortScore: runEffort } : {})}
+        {...(pacingInsight?.paceConsistency ? { paceConsistency: pacingInsight.paceConsistency } : {})}
+        variant="light"
+      />
+    ),
+    <KeyInsights
+      key="insights"
+      insights={createInsightArray(coachNotes, pacingInsight, garminInsight)}
+      isGenerating={isGenerating || isGarminInsightLoading}
+      onRegenerate={() => void generateNotes()}
+      variant="light"
+    />,
+    (path.length > 0 || paceChartEnabled) && (
+      <RouteTimeline
+        key="route"
+        gpsPath={path}
+        pacePath={pacePath}
+        hasPaceChart={paceChartEnabled}
+      />
+    ),
+    telemetrySplits.length > 0 && (
+      <SplitsTable key="splits" splits={telemetrySplits} type="km" variant="light" />
+    ),
+    coachNotes?.suggestedNextWorkout && (
+      <NextStepCard
+        key="next"
+        suggestedRun={coachNotes.suggestedNextWorkout}
+        rationale={coachNotes.recoveryNext24h || "Based on today's effort."}
+        onSaveToPlan={onSaveToPlan}
+      />
+    ),
+    <ShareRunCTA key="share" onShare={onShare} />,
+  ].filter(Boolean)
+
+  return (
+    <div className="min-h-screen bg-[oklch(var(--surface-2))] relative">
+      {/* Sticky light nav */}
+      <div className="sticky top-0 z-10 bg-[oklch(var(--surface-2))]/90 backdrop-blur-md border-b border-border/40 px-4 py-3 flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onBack}
+          aria-label="Back"
+          className="h-9 w-9"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <span className="text-sm font-semibold text-foreground/70 capitalize">{run.type} Run</span>
+      </div>
+
+      <div className="max-w-md mx-auto px-4 pt-5 pb-20 space-y-5">
+        {lightSections.map((section, i) => (
+          <div
+            key={i}
+            className="animate-in fade-in-0 slide-in-from-bottom-4"
+            style={{ animationDelay: `${i * 50}ms`, animationFillMode: 'backwards' }}
+          >
+            {section}
+          </div>
+        ))}
       </div>
     </div>
   )

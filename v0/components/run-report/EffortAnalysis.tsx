@@ -1,115 +1,122 @@
-import { Flame, HeartPulse } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
-
-// Heart Rate Zone definitions
-type HRZone = {
-    name: string
-    min: number
-    max: number
-    color: string
-    bg: string
-    description: string
-}
-
-// Very basic generic zones (ideally these come from user settings)
-const defaultZones: HRZone[] = [
-    { name: 'Zone 5', min: 172, max: 200, color: 'bg-rose-500', bg: 'bg-rose-500/10', description: 'Anaerobic / Max' },
-    { name: 'Zone 4', min: 153, max: 171, color: 'bg-orange-500', bg: 'bg-orange-500/10', description: 'Threshold' },
-    { name: 'Zone 3', min: 134, max: 152, color: 'bg-emerald-500', bg: 'bg-emerald-500/10', description: 'Aerobic' },
-    { name: 'Zone 2', min: 115, max: 133, color: 'bg-sky-500', bg: 'bg-sky-500/10', description: 'Easy / Endurance' },
-    { name: 'Zone 1', min: 0, max: 114, color: 'bg-slate-300', bg: 'bg-slate-500/10', description: 'Recovery' },
-]
+import { Flame, HeartPulse, TrendingUp } from 'lucide-react'
+import { getZoneDistribution } from '@/lib/hrZoneUtils'
 
 interface EffortAnalysisProps {
-    avgHr?: number | null
-    maxHr?: number | null
-    effortScore?: 'easy' | 'moderate' | 'hard'
-    // In a real app we'd pass an array of time spent in each zone
-    // For UI mockup we'll fake a distribution if HR exists
+  avgHr?: number | null
+  maxHr?: number | null
+  effortScore?: 'easy' | 'moderate' | 'hard'
+  paceConsistency?: 'consistent' | 'fading' | 'negative-split' | 'erratic'
+  variant?: 'garmin' | 'light'
 }
 
-export function EffortAnalysis({ avgHr, maxHr, effortScore }: EffortAnalysisProps) {
-    if (!avgHr && !effortScore) return null
+const EFFORT_CONFIG = {
+  easy:     { deg: 120, hex: '#10b981', text: 'text-emerald-400', pill: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
+  moderate: { deg: 200, hex: '#f59e0b', text: 'text-amber-400',   pill: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
+  hard:     { deg: 300, hex: '#f43f5e', text: 'text-rose-400',    pill: 'text-rose-400 bg-rose-500/10 border-rose-500/20' },
+} as const
 
-    // FAKE DISTRIBUTION for UI purposes since we don't have the stream data yet
-    const fakeDistribution = avgHr ? getFakeDistribution(avgHr) : []
+const CONSISTENCY_CONFIG = {
+  'consistent':     { pill: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', label: 'Consistent' },
+  'negative-split': { pill: 'text-sky-400 bg-sky-500/10 border-sky-500/20',             label: 'Negative Split' },
+  'fading':         { pill: 'text-amber-400 bg-amber-500/10 border-amber-500/20',       label: 'Fading' },
+  'erratic':        { pill: 'text-rose-400 bg-rose-500/10 border-rose-500/20',          label: 'Erratic' },
+} as const
+
+export function EffortAnalysis({ avgHr, maxHr, effortScore, paceConsistency, variant = 'light' }: EffortAnalysisProps) {
+  if (!avgHr && !effortScore) return null
+
+  const fakeDistribution = avgHr ? getZoneDistribution(avgHr) : []
+  const effort = effortScore ? EFFORT_CONFIG[effortScore] : null
+
+  // ─── GARMIN DARK ─────────────────────────────────────────────────────────
+  if (variant === 'garmin') {
+    const effortDeg = effort?.deg ?? 0
+    const effortHex = effort?.hex ?? 'rgba(255,255,255,0.08)'
 
     return (
-        <Card className="border-none shadow-sm bg-[oklch(var(--surface-2))]">
-            <CardContent className="p-4 md:p-5">
-                <div className="flex items-center gap-2 mb-4">
-                    {avgHr ? <HeartPulse className="w-5 h-5 text-rose-500" /> : <Flame className="w-5 h-5 text-orange-500" />}
-                    <h3 className="font-bold text-lg">Effort & Heart Rate</h3>
+      <div className="mx-4 bg-slate-900/60 border border-white/10 rounded-2xl p-5">
+        <div className="flex items-center gap-5 mb-4">
+          {/* Circular effort ring */}
+          {effortScore && (
+            <div className="relative flex-none w-20 h-20">
+              <div
+                className="w-full h-full rounded-full"
+                style={{
+                  background: `conic-gradient(${effortHex} 0deg, ${effortHex} ${effortDeg}deg, rgba(255,255,255,0.06) ${effortDeg}deg 360deg)`,
+                }}
+              />
+              <div className="absolute inset-[14%] rounded-full bg-slate-900 flex flex-col items-center justify-center gap-0.5">
+                <Flame className={`w-4 h-4 ${effort?.text ?? 'text-white/40'}`} />
+                <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${effort?.text ?? 'text-white/40'}`}>
+                  {effortScore}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* HR quick stats */}
+          <div className="flex-1 space-y-2">
+            {avgHr != null && (
+              <div>
+                <span className="text-2xl font-black text-white tabular-nums">{Math.round(avgHr)}</span>
+                <span className="text-sm text-white/35 ml-1">bpm avg</span>
+              </div>
+            )}
+            {maxHr != null && (
+              <div>
+                <span className="text-base font-bold text-rose-400 tabular-nums">{Math.round(maxHr)}</span>
+                <span className="text-xs text-rose-400/50 ml-1">bpm peak</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Zone bars (dark themed) */}
+        {avgHr != null && fakeDistribution.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-2">
+              Estimated Zone Time
+            </div>
+            {fakeDistribution.map((zone, i) => (
+              <div key={i} className="flex items-center gap-2.5">
+                <div className="w-8 text-[10px] text-white/35 font-mono">{zone.name}</div>
+                <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${zone.percent}%`, backgroundColor: zone.hexColor }}
+                  />
                 </div>
-
-                <div className="flex flex-col md:flex-row gap-6">
-
-                    {/* Quick Stats Column */}
-                    <div className="flex flex-row md:flex-col gap-4 w-full md:w-1/3 justify-between md:justify-start">
-                        {avgHr != null && (
-                            <div className="flex-1 bg-[oklch(var(--surface-3))] p-3 rounded-xl border border-border/50">
-                                <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">Avg HR</div>
-                                <div className="text-2xl font-black">{Math.round(avgHr)} <span className="text-sm font-medium text-muted-foreground">bpm</span></div>
-                            </div>
-                        )}
-                        {maxHr != null && (
-                            <div className="flex-1 bg-[oklch(var(--surface-3))] p-3 rounded-xl border border-border/50">
-                                <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">Max HR</div>
-                                <div className="text-2xl font-black text-rose-500">{Math.round(maxHr)} <span className="text-sm font-medium text-rose-500/70">bpm</span></div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Zones Breakdown Column */}
-                    {avgHr ? (
-                        <div className="w-full md:w-2/3 space-y-2">
-                            <div className="text-sm font-semibold mb-2">Estimated Zone Time</div>
-                            {fakeDistribution.map((zone, i) => (
-                                <div key={i} className="flex items-center gap-3 text-sm">
-                                    <div className="w-16 font-medium text-foreground/80">{zone.name}</div>
-                                    <div className="flex-1 h-3 bg-[oklch(var(--surface-3))] rounded-full overflow-hidden">
-                                        <div
-                                            className={`h-full rounded-full ${zone.color} transition-all duration-1000`}
-                                            style={{ width: `${zone.percent}%` }}
-                                        />
-                                    </div>
-                                    <div className="w-12 text-right font-medium text-muted-foreground">{zone.percent}%</div>
-                                </div>
-                            ))}
-                            <p className="text-xs text-muted-foreground text-right mt-2">*Estimated from average HR</p>
-                        </div>
-                    ) : (
-                        <div className="w-full md:w-2/3 flex items-center justify-center p-6 border border-dashed border-border rounded-xl">
-                            <p className="text-sm text-muted-foreground text-center">Detailed heart rate stream not available for this run.</p>
-                        </div>
-                    )}
-                </div>
-            </CardContent>
-        </Card>
+                <div className="w-7 text-right text-[10px] text-white/30 tabular-nums">{zone.percent}%</div>
+              </div>
+            ))}
+            <p className="text-[9px] text-white/20 text-right mt-1">*Estimated from avg HR</p>
+          </div>
+        )}
+      </div>
     )
-}
+  }
 
-// Helper to fake a visually appealing distribution for the mockup
-function getFakeDistribution(avgHr: number) {
-    if (avgHr > 165) return [
-        { ...defaultZones[0], percent: 35 },
-        { ...defaultZones[1], percent: 45 },
-        { ...defaultZones[2], percent: 15 },
-        { ...defaultZones[3], percent: 5 },
-        { ...defaultZones[4], percent: 0 },
-    ]
-    if (avgHr > 145) return [
-        { ...defaultZones[0], percent: 5 },
-        { ...defaultZones[1], percent: 25 },
-        { ...defaultZones[2], percent: 50 },
-        { ...defaultZones[3], percent: 15 },
-        { ...defaultZones[4], percent: 5 },
-    ]
-    return [
-        { ...defaultZones[0], percent: 0 },
-        { ...defaultZones[1], percent: 5 },
-        { ...defaultZones[2], percent: 20 },
-        { ...defaultZones[3], percent: 60 },
-        { ...defaultZones[4], percent: 15 },
-    ]
+  // ─── LIGHT — compact badge pills ─────────────────────────────────────────
+  return (
+    <div className="flex flex-wrap gap-2">
+      {effortScore && effort && (
+        <span className={`flex items-center gap-1.5 text-sm font-bold px-3.5 py-2 rounded-full border ${effort.pill}`}>
+          <Flame className="w-4 h-4" />
+          {effortScore.charAt(0).toUpperCase() + effortScore.slice(1)} Effort
+        </span>
+      )}
+      {paceConsistency && CONSISTENCY_CONFIG[paceConsistency] && (
+        <span className={`flex items-center gap-1.5 text-sm font-bold px-3.5 py-2 rounded-full border ${CONSISTENCY_CONFIG[paceConsistency].pill}`}>
+          <TrendingUp className="w-4 h-4" />
+          {CONSISTENCY_CONFIG[paceConsistency].label}
+        </span>
+      )}
+      {avgHr != null && (
+        <span className="flex items-center gap-1.5 text-sm font-bold px-3.5 py-2 rounded-full border border-rose-500/20 text-rose-500 bg-rose-500/8">
+          <HeartPulse className="w-4 h-4" />
+          {Math.round(avgHr)} bpm
+        </span>
+      )}
+    </div>
+  )
 }
