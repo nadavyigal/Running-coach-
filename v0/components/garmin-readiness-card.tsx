@@ -133,8 +133,7 @@ export function GarminReadinessCard({ userId }: GarminReadinessCardProps) {
 
         <GarminSyncStatusBar
           lastSyncAt={data.lastSyncAt}
-          onRefresh={handleRefresh}
-          isRefreshing={isRefreshing}
+          showRefreshButton={false}
           testId="garmin-readiness-sync-status"
         />
       </CardHeader>

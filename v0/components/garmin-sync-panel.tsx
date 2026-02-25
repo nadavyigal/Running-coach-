@@ -355,8 +355,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
                 </div>
                 <GarminSyncStatusBar
                   lastSyncAt={device.lastSync}
-                  onRefresh={handleSyncEnabledData}
-                  isRefreshing={isSyncing}
+                  showRefreshButton={false}
                   className="border-slate-200 bg-slate-50"
                   testId="garmin-sync-panel-status-bar"
                 />
