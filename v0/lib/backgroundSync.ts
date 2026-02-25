@@ -328,31 +328,44 @@ export class BackgroundSyncManager {
 
   private async processGarminActivity(activity: any, userId: number) {
     try {
-      // Check if activity already exists
-      const existingRun = await db.runs
-        .where(['userId', 'externalId'])
-        .equals([userId, `garmin-${activity.activityId}`])
-        .first();
+      if (!activity.activityId) return
 
-      if (existingRun) {
+      // Check if activity already exists using the indexed compound key
+      const existingCount = await db.runs
+        .where('[userId+importRequestId]')
+        .equals([userId, String(activity.activityId)])
+        .count();
+
+      if (existingCount > 0) {
         return; // Already processed
       }
 
-      // Create new run record
+      const completedAt = activity.startTimeGMT ? new Date(activity.startTimeGMT) : new Date()
+
+      // Skip activities with far-future dates (device clock or Garmin API issue)
+      const MAX_FUTURE_MS = 24 * 60 * 60 * 1000
+      if (completedAt.getTime() > Date.now() + MAX_FUTURE_MS) {
+        console.warn(`Skipping Garmin activity ${activity.activityId} with future date: ${completedAt.toISOString()}`)
+        return
+      }
+
+      // Create new run record using correct Run interface field names
       const runId = await db.runs.add({
         userId,
-        externalId: `garmin-${activity.activityId}`,
-        distance: activity.distance,
-        duration: activity.duration,
-        pace: activity.averagePace,
-        calories: activity.calories,
-        elevationGain: activity.elevationGain,
-        averageHeartRate: activity.averageHR,
-        maxHeartRate: activity.maxHR,
-        completedAt: new Date(activity.startTimeGMT),
+        type: 'other',
+        distance: activity.distance ?? 0,
+        duration: activity.duration ?? 0,
+        ...(activity.averagePace != null ? { pace: activity.averagePace } : {}),
+        ...(activity.calories != null ? { calories: activity.calories } : {}),
+        ...(activity.elevationGain != null ? { elevationGain: activity.elevationGain } : {}),
+        ...(activity.averageHR != null ? { heartRate: activity.averageHR } : {}),
+        ...(activity.maxHR != null ? { maxHR: activity.maxHR } : {}),
         notes: `Imported from Garmin: ${activity.activityName}`,
+        importSource: 'garmin',
+        importRequestId: String(activity.activityId),
+        completedAt,
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
       });
 
       console.log(`Created run ${runId} from Garmin activity ${activity.activityId}`);

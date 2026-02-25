@@ -167,7 +167,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       const [weekly, recent, all] = await Promise.all([
         dbUtils.getRunsInTimeRange(userId, start, end),
-        dbUtils.getUserRuns(userId, 10),
+        dbUtils.getUserRuns(userId, 30),
         dbUtils.getRunsByUser(userId),
       ])
 
@@ -226,7 +226,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         dbUtils.getPrimaryGoal(userId),
         dbUtils.getUserGoals(userId, "active"),
         dbUtils.getRunsInTimeRange(userId, start, end),
-        dbUtils.getUserRuns(userId, 10),
+        dbUtils.getUserRuns(userId, 30),
         dbUtils.getRunsByUser(userId),
         dbUtils.getWorkoutsForDateRange(userId, start, end, { planScope: "active" }),
       ])

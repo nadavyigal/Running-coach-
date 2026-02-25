@@ -2216,6 +2216,45 @@ export async function getUserRuns(userId: number, limit?: number): Promise<Run[]
 }
 
 /**
+ * Remove duplicate Garmin-imported runs for a user.
+ * Keeps the run with the earliest createdAt for each importRequestId, deletes the rest.
+ */
+export async function deduplicateGarminRuns(userId: number): Promise<number> {
+  return safeDbOperation(async () => {
+    if (!db) return 0
+
+    const garminRuns = await db.runs
+      .where('userId')
+      .equals(userId)
+      .filter((run) => run.importSource === 'garmin' && !!run.importRequestId)
+      .toArray()
+
+    // Group by importRequestId
+    const grouped = new Map<string, typeof garminRuns>()
+    for (const run of garminRuns) {
+      const key = run.importRequestId!
+      if (!grouped.has(key)) grouped.set(key, [])
+      grouped.get(key)!.push(run)
+    }
+
+    let deletedCount = 0
+    for (const [, group] of grouped) {
+      if (group.length <= 1) continue
+      // Sort by createdAt ascending – keep the oldest, delete the rest
+      group.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      const toDelete = group.slice(1).map((r) => r.id!).filter(Boolean)
+      await db.runs.bulkDelete(toDelete)
+      deletedCount += toDelete.length
+    }
+
+    if (deletedCount > 0) {
+      console.log(`deduplicateGarminRuns: removed ${deletedCount} duplicate run(s) for userId=${userId}`)
+    }
+    return deletedCount
+  }, 'deduplicateGarminRuns', 0)
+}
+
+/**
  * Get run statistics
  */
 export async function getRunStats(userId: number, days: number = 30): Promise<{

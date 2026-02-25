@@ -1,6 +1,7 @@
 "use client"
 
 import { db, type GarminSummaryRecord, type Run, type SleepData, type WearableDevice } from '@/lib/db'
+import { deduplicateGarminRuns } from '@/lib/dbUtils'
 
 export interface GarminEnablementItem {
   key: string
@@ -636,9 +637,8 @@ export async function syncGarminEnabledData(
     }
 
     const existingCount = await db.runs
-      .where('userId')
-      .equals(userId)
-      .and((run) => run.importRequestId === activity.activityId)
+      .where('[userId+importRequestId]')
+      .equals([userId, activity.activityId])
       .count()
 
     if (existingCount > 0) {
@@ -647,6 +647,14 @@ export async function syncGarminEnabledData(
     }
 
     const completedAt = activity.startTimeGMT ? new Date(activity.startTimeGMT) : new Date()
+
+    // Skip activities with far-future dates (device clock or Garmin API issue)
+    const MAX_FUTURE_MS = 24 * 60 * 60 * 1000
+    if (completedAt.getTime() > Date.now() + MAX_FUTURE_MS) {
+      console.warn(`Skipping Garmin activity ${activity.activityId} with future date: ${completedAt.toISOString()}`)
+      activitiesSkipped += 1
+      continue
+    }
 
     const run: Omit<Run, 'id'> = {
       userId,
@@ -741,6 +749,9 @@ export async function syncGarminEnabledData(
       updatedAt: new Date(),
     })
   }
+
+  // Clean up any duplicate runs that may have been created by concurrent syncs
+  await deduplicateGarminRuns(userId)
 
   return {
     ...buildCatalogResult(data),

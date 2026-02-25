@@ -1440,6 +1440,12 @@ export class RunSmartDB extends Dexie {
       console.log('Upgrading database to version 9: Extending run records for Garmin metrics');
     });
 
+    this.version(10).stores({
+      runs: '++id, userId, type, distance, duration, completedAt, [userId+completedAt], [userId+type], importRequestId, [userId+importRequestId]',
+    }).upgrade(async (_trans) => {
+      console.log('Upgrading database to version 10: Adding importRequestId index for Garmin deduplication');
+    });
+
   }
 }
 
