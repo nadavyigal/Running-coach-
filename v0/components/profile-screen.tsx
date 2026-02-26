@@ -1,10 +1,48 @@
-'use client';
+﻿'use client';
 
-import { isSafeRedirect } from "@/lib/validateRedirect"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
-import { Badge } from "@/components/ui/badge"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { useRouter } from "next/navigation"
+import {
+  Settings,
+  Footprints,
+  Music,
+  Heart,
+  Plus,
+  UserCheckIcon as UserEdit,
+  Bell,
+  Shield,
+  HelpCircle,
+  Loader2,
+  AlertCircle,
+  Trash2,
+  Database,
+  Pencil,
+  Brain,
+  Users,
+  Target,
+  GitMerge,
+  Star,
+} from "lucide-react"
+import { AddShoesModal } from "@/components/add-shoes-modal"
+import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
+import { JoinCohortModal } from "@/components/join-cohort-modal";
+import { PlanTemplateFlow } from "@/components/plan-template-flow";
+import { startChallengeAndSyncPlan } from "@/lib/challenge-plan-sync";
+import { ProfileHeroCard } from "@/components/profile/ProfileHeroCard";
+import { PrimaryGoalCard } from "@/components/profile/PrimaryGoalCard";
+import { MomentumSnapshotGrid } from "@/components/profile/MomentumSnapshotGrid";
+import { ChallengeSection } from "@/components/profile/ChallengeSection";
+import { CoachingProfilePanel } from "@/components/profile/CoachingProfilePanel";
+import { PerformanceAnalyticsSection } from "@/components/profile/PerformanceAnalyticsSection";
+import { AchievementsSection } from "@/components/profile/AchievementsSection";
+import { IntegrationsListCard, type IntegrationRow } from "@/components/profile/IntegrationsListCard";
+import { SettingsListCard, type SettingsRow } from "@/components/profile/SettingsListCard";
+import { DeveloperToolsAccordion } from "@/components/profile/DeveloperToolsAccordion";
+import { ProfilePageSkeleton } from "@/components/profile/ProfilePageSkeleton";
+import { ProfileEmptyState } from "@/components/profile/ProfileEmptyStates";
+import { ReminderSettings } from "@/components/reminder-settings"
+import { RunSmartBrandMark } from "@/components/run-smart-brand-mark";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,67 +53,30 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import {
-  Settings,
-  User,
-  Route,
-  Clock,
-  Flame,
-  Footprints,
-  Watch,
-  Music,
-  Heart,
-  Plus,
-  UserCheckIcon as UserEdit,
-  Bell,
-  Shield,
-  HelpCircle,
-  ChevronRight,
-  ChevronDown,
-  Loader2,
-  AlertCircle,
-  Trash2,
-  Database,
-  Activity,
-  History,
-  Pencil,
-  Trophy,
-} from "lucide-react"
-import { AddShoesModal } from "@/components/add-shoes-modal"
-import { ReminderSettings } from "@/components/reminder-settings"
-import { useState, useEffect, useCallback } from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { BadgeCabinet } from "@/components/badge-cabinet";
-import { dbUtils } from "@/lib/dbUtils";
-import { DATABASE } from "@/lib/constants";
-import { useData } from "@/contexts/DataContext";
-import { useToast } from "@/components/ui/use-toast";
-import { getChallengeHistory, getActiveChallenge, type DailyChallengeData } from "@/lib/challengeEngine";
-import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db";
-import { ShareBadgeModal } from "@/components/share-badge-modal";
-import { Share2, Users } from "lucide-react";
-import { JoinCohortModal } from "@/components/join-cohort-modal";
-import { CommunityStatsWidget } from "@/components/community-stats-widget";
-import { CoachingInsightsWidget } from "@/components/coaching-insights-widget";
-import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
-import { PerformanceAnalyticsDashboard } from "@/components/performance-analytics-dashboard";
-import { Brain, Target, GitMerge, Star } from "lucide-react";
-import { PlanTemplateFlow } from "@/components/plan-template-flow";
-import { type Goal, type Run, db } from "@/lib/db";
-import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine";
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/components/ui/use-toast";
 import { UserDataSettings } from "@/components/user-data-settings";
-import { RunSmartBrandMark } from "@/components/run-smart-brand-mark";
+import { useData } from "@/contexts/DataContext";
+import { trackFeatureUsed, trackScreenViewed } from "@/lib/analytics";
+import { getChallengeHistory, getActiveChallenge, type DailyChallengeData } from "@/lib/challengeEngine";
 import { getActiveChallengeTemplates } from "@/lib/challengeTemplates";
-import { startChallengeAndSyncPlan } from "@/lib/challenge-plan-sync";
+import { DATABASE } from "@/lib/constants";
+import { type Goal, type Run, db } from "@/lib/db";
+import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db";
+import { dbUtils } from "@/lib/dbUtils";
+import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine";
+import { isSafeRedirect } from "@/lib/validateRedirect"
 
 type ChallengeTemplateSeed = ReturnType<typeof getActiveChallengeTemplates>[number]
 
 export function ProfileScreen() {
   const router = useRouter()
   const recentRunsWindowDays = 14
+  const hasTrackedProfileViewRef = useRef(false)
 
   // Get shared data from context
   const {
@@ -95,8 +96,6 @@ export function ProfileScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [selectedBadge, setSelectedBadge] = useState<{ id: string; name: string } | null>(null);
   const [showJoinCohortModal, setShowJoinCohortModal] = useState(false);
   const [showCoachingPreferences, setShowCoachingPreferences] = useState(false);
   const [showPlanTemplateFlow, setShowPlanTemplateFlow] = useState(false);
@@ -116,7 +115,6 @@ export function ProfileScreen() {
   const [isSwitchingPrimary, setIsSwitchingPrimary] = useState(false)
   const [joiningChallengeSlug, setJoiningChallengeSlug] = useState<string | null>(null)
   const [garminConnected, setGarminConnected] = useState(false)
-  const [recentRunsExpanded, setRecentRunsExpanded] = useState(false)
 
   const filterRunsToRecentWindow = useCallback((runs: Run[]): Run[] => {
     const cutoff = new Date()
@@ -255,16 +253,6 @@ export function ProfileScreen() {
     }
   }
 
-  const handleShareClick = (badgeId: string, badgeName: string) => {
-    setSelectedBadge({ id: badgeId, name: badgeName });
-    setIsShareModalOpen(true);
-  };
-
-  const handleCloseShareModal = () => {
-    setIsShareModalOpen(false);
-    setSelectedBadge(null);
-  };
-
   const handleDeleteGoal = async () => {
     if (!goalToDelete?.id) return;
     try {
@@ -346,6 +334,7 @@ export function ProfileScreen() {
 
   const handleJoinChallenge = async (template: ChallengeTemplateSeed) => {
     if (!userId) return
+    trackProfileInteraction('challenge_join_click', { challenge_slug: template.slug })
     if (activeChallenge?.template.slug === template.slug) {
       toast({
         title: "Already active",
@@ -407,7 +396,7 @@ export function ProfileScreen() {
     return diff < 0 ? 0 : diff;
   };
 
-  const loadGoals = async () => {
+  const loadGoals = useCallback(async () => {
     if (!userId) return;
     try {
       const [primary, activeGoals] = await Promise.all([
@@ -419,7 +408,7 @@ export function ProfileScreen() {
     } catch (goalError) {
       console.warn('[ProfileScreen] Failed to load goals:', goalError);
     }
-  };
+  }, [userId]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -539,7 +528,7 @@ export function ProfileScreen() {
         const user = await dbUtils.getCurrentUser();
 
         if (user) {
-          console.log(`[ProfileScreen] ✅ User loaded: id=${user.id}`);
+          console.log(`[ProfileScreen] ג… User loaded: id=${user.id}`);
           setUserId(user.id!);
           setError(null);
           setIsLoading(false);
@@ -553,7 +542,7 @@ export function ProfileScreen() {
             if (unlocked && unlocked.length > 0) {
               unlocked.forEach(badge => {
                 toast({
-                  title: `🏅 Badge Unlocked!`,
+                  title: `נ… Badge Unlocked!`,
                   description: `You earned the ${badge.type} badge for a ${badge.milestone}-day streak!`,
                 });
               });
@@ -571,7 +560,7 @@ export function ProfileScreen() {
             setTimeout(() => loadUserData(retryCount + 1), delay);
             return;
           }
-          console.error('[ProfileScreen] ❌ All retry attempts exhausted');
+          console.error('[ProfileScreen] ג All retry attempts exhausted');
           setError("Unable to load profile. The database may still be initializing. Please wait a moment and try refreshing.");
           setIsLoading(false);
         }
@@ -610,7 +599,7 @@ export function ProfileScreen() {
           const users = await db.users.toArray();
           const firstUser = users.at(0);
           if (firstUser?.id) {
-            console.log(`[ProfileScreen] ✅ Fallback found userId: ${firstUser.id}`);
+            console.log(`[ProfileScreen] ג… Fallback found userId: ${firstUser.id}`);
             setUserId(firstUser.id);
             setError(null);
           }
@@ -625,1151 +614,802 @@ export function ProfileScreen() {
 
   useEffect(() => {
     if (userId) {
-      loadGoals();
+      void loadGoals();
     }
-  }, [userId]);
+  }, [userId, loadGoals]);
 
-  const connections = [
-    { icon: Footprints, name: "Add Shoes", desc: "Track your running shoes mileage" },
-    { icon: Users, name: "Join a Cohort", desc: "Join a community group with an invite code" },
-    { icon: Music, name: "Connect to Spotify", desc: "Sync your running playlists" },
-    { icon: Heart, name: "Connect to Fitness Apps", desc: "Sync with Strava, Nike Run Club, etc." },
-    { icon: Plus, name: "Connect to Health", desc: "Sync with Apple Health or Google Fit" },
+  const trackProfileInteraction = useCallback((action: string, properties?: Record<string, unknown>) => {
+    void trackFeatureUsed(`profile_${action}`, 'profile_screen', properties)
+  }, [])
+
+  useEffect(() => {
+    if (isLoading || error || !userId || hasTrackedProfileViewRef.current) {
+      return
+    }
+    hasTrackedProfileViewRef.current = true
+    void trackScreenViewed('profile', undefined, { profile_version: 'v2_hub' })
+  }, [error, isLoading, userId]);
+
+
+  const notifyComingSoon = (name: string) => {
+    trackProfileInteraction('coming_soon_click', { integration_name: name })
+    toast({
+      title: `${name} coming soon`,
+      description: `We'll enable ${name} integration in an upcoming update.`,
+    })
+  }
+
+  const resetAllData = useCallback(() => {
+    trackProfileInteraction('developer_reset_all_data')
+    if (!confirm('Are you sure you want to reset all app data? This cannot be undone.')) return
+
+    [DATABASE.NAME, 'running-coach-db', 'RunningCoachDB'].forEach((dbName) => {
+      try {
+        indexedDB.deleteDatabase(dbName)
+      } catch {
+        // Best-effort cleanup
+      }
+    })
+    localStorage.clear()
+    sessionStorage.clear()
+    window.location.reload()
+  }, [trackProfileInteraction])
+
+  const sevenDayCutoff = new Date()
+  sevenDayCutoff.setDate(sevenDayCutoff.getDate() - 7)
+  sevenDayCutoff.setHours(0, 0, 0, 0)
+
+  const runsLastSevenDays = recentRuns.filter((run) => {
+    const completed = new Date(run.completedAt ?? run.createdAt)
+    return completed >= sevenDayCutoff
+  })
+
+  const weeklyRuns = runsLastSevenDays.length
+  const weeklyDistanceKm = runsLastSevenDays.reduce((sum, run) => sum + (run.distance ?? 0), 0)
+  const expectedWeeklyRuns = Math.max(1, user?.daysPerWeek ?? 3)
+  const consistencyScore = Math.min(100, (weeklyRuns / expectedWeeklyRuns) * 100)
+  const momentumStreakDays = activeChallenge?.dailyData.streakDays ?? 0
+
+  const distanceSparkline = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date()
+    date.setDate(date.getDate() - (6 - index))
+    date.setHours(0, 0, 0, 0)
+    const dayStart = date.getTime()
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000
+    const dayDistance = recentRuns.reduce((sum, run) => {
+      const completed = new Date(run.completedAt ?? run.createdAt).getTime()
+      if (completed >= dayStart && completed < dayEnd) {
+        return sum + (run.distance ?? 0)
+      }
+      return sum
+    }, 0)
+    return Math.min(100, dayDistance * 8)
+  })
+
+  const runnerName = user?.name?.trim() || 'Runner'
+  const runnerLevel = `${user?.experience ? `${String(user.experience).charAt(0).toUpperCase()}${String(user.experience).slice(1)}` : 'Beginner'} Runner`
+  const runnerSummary = `You have completed ${allTimeStats.totalRuns} runs and ${allTimeStats.totalDistanceKm.toFixed(1)} km so far. ${
+    weeklyRuns >= expectedWeeklyRuns ? 'You are on track this week.' : 'You are building momentum this week.'
+  }`
+
+  const goalDeadlineLabel = primaryGoal?.timeBound?.deadline
+    ? (() => {
+        const deadline = new Date(primaryGoal.timeBound.deadline)
+        return Number.isNaN(deadline.getTime()) ? null : `Target date: ${deadline.toLocaleDateString()}`
+      })()
+    : null
+
+  const primaryGoalTarget = primaryGoal?.target?.type && primaryGoal?.target?.value != null
+    ? `${String(primaryGoal.target.type)} target: ${primaryGoal.target.value}`
+    : undefined
+
+  const primaryGoalProgress = getGoalProgress(primaryGoal?.id)
+  const primaryGoalTrajectory = getGoalTrajectory(primaryGoal?.id)
+
+  const coachGuidanceByTrajectory: Record<string, string> = {
+    ahead: 'Excellent pace. Keep your current rhythm and recover well.',
+    on_track: 'You are on track. Keep consistency and protect recovery.',
+    behind: 'Add one short quality session this week to regain momentum.',
+  }
+
+  const coachGuidance = primaryGoalTrajectory
+    ? (coachGuidanceByTrajectory[primaryGoalTrajectory] ?? 'Keep logging runs and we will adapt your next steps.')
+    : 'Log a few more runs to unlock stronger goal guidance.'
+
+  const integrationRows: IntegrationRow[] = [
+    {
+      icon: Footprints,
+      name: 'Add Shoes',
+      description: 'Track shoe mileage and replacement timing.',
+      status: 'available',
+      onClick: () => {
+        trackProfileInteraction('add_shoes_open')
+        setShowAddShoesModal(true)
+      },
+    },
+    {
+      icon: Users,
+      name: 'Join a Cohort',
+      description: 'Train with a community invite code.',
+      status: 'available',
+      onClick: () => {
+        trackProfileInteraction('join_cohort_open')
+        setShowJoinCohortModal(true)
+      },
+    },
+    {
+      icon: Music,
+      name: 'Spotify',
+      description: 'Sync playlists for training sessions.',
+      status: 'available',
+      onClick: () => notifyComingSoon('Spotify'),
+    },
+    {
+      icon: Heart,
+      name: 'Fitness Apps',
+      description: 'Sync with Strava and other providers.',
+      status: 'available',
+      onClick: () => notifyComingSoon('Fitness app sync'),
+    },
+    {
+      icon: Plus,
+      name: 'Apple Health / Google Fit',
+      description: 'Unify your health data streams.',
+      status: 'available',
+      onClick: () => notifyComingSoon('Health sync'),
+    },
   ]
 
-  const settings = [
-    { icon: UserEdit, name: "Edit Profile", desc: "Name, goals, and preferences" },
-    { icon: Target, name: "Goal Settings", desc: "Manage your running goals and targets", action: "goal-settings" },
-    { icon: Brain, name: "Coaching Preferences", desc: "Customize your AI coach behavior", action: "coaching-preferences" },
-    { icon: Bell, name: "Notifications", desc: "Reminders and updates" },
-    { icon: Shield, name: "Privacy & Data", desc: "Manage your data", action: "privacy" },
-    { icon: HelpCircle, name: "Help & Support", desc: "Get help and contact us" },
+  const settingsRows: SettingsRow[] = [
+    {
+      icon: UserEdit,
+      name: 'Edit Profile',
+      description: 'Name, training profile, and preferences.',
+      onClick: () => {
+        trackProfileInteraction('edit_profile_open')
+        setShowUserDataModal(true)
+      },
+    },
+    {
+      icon: Target,
+      name: 'Goal Settings',
+      description: 'Manage active goals and progression.',
+      onClick: () => {
+        trackProfileInteraction('goal_settings_scroll')
+        document.getElementById('goal-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      },
+    },
+    {
+      icon: Brain,
+      name: 'Coaching Preferences',
+      description: 'Customize AI coaching behavior.',
+      onClick: () => {
+        trackProfileInteraction('coaching_preferences_open')
+        setShowCoachingPreferences(true)
+      },
+    },
+    {
+      icon: Bell,
+      name: 'Notifications',
+      description: 'Reminders and update preferences.',
+      onClick: () => notifyComingSoon('Notification controls'),
+    },
+    {
+      icon: Shield,
+      name: 'Privacy & Data',
+      description: 'Manage account data and exports.',
+      onClick: () => {
+        trackProfileInteraction('privacy_open')
+        router.push('/privacy')
+      },
+    },
+    {
+      icon: HelpCircle,
+      name: 'Help & Support',
+      description: 'Get troubleshooting and support.',
+      onClick: () => notifyComingSoon('Help center'),
+    },
   ]
+
+  const secondaryGoals = goals.filter((goal) => !primaryGoal || goal.id !== primaryGoal.id)
 
   return (
-    <div className="p-4 space-y-6">
-      {/* Header */}
+    <div className="space-y-5 px-4 pb-28 pt-4 md:px-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <RunSmartBrandMark compact size="lg" className="opacity-90" />
-          <h1 className="text-2xl font-bold">Profile</h1>
+          <p className="text-label-sm text-muted-foreground">Profile Hub</p>
         </div>
-        <Button variant="ghost" size="sm">
+        <Button variant="ghost" size="sm" aria-label="Profile screen settings">
           <Settings className="h-5 w-5" />
         </Button>
       </div>
 
-      {/* Loading State */}
-      {isLoading && (
-        <Card>
-          <CardContent className="p-8 flex flex-col items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-foreground/70 mb-4" />
-            <p className="text-foreground/70">Loading profile data...</p>
-          </CardContent>
-        </Card>
-      )}
+      {isLoading ? <ProfilePageSkeleton /> : null}
 
-      {/* Error State */}
-      {error && !isLoading && (
+      {error && !isLoading ? (
         <Card className="border-red-200">
-          <CardContent className="p-6 flex flex-col items-center text-center">
-            <AlertCircle className="h-8 w-8 text-red-500 mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Unable to Load Profile</h3>
-            <p className="text-foreground/70 mb-4">{error}</p>
+          <CardContent className="p-6 text-center">
+            <AlertCircle className="mx-auto mb-4 h-8 w-8 text-red-500" />
+            <h3 className="mb-2 text-lg font-semibold">Unable to Load Profile</h3>
+            <p className="mb-4 text-foreground/70">{error}</p>
 
-            {/* Database Status Indicator */}
-            <div className="flex items-center gap-2 text-xs text-foreground/60 mb-4 bg-[oklch(var(--surface-2))] px-3 py-2 rounded-lg">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-lg bg-[oklch(var(--surface-2))] px-3 py-2 text-xs text-foreground/60">
               <Database className="h-3 w-3" />
               <span>Database: {typeof indexedDB !== 'undefined' ? 'Available' : 'Not Available'}</span>
             </div>
 
-            <div className="flex flex-col gap-2 w-full max-w-xs">
+            <div className="mx-auto flex max-w-xs flex-col gap-2">
               <Button
                 onClick={() => {
-                  setError(null);
-                  setIsLoading(true);
-                  // Trigger re-mount by updating a key or reloading
-                  window.location.reload();
+                  setError(null)
+                  setIsLoading(true)
+                  window.location.reload()
                 }}
-                variant="default"
               >
                 Refresh Page
               </Button>
               <Button
-                onClick={() => {
-                  // Try to re-initialize the database
-                  setError(null);
-                  setIsLoading(true);
-                  dbUtils.initializeDatabase().then(() => {
-                    dbUtils.getCurrentUser().then((user: any) => {
-                      if (user) {
-                        setUserId(user.id!);
-                        setError(null);
-                      } else {
-                        setError("Still unable to load profile. Please try again.");
-                      }
-                      setIsLoading(false);
-                    }).catch(() => {
-                      setError("Failed to load user data.");
-                      setIsLoading(false);
-                    });
-                  }).catch(() => {
-                    setError("Database initialization failed.");
-                    setIsLoading(false);
-                  });
-                }}
                 variant="outline"
+                onClick={() => {
+                  setError(null)
+                  setIsLoading(true)
+                  dbUtils.initializeDatabase()
+                    .then(() => dbUtils.getCurrentUser())
+                    .then((loadedUser: any) => {
+                      if (loadedUser?.id) {
+                        setUserId(loadedUser.id)
+                        setError(null)
+                      } else {
+                        setError('Still unable to load profile. Please try again.')
+                      }
+                    })
+                    .catch(() => setError('Database initialization failed.'))
+                    .finally(() => setIsLoading(false))
+                }}
               >
                 Retry Without Refresh
               </Button>
-              <Button
-                onClick={() => {
-                  // Clear all data and restart
-                  localStorage.clear();
-                  [DATABASE.NAME, 'running-coach-db', 'RunningCoachDB'].forEach((dbName) => {
-                    try {
-                      indexedDB.deleteDatabase(dbName);
-                    } catch {
-                      // Best-effort cleanup
-                    }
-                  });
-                  toast({
-                    title: "Data Cleared",
-                    description: "Restarting with fresh data...",
-                  });
-                  setTimeout(() => window.location.reload(), 500);
-                }}
-                variant="ghost"
-                className="text-red-500 hover:text-red-600"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
+              <Button variant="ghost" className="text-red-500 hover:text-red-600" onClick={resetAllData}>
+                <Trash2 className="mr-2 h-4 w-4" />
                 Clear Data & Restart
               </Button>
             </div>
-            <p className="text-xs text-foreground/60 mt-4">
-              If this persists, try clearing your browser cache or using incognito mode.
-            </p>
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
-      {/* Show content only when not loading and no error */}
-      {!isLoading && !error && (
+      {!isLoading && !error ? (
         <>
-
-          {/* Goals */}
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold">Goals</h2>
-              <Button size="sm" className="gap-2" onClick={() => setShowPlanTemplateFlow(true)}>
-                <Plus className="h-4 w-4" />
-                Create Goal
+          <div className="sticky top-2 z-20 -mx-1 overflow-x-auto rounded-xl border bg-background/95 p-2 shadow-sm backdrop-blur">
+            <div className="flex min-w-max gap-2">
+              <Button
+                size="sm"
+                className="h-8"
+                onClick={() => {
+                  trackProfileInteraction('sticky_edit_profile')
+                  setShowUserDataModal(true)
+                }}
+              >
+                Edit Profile
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => {
+                  trackProfileInteraction('sticky_update_goal')
+                  setShowPlanTemplateFlow(true)
+                }}
+              >
+                Update Goal
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => {
+                  trackProfileInteraction('sticky_challenges_scroll')
+                  document.getElementById('challenges-section')?.scrollIntoView({ behavior: 'smooth' })
+                }}
+              >
+                Challenges
               </Button>
             </div>
+          </div>
 
-            {primaryGoal ? (
-              <Card className="border">
-                <CardContent className="p-5 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold text-primary">PRIMARY GOAL</p>
-                      <h3 className="text-lg font-semibold text-foreground">{primaryGoal.title}</h3>
-                      <p className="text-sm text-foreground/70">{primaryGoal.description}</p>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <div className="text-right space-y-1">
-                        {getDaysRemaining(primaryGoal) !== null && (
-                          <Badge variant="secondary" className="text-xs">
-                            {getDaysRemaining(primaryGoal)} days left
-                          </Badge>
-                        )}
-                        {primaryGoal.timeBound?.deadline && (
-                          <div className="text-xs text-foreground/60">
-                            Target date:{' '}
-                            {(() => {
-                              const deadline = new Date(primaryGoal.timeBound.deadline);
-                              return Number.isNaN(deadline.getTime()) ? '--' : deadline.toLocaleDateString();
-                            })()}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => openDeleteDialog(primaryGoal)}
-                        className="p-1 text-foreground/50 hover:text-red-500 transition-colors"
-                        title="Delete goal"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
+          <ProfileHeroCard
+            runnerName={runnerName}
+            runnerLevel={runnerLevel}
+            summary={runnerSummary}
+            quickFacts={[
+              `${allTimeStats.totalRuns} total runs`,
+              `${weeklyRuns}/${expectedWeeklyRuns} runs this week`,
+              `${allTimeStats.totalDistanceKm.toFixed(1)} km total distance`,
+              `${momentumStreakDays} day momentum streak`,
+            ]}
+            onEditProfile={() => {
+              trackProfileInteraction('hero_edit_profile')
+              setShowUserDataModal(true)
+            }}
+            onViewProgress={() => {
+              trackProfileInteraction('hero_view_progress')
+              document.getElementById('analytics-section')?.scrollIntoView({ behavior: 'smooth' })
+            }}
+          />
 
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-sm text-foreground/70">
-                      <span>Progress</span>
-                      <div className="flex items-center gap-2">
-                        <span>{Math.round(getGoalProgress(primaryGoal.id))}%</span>
-                        {getGoalTrajectory(primaryGoal.id) && (
-                          <Badge
-                            variant="outline"
-                            className={`text-xs capitalize ${getGoalTrajectory(primaryGoal.id) === 'ahead' ? 'text-primary border-primary/30' :
-                                getGoalTrajectory(primaryGoal.id) === 'on_track' ? 'text-primary border-primary/30' :
-                                  getGoalTrajectory(primaryGoal.id) === 'behind' ? 'text-amber-600 border-amber-300' :
-                                    'text-red-600 border-red-300'
-                              }`}
-                          >
-                            {getGoalTrajectory(primaryGoal.id)?.replace('_', ' ')}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <Progress value={getGoalProgress(primaryGoal.id)} className="h-2" />
-                    <p className="text-xs text-foreground/70">
-                      This plan is designed to help you achieve your goal by the target date.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="p-5 flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold">No active goal</h3>
-                    <p className="text-sm text-foreground/70">Set a goal to get a tailored training plan.</p>
-                  </div>
-                  <Button size="sm" onClick={() => setShowPlanTemplateFlow(true)} className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    Create Goal
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
+          <div id="goal-section" className="space-y-3">
+            <PrimaryGoalCard
+              hasGoal={Boolean(primaryGoal)}
+              goalTitle={primaryGoal?.title}
+              goalDescription={primaryGoal?.description}
+              goalTarget={primaryGoalTarget}
+              progressValue={primaryGoalProgress}
+              trajectory={primaryGoalTrajectory}
+              daysRemaining={getDaysRemaining(primaryGoal)}
+              deadlineLabel={goalDeadlineLabel}
+              coachGuidance={coachGuidance}
+              onCreateGoal={() => {
+                trackProfileInteraction('goal_create_open')
+                setShowPlanTemplateFlow(true)
+              }}
+              onOpenGoalSettings={() => {
+                trackProfileInteraction('goal_settings_open')
+                document.getElementById('other-goals')?.scrollIntoView({ behavior: 'smooth' })
+              }}
+              onViewPlan={() => {
+                trackProfileInteraction('goal_view_plan')
+                try {
+                  window.dispatchEvent(new CustomEvent('navigate-to-plan'))
+                } catch {
+                  // ignore
+                }
+              }}
+              onDeleteGoal={primaryGoal ? () => {
+                trackProfileInteraction('goal_delete_dialog_open')
+                openDeleteDialog(primaryGoal)
+              } : undefined}
+            />
 
-            {goals.filter(g => !primaryGoal || g.id !== primaryGoal.id).length > 0 && (
-              <Card>
+            {secondaryGoals.length > 0 ? (
+              <Card id="other-goals" className="rounded-2xl">
                 <CardHeader>
                   <CardTitle className="text-base">Other Goals</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {goals
-                    .filter(g => !primaryGoal || g.id !== primaryGoal.id)
-                    .map(goal => (
-                      <div key={goal.id} className="p-3 rounded-lg border bg-[oklch(var(--surface-2))]">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <h4 className="font-semibold text-foreground">{goal.title}</h4>
-                            <p className="text-xs text-foreground/70">{goal.description}</p>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 px-2 text-xs"
-                              onClick={() => goal.id && handleSetPrimary(goal.id)}
-                              disabled={isSwitchingPrimary}
-                              title="Set as primary goal"
-                            >
-                              <Star className="h-3.5 w-3.5 mr-1" />
-                              Primary
-                            </Button>
-                            {primaryGoal && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 px-2 text-xs"
-                                onClick={() => openMergeDialog(goal)}
-                                title="Merge into primary goal"
-                              >
-                                <GitMerge className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
-                            <button
-                              onClick={() => openDeleteDialog(goal)}
-                              className="p-1.5 text-foreground/50 hover:text-red-500 transition-colors"
-                              title="Delete goal"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="mt-2">
-                          <div className="flex justify-between text-xs text-foreground/70 mb-1">
-                            <span>Progress</span>
-                            <div className="flex items-center gap-2">
-                              <span>{Math.round(getGoalProgress(goal.id))}%</span>
-                              {getGoalTrajectory(goal.id) && (
-                                <span className={`capitalize ${getGoalTrajectory(goal.id) === 'ahead' ? 'text-primary' :
-                                    getGoalTrajectory(goal.id) === 'on_track' ? 'text-primary' :
-                                      getGoalTrajectory(goal.id) === 'behind' ? 'text-amber-600' :
-                                        'text-red-600'
-                                  }`}>
-                                  {getGoalTrajectory(goal.id)?.replace('_', ' ')}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <Progress value={getGoalProgress(goal.id)} className="h-1.5" />
-                        </div>
-                      </div>
-                    ))}
-                </CardContent>
-              </Card>
-            )}
-          </div>
-
-          {/* Challenges Section */}
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold">Challenges</h2>
-            </div>
-
-            {isChallengesLoading ? (
-              <Card>
-                <CardContent className="p-8 flex flex-col items-center justify-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-foreground/70 mb-4" />
-                  <p className="text-foreground/70">Loading challenges...</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {/* Active Challenge */}
-                {activeChallenge && (
-                  <Card className="border-2 border-primary bg-primary/10">
-                    <CardContent className="p-5 space-y-4">
+                  {secondaryGoals.map((goal) => (
+                    <div key={goal.id} className="rounded-xl border bg-[oklch(var(--surface-2))] p-3">
                       <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Activity className="h-4 w-4 text-primary" />
-                            <p className="text-xs font-semibold text-primary">ACTIVE CHALLENGE</p>
-                          </div>
-                          <h3 className="text-lg font-semibold text-foreground">{activeChallenge.template.name}</h3>
-                          <p className="text-sm text-foreground/70">{activeChallenge.template.tagline}</p>
-                        </div>
-                        <Badge variant="secondary" className="text-xs bg-primary/10 text-primary">
-                          Day {activeChallenge.dailyData.currentDay}/{activeChallenge.dailyData.totalDays}
-                        </Badge>
-                      </div>
-
-                      {/* Progress Bar */}
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-foreground/70">Progress</span>
-                          <span className="font-medium text-primary">{activeChallenge.dailyData.progress}%</span>
-                        </div>
-                        <Progress value={activeChallenge.dailyData.progress} className="h-2" />
-                      </div>
-
-                      {/* Today's Theme */}
-                      <div className="bg-white/60 rounded-lg p-3">
-                        <p className="text-sm font-medium text-foreground/80">{activeChallenge.dailyData.dayTheme}</p>
-                      </div>
-
-                      <div className="flex gap-4 text-sm text-foreground/70">
-                        <div className="flex items-center gap-1">
-                          <Flame className="h-4 w-4 text-primary" />
-                          <span>{activeChallenge.dailyData.streakDays}-day streak</span>
+                        <div className="min-w-0">
+                          <h4 className="font-semibold">{goal.title}</h4>
+                          <p className="text-xs text-muted-foreground">{goal.description}</p>
                         </div>
                         <div className="flex items-center gap-1">
-                          <Clock className="h-4 w-4 text-primary" />
-                          <span>{activeChallenge.dailyData.daysRemaining} days left</span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 px-2 text-xs"
+                            onClick={() => goal.id && handleSetPrimary(goal.id)}
+                            disabled={isSwitchingPrimary}
+                          >
+                            <Star className="mr-1 h-3.5 w-3.5" />
+                            Primary
+                          </Button>
+                          {primaryGoal ? (
+                            <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => openMergeDialog(goal)}>
+                              <GitMerge className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : null}
+                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openDeleteDialog(goal)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Completed/Abandoned Challenges */}
-                {challengeHistory.length > 0 ? (
-                  <>
-                    {activeChallenge && (
-                      <div className="flex items-center gap-2 pt-2">
-                        <History className="h-4 w-4 text-foreground/60" />
-                        <span className="text-sm text-foreground/70 font-medium">Past Challenges</span>
+                      <div className="mt-2 space-y-1">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Progress</span>
+                          <span>{Math.round(getGoalProgress(goal.id))}%</span>
+                        </div>
+                        <Progress value={getGoalProgress(goal.id)} className="h-1.5" />
                       </div>
-                    )}
-                    {challengeHistory.map((challenge) => (
-                      <Card key={challenge.progress.id} className="border">
-                        <CardContent className="p-5 space-y-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                {challenge.progress.status === 'completed' ? (
-                                  <>
-                                    <Trophy className="h-4 w-4 text-amber-500" />
-                                    <p className="text-xs font-semibold text-primary">COMPLETED</p>
-                                  </>
-                                ) : (
-                                  <>
-                                    <AlertCircle className="h-4 w-4 text-foreground/50" />
-                                    <p className="text-xs font-semibold text-foreground/60">ENDED</p>
-                                  </>
-                                )}
-                              </div>
-                              <h3 className="text-lg font-semibold text-foreground">{challenge.template.name}</h3>
-                              <p className="text-sm text-foreground/70">{challenge.template.tagline}</p>
-                            </div>
-                            <Badge variant="secondary" className="text-xs">
-                              {challenge.template.durationDays} days
-                            </Badge>
-                          </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
+          <MomentumSnapshotGrid
+            weeklyDistanceKm={weeklyDistanceKm}
+            weeklyRuns={weeklyRuns}
+            totalRuns={allTimeStats.totalRuns}
+            totalDistanceKm={allTimeStats.totalDistanceKm}
+            consistencyScore={consistencyScore}
+            streakDays={momentumStreakDays}
+            distanceSparkline={distanceSparkline}
+          />
 
-                          <div className="flex gap-4 text-sm text-foreground/70">
-                            <div className="flex items-center gap-1">
-                              <Flame className="h-4 w-4 text-primary" />
-                              <span>{challenge.progress.streakDays}-day streak</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Trophy className="h-4 w-4 text-amber-500" />
-                              <span>{challenge.progress.totalDaysCompleted} runs completed</span>
-                            </div>
-                          </div>
-
-                          {challenge.progress.completedAt && (
-                            <p className="text-xs text-foreground/60">
-                              Completed {new Date(challenge.progress.completedAt).toLocaleDateString()}
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </>
-                ) : !activeChallenge && (
-                  <Card>
-                    <CardContent className="p-5 flex items-center justify-between">
-                      <div>
-                        <h3 className="text-lg font-semibold">No challenges yet</h3>
-                        <p className="text-sm text-foreground/70">Start a challenge to build consistency and reach your goals.</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
-                <div className="pt-2">
-                  <div className="flex items-center gap-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <span className="text-sm text-foreground/70 font-medium">Available Challenges</span>
-                  </div>
-                </div>
-
-                {availableChallenges.length === 0 ? (
-                  <Card>
-                    <CardContent className="p-5">
-                      <p className="text-sm text-foreground/70">No challenges available right now.</p>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="grid gap-3">
-                    {availableChallenges.map((template) => {
-                      const isActive = activeChallenge?.template.slug === template.slug
-                      const isJoining = joiningChallengeSlug === template.slug
-                      return (
-                        <Card key={template.slug} className="border">
-                          <CardContent className="p-5 space-y-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex-1">
-                                <h3 className="text-lg font-semibold text-foreground">{template.name}</h3>
-                                <p className="text-sm text-foreground/70">{template.tagline}</p>
-                              </div>
-                              <Badge variant="secondary" className="text-xs">
-                                {template.durationDays} days
-                              </Badge>
-                            </div>
-
-                            <div className="flex flex-wrap gap-2">
-                              <Badge variant="outline" className="text-xs capitalize">
-                                {template.difficulty}
-                              </Badge>
-                              <Badge variant="outline" className="text-xs capitalize">
-                                {template.category}
-                              </Badge>
-                              {isActive && (
-                                <Badge variant="secondary" className="text-xs bg-primary/10 text-primary">
-                                  Active
-                                </Badge>
-                              )}
-                            </div>
-
-                            <div className="flex flex-wrap gap-2">
-                              <Button asChild variant="outline" size="sm" className="h-8">
-                                <Link href={`/challenges/${template.slug}`}>View details</Link>
-                              </Button>
-                              <Button
-                                size="sm"
-                                className="h-8"
-                                onClick={() => handleJoinChallenge(template)}
-                                disabled={isJoining || isActive}
-                              >
-                                {isActive ? "Active" : isJoining ? "Joining..." : "Join challenge"}
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+          <div id="challenges-section">
+            <ChallengeSection
+              isLoading={isChallengesLoading}
+              activeChallenge={activeChallenge}
+              challengeHistory={challengeHistory}
+              availableChallenges={availableChallenges}
+              joiningChallengeSlug={joiningChallengeSlug}
+              onJoinChallenge={handleJoinChallenge}
+            />
           </div>
 
-          {/* User Info */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center">
-                  <User className="h-8 w-8 text-white" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-xl font-bold">Runner</h2>
-                  <p className="text-foreground/70">Beginner Runner</p>
-                  <div className="flex gap-2 text-sm text-foreground/60 mt-1">
-                    <span>{allTimeStats.totalRuns} total runs</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <CoachingProfilePanel
+            userId={userId}
+            coachingStyle={typeof user?.coachingStyle === 'string' ? user.coachingStyle : null}
+            onOpenSettings={() => setShowCoachingPreferences(true)}
+          />
 
-          {/* Training Data */}
-          <Card>
+          <div id="analytics-section">
+            <PerformanceAnalyticsSection
+              userId={userId}
+              totalRuns={allTimeStats.totalRuns}
+              weeklyRuns={weeklyRuns}
+              consistencyScore={consistencyScore}
+            />
+          </div>
+
+          <Card className="rounded-2xl">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <div className="flex items-center gap-2">
                 <Database className="h-5 w-5 text-primary" />
-                <CardTitle>Training Data</CardTitle>
+                <CardTitle>Training Profile Data</CardTitle>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowUserDataModal(true)}
-                className="h-8 gap-2"
-              >
+              <Button variant="ghost" size="sm" onClick={() => setShowUserDataModal(true)} className="h-8 gap-2">
                 <Pencil className="h-4 w-4" />
                 Edit
               </Button>
             </CardHeader>
-
-            <CardContent className="space-y-4">
-              <div>
-                <h4 className="text-sm font-semibold flex items-center gap-2 mb-2">
-                  <User className="h-4 w-4" />
-                  Profile
-                </h4>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-foreground/70">Age:</span>
-                    <span className="font-medium">{user?.age ?? '--'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-foreground/70">Experience:</span>
-                    <span className="font-medium capitalize">{user?.experience ?? '--'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-foreground/70">Weekly Volume:</span>
-                    <span className="font-medium">
-                      {typeof user?.averageWeeklyKm === 'number' ? `${user.averageWeeklyKm} km` : '--'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-foreground/70">Days/Week:</span>
-                    <span className="font-medium">{user?.daysPerWeek ?? '--'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {(user?.calculatedVDOT || user?.vo2Max || user?.lactateThreshold || user?.hrvBaseline || user?.maxHeartRate || user?.restingHeartRate || user?.lactateThresholdHR) && (
-                <>
-                  <Separator />
-                  <div>
-                    <h4 className="text-sm font-semibold flex items-center gap-2 mb-2">
-                      <Activity className="h-4 w-4" />
-                      Physiological Metrics
-                    </h4>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                      {user?.calculatedVDOT && (
+            <CardContent>
+              <Accordion
+                type="multiple"
+                defaultValue={["training-profile", "recent-runs"]}
+                onValueChange={(sections) => {
+                  trackProfileInteraction('training_sections_toggle', { sections })
+                }}
+              >
+                <AccordionItem value="training-profile">
+                  <AccordionTrigger>Profile & Physiological Metrics</AccordionTrigger>
+                  <AccordionContent className="space-y-4">
+                    <div>
+                      <h4 className="mb-2 text-sm font-semibold">Profile</h4>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-foreground/70">VDOT:</span>
-                          <span className="font-medium flex items-center gap-1">
-                            {user.calculatedVDOT.toFixed(1)}
-                            <Badge variant="secondary" className="text-xs px-1 py-0">
-                              {getVDOTRating(user.calculatedVDOT)}
-                            </Badge>
-                          </span>
+                          <span className="text-muted-foreground">Age:</span>
+                          <span className="font-medium">{user?.age ?? '--'}</span>
                         </div>
-                      )}
-                      {user?.vo2Max && (
                         <div className="flex justify-between">
-                          <span className="text-foreground/70">VO2 Max:</span>
-                          <span className="font-medium">{user.vo2Max} ml/kg/min</span>
+                          <span className="text-muted-foreground">Experience:</span>
+                          <span className="font-medium capitalize">{user?.experience ?? '--'}</span>
                         </div>
-                      )}
-                      {user?.lactateThreshold && (
                         <div className="flex justify-between">
-                          <span className="text-foreground/70">LT Pace:</span>
-                          <span className="font-medium">{formatPace(user.lactateThreshold)}/km</span>
+                          <span className="text-muted-foreground">Weekly Volume:</span>
+                          <span className="font-medium">{typeof user?.averageWeeklyKm === 'number' ? `${user.averageWeeklyKm} km` : '--'}</span>
                         </div>
-                      )}
-                      {user?.lactateThresholdHR && (
                         <div className="flex justify-between">
-                          <span className="text-foreground/70">LT HR:</span>
-                          <span className="font-medium">{user.lactateThresholdHR} bpm</span>
-                        </div>
-                      )}
-                      {user?.hrvBaseline && (
-                        <div className="flex justify-between">
-                          <span className="text-foreground/70">HRV Baseline:</span>
-                          <span className="font-medium">{user.hrvBaseline} ms</span>
-                        </div>
-                      )}
-                      {user?.maxHeartRate && (
-                        <div className="flex justify-between">
-                          <span className="text-foreground/70">Max HR:</span>
-                          <span className="font-medium">
-                            {user.maxHeartRate} bpm
-                            {user.maxHeartRateSource === 'calculated' && (
-                              <span className="text-xs text-foreground/60 ml-1">(calc)</span>
-                            )}
-                          </span>
-                        </div>
-                      )}
-                      {user?.restingHeartRate && (
-                        <div className="flex justify-between">
-                          <span className="text-foreground/70">Resting HR:</span>
-                          <span className="font-medium">{user.restingHeartRate} bpm</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {user?.referenceRaceDistance && user?.referenceRaceTime && (
-                <>
-                  <Separator />
-                  <div>
-                    <h4 className="text-sm font-semibold flex items-center gap-2 mb-2">
-                      <Trophy className="h-4 w-4" />
-                      Reference Race
-                    </h4>
-                    <div className="text-sm">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-foreground/70">Distance & Time:</span>
-                        <span className="font-medium">
-                          {user.referenceRaceDistance}K in {formatTime(user.referenceRaceTime)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-foreground/70">Pace:</span>
-                        <span className="font-medium">
-                          {formatPace(user.referenceRaceTime / user.referenceRaceDistance)}/km
-                        </span>
-                      </div>
-                      {user.referenceRaceDate && (
-                        <div className="flex items-center justify-between mt-1">
-                          <span className="text-foreground/70">Date:</span>
-                          <span className="text-foreground/60 text-xs">
-                            {formatDate(user.referenceRaceDate)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {user?.historicalRuns && user.historicalRuns.length > 0 && (
-                <>
-                  <Separator />
-                  <div>
-                    <h4 className="text-sm font-semibold flex items-center gap-2 mb-2">
-                      <History className="h-4 w-4" />
-                      Training History
-                    </h4>
-                    <div className="text-sm text-foreground/70">
-                      {user.historicalRuns.length} significant run{user.historicalRuns.length !== 1 ? 's' : ''} logged
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {!user?.vo2Max && !user?.lactateThreshold && !user?.referenceRaceDistance && (
-                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 text-sm">
-                  <p className="text-foreground font-medium mb-1">
-                    Add your training data
-                  </p>
-                  <p className="text-foreground/70 text-xs">
-                    Metrics like VO2 max, lactate threshold, and race times help us personalize your training plan.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Quick Stats */}
-          <div className="grid grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="p-4 text-center">
-                <Route className="h-6 w-6 text-primary mx-auto mb-2" />
-                <div className="text-lg font-bold">{allTimeStats.totalDistanceKm.toFixed(1)} km</div>
-                <div className="text-xs text-foreground/70">Total Distance</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <Clock className="h-6 w-6 text-primary mx-auto mb-2" />
-                <div className="text-lg font-bold">{Math.round(allTimeStats.totalDurationSeconds / 60)} min</div>
-                <div className="text-xs text-foreground/70">Total Time</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <Flame className="h-6 w-6 text-primary mx-auto mb-2" />
-                <div className="text-lg font-bold">{allTimeStats.totalRuns}</div>
-                <div className="text-xs text-foreground/70">Total Runs</div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Recent Runs — collapsible */}
-          <Card>
-            <CardHeader
-              className="cursor-pointer select-none"
-              onClick={() => setRecentRunsExpanded((prev) => !prev)}
-            >
-              <CardTitle className="text-base flex items-center justify-between">
-                Recent Runs (Last 14 Days)
-                <ChevronDown
-                  className={`h-4 w-4 text-foreground/50 transition-transform duration-200 ${recentRunsExpanded ? 'rotate-180' : ''}`}
-                />
-              </CardTitle>
-            </CardHeader>
-            {recentRunsExpanded && (
-              <CardContent className="space-y-3">
-                {isRunsLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-foreground/70">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading runs...
-                  </div>
-                ) : recentRuns.length === 0 ? (
-                  <p className="text-sm text-foreground/70">No runs in the last 14 days.</p>
-                ) : (
-                  recentRuns.map((run) => (
-                    <div key={run.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-white">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-foreground">{run.distance.toFixed(2)} km</span>
-                          <span className="text-xs text-foreground/60">•</span>
-                          <span className="text-sm text-foreground/70">{formatTime(run.duration)}</span>
-                          <span className="text-xs text-foreground/60">•</span>
-                          <span className="text-sm text-foreground/70">{formatPace(run.pace ?? run.duration / run.distance)}/km</span>
-                        </div>
-                        <div className="text-xs text-foreground/60 truncate">
-                          {run.importSource === 'garmin' && (
-                            <Badge variant="secondary" className="text-[10px] me-1 inline-flex items-center gap-1">
-                              <Watch className="h-3 w-3" />
-                              Garmin
-                            </Badge>
-                          )}
-                          {new Date(run.completedAt).toLocaleDateString()} • {run.notes ?? run.type}
-                          {run.elevationGain != null ? ` • Elev +${Math.round(run.elevationGain)}m` : ''}
-                          {run.maxHR != null ? ` • Max HR ${run.maxHR}bpm` : ''}
-                          {run.heartRate != null ? ` • Avg HR ${Math.round(run.heartRate)}bpm` : ''}
-                          {run.calories != null ? ` • ${Math.round(run.calories)} kcal` : ''}
-                          {run.runReport ? ' • report ready' : ''}
+                          <span className="text-muted-foreground">Days/Week:</span>
+                          <span className="font-medium">{user?.daysPerWeek ?? '--'}</span>
                         </div>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          if (!run.id) return
-                          try {
-                            window.dispatchEvent(new CustomEvent('navigate-to-run-report', { detail: { runId: run.id } }))
-                          } catch {
-                            // ignore
-                          }
-                        }}
-                      >
-                        View
-                      </Button>
                     </div>
-                  ))
-                )}
-              </CardContent>
-            )}
-          </Card>
 
-          {/* Adaptive Coaching Widget */}
-          {userId && (
-            <CoachingInsightsWidget
-              userId={userId}
-              showDetails={false}
-              onSettingsClick={() => setShowCoachingPreferences(true)}
-              className="hover:shadow-lg transition-all duration-300"
-            />
-          )}
+                    <Separator />
 
-          {/* Achievements */}
-          {userId && <BadgeCabinet userId={userId} />}
-
-          {/* Performance Analytics */}
-          {userId ? (
-            <PerformanceAnalyticsDashboard
-              userId={userId}
-            />
-          ) : isLoading ? (
-            <Card>
-              <CardContent className="p-6 text-center text-muted-foreground">
-                Loading analytics...
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {/* Community Stats Widget */}
-          {userId && <CommunityStatsWidget userId={userId} />}
-
-          {userId && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-2xl font-bold">Share All Badges</CardTitle>
-                <Button variant="outline" size="sm" onClick={() => handleShareClick("all-badges", "All Badges")}>
-                  <Share2 className="mr-2 h-4 w-4" /> Share All
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-foreground/60">Share your entire badge collection with friends and on social media.</p>
-              </CardContent>
-            </Card>
-          )}
-
-          {selectedBadge && (
-            <ShareBadgeModal
-              badgeId={selectedBadge.id}
-              badgeName={selectedBadge.name}
-              isOpen={isShareModalOpen}
-              onClose={handleCloseShareModal}
-            />
-          )}
-
-          {runningShoes.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Your Running Shoes</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {runningShoes.map((shoe) => (
-                  <div key={shoe.id} className="flex items-center justify-between p-3 bg-[oklch(var(--surface-2))] rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Footprints className="h-5 w-5 text-foreground/70" />
+                    {(user?.calculatedVDOT || user?.vo2Max || user?.lactateThreshold || user?.hrvBaseline || user?.maxHeartRate || user?.restingHeartRate || user?.lactateThresholdHR) ? (
                       <div>
-                        <div className="font-medium">{shoe.name}</div>
-                        <div className="text-sm text-foreground/70">
-                          {shoe.brand} {shoe.model}
+                        <h4 className="mb-2 text-sm font-semibold">Physiological Metrics</h4>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                          {user?.calculatedVDOT ? (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">VDOT:</span>
+                              <span className="font-medium">{user.calculatedVDOT.toFixed(1)} ({getVDOTRating(user.calculatedVDOT)})</span>
+                            </div>
+                          ) : null}
+                          {user?.vo2Max ? (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">VO2 Max:</span>
+                              <span className="font-medium">{user.vo2Max} ml/kg/min</span>
+                            </div>
+                          ) : null}
+                          {user?.lactateThreshold ? (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">LT Pace:</span>
+                              <span className="font-medium">{formatPace(user.lactateThreshold)}/km</span>
+                            </div>
+                          ) : null}
+                          {user?.lactateThresholdHR ? (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">LT HR:</span>
+                              <span className="font-medium">{user.lactateThresholdHR} bpm</span>
+                            </div>
+                          ) : null}
+                          {user?.hrvBaseline ? (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">HRV Baseline:</span>
+                              <span className="font-medium">{user.hrvBaseline} ms</span>
+                            </div>
+                          ) : null}
+                          {user?.maxHeartRate ? (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Max HR:</span>
+                              <span className="font-medium">{user.maxHeartRate} bpm</span>
+                            </div>
+                          ) : null}
+                          {user?.restingHeartRate ? (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Resting HR:</span>
+                              <span className="font-medium">{user.restingHeartRate} bpm</span>
+                            </div>
+                          ) : null}
                         </div>
-                        <div className="text-xs text-foreground/60">
-                          {shoe.currentKm}km / {shoe.maxKm}km
+                      </div>
+                    ) : (
+                      <ProfileEmptyState
+                        title="No advanced physiology data yet"
+                        description="Add VO2 Max, threshold, or race references to improve training personalization and analytics clarity."
+                        actionLabel="Update Profile Data"
+                        onAction={() => setShowUserDataModal(true)}
+                      />
+                    )}
+
+                    {user?.referenceRaceDistance && user?.referenceRaceTime ? (
+                      <>
+                        <Separator />
+                        <div>
+                          <h4 className="mb-2 text-sm font-semibold">Reference Race</h4>
+                          <div className="text-sm">
+                            <div className="mb-1 flex items-center justify-between">
+                              <span className="text-muted-foreground">Distance & Time:</span>
+                              <span className="font-medium">{user.referenceRaceDistance}K in {formatTime(user.referenceRaceTime)}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground">Pace:</span>
+                              <span className="font-medium">{formatPace(user.referenceRaceTime / user.referenceRaceDistance)}/km</span>
+                            </div>
+                            {user.referenceRaceDate ? (
+                              <div className="mt-1 flex items-center justify-between">
+                                <span className="text-muted-foreground">Date:</span>
+                                <span className="text-xs text-foreground/60">{formatDate(user.referenceRaceDate)}</span>
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-medium">{Math.round((shoe.currentKm / shoe.maxKm) * 100)}%</div>
-                      <div className="w-16 h-2 bg-border/60 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary transition-all"
-                          style={{ width: `${Math.min((shoe.currentKm / shoe.maxKm) * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
+                      </>
+                    ) : null}
+                  </AccordionContent>
+                </AccordionItem>
 
-          {/* Devices & Apps */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Devices & Apps</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {/* Garmin — dedicated row with connect/details */}
-              <div className="flex items-center justify-between p-3 rounded-lg hover:bg-[oklch(var(--surface-2))]">
-                <div className="flex items-center gap-3">
-                  <Watch className="h-5 w-5 text-foreground/70" />
-                  <div>
-                    <div className="font-medium">Garmin</div>
-                    <div className="text-sm text-foreground/70">
-                      {garminConnected ? 'Connected' : 'Not connected'}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {garminConnected ? (
-                    <Button variant="ghost" size="sm" onClick={() => router.push('/garmin/details')}>
-                      Details
-                    </Button>
-                  ) : (
-                    <Button size="sm" onClick={() => void handleGarminConnect()}>
-                      Connect
-                    </Button>
-                  )}
-                </div>
-              </div>
-              {connections.map((connection, index) => {
-                const handleClick = () => {
-                  if (connection.name === "Add Shoes") {
-                    setShowAddShoesModal(true);
-                  } else if (connection.name === "Join a Cohort") {
-                    setShowJoinCohortModal(true);
-                  }
-                  // Add other connection handlers here
-                };
-
-                return (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-3 rounded-lg hover:bg-[oklch(var(--surface-2))] cursor-pointer"
-                    onClick={handleClick}
-                  >
-                    <div className="flex items-center gap-3">
-                      <connection.icon className="h-5 w-5 text-foreground/70" />
-                      <div>
-                        <div className="font-medium">{connection.name}</div>
-                        <div className="text-sm text-foreground/70">{connection.desc}</div>
+                <AccordionItem value="recent-runs">
+                  <AccordionTrigger>
+                    Recent Runs (Last {recentRunsWindowDays} Days)
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    {isRunsLoading ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading runs...
                       </div>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-foreground/50" />
-                  </div>
-                );
-              })}
+                    ) : recentRuns.length === 0 ? (
+                      <ProfileEmptyState
+                        title="No recent runs"
+                        description="Record your next workout to unlock trend insights, pace guidance, and progression analysis."
+                      />
+                    ) : (
+                      <div className="space-y-2">
+                        {recentRuns.map((run) => (
+                          <div key={run.id} className="rounded-lg border bg-[oklch(var(--surface-2))] p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-medium">{run.distance.toFixed(2)} km</span>
+                                  <span className="text-xs text-muted-foreground">•</span>
+                                  <span className="text-sm text-muted-foreground">{formatTime(run.duration)}</span>
+                                  <span className="text-xs text-muted-foreground">•</span>
+                                  <span className="text-sm text-muted-foreground">{formatPace(run.pace ?? run.duration / run.distance)}/km</span>
+                                </div>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {run.importSource === 'garmin' ? 'Garmin • ' : ''}
+                                  {new Date(run.completedAt).toLocaleDateString()} • {run.notes ?? run.type}
+                                </p>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  if (!run.id) return
+                                  try {
+                                    window.dispatchEvent(new CustomEvent('navigate-to-run-report', { detail: { runId: run.id } }))
+                                  } catch {
+                                    // ignore
+                                  }
+                                }}
+                              >
+                                View
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </AccordionContent>
+                </AccordionItem>
+
+                {runningShoes.length > 0 ? (
+                  <AccordionItem value="shoes">
+                    <AccordionTrigger>Running Shoes</AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-2">
+                        {runningShoes.map((shoe) => (
+                          <div key={shoe.id} className="flex items-center justify-between rounded-lg border bg-[oklch(var(--surface-2))] p-3">
+                            <div className="min-w-0">
+                              <p className="font-medium">{shoe.name}</p>
+                              <p className="text-sm text-muted-foreground">{shoe.brand} {shoe.model}</p>
+                              <p className="text-xs text-muted-foreground">{shoe.currentKm} km / {shoe.maxKm} km</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold">{Math.round((shoe.currentKm / shoe.maxKm) * 100)}%</p>
+                              <div className="mt-1 h-2 w-16 overflow-hidden rounded-full bg-border/60">
+                                <div
+                                  className="h-full bg-primary transition-all"
+                                  style={{ width: `${Math.min((shoe.currentKm / shoe.maxKm) * 100, 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ) : null}
+              </Accordion>
             </CardContent>
           </Card>
 
-          {/* Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Settings</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {settings.map((setting, index) => {
-                const handleSettingClick = () => {
-                  if (setting.action === "coaching-preferences") {
-                    setShowCoachingPreferences(true);
-                  } else if (setting.action === "goal-settings") {
-                    // Navigate to goal settings - could scroll to goal dashboard
-                    const goalSection = document.querySelector('[data-section="goal-progress"]');
-                    if (goalSection) {
-                      goalSection.scrollIntoView({ behavior: 'smooth' });
-                    }
-                  } else if (setting.action === "privacy") {
-                    router.push('/privacy')
-                  }
-                  // Add other setting handlers here
-                };
+          <AchievementsSection userId={userId} />
 
-                return (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-3 rounded-lg hover:bg-[oklch(var(--surface-2))] cursor-pointer"
-                    onClick={handleSettingClick}
-                  >
-                    <div className="flex items-center gap-3">
-                      <setting.icon className="h-5 w-5 text-foreground/70" />
-                      <div>
-                        <div className="font-medium">{setting.name}</div>
-                        <div className="text-sm text-foreground/70">{setting.desc}</div>
-                      </div>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-foreground/50" />
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
+          <IntegrationsListCard
+            garminConnected={garminConnected}
+            onGarminConnect={() => void handleGarminConnect()}
+            onGarminDetails={() => router.push('/garmin/details')}
+            rows={integrationRows}
+          />
 
-          {/* Developer/Testing Tools */}
-          <Card className="border-red-200 bg-red-50/50">
-            <CardHeader>
-              <CardTitle className="text-red-900 flex items-center gap-2">
-                <Database className="h-5 w-5" />
-                Developer Tools
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="p-4 bg-white rounded-lg border border-red-200">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <div className="font-medium text-red-900">Reset App Data</div>
-                    <div className="text-sm text-red-700 mt-1">
-                      Clear all local data including user profile, workouts, and cached data.
-                      This will reset the app to its initial state.
-                    </div>
-                  </div>
-                </div>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="mt-3 w-full"
-                  onClick={() => {
-                    if (confirm('Are you sure you want to reset all app data? This cannot be undone.')) {
-                      // Clear IndexedDB
-                      [DATABASE.NAME, 'running-coach-db', 'RunningCoachDB'].forEach((dbName) => {
-                        try {
-                          indexedDB.deleteDatabase(dbName);
-                        } catch {
-                          // Best-effort cleanup
-                        }
-                      });
-                      // Clear localStorage
-                      localStorage.clear();
-                      // Clear sessionStorage
-                      sessionStorage.clear();
-                      // Reload page
-                      window.location.reload();
-                    }
-                  }}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Reset All Data
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <SettingsListCard rows={settingsRows} />
+
+          <DeveloperToolsAccordion onResetAllData={resetAllData} />
 
           <ReminderSettings />
 
-          {/* App Info */}
-          <div className="text-center text-sm text-foreground/60 space-y-1">
+          <div className="space-y-1 pb-4 text-center text-sm text-muted-foreground">
             <p>Run-Smart v1.0.0</p>
-            <p>Made with ❤️ for runners</p>
+            <p>Runner identity and progress hub</p>
           </div>
-          {showAddShoesModal && (
-            <AddShoesModal
-              isOpen={showAddShoesModal}
-              onClose={() => {
-                setShowAddShoesModal(false)
-                // Reload shoes data
-                const shoes = JSON.parse(localStorage.getItem("running-shoes") || "[]")
-                setRunningShoes(shoes)
-              }}
-            />
-          )}
+        </>
+      ) : null}
 
-          {userId && (
-            <PlanTemplateFlow
-              isOpen={showPlanTemplateFlow}
-              onClose={() => setShowPlanTemplateFlow(false)}
-              userId={userId}
-              onCompleted={loadGoals}
-            />
-          )}
+      {showAddShoesModal ? (
+        <AddShoesModal
+          isOpen={showAddShoesModal}
+          onClose={() => {
+            setShowAddShoesModal(false)
+            const shoes = JSON.parse(localStorage.getItem('running-shoes') || '[]')
+            setRunningShoes(shoes)
+          }}
+        />
+      ) : null}
 
-          {userId && (
-            <JoinCohortModal
-              isOpen={showJoinCohortModal}
-              onClose={() => setShowJoinCohortModal(false)}
-              userId={userId}
-            />
-          )}
+      {userId ? (
+        <PlanTemplateFlow
+          isOpen={showPlanTemplateFlow}
+          onClose={() => setShowPlanTemplateFlow(false)}
+          userId={userId}
+          onCompleted={loadGoals}
+        />
+      ) : null}
 
-          {showUserDataModal && userId && (
-            <div className="fixed inset-0 z-[60] overflow-auto">
-              <UserDataSettings
+      {userId ? (
+        <JoinCohortModal
+          isOpen={showJoinCohortModal}
+          onClose={() => setShowJoinCohortModal(false)}
+          userId={userId}
+        />
+      ) : null}
+
+      {showUserDataModal && userId ? (
+        <div className="fixed inset-0 z-[60] overflow-auto">
+          <UserDataSettings
+            userId={userId}
+            onBack={() => setShowUserDataModal(false)}
+            onSave={refreshContext}
+          />
+        </div>
+      ) : null}
+
+      {showCoachingPreferences && userId ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-white">
+            <div className="flex items-center justify-between border-b p-4">
+              <h2 className="text-lg font-semibold">Coaching Preferences</h2>
+              <Button variant="ghost" size="sm" onClick={() => setShowCoachingPreferences(false)}>
+                X
+              </Button>
+            </div>
+            <div className="p-4">
+              <CoachingPreferencesSettings
                 userId={userId}
-                onBack={() => setShowUserDataModal(false)}
-                onSave={refreshContext}
+                onClose={() => setShowCoachingPreferences(false)}
               />
             </div>
-          )}
+          </div>
+        </div>
+      ) : null}
 
-          {/* Coaching Preferences Modal */}
-          {showCoachingPreferences && userId && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
-                <div className="p-4 border-b flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">Coaching Preferences</h2>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowCoachingPreferences(false)}
-                  >
-                    ×
-                  </Button>
-                </div>
-                <div className="p-4">
-                  <CoachingPreferencesSettings
-                    userId={userId}
-                    onClose={() => setShowCoachingPreferences(false)}
-                  />
-                </div>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Goal?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                <p className="mb-3">
+                  This will permanently delete &quot;{goalToDelete?.title}&quot; including:
+                </p>
+                <ul className="mb-3 list-inside list-disc space-y-1 text-sm">
+                  <li>All progress history and milestones</li>
+                  <li>Associated training plan workouts</li>
+                  <li>Analytics and insights data</li>
+                </ul>
+                <p className="font-medium text-red-600">This action cannot be undone.</p>
               </div>
-            </div>
-          )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setGoalToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteGoal}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              Delete Goal
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-          {/* Delete Goal Confirmation Dialog */}
-          <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete Goal?</AlertDialogTitle>
-                <AlertDialogDescription asChild>
-                  <div>
-                    <p className="mb-3">
-                      This will permanently delete &quot;{goalToDelete?.title}&quot; including:
-                    </p>
-                    <ul className="list-disc list-inside text-sm space-y-1 mb-3">
-                      <li>All progress history and milestones</li>
-                      <li>Associated training plan workouts</li>
-                      <li>Analytics and insights data</li>
-                    </ul>
-                    <p className="font-medium text-red-600">This action cannot be undone.</p>
-                  </div>
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel onClick={() => setGoalToDelete(null)}>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleDeleteGoal}
-                  className="bg-red-500 hover:bg-red-600"
-                >
-                  Delete Goal
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-
-          {/* Merge Goal Dialog */}
-          <Dialog open={showMergeDialog} onOpenChange={setShowMergeDialog}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Merge Goal</DialogTitle>
-                <DialogDescription asChild>
-                  <div>
-                    <p className="mb-3">
-                      Merge &quot;{mergeSourceGoal?.title}&quot; into your primary goal &quot;{primaryGoal?.title}&quot;?
-                    </p>
-                    <p className="text-sm text-foreground/70 mb-3">
-                      This will:
-                    </p>
-                    <ul className="list-disc list-inside text-sm space-y-1 mb-3">
-                      <li>Transfer all progress history to your primary goal</li>
-                      <li>Move milestones to your primary goal</li>
-                      <li>Delete the merged goal</li>
-                    </ul>
-                  </div>
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex justify-end gap-2 pt-4">
-                <Button variant="outline" onClick={() => setShowMergeDialog(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleMergeGoal} className="bg-primary/100 hover:bg-primary/90">
-                  <GitMerge className="h-4 w-4 mr-2" />
-                  Merge Goals
-                </Button>
+      <Dialog open={showMergeDialog} onOpenChange={setShowMergeDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Merge Goal</DialogTitle>
+            <DialogDescription asChild>
+              <div>
+                <p className="mb-3">
+                  Merge &quot;{mergeSourceGoal?.title}&quot; into your primary goal &quot;{primaryGoal?.title}&quot;?
+                </p>
+                <p className="mb-3 text-sm text-foreground/70">
+                  This will:
+                </p>
+                <ul className="mb-3 list-inside list-disc space-y-1 text-sm">
+                  <li>Transfer all progress history to your primary goal</li>
+                  <li>Move milestones to your primary goal</li>
+                  <li>Delete the merged goal</li>
+                </ul>
               </div>
-            </DialogContent>
-          </Dialog>
-
-        </>
-      )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setShowMergeDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleMergeGoal} className="bg-primary/100 hover:bg-primary/90">
+              <GitMerge className="mr-2 h-4 w-4" />
+              Merge Goals
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
