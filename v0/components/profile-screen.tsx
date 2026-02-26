@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import {
   Settings,
@@ -24,19 +24,9 @@ import {
   Star,
 } from "lucide-react"
 import { AddShoesModal } from "@/components/add-shoes-modal"
-import { useToast } from "@/components/ui/use-toast";
-import { getChallengeHistory, getActiveChallenge, type DailyChallengeData } from "@/lib/challengeEngine";
-import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db";
-import { JoinCohortModal } from "@/components/join-cohort-modal";
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
+import { JoinCohortModal } from "@/components/join-cohort-modal";
 import { PlanTemplateFlow } from "@/components/plan-template-flow";
-import { type Goal, type Run, db } from "@/lib/db";
-import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
-import { UserDataSettings } from "@/components/user-data-settings";
-import { RunSmartBrandMark } from "@/components/run-smart-brand-mark";
-import { getActiveChallengeTemplates } from "@/lib/challengeTemplates";
 import { startChallengeAndSyncPlan } from "@/lib/challenge-plan-sync";
 import { ProfileHeroCard } from "@/components/profile/ProfileHeroCard";
 import { PrimaryGoalCard } from "@/components/profile/PrimaryGoalCard";
@@ -51,6 +41,7 @@ import { DeveloperToolsAccordion } from "@/components/profile/DeveloperToolsAcco
 import { ProfilePageSkeleton } from "@/components/profile/ProfilePageSkeleton";
 import { ProfileEmptyState } from "@/components/profile/ProfileEmptyStates";
 import { ReminderSettings } from "@/components/reminder-settings"
+import { RunSmartBrandMark } from "@/components/run-smart-brand-mark";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import {
   AlertDialog,
@@ -64,10 +55,20 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress"
+import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/components/ui/use-toast";
+import { UserDataSettings } from "@/components/user-data-settings";
 import { useData } from "@/contexts/DataContext";
+import { trackFeatureUsed, trackScreenViewed } from "@/lib/analytics";
+import { getChallengeHistory, getActiveChallenge, type DailyChallengeData } from "@/lib/challengeEngine";
+import { getActiveChallengeTemplates } from "@/lib/challengeTemplates";
 import { DATABASE } from "@/lib/constants";
+import { type Goal, type Run, db } from "@/lib/db";
+import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db";
 import { dbUtils } from "@/lib/dbUtils";
+import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine";
 import { isSafeRedirect } from "@/lib/validateRedirect"
 
 type ChallengeTemplateSeed = ReturnType<typeof getActiveChallengeTemplates>[number]
@@ -75,6 +76,7 @@ type ChallengeTemplateSeed = ReturnType<typeof getActiveChallengeTemplates>[numb
 export function ProfileScreen() {
   const router = useRouter()
   const recentRunsWindowDays = 14
+  const hasTrackedProfileViewRef = useRef(false)
 
   // Get shared data from context
   const {
@@ -332,6 +334,7 @@ export function ProfileScreen() {
 
   const handleJoinChallenge = async (template: ChallengeTemplateSeed) => {
     if (!userId) return
+    trackProfileInteraction('challenge_join_click', { challenge_slug: template.slug })
     if (activeChallenge?.template.slug === template.slug) {
       toast({
         title: "Already active",
@@ -393,7 +396,7 @@ export function ProfileScreen() {
     return diff < 0 ? 0 : diff;
   };
 
-  const loadGoals = async () => {
+  const loadGoals = useCallback(async () => {
     if (!userId) return;
     try {
       const [primary, activeGoals] = await Promise.all([
@@ -405,7 +408,7 @@ export function ProfileScreen() {
     } catch (goalError) {
       console.warn('[ProfileScreen] Failed to load goals:', goalError);
     }
-  };
+  }, [userId]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -611,12 +614,25 @@ export function ProfileScreen() {
 
   useEffect(() => {
     if (userId) {
-      loadGoals();
+      void loadGoals();
     }
-  }, [userId]);
+  }, [userId, loadGoals]);
+
+  const trackProfileInteraction = useCallback((action: string, properties?: Record<string, unknown>) => {
+    void trackFeatureUsed(`profile_${action}`, 'profile_screen', properties)
+  }, [])
+
+  useEffect(() => {
+    if (isLoading || error || !userId || hasTrackedProfileViewRef.current) {
+      return
+    }
+    hasTrackedProfileViewRef.current = true
+    void trackScreenViewed('profile', undefined, { profile_version: 'v2_hub' })
+  }, [error, isLoading, userId]);
 
 
   const notifyComingSoon = (name: string) => {
+    trackProfileInteraction('coming_soon_click', { integration_name: name })
     toast({
       title: `${name} coming soon`,
       description: `We'll enable ${name} integration in an upcoming update.`,
@@ -624,6 +640,7 @@ export function ProfileScreen() {
   }
 
   const resetAllData = useCallback(() => {
+    trackProfileInteraction('developer_reset_all_data')
     if (!confirm('Are you sure you want to reset all app data? This cannot be undone.')) return
 
     [DATABASE.NAME, 'running-coach-db', 'RunningCoachDB'].forEach((dbName) => {
@@ -636,7 +653,7 @@ export function ProfileScreen() {
     localStorage.clear()
     sessionStorage.clear()
     window.location.reload()
-  }, [])
+  }, [trackProfileInteraction])
 
   const sevenDayCutoff = new Date()
   sevenDayCutoff.setDate(sevenDayCutoff.getDate() - 7)
@@ -705,14 +722,20 @@ export function ProfileScreen() {
       name: 'Add Shoes',
       description: 'Track shoe mileage and replacement timing.',
       status: 'available',
-      onClick: () => setShowAddShoesModal(true),
+      onClick: () => {
+        trackProfileInteraction('add_shoes_open')
+        setShowAddShoesModal(true)
+      },
     },
     {
       icon: Users,
       name: 'Join a Cohort',
       description: 'Train with a community invite code.',
       status: 'available',
-      onClick: () => setShowJoinCohortModal(true),
+      onClick: () => {
+        trackProfileInteraction('join_cohort_open')
+        setShowJoinCohortModal(true)
+      },
     },
     {
       icon: Music,
@@ -742,13 +765,17 @@ export function ProfileScreen() {
       icon: UserEdit,
       name: 'Edit Profile',
       description: 'Name, training profile, and preferences.',
-      onClick: () => setShowUserDataModal(true),
+      onClick: () => {
+        trackProfileInteraction('edit_profile_open')
+        setShowUserDataModal(true)
+      },
     },
     {
       icon: Target,
       name: 'Goal Settings',
       description: 'Manage active goals and progression.',
       onClick: () => {
+        trackProfileInteraction('goal_settings_scroll')
         document.getElementById('goal-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       },
     },
@@ -756,7 +783,10 @@ export function ProfileScreen() {
       icon: Brain,
       name: 'Coaching Preferences',
       description: 'Customize AI coaching behavior.',
-      onClick: () => setShowCoachingPreferences(true),
+      onClick: () => {
+        trackProfileInteraction('coaching_preferences_open')
+        setShowCoachingPreferences(true)
+      },
     },
     {
       icon: Bell,
@@ -768,7 +798,10 @@ export function ProfileScreen() {
       icon: Shield,
       name: 'Privacy & Data',
       description: 'Manage account data and exports.',
-      onClick: () => router.push('/privacy'),
+      onClick: () => {
+        trackProfileInteraction('privacy_open')
+        router.push('/privacy')
+      },
     },
     {
       icon: HelpCircle,
@@ -850,13 +883,36 @@ export function ProfileScreen() {
         <>
           <div className="sticky top-2 z-20 -mx-1 overflow-x-auto rounded-xl border bg-background/95 p-2 shadow-sm backdrop-blur">
             <div className="flex min-w-max gap-2">
-              <Button size="sm" className="h-8" onClick={() => setShowUserDataModal(true)}>
+              <Button
+                size="sm"
+                className="h-8"
+                onClick={() => {
+                  trackProfileInteraction('sticky_edit_profile')
+                  setShowUserDataModal(true)
+                }}
+              >
                 Edit Profile
               </Button>
-              <Button size="sm" variant="outline" className="h-8" onClick={() => setShowPlanTemplateFlow(true)}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => {
+                  trackProfileInteraction('sticky_update_goal')
+                  setShowPlanTemplateFlow(true)
+                }}
+              >
                 Update Goal
               </Button>
-              <Button size="sm" variant="outline" className="h-8" onClick={() => document.getElementById('challenges-section')?.scrollIntoView({ behavior: 'smooth' })}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => {
+                  trackProfileInteraction('sticky_challenges_scroll')
+                  document.getElementById('challenges-section')?.scrollIntoView({ behavior: 'smooth' })
+                }}
+              >
                 Challenges
               </Button>
             </div>
@@ -872,8 +928,14 @@ export function ProfileScreen() {
               `${allTimeStats.totalDistanceKm.toFixed(1)} km total distance`,
               `${momentumStreakDays} day momentum streak`,
             ]}
-            onEditProfile={() => setShowUserDataModal(true)}
-            onViewProgress={() => document.getElementById('analytics-section')?.scrollIntoView({ behavior: 'smooth' })}
+            onEditProfile={() => {
+              trackProfileInteraction('hero_edit_profile')
+              setShowUserDataModal(true)
+            }}
+            onViewProgress={() => {
+              trackProfileInteraction('hero_view_progress')
+              document.getElementById('analytics-section')?.scrollIntoView({ behavior: 'smooth' })
+            }}
           />
 
           <div id="goal-section" className="space-y-3">
@@ -887,16 +949,26 @@ export function ProfileScreen() {
               daysRemaining={getDaysRemaining(primaryGoal)}
               deadlineLabel={goalDeadlineLabel}
               coachGuidance={coachGuidance}
-              onCreateGoal={() => setShowPlanTemplateFlow(true)}
-              onOpenGoalSettings={() => document.getElementById('other-goals')?.scrollIntoView({ behavior: 'smooth' })}
+              onCreateGoal={() => {
+                trackProfileInteraction('goal_create_open')
+                setShowPlanTemplateFlow(true)
+              }}
+              onOpenGoalSettings={() => {
+                trackProfileInteraction('goal_settings_open')
+                document.getElementById('other-goals')?.scrollIntoView({ behavior: 'smooth' })
+              }}
               onViewPlan={() => {
+                trackProfileInteraction('goal_view_plan')
                 try {
                   window.dispatchEvent(new CustomEvent('navigate-to-plan'))
                 } catch {
                   // ignore
                 }
               }}
-              onDeleteGoal={primaryGoal ? () => openDeleteDialog(primaryGoal) : undefined}
+              onDeleteGoal={primaryGoal ? () => {
+                trackProfileInteraction('goal_delete_dialog_open')
+                openDeleteDialog(primaryGoal)
+              } : undefined}
             />
 
             {secondaryGoals.length > 0 ? (
@@ -994,7 +1066,13 @@ export function ProfileScreen() {
               </Button>
             </CardHeader>
             <CardContent>
-              <Accordion type="multiple" defaultValue={["training-profile", "recent-runs"]}>
+              <Accordion
+                type="multiple"
+                defaultValue={["training-profile", "recent-runs"]}
+                onValueChange={(sections) => {
+                  trackProfileInteraction('training_sections_toggle', { sections })
+                }}
+              >
                 <AccordionItem value="training-profile">
                   <AccordionTrigger>Profile & Physiological Metrics</AccordionTrigger>
                   <AccordionContent className="space-y-4">

@@ -28,14 +28,26 @@ test.describe("Profile Visual Snapshots", () => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.waitForTimeout(500)
     await expect(page.getByText(/Profile Hub|Runner identity/i).first()).toBeVisible()
-    await page.screenshot({ path: testInfo.outputPath("profile-390x844.png"), fullPage: true })
+    await expect(page).toHaveScreenshot("profile-390x844.png", {
+      fullPage: true,
+      animations: "disabled",
+      caret: "hide",
+    })
 
     await page.setViewportSize({ width: 430, height: 932 })
     await page.waitForTimeout(500)
-    await page.screenshot({ path: testInfo.outputPath("profile-430x932.png"), fullPage: true })
+    await expect(page).toHaveScreenshot("profile-430x932.png", {
+      fullPage: true,
+      animations: "disabled",
+      caret: "hide",
+    })
 
     await page.setViewportSize({ width: 1366, height: 900 })
     await page.waitForTimeout(500)
-    await page.screenshot({ path: testInfo.outputPath("profile-desktop-1366x900.png"), fullPage: true })
+    await expect(page).toHaveScreenshot("profile-desktop-1366x900.png", {
+      fullPage: true,
+      animations: "disabled",
+      caret: "hide",
+    })
   })
 })
