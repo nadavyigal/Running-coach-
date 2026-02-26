@@ -779,6 +779,7 @@ export function TodayScreen() {
   const isRunDay = Boolean(todaysWorkout && todaysWorkout.type !== "rest")
   const primaryActionLabel = isRunDay ? "Start Run" : "Recovery Action"
   const dailyStatusLabel = isRunDay ? "Workout day" : "Recovery day"
+  const dailyStatusTone = isRunDay ? "positive" as const : "info" as const
   const dailyHeadline = isRunDay
     ? `${todaysWorkout?.type ? `${todaysWorkout.type.charAt(0).toUpperCase()}${todaysWorkout.type.slice(1)}` : "Workout"} focus`
     : "Recovery and reset"
@@ -791,15 +792,27 @@ export function TodayScreen() {
       id: "readiness",
       label: "Readiness",
       value: `${recoveryScoreValue}`,
-      helper: getRecoveryRecommendation(recoveryScoreValue),
+      unit: "/100",
+      helper: recoveryScoreValue >= 65 ? "Higher than usual recovery baseline" : getRecoveryRecommendation(recoveryScoreValue),
       tone: recoveryScoreValue >= 65 ? "positive" : recoveryScoreValue < 50 ? "caution" : "default",
+      trend:
+        recoveryTrend?.direction === "up"
+          ? "up"
+          : recoveryTrend?.direction === "down"
+            ? "down"
+            : "stable",
+      trendLabel: recoveryTrend?.direction === "up" ? "Rising" : recoveryTrend?.direction === "down" ? "Lower" : "Steady",
+      meterValue: recoveryScoreValue,
     },
     {
       id: "weekly",
       label: "Weekly Progress",
       value: `${totalRuns}/${plannedRuns || 0}`,
-      helper: "Completed vs planned runs this week",
+      helper: totalRuns >= plannedRuns && plannedRuns > 0 ? "Completed all planned sessions" : "Completed vs planned runs this week",
       tone: totalRuns >= plannedRuns && plannedRuns > 0 ? "positive" : "default",
+      trend: totalRuns >= plannedRuns && plannedRuns > 0 ? "up" : "stable",
+      trendLabel: totalRuns >= plannedRuns && plannedRuns > 0 ? "On plan" : "In progress",
+      meterValue: plannedRuns > 0 ? Math.round((totalRuns / plannedRuns) * 100) : 0,
     },
     {
       id: "consistency",
@@ -807,6 +820,9 @@ export function TodayScreen() {
       value: `${consistency}%`,
       helper: consistency >= 70 ? "You're on track this week" : "One extra session gets you back on track",
       tone: consistency >= 70 ? "positive" : "caution",
+      trend: consistency >= 70 ? "up" : "down",
+      trendLabel: consistency >= 70 ? "On track" : "Needs lift",
+      meterValue: consistency,
     },
     {
       id: "confidence",
@@ -814,6 +830,9 @@ export function TodayScreen() {
       value: `${recoveryConfidenceValue}%`,
       helper: recoveryNextStep,
       tone: recoveryConfidenceValue >= 70 ? "positive" : "default",
+      trend: recoveryConfidenceValue >= 70 ? "up" : "stable",
+      trendLabel: recoveryConfidenceValue >= 70 ? "Trusted" : "Limited",
+      meterValue: recoveryConfidenceValue,
     },
   ]
 
@@ -841,13 +860,23 @@ export function TodayScreen() {
     },
   ]
 
-  const dataQualityState = (() => {
+  type DataQualityState = {
+    tone: "info" | "warning" | "error" | "success"
+    title: string
+    description: string
+    actionLabel?: string
+    actionDisabled?: boolean
+    action?: () => void
+  } | null
+
+  const dataQualityState: DataQualityState = (() => {
     if (!userId) {
       return {
         tone: "info" as const,
         title: "Profile setup incomplete",
         description: "Finish onboarding to unlock personalized readiness and workout guidance.",
         actionLabel: "Open Plan",
+        actionDisabled: false,
         action: openPlanScreen,
       }
     }
@@ -857,6 +886,7 @@ export function TodayScreen() {
         title: "Sync issue detected",
         description: garminSyncError,
         actionLabel: "Retry sync",
+        actionDisabled: false,
         action: () => void handleGarminFitSync(),
       }
     }
@@ -866,6 +896,7 @@ export function TodayScreen() {
         title: "Partial data today",
         description: "Add sleep or wellness inputs to improve recommendation quality.",
         actionLabel: "Add Activity",
+        actionDisabled: false,
         action: () => setShowAddActivityModal(true),
       }
     }
@@ -875,6 +906,7 @@ export function TodayScreen() {
         title: "Device connected",
         description: "Garmin is connected and ready for sync.",
         actionLabel: isGarminFitSyncing ? "Syncing..." : "Sync Garmin",
+        actionDisabled: isGarminFitSyncing,
         action: () => void handleGarminFitSync(),
       }
     }
@@ -882,7 +914,7 @@ export function TodayScreen() {
   })()
 
   return (
-    <div className="pb-44 space-y-4">
+    <div className="pb-44 space-y-5">
       <header className="px-4 pt-2">
         <div className="flex items-center justify-between">
           <RunSmartBrandMark className="opacity-90" />
@@ -917,6 +949,7 @@ export function TodayScreen() {
             day: "numeric",
           })}
           statusLabel={dailyStatusLabel}
+          statusTone={dailyStatusTone}
           headline={dailyHeadline}
           coachInsight={dailyCoachInsight}
           primaryAction={{
@@ -945,6 +978,7 @@ export function TodayScreen() {
           title={dataQualityState?.title}
           description={dataQualityState?.description}
           actionLabel={dataQualityState?.actionLabel}
+          actionDisabled={dataQualityState?.actionDisabled}
           onAction={dataQualityState?.action}
         />
 
@@ -960,7 +994,7 @@ export function TodayScreen() {
         <CoachInsightsPanel insights={coachInsights} isLoading={isLoadingRecovery} />
 
         {primaryGoal ? (
-          <Card className="border-border/70 bg-card shadow-sm">
+          <Card className="rounded-[1.25rem] border-border/70 bg-card/95 shadow-[0_20px_44px_-36px_rgba(16,24,40,0.55)]">
             <CardContent className="space-y-3 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -997,7 +1031,7 @@ export function TodayScreen() {
           </section>
         ) : null}
 
-        <section aria-labelledby="today-plan-activities-heading" className="space-y-3">
+        <section aria-labelledby="today-plan-activities-heading" className="space-y-3.5">
           <h2 id="today-plan-activities-heading" className="text-sm font-semibold text-foreground">
             Plan and activities
           </h2>
@@ -1015,7 +1049,7 @@ export function TodayScreen() {
             onSelectRoute={() => setShowRouteSelectorModal(true)}
           />
 
-          <Card className="border-border/70 bg-card shadow-sm">
+          <Card className="rounded-[1.15rem] border-border/70 bg-card/95 shadow-[0_18px_36px_-30px_rgba(16,24,40,0.5)]">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">Recent activity</CardTitle>
             </CardHeader>
@@ -1052,7 +1086,7 @@ export function TodayScreen() {
             </Button>
           </div>
 
-          <div className="rounded-2xl border border-border/70 bg-card p-2">
+          <div className="rounded-2xl border border-border/70 bg-card/90 p-2 shadow-[0_16px_32px_-30px_rgba(16,24,40,0.45)]">
             <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
               {calendarDays.map((day, index) => {
                 const isSelected = day.fullDate.toDateString() === selectedCalendarDate.toDateString()

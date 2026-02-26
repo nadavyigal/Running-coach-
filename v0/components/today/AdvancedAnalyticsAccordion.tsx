@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-
+import { todayCardVariants, todayStatusBadgeVariants } from "@/components/today/today-ui"
 import {
   Accordion,
   AccordionContent,
@@ -24,17 +24,20 @@ interface AdvancedAnalyticsAccordionProps {
 export function AdvancedAnalyticsAccordion({ sections }: AdvancedAnalyticsAccordionProps) {
   return (
     <section aria-labelledby="today-advanced-heading">
-      <Card className="border-border/70 bg-card shadow-sm">
+      <Card className={todayCardVariants({ level: "secondary" })}>
         <CardHeader className="pb-2">
-          <CardTitle id="today-advanced-heading" className="text-sm font-semibold">
-            Advanced analytics
-          </CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle id="today-advanced-heading" className="text-sm font-semibold">
+              Advanced analytics
+            </CardTitle>
+            <span className={todayStatusBadgeVariants({ tone: "neutral" })}>Optional detail</span>
+          </div>
         </CardHeader>
         <CardContent className="pt-0">
           <Accordion type="multiple" className="w-full">
             {sections.map((section) => (
-              <AccordionItem key={section.id} value={section.id} className="border-border/60">
-                <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">
+              <AccordionItem key={section.id} value={section.id} className="border-border/60 last:border-b-0">
+                <AccordionTrigger className="rounded-lg px-1 text-left text-sm font-medium hover:bg-muted/35 hover:no-underline">
                   <div>
                     <p>{section.title}</p>
                     {section.description ? (
@@ -42,7 +45,7 @@ export function AdvancedAnalyticsAccordion({ sections }: AdvancedAnalyticsAccord
                     ) : null}
                   </div>
                 </AccordionTrigger>
-                <AccordionContent>{section.content}</AccordionContent>
+                <AccordionContent className="pt-1">{section.content}</AccordionContent>
               </AccordionItem>
             ))}
           </Accordion>
