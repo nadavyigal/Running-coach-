@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { rateLimiter } from '@/lib/security.config'
 
 // Cookie options for auth tokens
 const cookieOptions = {
@@ -42,6 +43,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Email and password are required' },
         { status: 400 }
+      )
+    }
+
+    // Rate limit: 5 signup attempts per 15 minutes per IP
+    const ip = request.headers.get('x-forwarded-for') ?? 'unknown'
+    const rateLimitResult = await rateLimiter.check(`signup:${ip}`, {
+      windowMs: 15 * 60 * 1000,
+      max: 5,
+      message: 'Too many signup attempts',
+      standardHeaders: true,
+      legacyHeaders: false,
+    })
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: 'Too many signup attempts. Please try again later.' },
+        { status: 429 }
       )
     }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { chatDriver } from '@/lib/chatDriver';
 import { logger } from '@/lib/logger';
+import { securityConfig } from '@/lib/security.config';
 
 export async function GET() {
   const startTime = Date.now();
@@ -47,14 +48,19 @@ export async function GET() {
   }
 }
 
-// Allow CORS for development testing
-export async function OPTIONS() {
-  return new NextResponse(null, {
+export async function OPTIONS(req: Request) {
+  const allowedOrigins = securityConfig.apiSecurity.cors.origin
+  const requestOrigin = req.headers.get('origin') || ''
+  const isAllowed =
+    allowedOrigins.includes(requestOrigin) ||
+    (process.env.NODE_ENV === 'development' && requestOrigin.startsWith('http://localhost'))
+
+  return new Response(null, {
     status: 200,
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': isAllowed ? requestOrigin : 'null',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     },
-  });
+  })
 }

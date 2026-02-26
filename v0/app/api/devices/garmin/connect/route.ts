@@ -16,15 +16,6 @@ async function handleGarminConnect(req: ApiRequest) {
       }, { status: 400 });
     }
 
-    // Security: Verify authenticated user matches requested userId
-    const authUserId = req.headers.get('x-user-id');
-    if (authUserId && parseInt(authUserId) !== userId) {
-      return NextResponse.json({
-        success: false,
-        error: 'User mismatch'
-      }, { status: 403 });
-    }
-
     // Security: Validate and sanitize redirectUri
     if (redirectUri && typeof redirectUri !== 'string') {
       return NextResponse.json({

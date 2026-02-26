@@ -1,13 +1,21 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
 import { logger } from '@/lib/logger';
 
+const shareRunSchema = z.object({
+  runId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+})
+
 export async function POST(request: Request) {
   try {
-    const { runId, userId } = await request.json();
-    if (!runId || !userId) {
-      return NextResponse.json({ message: 'Missing runId or userId' }, { status: 400 });
+    const body = await request.json();
+    const parsed = shareRunSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ message: 'Invalid runId or userId' }, { status: 400 });
     }
+    const { runId, userId } = parsed.data;
 
     // Fetch all runs for the user and find the run by ID
     const runs = await dbUtils.getRunsByUser(Number(userId));
