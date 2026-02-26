@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -73,6 +73,13 @@ import { calculateCoachConfidence, type CoachConfidenceResult } from "@/lib/coac
 import { InsightsPanelsDashboard } from "@/components/insights/panels/InsightsPanelsDashboard"
 import { PlanAdjustmentNotice } from "@/components/plan/PlanAdjustmentNotice"
 import { WeeklyGoalCard } from "@/components/goals/WeeklyGoalCard"
+import { DailyFocusCard } from "@/components/today/DailyFocusCard"
+import { KeyMetricsGrid, type KeyMetric } from "@/components/today/KeyMetricsGrid"
+import { ProgressSummaryChart } from "@/components/today/ProgressSummaryChart"
+import { CoachInsightsPanel, type CoachInsight } from "@/components/today/CoachInsightsPanel"
+import { TodayWorkoutCard } from "@/components/today/TodayWorkoutCard"
+import { AdvancedAnalyticsAccordion } from "@/components/today/AdvancedAnalyticsAccordion"
+import { DataQualityBanner } from "@/components/today/DataQualityBanner"
 
 export function TodayScreen() {
   // Get shared data from context
@@ -81,6 +88,7 @@ export function TodayScreen() {
     userId,
     plan,
     primaryGoal,
+    weeklyRuns,
     weeklyWorkouts,
     weeklyStats,
     refresh: refreshContext,
@@ -122,6 +130,7 @@ export function TodayScreen() {
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'signup' | 'login'>('signup')
   const [isGarminFitSyncing, setIsGarminFitSyncing] = useState(false)
+  const [garminSyncError, setGarminSyncError] = useState<string | null>(null)
   const [isGarminConnected, setIsGarminConnected] = useState(false)
   const [authStorageKey, setAuthStorageKey] = useState<string | null>(null)
   const [storedAuthEmail, setStoredAuthEmail] = useState<string | null>(null)
@@ -238,6 +247,7 @@ export function TodayScreen() {
   const handleGarminFitSync = async () => {
     if (!userId) return
     setIsGarminFitSyncing(true)
+    setGarminSyncError(null)
     try {
       const res = await fetch('/api/garmin/sync-fit', {
         method: 'POST',
@@ -247,14 +257,17 @@ export function TodayScreen() {
       const data = (await res.json()) as { processed?: number; message?: string; error?: string; code?: string }
 
       if (!res.ok) {
-        if (data.code === 'not_connected') return // Garmin not linked — silently skip
+        if (data.code === 'not_connected') return // Garmin not linked - silently skip
+        setGarminSyncError(data.error ?? 'Unknown error')
         toast({ title: 'Sync failed', description: data.error ?? 'Unknown error', variant: 'destructive' })
         return
       }
 
       toast({ title: data.processed ? 'Run synced!' : 'Up to date', description: data.message })
+      setGarminSyncError(null)
       if (data.processed) await refreshContext()
     } catch {
+      setGarminSyncError('Could not reach server. Please try again.')
       toast({ title: 'Sync failed', description: 'Could not reach server. Please try again.', variant: 'destructive' })
     } finally {
       setIsGarminFitSyncing(false)
@@ -739,681 +752,528 @@ export function TodayScreen() {
     setShowWeeklyRecapNotification(false)
   }
 
+  const openPlanScreen = () => {
+    try {
+      window.dispatchEvent(new CustomEvent("navigate-to-plan"))
+    } catch {
+      window.location.hash = "#plan"
+    }
+  }
+
+  const latestRun = [...(weeklyRuns ?? [])]
+    .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
+    .at(0)
+
+  const progressPoints = calendarDays.map((day) => {
+    const workoutForDay =
+      visibleWorkouts.find((w) => new Date(w.scheduledDate).toDateString() === day.fullDate.toDateString()) ??
+      weeklyWorkouts.find((w) => new Date(w.scheduledDate).toDateString() === day.fullDate.toDateString()) ??
+      null
+
+    return {
+      day: day.day.slice(0, 1) + day.day.slice(1).toLowerCase(),
+      completion: workoutForDay ? (workoutForDay.completed ? 100 : day.isToday ? 45 : 0) : 0,
+    }
+  })
+
+  const isRunDay = Boolean(todaysWorkout && todaysWorkout.type !== "rest")
+  const primaryActionLabel = isRunDay ? "Start Run" : "Recovery Action"
+  const dailyStatusLabel = isRunDay ? "Workout day" : "Recovery day"
+  const dailyHeadline = isRunDay
+    ? `${todaysWorkout?.type ? `${todaysWorkout.type.charAt(0).toUpperCase()}${todaysWorkout.type.slice(1)}` : "Workout"} focus`
+    : "Recovery and reset"
+  const dailyCoachInsight = isRunDay
+    ? workoutCoachCue || "Keep effort controlled and focus on smooth form."
+    : getRecoveryRecommendation(recoveryScoreValue)
+
+  const keyMetrics: KeyMetric[] = [
+    {
+      id: "readiness",
+      label: "Readiness",
+      value: `${recoveryScoreValue}`,
+      helper: getRecoveryRecommendation(recoveryScoreValue),
+      tone: recoveryScoreValue >= 65 ? "positive" : recoveryScoreValue < 50 ? "caution" : "default",
+    },
+    {
+      id: "weekly",
+      label: "Weekly Progress",
+      value: `${totalRuns}/${plannedRuns || 0}`,
+      helper: "Completed vs planned runs this week",
+      tone: totalRuns >= plannedRuns && plannedRuns > 0 ? "positive" : "default",
+    },
+    {
+      id: "consistency",
+      label: "Consistency",
+      value: `${consistency}%`,
+      helper: consistency >= 70 ? "You're on track this week" : "One extra session gets you back on track",
+      tone: consistency >= 70 ? "positive" : "caution",
+    },
+    {
+      id: "confidence",
+      label: "Coach Confidence",
+      value: `${recoveryConfidenceValue}%`,
+      helper: recoveryNextStep,
+      tone: recoveryConfidenceValue >= 70 ? "positive" : "default",
+    },
+  ]
+
+  const coachInsights: CoachInsight[] = [
+    {
+      id: "insight-1",
+      title: "Today focus",
+      message: dailyCoachInsight,
+      severity: isRunDay ? "action" : "good",
+    },
+    {
+      id: "insight-2",
+      title: "Consistency trend",
+      message:
+        consistency >= 75
+          ? "You are building excellent training rhythm. Keep your routine consistent."
+          : "A short quality session this week will improve consistency and momentum.",
+      severity: consistency >= 75 ? "good" : "caution",
+    },
+    {
+      id: "insight-3",
+      title: "Data coverage",
+      message: recoveryNextStep,
+      severity: recoveryConfidenceValue >= 60 ? "good" : "action",
+    },
+  ]
+
+  const dataQualityState = (() => {
+    if (!userId) {
+      return {
+        tone: "info" as const,
+        title: "Profile setup incomplete",
+        description: "Finish onboarding to unlock personalized readiness and workout guidance.",
+        actionLabel: "Open Plan",
+        action: openPlanScreen,
+      }
+    }
+    if (garminSyncError) {
+      return {
+        tone: "error" as const,
+        title: "Sync issue detected",
+        description: garminSyncError,
+        actionLabel: "Retry sync",
+        action: () => void handleGarminFitSync(),
+      }
+    }
+    if (recoveryConfidenceValue < 50) {
+      return {
+        tone: "warning" as const,
+        title: "Partial data today",
+        description: "Add sleep or wellness inputs to improve recommendation quality.",
+        actionLabel: "Add Activity",
+        action: () => setShowAddActivityModal(true),
+      }
+    }
+    if (isGarminConnected) {
+      return {
+        tone: "success" as const,
+        title: "Device connected",
+        description: "Garmin is connected and ready for sync.",
+        actionLabel: isGarminFitSyncing ? "Syncing..." : "Sync Garmin",
+        action: () => void handleGarminFitSync(),
+      }
+    }
+    return null
+  })()
+
   return (
-    <div className="pb-24 space-y-4">
-      <div className="px-4 pt-2">
-        <RunSmartBrandMark className="opacity-90" />
-      </div>
+    <div className="pb-44 space-y-4">
+      <header className="px-4 pt-2">
+        <div className="flex items-center justify-between">
+          <RunSmartBrandMark className="opacity-90" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRestartOnboarding}
+            className="gap-1.5 text-xs text-muted-foreground"
+            aria-label="Reset onboarding"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Reset
+          </Button>
+        </div>
+      </header>
+
       {showWeeklyRecapNotification && (
-        <div className="px-4 animate-in fade-in-0 slide-in-from-top-4 duration-300">
+        <div className="px-4">
           <WeeklyRecapNotificationBanner
             onViewRecap={handleViewRecapFromNotification}
             onDismiss={() => setShowWeeklyRecapNotification(false)}
           />
         </div>
       )}
-      {activeChallenge && (
-        <div className="px-4 space-y-4">
-          <ChallengeProgressRing
-            data={activeChallenge.dailyData}
-            challengeName={activeChallenge.template.name}
-            showDetails={true}
-          />
-          <DailyChallengePrompt
-            template={activeChallenge.template}
-            timing="before"
-          />
-        </div>
-      )}
-      {primaryGoal && (
-        <div className="px-4">
-          <Card className="border">
-            <CardContent className="p-4 space-y-2">
+
+      <main className="space-y-4 px-4">
+        <DailyFocusCard
+          isLoading={isLoadingWorkout}
+          dateLabel={new Date().toLocaleDateString("en-US", {
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+          })}
+          statusLabel={dailyStatusLabel}
+          headline={dailyHeadline}
+          coachInsight={dailyCoachInsight}
+          primaryAction={{
+            label: primaryActionLabel,
+            onClick: isRunDay ? startRecordFlow : () => setShowAddActivityModal(true),
+            disabled: isLoadingWorkout,
+            icon: <Play className="h-4 w-4" />,
+          }}
+          secondaryActions={[
+            {
+              label: "View Plan",
+              onClick: openPlanScreen,
+              icon: <BarChart3 className="h-3.5 w-3.5" />,
+            },
+            {
+              label: isGarminFitSyncing ? "Syncing" : "Sync",
+              onClick: () => void handleGarminFitSync(),
+              disabled: isGarminFitSyncing || !userId,
+              icon: <RefreshCw className="h-3.5 w-3.5" />,
+            },
+          ]}
+        />
+
+        <DataQualityBanner
+          tone={dataQualityState?.tone}
+          title={dataQualityState?.title}
+          description={dataQualityState?.description}
+          actionLabel={dataQualityState?.actionLabel}
+          onAction={dataQualityState?.action}
+        />
+
+        <KeyMetricsGrid metrics={keyMetrics} isLoading={isLoadingRecovery} />
+
+        <ProgressSummaryChart
+          data={progressPoints}
+          progressPercent={plannedRuns > 0 ? (totalRuns / plannedRuns) * 100 : 0}
+          summaryLabel={`${totalRuns} of ${plannedRuns || 0} planned runs completed`}
+          isLoading={isLoadingWorkout}
+        />
+
+        <CoachInsightsPanel insights={coachInsights} isLoading={isLoadingRecovery} />
+
+        {primaryGoal ? (
+          <Card className="border-border/70 bg-card shadow-sm">
+            <CardContent className="space-y-3 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold text-emerald-600">Active Goal</p>
-                  <h3 className="text-lg font-bold text-gray-900">{primaryGoal.title}</h3>
-                  <p className="text-sm text-gray-700">{primaryGoal.description}</p>
+                  <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Active Goal</p>
+                  <h2 className="mt-1 text-base font-semibold text-foreground">{primaryGoal.title}</h2>
+                  <p className="text-sm text-muted-foreground">{primaryGoal.description}</p>
                 </div>
-                <div className="text-right">
-                  {getDaysRemaining(primaryGoal) !== null && (
-                    <Badge variant="secondary" className="text-xs">
-                      {getDaysRemaining(primaryGoal)} days remaining
-                    </Badge>
-                  )}
-                </div>
+                {getDaysRemaining(primaryGoal) !== null ? (
+                  <Badge variant="outline">{getDaysRemaining(primaryGoal)} days left</Badge>
+                ) : null}
               </div>
               <div>
-                <div className="flex justify-between text-xs text-gray-700 mb-1">
-                  <span>Progress</span>
-                  <div className="flex items-center gap-2">
-                    <span>{Math.round(getGoalProgressPercent())}%</span>
-                    {getGoalTrajectory() && (
-                      <Badge
-                        variant="outline"
-                        className={`text-xs capitalize ${
-                          getGoalTrajectory() === 'ahead' ? 'text-emerald-600 border-emerald-300' :
-                          getGoalTrajectory() === 'on_track' ? 'text-blue-600 border-blue-300' :
-                          getGoalTrajectory() === 'behind' ? 'text-amber-600 border-amber-300' :
-                          'text-red-600 border-red-300'
-                        }`}
-                      >
-                        {getGoalTrajectory()?.replace('_', ' ')}
-                      </Badge>
-                    )}
-                  </div>
+                <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Goal progress</span>
+                  <span>{Math.round(getGoalProgressPercent())}%</span>
                 </div>
-                <Progress value={getGoalProgressPercent()} className="h-2" />
+                <Progress value={Math.max(0, Math.min(100, getGoalProgressPercent()))} className="h-2" />
               </div>
             </CardContent>
           </Card>
-        </div>
-      )}
-      {/* Header */}
-      <div className="bg-white p-6 rounded-b-3xl shadow-sm">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <p className="text-sm text-gray-600 mb-1">
-              {new Date().toLocaleDateString("en-US", {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-              })}
-            </p>
-            <h1 className="text-3xl font-bold text-gray-900">
-              {plan?.title || "Your Training"}
-            </h1>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-2 bg-blue-100 text-blue-800 px-4 py-2 rounded-full">
-              <Sun className="h-5 w-5" />
-              <span className="text-sm font-semibold">22°C</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRestartOnboarding}
-              className="gap-1.5 text-xs text-gray-500 hover:text-gray-700"
-            >
-              <RefreshCw className="h-3 w-3" />
-              Reset
+        ) : null}
+
+        {activeChallenge ? (
+          <section aria-labelledby="today-challenge-heading" className="space-y-3">
+            <h2 id="today-challenge-heading" className="text-sm font-semibold text-foreground">
+              Challenge
+            </h2>
+            <ChallengeProgressRing
+              data={activeChallenge.dailyData}
+              challengeName={activeChallenge.template.name}
+              showDetails={true}
+            />
+            <DailyChallengePrompt template={activeChallenge.template} timing="before" />
+          </section>
+        ) : null}
+
+        <section aria-labelledby="today-plan-activities-heading" className="space-y-3">
+          <h2 id="today-plan-activities-heading" className="text-sm font-semibold text-foreground">
+            Plan and activities
+          </h2>
+          <TodayWorkoutCard
+            isLoading={isLoadingWorkout}
+            workout={todaysWorkout}
+            structuredWorkout={structuredWorkout}
+            selectedRoute={selectedRoute}
+            workoutDistanceLabel={workoutDistanceLabel}
+            workoutCoachCue={workoutCoachCue}
+            goalProgressPercent={getGoalProgressPercent()}
+            showBreakdown={showWorkoutBreakdown}
+            onToggleBreakdown={() => setShowWorkoutBreakdown((prev) => !prev)}
+            onStartRun={startRecordFlow}
+            onSelectRoute={() => setShowRouteSelectorModal(true)}
+          />
+
+          <Card className="border-border/70 bg-card shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">Recent activity</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {latestRun ? (
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Distance</p>
+                    <p className="font-semibold text-foreground">{latestRun.distance.toFixed(1)} km</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Duration</p>
+                    <p className="font-semibold text-foreground">{Math.max(1, Math.round((latestRun.duration || 0) / 60))} min</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">RPE</p>
+                    <p className="font-semibold text-foreground">{typeof latestRun.rpe === "number" ? `${latestRun.rpe}/10` : "--"}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No recent run data yet. Record your first run to see trends.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="secondary" className="h-11" onClick={() => setShowAddRunModal(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Run
+            </Button>
+            <Button variant="outline" className="h-11" onClick={() => setShowAddActivityModal(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Activity
             </Button>
           </div>
-        </div>
 
-        {/* Streak & Challenge Progress */}
-        <div className="grid grid-cols-2 gap-3">
-          <Card className="border">
-            <CardContent className="p-4 text-center">
-              <Flame className="h-6 w-6 text-orange-500 mx-auto mb-2" />
-              <div className="text-3xl font-bold text-gray-900 mb-1">
-                {streak}
-              </div>
-              <div className="text-xs font-medium text-gray-600">Day Streak</div>
-            </CardContent>
-          </Card>
-          <Card className="border">
-            <CardContent className="p-4 text-center">
-              <BarChart3 className="h-6 w-6 text-blue-500 mx-auto mb-2" />
-              <div className="text-3xl font-bold text-gray-900 mb-1">
-                {totalRuns}/{plannedRuns}
-              </div>
-              <div className="text-xs font-medium text-gray-600">This Week</div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+          <div className="rounded-2xl border border-border/70 bg-card p-2">
+            <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+              {calendarDays.map((day, index) => {
+                const isSelected = day.fullDate.toDateString() === selectedCalendarDate.toDateString()
+                return (
+                  <button
+                    key={index}
+                    onClick={() => void handleDateClick(day)}
+                    className={`min-h-14 min-w-[62px] rounded-xl px-2 py-1 text-center text-xs transition ${
+                      isSelected
+                        ? "bg-primary text-primary-foreground"
+                        : "border border-border/70 bg-background text-foreground"
+                    }`}
+                  >
+                    <p className="uppercase tracking-[0.08em]">{day.day.slice(0, 2)}</p>
+                    <p className="mt-1 text-base font-semibold">{day.date}</p>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </section>
 
-      {userId ? (
-        <div className="px-4 space-y-3">
-          <WeeklyGoalCard userId={userId} runsCompleted={totalRuns} plannedRuns={plannedRuns} />
-          <PlanAdjustmentNotice userId={userId} />
-          <InsightsPanelsDashboard
-            userId={userId}
-            runsCompleted={totalRuns}
-            plannedRuns={plannedRuns}
-            consistencyRate={consistency}
-            goalProgress={getGoalProgressPercent()}
-            goalTrajectory={getGoalTrajectory() ?? null}
-          />
-        </div>
-      ) : null}
-
-      {userId && (
-        <div className="px-4">
-          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-900 text-white shadow-[0_20px_60px_rgba(16,185,129,0.25)]">
-            <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-emerald-400/20 blur-3xl" />
-            <div className="absolute -left-20 bottom-0 h-44 w-44 rounded-full bg-teal-400/20 blur-3xl" />
-            <CardContent className="relative space-y-4 p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">Today&apos;s Recovery</p>
-                  <div className="mt-2 flex items-end gap-3">
-                    {isLoadingRecovery ? (
-                      <Loader2 className="h-8 w-8 animate-spin text-emerald-200" />
-                    ) : (
-                      <span className="text-5xl font-bold">{recoveryScoreValue}</span>
-                    )}
-                    <div className="flex items-center gap-1 text-sm text-emerald-100/80">
-                      {recoveryTrend?.direction === 'up' ? (
-                        <TrendingUp className="h-4 w-4" />
-                      ) : recoveryTrend?.direction === 'down' ? (
-                        <TrendingDown className="h-4 w-4" />
+        <AdvancedAnalyticsAccordion
+          sections={[
+            {
+              id: "readiness-panels",
+              title: "Readiness, load, and consistency details",
+              description: "Deep diagnostics for recovery, load, and progression.",
+              content: userId ? (
+                <div className="space-y-3 pt-2">
+                  <WeeklyGoalCard userId={userId} runsCompleted={totalRuns} plannedRuns={plannedRuns} />
+                  <PlanAdjustmentNotice userId={userId} />
+                  <InsightsPanelsDashboard
+                    userId={userId}
+                    runsCompleted={totalRuns}
+                    plannedRuns={plannedRuns}
+                    consistencyRate={consistency}
+                    goalProgress={getGoalProgressPercent()}
+                    goalTrajectory={getGoalTrajectory() ?? null}
+                  />
+                </div>
+              ) : (
+                <p className="pt-2 text-sm text-muted-foreground">Complete onboarding to unlock analytics.</p>
+              ),
+            },
+            {
+              id: "widgets",
+              title: "Additional coaching widgets",
+              description: "Optional habits, community, and recommendation panels.",
+              content: (
+                <div className="space-y-3 pt-2">
+                  {ENABLE_WEEKLY_RECAP && userId ? (
+                    <WeeklyRecapWidget userId={userId} openRecapSignal={recapOpenSignal} />
+                  ) : null}
+                  <Card className="border-border/70">
+                    <CardContent className="flex items-start justify-between gap-3 p-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Coach tip</p>
+                        <p className="mt-1 text-sm text-foreground">{dailyTip}</p>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={refreshTip} aria-label="Refresh coach tip">
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    </CardContent>
+                  </Card>
+                  {userId ? <HabitAnalyticsWidget userId={userId} showDetails={false} /> : null}
+                  {userId ? <GoalRecommendations userId={userId} /> : null}
+                  {userId ? <CommunityStatsWidget userId={userId} /> : null}
+                </div>
+              ),
+            },
+            {
+              id: "sync-account",
+              title: "Sync and account",
+              description: "Device sync health and account access state.",
+              content: (
+                <div className="space-y-3 pt-2">
+                  <Card className="border-border/70">
+                    <CardContent className="space-y-3 p-4">
+                      <SyncStatusIndicator />
+                      {isGarminConnected ? (
+                        <Button
+                          variant="outline"
+                          className="w-full gap-2"
+                          onClick={() => void handleGarminFitSync()}
+                          disabled={isGarminFitSyncing}
+                        >
+                          {isGarminFitSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                          {isGarminFitSyncing ? "Syncing..." : "Sync Garmin"}
+                        </Button>
                       ) : (
-                        <Minus className="h-4 w-4" />
+                        <p className="text-xs text-muted-foreground">No connected Garmin device found for this account.</p>
                       )}
-                      <span>
-                        {recoveryTrend?.delta
-                          ? `${Math.abs(Math.round(recoveryTrend.delta))} pts`
-                          : 'No change'}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-sm text-emerald-100/80">
-                    {getRecoveryRecommendation(recoveryScoreValue)}
-                  </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-border/70">
+                    <CardContent className="space-y-3 p-4">
+                      {authLoading || !authSnapshotChecked ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Checking account status...
+                        </div>
+                      ) : isRegistered ? (
+                        <>
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Account active</p>
+                            <p className="mt-1 text-sm font-medium text-foreground">
+                              {registeredEmail ? `Signed in as ${registeredEmail}` : registeredHeadline}
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            onClick={async () => {
+                              try {
+                                await signOut()
+                                if (authStorageKey) {
+                                  localStorage.removeItem(authStorageKey)
+                                }
+                                setStoredAuthEmail(null)
+                                setStoredAuthUserId(null)
+                                try {
+                                  localStorage.removeItem("runsmart_auth_user_id")
+                                  localStorage.removeItem("runsmart_auth_email")
+                                  localStorage.removeItem("runsmart_auth_at")
+                                } catch {
+                                  // ignore
+                                }
+                                setLocalAuthEmail(null)
+                                setLocalAuthUserId(null)
+                                toast({
+                                  title: "Signed out",
+                                  description: "You've been signed out successfully",
+                                })
+                              } catch {
+                                toast({
+                                  title: "Error",
+                                  description: "Failed to sign out. Please try again.",
+                                  variant: "destructive",
+                                })
+                              }
+                            }}
+                          >
+                            <LogOut className="mr-2 h-4 w-4" />
+                            Sign Out
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm text-muted-foreground">
+                            {accountHeadline} Create an account to sync activity across devices.
+                          </p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button
+                              onClick={() => {
+                                trackAnalyticsEvent("early_access_cta_clicked", {
+                                  source: "today_screen_account",
+                                  action: "signup",
+                                  variant: "redesign_v1",
+                                  user_type: accountShortName ? "returning" : "new",
+                                  signup_count: betaSignups.count,
+                                })
+                                setAuthModalTab("signup")
+                                setShowAuthModal(true)
+                              }}
+                            >
+                              <UserPlus className="mr-2 h-4 w-4" />
+                              Sign Up
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                trackAnalyticsEvent("early_access_cta_clicked", {
+                                  source: "today_screen_account",
+                                  action: "login",
+                                  variant: "redesign_v1",
+                                  user_type: accountShortName ? "returning" : "new",
+                                })
+                                setAuthModalTab("login")
+                                setShowAuthModal(true)
+                              }}
+                            >
+                              <LogIn className="mr-2 h-4 w-4" />
+                              Log In
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
-                <Badge className="bg-white/10 text-emerald-100 border border-emerald-200/30">
-                  {getRecoveryLabel(recoveryScoreValue)}
-                </Badge>
-              </div>
+              ),
+            },
+          ]}
+        />
+      </main>
 
-              <div className="rounded-xl bg-white/10 p-4">
-                <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-emerald-100/70">
-                  <span>Coach Confidence</span>
-                  <span className="text-sm font-semibold normal-case">{recoveryConfidenceValue}%</span>
-                </div>
-                <div className="mt-3">
-                  <Progress value={recoveryConfidenceValue} className="h-2 bg-white/20" />
-                </div>
-                <p className="mt-2 text-xs text-emerald-100/80">
-                  {recoveryNextStep}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Account Callout */}
-      <div className="px-4">
-        <Card className="relative overflow-hidden border border-emerald-500/20 bg-[#0b1512] text-white shadow-[0_20px_60px_rgba(16,185,129,0.25)]">
-          <div className="absolute -right-20 -top-16 h-48 w-48 rounded-full bg-emerald-400/20 blur-3xl" />
-          <div className="absolute -left-16 -bottom-20 h-52 w-52 rounded-full bg-teal-400/20 blur-3xl" />
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/60 to-transparent" />
-          <CardContent className="relative space-y-4 p-6">
-            {authLoading || !authSnapshotChecked ? (
-              <div className="flex items-center gap-2 text-sm text-emerald-100/80">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Checking account status...
-              </div>
-            ) : isRegistered ? (
-              <>
-                <div className="flex items-start gap-4">
-                  <div className="relative">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-400/15 p-1 shadow-[0_0_24px_rgba(16,185,129,0.45)]">
-                      <img src="/images/runsmart-logo-1.png" alt="RunSmart" className="h-full w-full object-contain" />
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">Account Active</p>
-                    <h3 className="text-2xl font-semibold">{registeredHeadline}</h3>
-                    <p className="text-sm text-emerald-100/80">
-                      {registeredEmail ? `Signed in as ${registeredEmail}` : "You're signed in on this device."}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span className="text-xs text-emerald-100/70">Your runs are syncing across devices</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-emerald-300/40 bg-white/5 text-emerald-100 hover:bg-white/10"
-                    onClick={async () => {
-                    try {
-                      await signOut()
-                      if (authStorageKey) {
-                        localStorage.removeItem(authStorageKey)
-                      }
-                      setStoredAuthEmail(null)
-                      setStoredAuthUserId(null)
-                      try {
-                        localStorage.removeItem('runsmart_auth_user_id')
-                        localStorage.removeItem('runsmart_auth_email')
-                        localStorage.removeItem('runsmart_auth_at')
-                      } catch {
-                        // ignore
-                      }
-                      setLocalAuthEmail(null)
-                      setLocalAuthUserId(null)
-                      toast({
-                        title: "Signed out",
-                        description: "You've been signed out successfully",
-                      })
-                      } catch {
-                        toast({
-                          title: "Error",
-                          description: "Failed to sign out. Please try again.",
-                          variant: "destructive",
-                        })
-                      }
-                    }}
-                  >
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Sign Out
-                  </Button>
-                </div>
-                <div className="rounded-lg border border-emerald-400/30 bg-black/30 p-3">
-                  <SyncStatusIndicator />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex items-start gap-4">
-                  <div className="relative">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-400/15 p-1 shadow-[0_0_24px_rgba(16,185,129,0.45)]">
-                      <img src="/images/runsmart-logo-1.png" alt="RunSmart" className="h-full w-full object-contain" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">Early Access</p>
-                    <h3 className="text-2xl font-semibold">{accountHeadline}</h3>
-                    <div className="flex items-center gap-2 text-xs text-emerald-200/80">
-                      <Users className="h-3 w-3" />
-                      <span>
-                        {betaSignups.loading ? 'Runner count updating...' : `${betaSignups.count}+ runners already registered`}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <ul className="text-sm text-emerald-100/80 space-y-2">
-                    <li className="flex items-start gap-2">
-                      <span className="text-emerald-300 flex-shrink-0">✓</span>
-                      <span>AI coach tailored to your running level</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-emerald-300 flex-shrink-0">✓</span>
-                      <span>Founding member pricing when paid plans launch</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-emerald-300 flex-shrink-0">✓</span>
-                      <span>Exclusive Beta Pioneer badge</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-emerald-300 flex-shrink-0">✓</span>
-                      <span>Sync runs across all your devices</span>
-                    </li>
-                  </ul>
-                  <div className="flex items-center gap-2 text-xs text-amber-300/90 bg-amber-500/10 rounded-lg px-3 py-2 border border-amber-400/20">
-                    <Zap className="h-3 w-3 fill-current" />
-                    <span className="font-medium">
-                      {betaSignups.loading
-                        ? 'Loading...'
-                        : betaSignups.isNearCapacity
-                          ? `Almost full! Only ${betaSignups.spotsRemaining} spots left`
-                          : `${betaSignups.count} runners have joined the early access program`
-                      }
-                    </span>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    className="bg-emerald-300 text-emerald-950 hover:bg-emerald-200 font-semibold"
-                    onClick={() => {
-                      // Track early access CTA click
-                      trackAnalyticsEvent('early_access_cta_clicked', {
-                        source: 'today_screen_callout',
-                        action: 'signup',
-                        variant: 'optimized_v1',
-                        user_type: accountShortName ? 'returning' : 'new',
-                        signup_count: betaSignups.count,
-                        spots_remaining: betaSignups.spotsRemaining,
-                        percent_filled: betaSignups.percentFilled,
-                      })
-                      setAuthModalTab('signup')
-                      setShowAuthModal(true)
-                    }}
-                  >
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    Claim Your Spot
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="border-emerald-300/40 bg-white/5 text-emerald-100 hover:bg-white/10"
-                    onClick={() => {
-                      // Track login CTA click
-                      trackAnalyticsEvent('early_access_cta_clicked', {
-                        source: 'today_screen_callout',
-                        action: 'login',
-                        variant: 'optimized_v1',
-                        user_type: accountShortName ? 'returning' : 'new',
-                      })
-                      setAuthModalTab('login')
-                      setShowAuthModal(true)
-                    }}
-                  >
-                    <LogIn className="mr-2 h-4 w-4" />
-                    Log In
-                  </Button>
-                </div>
-              </>
-            )}
+      <div className="fixed bottom-[5.4rem] left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 px-4">
+        <Card className="border-border/70 bg-background/95 shadow-[0_10px_30px_rgba(0,0,0,0.12)] backdrop-blur">
+          <CardContent className="grid grid-cols-3 gap-2 p-2">
+            <Button
+              className="h-10 text-xs"
+              onClick={isRunDay ? startRecordFlow : () => setShowAddActivityModal(true)}
+              aria-label={isRunDay ? "Start run from sticky actions" : "Open recovery action"}
+            >
+              <Play className="mr-1 h-3.5 w-3.5" />
+              {isRunDay ? "Start" : "Recover"}
+            </Button>
+            <Button variant="outline" className="h-10 text-xs" onClick={openPlanScreen} aria-label="Open training plan">
+              Plan
+            </Button>
+            <Button
+              variant="outline"
+              className="h-10 text-xs"
+              onClick={() => void handleGarminFitSync()}
+              disabled={!userId || isGarminFitSyncing}
+              aria-label="Sync device data"
+            >
+              {isGarminFitSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Sync"}
+            </Button>
           </CardContent>
         </Card>
-      </div>
-
-      {/* Calendar Strip with Staggered Animations */}
-      <div className="px-4 animate-in fade-in-0 slide-in-from-left duration-500 delay-200">
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-          {calendarDays.map((day, index) => {
-            const isSelected = day.fullDate.toDateString() === selectedCalendarDate.toDateString()
-            return (
-              <button
-                key={index}
-                className={`flex-shrink-0 text-center p-3 rounded-xl min-w-[70px] transition-all duration-300 hover:scale-105 active:scale-95 ${isSelected
-                  ? "bg-blue-500 text-white shadow-lg scale-105"
-                  : "bg-white border border-gray-200 hover:shadow-md"
-                  }`}
-                style={{ animationDelay: `${200 + index * 50}ms` }}
-                onClick={() => handleDateClick(day)}
-              >
-                <div className="text-xs font-semibold mb-1">{day.day}</div>
-                <div className="text-2xl font-bold mb-1">{day.date}</div>
-                {day.hasWorkout && (
-                  <div className="flex justify-center">
-                    <div
-                      className={`w-2 h-2 rounded-full ${isSelected
-                        ? "bg-white"
-                        : day.workoutColor || "bg-green-500"
-                        }`}
-                    />
-                  </div>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Today's Workout */}
-      <div className="px-4">
-        {isLoadingWorkout ? (
-          <Card className="h-64 flex items-center justify-center border">
-            <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
-          </Card>
-        ) : todaysWorkout ? (
-          <Card className="border border-[#d7d8d0] bg-[#f7f7f4] shadow-sm rounded-[28px]">
-            <CardContent className="space-y-6 p-6">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm text-gray-600">Today</p>
-                  <h3 className="mt-1 text-3xl font-semibold leading-tight text-gray-900">
-                    {structuredWorkout?.name ?? `${todaysWorkout.type.charAt(0).toUpperCase()}${todaysWorkout.type.slice(1)} Run`}
-                  </h3>
-                </div>
-                <Badge className="rounded-full border border-emerald-300 bg-white px-3 py-1 text-sm text-emerald-700">
-                  Personalized
-                </Badge>
-              </div>
-
-              <div className="rounded-3xl border border-[#d7d8d0] bg-[#efefe9] p-6">
-                <p className="text-sm text-gray-700">Target distance</p>
-                <p className="text-5xl font-semibold tracking-tight text-gray-900 mt-2">{workoutDistanceLabel}</p>
-                <Progress
-                  value={Math.max(20, Math.min(100, getGoalProgressPercent() || 0))}
-                  className="mt-4 h-3 rounded-full bg-white/80"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-[#d7d8d0] bg-white p-4">
-                  <p className="text-xs text-gray-600">Coach cue</p>
-                  <p className="mt-1.5 text-base font-semibold leading-snug text-gray-900">Hold 6:05/km</p>
-                </div>
-                <div className="rounded-2xl border border-[#d7d8d0] bg-white p-4">
-                  <p className="text-xs text-gray-600">Recovery</p>
-                  <p className="mt-1.5 text-base font-semibold leading-snug text-gray-900">Green zone</p>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-[#d7d8d0] bg-white p-4">
-                <div className="flex items-center gap-2 text-gray-700 mb-2">
-                  <Zap className="h-4 w-4 text-emerald-600" />
-                  <p className="text-xs font-medium">Coach message</p>
-                </div>
-                <p className="text-base leading-relaxed text-gray-900">{workoutCoachCue}</p>
-              </div>
-
-              <div className="flex gap-2">
-                <Button onClick={startRecordFlow} className="flex-1 h-12 text-sm font-semibold">
-                  <Play className="h-4 w-4 mr-2" />
-                  Start Run
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowRouteSelectorModal(true)}
-                  className="h-12 px-4"
-                >
-                  <MapPin className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowWorkoutBreakdown(!showWorkoutBreakdown)}
-                  className="h-12 px-4"
-                >
-                  {showWorkoutBreakdown ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-
-              {selectedRoute && (
-                <div className="rounded-2xl border border-[#d7d8d0] bg-white p-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-emerald-600" />
-                      <span className="font-semibold text-gray-900">{selectedRoute.name}</span>
-                    </div>
-                    {selectedRoute.distance && (
-                      <span className="text-gray-600">{selectedRoute.distance} km</span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {showWorkoutBreakdown && (
-                <div className="rounded-2xl border border-[#d7d8d0] bg-white p-4 animate-in fade-in-0 slide-in-from-top-4 duration-300">
-                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-700">
-                    Workout phases
-                  </h4>
-                  {structuredWorkout ? (
-                    <WorkoutPhasesDisplay workout={structuredWorkout} compact />
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-gray-400" />
-                        <span className="text-sm text-gray-600">Warm-up: 5-10 min easy pace</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-gray-800" />
-                        <span className="text-sm font-semibold text-gray-900">
-                          Main: {workoutDistanceLabel} at target pace
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-gray-400" />
-                        <span className="text-sm text-gray-600">Cool-down: 5 min walk</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="text-center py-12">
-            <CardContent>
-              <div className="w-16 h-16 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center mx-auto mb-4">
-                <Award className="h-8 w-8 text-white" />
-              </div>
-              <h3 className="text-xl font-bold mb-2">Rest Day</h3>
-              <p className="text-gray-600 text-sm">
-                Recovery is just as important as training. Enjoy your rest!
-              </p>
-              <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
-                <Button onClick={startRecordFlow} className="gap-2">
-                  <Play className="h-4 w-4" />
-                  Record a Run
-                </Button>
-                <Button
-                  variant="outline"
-                  className="gap-2"
-                  onClick={() => setShowRouteSelectorModal(true)}
-                >
-                  <MapPin className="h-4 w-4" />
-                  Choose Route
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {ENABLE_WEEKLY_RECAP && userId && (
-        <div className="px-4 mt-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-450">
-      <WeeklyRecapWidget userId={userId} openRecapSignal={recapOpenSignal} />
-        </div>
-      )}
-
-      {/* Add Run & Activity - Side by Side */}
-      <div className="px-4 grid grid-cols-2 gap-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-400">
-        <Button
-          variant="default"
-          className="h-12"
-          onClick={() => setShowAddRunModal(true)}
-        >
-          <Plus className="h-5 w-5 mr-2" />
-          Add Run
-        </Button>
-        <Button
-          variant="secondary"
-          className="h-12"
-          onClick={() => setShowAddActivityModal(true)}
-        >
-          <Plus className="h-5 w-5 mr-2" />
-          Activity
-        </Button>
-      </div>
-
-      {/* Garmin Sync — single sync button, only shown when Garmin is connected */}
-      {isGarminConnected && (
-        <div className="px-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-410">
-          <Button
-            variant="outline"
-            className="w-full h-12 gap-2"
-            onClick={() => void handleGarminFitSync()}
-            disabled={isGarminFitSyncing}
-          >
-            {isGarminFitSyncing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            {isGarminFitSyncing ? 'Syncing...' : 'Sync Garmin'}
-          </Button>
-        </div>
-      )}
-
-      {/* Coaching Tip with Gradient Background */}
-      <div className="px-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-500">
-        <Card className="relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary/20 to-accent/20 rounded-full blur-3xl" />
-          <CardContent className="p-6 relative z-10">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
-                <Zap className="h-6 w-6 text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-gray-900">Coach&apos;s Tip</h3>
-                    <RunSmartBrandMark compact size="sm" className="opacity-60" />
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={refreshTip}
-                    className="h-8 w-8"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                  </Button>
-                </div>
-                <p className="text-sm text-gray-700 leading-relaxed">{dailyTip}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Progress Stats - Bento Grid */}
-      <div className="px-4 grid grid-cols-3 gap-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-600">
-        <Card className="col-span-1 hover:-translate-y-1">
-          <CardContent className="p-4 text-center">
-            <TrendingUp className="h-5 w-5 text-primary mx-auto mb-2" />
-            <div className="text-2xl font-bold text-gray-900">{totalRuns}</div>
-            <div className="text-xs text-gray-600 mt-1">Runs</div>
-          </CardContent>
-        </Card>
-        <Card className="col-span-1 hover:-translate-y-1">
-          <CardContent className="p-4 text-center">
-            <BarChart3 className="h-5 w-5 text-accent mx-auto mb-2" />
-            <div className="text-2xl font-bold text-gray-900">{consistency}%</div>
-            <div className="text-xs text-gray-600 mt-1">Rate</div>
-          </CardContent>
-        </Card>
-        <Card className="col-span-1 hover:-translate-y-1">
-          <CardContent className="p-4 text-center">
-            <Award className="h-5 w-5 text-warning mx-auto mb-2" />
-            <div className="text-2xl font-bold text-gray-900">
-              {weeklyWorkouts.filter((w) => w.completed).length}
-            </div>
-            <div className="text-xs text-gray-600 mt-1">Done</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Widgets Section - Stacked with Animations */}
-      <div className="px-4 space-y-4">
-        {userId && (
-          <div className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-700">
-            <HabitAnalyticsWidget
-              userId={userId}
-              showDetails={false}
-              className="hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
-            />
-          </div>
-        )}
-
-        {userId && (
-          <div className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-1000">
-            <GoalRecommendations
-              userId={userId}
-              className="hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
-            />
-          </div>
-        )}
-
-        {userId && (
-          <div className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-1100">
-            <CommunityStatsWidget
-              userId={userId}
-              className="hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
-            />
-          </div>
-        )}
       </div>
 
       <AuthModal
@@ -1542,3 +1402,4 @@ export function TodayScreen() {
     </div>
   )
 }
+
