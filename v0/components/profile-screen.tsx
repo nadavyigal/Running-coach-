@@ -1,5 +1,6 @@
 'use client';
 
+import { isSafeRedirect } from "@/lib/validateRedirect"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -243,6 +244,9 @@ export function ProfileScreen() {
       const data = await response.json()
       if (!response.ok || !data?.success || !data?.authUrl) {
         throw new Error(data?.error || 'Failed to initiate Garmin connection')
+      }
+      if (!isSafeRedirect(data.authUrl)) {
+        throw new Error('Blocked unsafe redirect URL')
       }
       window.location.href = data.authUrl
     } catch (err) {

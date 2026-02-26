@@ -8,6 +8,7 @@ import { GarminReadinessCard } from '@/components/garmin-readiness-card'
 import { PerformanceManagementChart } from '@/components/performance-management-chart'
 import { useData } from '@/contexts/DataContext'
 import { useToast } from '@/components/ui/use-toast'
+import { isSafeRedirect } from '@/lib/validateRedirect'
 
 export default function GarminDetailsPage() {
   const router = useRouter()
@@ -31,6 +32,9 @@ export default function GarminDetailsPage() {
       const data = await response.json()
       if (!response.ok || !data?.success || !data?.authUrl) {
         throw new Error(data?.error || 'Failed to initiate Garmin reconnect')
+      }
+      if (!isSafeRedirect(data.authUrl)) {
+        throw new Error('Blocked unsafe redirect URL')
       }
       window.location.href = data.authUrl
     } catch (err) {

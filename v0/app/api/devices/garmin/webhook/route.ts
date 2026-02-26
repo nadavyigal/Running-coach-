@@ -150,11 +150,9 @@ function getWebhookAuthResult(req: Request): { authorized: boolean; status: numb
     }
   }
 
-  const url = new URL(req.url)
-  const querySecret = url.searchParams.get('secret')?.trim()
   const headerSecret = req.headers.get('x-garmin-webhook-secret')?.trim()
 
-  if (querySecret === configuredSecret || headerSecret === configuredSecret) {
+  if (headerSecret === configuredSecret) {
     return { authorized: true, status: 200 }
   }
 

@@ -7,6 +7,16 @@ import { z } from "zod"
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
 
+function isValidImageBuffer(buf: Buffer): boolean {
+  // JPEG: FF D8 FF
+  if (buf.length >= 3 && buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return true
+  // PNG: 89 50 4E 47
+  if (buf.length >= 4 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return true
+  // WebP: RIFF....WEBP
+  if (buf.length >= 12 && buf.slice(0, 4).toString('ascii') === 'RIFF' && buf.slice(8, 12).toString('ascii') === 'WEBP') return true
+  return false
+}
+
 export async function POST(req: Request) {
   try {
     const apiKey = process.env.OPENAI_API_KEY
@@ -34,6 +44,11 @@ export async function POST(req: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer())
+
+    // Magic byte validation — ensures the file content matches the declared type
+    if (!isValidImageBuffer(buffer)) {
+      return NextResponse.json({ success: false, error: "File content does not match a supported image type" }, { status: 400 })
+    }
 
     const extractedRunSchema = z
       .object({

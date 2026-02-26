@@ -120,9 +120,11 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 ${prefix} [data-chart=${id}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
-    const color =
+    const rawColor =
       itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
       itemConfig.color
+    const CSS_COLOR_RE = /^(#[0-9a-fA-F]{3,8}|rgb\([\d,\s.]+\)|rgba\([\d,\s.]+\)|hsl\([\d%,\s.]+\)|hsla\([\d%,\s.]+\)|var\(--[\w-]+\)|[a-zA-Z]+)$/
+    const color = rawColor && CSS_COLOR_RE.test(rawColor) ? rawColor : null
     return color ? `  --color-${key}: ${color};` : null
   })
   .join("\n")}

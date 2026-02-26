@@ -1,6 +1,7 @@
 ﻿"use client"
 
 import { useState, useEffect } from "react"
+import { isSafeRedirect } from "@/lib/validateRedirect"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -161,7 +162,10 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
       const data = await response.json()
       
       if (data.success) {
-        // Redirect to Garmin OAuth
+        // Redirect to Garmin OAuth — validate URL before following
+        if (!isSafeRedirect(data.authUrl)) {
+          throw new Error('Blocked unsafe redirect URL')
+        }
         window.location.href = data.authUrl
       } else {
         throw new Error(data.error)

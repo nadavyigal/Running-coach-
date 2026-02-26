@@ -60,10 +60,11 @@ export async function middleware(request: NextRequest) {
   // Protect /admin routes
   if (pathname.startsWith('/admin')) {
     // Admin email whitelist
-    const adminEmails = process.env.ADMIN_EMAILS?.split(',') || [
-      'nadav@example.com',
-      'admin@runsmart.ai'
-    ]
+    const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) ?? []
+    if (adminEmails.length === 0) {
+      console.error('ADMIN_EMAILS not configured — admin routes disabled')
+      return NextResponse.redirect(new URL('/', request.url))
+    }
     const isAdmin = user && adminEmails.includes(user.email || '')
 
     if (!isAdmin) {

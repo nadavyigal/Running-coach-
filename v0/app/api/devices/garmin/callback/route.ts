@@ -79,17 +79,6 @@ async function handleGarminCallback(req: ApiRequest) {
       )
     }
 
-    const authUserId = req.headers.get('x-user-id')
-    if (authUserId && Number.parseInt(authUserId, 10) !== userId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'User mismatch in OAuth flow',
-        },
-        { status: 403 }
-      )
-    }
-
     const clientId = process.env.GARMIN_CLIENT_ID
     const clientSecret = process.env.GARMIN_CLIENT_SECRET
     if (!clientId || !clientSecret) {
