@@ -30,3 +30,15 @@
   - reusable metric surface with trend icon, helper microcopy, and meter animation
 - Updated e2e snapshot flow:
   - `V0/e2e/today-redesign.spec.ts` now records both fold and full-page images per viewport.
+
+## Phase 2 Enhancements Implemented
+- Added animated number transitions for live metric values:
+  - `v0/components/today/AnimatedMetricValue.tsx`
+  - used in `MetricCard` and `ProgressSummaryChart`
+  - reduced-motion safe fallback keeps updates instant when motion should be minimized.
+- Added reusable chart presentation primitives:
+  - `v0/components/today/TodayChartPrimitives.tsx`
+  - standardized axis tick style, tooltip content, chart empty state, and chart panel wrapper.
+- Added component-level visual snapshot coverage:
+  - `v0/components/today/today-visual-snapshots.test.tsx`
+  - snapshots for Daily focus, metrics grid, progress chart, data quality banner, and workout card.

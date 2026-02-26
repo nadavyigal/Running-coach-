@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from "framer-motion"
 import { Activity, Minus, TrendingDown, TrendingUp } from "lucide-react"
+import { AnimatedMetricValue } from "@/components/today/AnimatedMetricValue"
 import { todayCardVariants, todayTrendBadgeVariants } from "@/components/today/today-ui"
 import { CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -20,6 +21,9 @@ export type MetricCardData = {
   trendLabel?: string
   unit?: string
   meterValue?: number
+  animatedValue?: number
+  formatAnimatedValue?: (value: number) => string
+  animationDecimals?: number
 }
 
 interface MetricCardProps {
@@ -64,6 +68,8 @@ export function MetricCard({ metric, index, isLoading = false }: MetricCardProps
   const TrendIcon = trendConfig.icon
   const meterValue = Math.max(0, Math.min(100, metric.meterValue ?? 0))
   const hasMeter = Number.isFinite(metric.meterValue)
+  const animatedValue = metric.animatedValue
+  const hasAnimatedValue = Number.isFinite(metric.animatedValue)
 
   return (
     <motion.article
@@ -83,8 +89,16 @@ export function MetricCard({ metric, index, isLoading = false }: MetricCardProps
         </div>
 
         <div className="flex items-end gap-1">
-          <p className={cn("text-[1.55rem] font-semibold leading-none tracking-tight", toneClassName[metric.tone ?? "default"])}>
-            {metric.value}
+          <p className={cn("text-[1.55rem] font-semibold leading-none tracking-tight tabular-nums", toneClassName[metric.tone ?? "default"])}>
+            {hasAnimatedValue ? (
+              <AnimatedMetricValue
+                value={Number(animatedValue)}
+                decimals={metric.animationDecimals ?? 0}
+                formatter={metric.formatAnimatedValue}
+              />
+            ) : (
+              metric.value
+            )}
           </p>
           {metric.unit ? <span className="pb-0.5 text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">{metric.unit}</span> : null}
         </div>

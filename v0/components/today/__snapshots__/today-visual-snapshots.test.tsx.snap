@@ -1,0 +1,1077 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Today visual snapshots > matches data quality banner snapshot 1`] = `
+<aside
+  aria-live="polite"
+  class="relative overflow-hidden rounded-2xl border px-4 py-3 text-sm shadow-[0_16px_34px_-26px_rgba(16,24,40,0.55)] border-amber-200/90 bg-amber-50/90 text-amber-900 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-amber-400/70"
+  role="status"
+  style="opacity: 0; transform: translateY(6px);"
+>
+  <div
+    class="flex items-start gap-3"
+  >
+    <span
+      class="mt-0.5 rounded-full bg-background/75 p-1.5"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-triangle-alert h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"
+        />
+        <path
+          d="M12 9v4"
+        />
+        <path
+          d="M12 17h.01"
+        />
+      </svg>
+    </span>
+    <div
+      class="min-w-0 flex-1 space-y-2"
+    >
+      <div
+        class="flex items-start justify-between gap-2"
+      >
+        <h3
+          class="text-sm font-semibold leading-tight"
+        >
+          Partial data today
+        </h3>
+        <span
+          class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] border-amber-300/80 bg-amber-100/90 text-amber-800"
+        >
+          Partial
+        </span>
+      </div>
+      <p
+        class="text-sm leading-relaxed"
+      >
+        Add sleep or wellness inputs to improve recommendation quality.
+      </p>
+    </div>
+  </div>
+  <div
+    class="mt-2"
+  >
+    <button
+      class="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border hover:text-accent-foreground px-3 h-9 rounded-lg border-current/30 bg-transparent text-current hover:bg-background/60"
+    >
+      Add Activity
+    </button>
+  </div>
+</aside>
+`;
+
+exports[`Today visual snapshots > matches hero card snapshot 1`] = `
+<section
+  aria-labelledby="today-daily-focus-heading"
+  style="opacity: 0; transform: translateY(10px);"
+>
+  <div
+    class="relative overflow-hidden border bg-card/95 text-card-foreground backdrop-blur supports-[backdrop-filter]:bg-card/90 rounded-[1.65rem] border-primary/20 shadow-[0_24px_60px_-38px_rgba(16,24,40,0.6)] transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_22px_56px_-34px_rgba(8,47,73,0.5)] active:translate-y-0"
+  >
+    <div
+      class="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-emerald-200/70 via-emerald-100/40 to-transparent"
+    />
+    <div
+      class="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full bg-primary/10 blur-3xl"
+    />
+    <div
+      class="relative space-y-4 p-5"
+    >
+      <div
+        class="flex items-start justify-between gap-3"
+      >
+        <div>
+          <p
+            class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-calendar-days h-3.5 w-3.5"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M8 2v4"
+              />
+              <path
+                d="M16 2v4"
+              />
+              <rect
+                height="18"
+                rx="2"
+                width="18"
+                x="3"
+                y="4"
+              />
+              <path
+                d="M3 10h18"
+              />
+              <path
+                d="M8 14h.01"
+              />
+              <path
+                d="M12 14h.01"
+              />
+              <path
+                d="M16 14h.01"
+              />
+              <path
+                d="M8 18h.01"
+              />
+              <path
+                d="M12 18h.01"
+              />
+              <path
+                d="M16 18h.01"
+              />
+            </svg>
+            Thursday, February 26
+          </p>
+          <h1
+            class="mt-1 text-[1.85rem] font-semibold leading-tight tracking-tight text-foreground"
+            id="today-daily-focus-heading"
+          >
+            Tempo focus
+          </h1>
+        </div>
+        <div
+          class="transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] border-emerald-300/80 bg-emerald-100/90 text-emerald-800"
+        >
+          Workout day
+        </div>
+      </div>
+      <div
+        class="grid grid-cols-[1fr_auto] gap-3 rounded-2xl border border-border/65 bg-background/75 p-3.5"
+      >
+        <div
+          class="flex items-start gap-2"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-shield-plus mt-0.5 h-4 w-4 text-primary"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"
+            />
+            <path
+              d="M9 12h6"
+            />
+            <path
+              d="M12 9v6"
+            />
+          </svg>
+          <div>
+            <p
+              class="text-[11px] font-semibold uppercase tracking-[0.11em] text-muted-foreground"
+            >
+              Coach signal
+            </p>
+            <p
+              class="mt-1 text-sm leading-relaxed text-foreground"
+            >
+              Keep breathing smooth and settle into pace after the first 5 minutes.
+            </p>
+          </div>
+        </div>
+        <div
+          class="flex items-center justify-center"
+        >
+          <div
+            class="relative h-12 w-12 rounded-full border border-border/70 bg-background/90 p-[3px]"
+          >
+            <div
+              class="h-full w-full rounded-full bg-muted/50"
+            />
+            <div
+              class="absolute inset-[3px] rounded-full bg-gradient-to-tr opacity-80 from-emerald-500 to-emerald-300"
+            />
+            <svg
+              class="lucide lucide-sparkles absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 text-white"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"
+              />
+              <path
+                d="M20 3v4"
+              />
+              <path
+                d="M22 5h-4"
+              />
+              <path
+                d="M4 17v2"
+              />
+              <path
+                d="M5 18H3"
+              />
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div
+        class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+      >
+        <button
+          aria-label="Start Run"
+          class="inline-flex items-center whitespace-nowrap ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 h-11 w-full justify-center gap-2 rounded-xl text-sm font-semibold"
+        >
+          <svg
+            class="lucide lucide-play h-4 w-4"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <polygon
+              points="6 3 20 12 6 21 6 3"
+            />
+          </svg>
+          Start Run
+        </button>
+        <div
+          class="grid grid-cols-2 gap-2"
+        >
+          <button
+            aria-label="View Plan"
+            class="inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border hover:bg-accent hover:text-accent-foreground px-4 py-2 h-11 rounded-xl border-border/70 bg-background/85 text-xs sm:text-sm"
+          >
+            View Plan
+          </button>
+          <button
+            aria-label="Sync"
+            class="inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border hover:bg-accent hover:text-accent-foreground px-4 py-2 h-11 rounded-xl border-border/70 bg-background/85 text-xs sm:text-sm"
+          >
+            Sync
+          </button>
+        </div>
+      </div>
+      <p
+        class="flex items-center gap-1.5 text-xs text-muted-foreground"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-activity h-3 w-3"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"
+          />
+        </svg>
+        Updated in real time as runs and recovery data sync.
+      </p>
+    </div>
+  </div>
+</section>
+`;
+
+exports[`Today visual snapshots > matches metrics grid snapshot 1`] = `
+<section
+  aria-labelledby="today-key-metrics-heading"
+  class="space-y-2.5"
+>
+  <div
+    class="flex items-center justify-between"
+  >
+    <h2
+      class="text-sm font-semibold text-foreground"
+      id="today-key-metrics-heading"
+    >
+      Key metrics
+    </h2>
+    <span
+      class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] border-sky-300/80 bg-sky-100/90 text-sky-800"
+    >
+      Live snapshot
+    </span>
+  </div>
+  <div
+    class="grid grid-cols-2 gap-3"
+  >
+    <article
+      class="relative overflow-hidden border bg-card/95 text-card-foreground backdrop-blur supports-[backdrop-filter]:bg-card/90 rounded-[1.25rem] border-border/65 shadow-[0_14px_36px_-32px_rgba(16,24,40,0.45)] transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_22px_56px_-34px_rgba(8,47,73,0.5)] active:translate-y-0"
+      style="opacity: 0; transform: translateY(10px);"
+      tabindex="0"
+    >
+      <div
+        class="space-y-2.5 p-4"
+      >
+        <div
+          class="flex items-start justify-between gap-2"
+        >
+          <p
+            class="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground"
+          >
+            Readiness
+          </p>
+          <span
+            class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] border-emerald-200 bg-emerald-100/80 text-emerald-700"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-trending-up h-3 w-3"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <polyline
+                points="22 7 13.5 15.5 8.5 10.5 2 17"
+              />
+              <polyline
+                points="16 7 22 7 22 13"
+              />
+            </svg>
+            Rising
+          </span>
+        </div>
+        <div
+          class="flex items-end gap-1"
+        >
+          <p
+            class="text-[1.55rem] font-semibold leading-none tracking-tight tabular-nums text-emerald-700"
+          >
+            <span>
+              78
+            </span>
+          </p>
+          <span
+            class="pb-0.5 text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground"
+          >
+            /100
+          </span>
+        </div>
+        <div
+          class="h-1.5 overflow-hidden rounded-full bg-muted"
+        >
+          <div
+            class="h-full rounded-full bg-emerald-500/90"
+            style="width: 0px;"
+          />
+        </div>
+        <p
+          class="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-activity mt-0.5 h-3 w-3 shrink-0"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"
+            />
+          </svg>
+          <span>
+            Higher than usual recovery baseline
+          </span>
+        </p>
+      </div>
+    </article>
+    <article
+      class="relative overflow-hidden border bg-card/95 text-card-foreground backdrop-blur supports-[backdrop-filter]:bg-card/90 rounded-[1.25rem] border-border/65 shadow-[0_14px_36px_-32px_rgba(16,24,40,0.45)] transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_22px_56px_-34px_rgba(8,47,73,0.5)] active:translate-y-0"
+      style="opacity: 0; transform: translateY(10px);"
+      tabindex="0"
+    >
+      <div
+        class="space-y-2.5 p-4"
+      >
+        <div
+          class="flex items-start justify-between gap-2"
+        >
+          <p
+            class="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground"
+          >
+            Weekly Progress
+          </p>
+          <span
+            class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] border-slate-200 bg-slate-100/90 text-slate-600"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-minus h-3 w-3"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M5 12h14"
+              />
+            </svg>
+            In progress
+          </span>
+        </div>
+        <div
+          class="flex items-end gap-1"
+        >
+          <p
+            class="text-[1.55rem] font-semibold leading-none tracking-tight tabular-nums text-foreground"
+          >
+            <span>
+              2/4
+            </span>
+          </p>
+        </div>
+        <div
+          class="h-1.5 overflow-hidden rounded-full bg-muted"
+        >
+          <div
+            class="h-full rounded-full bg-primary/85"
+            style="width: 0px;"
+          />
+        </div>
+        <p
+          class="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-activity mt-0.5 h-3 w-3 shrink-0"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"
+            />
+          </svg>
+          <span>
+            Completed vs planned runs this week
+          </span>
+        </p>
+      </div>
+    </article>
+    <article
+      class="relative overflow-hidden border bg-card/95 text-card-foreground backdrop-blur supports-[backdrop-filter]:bg-card/90 rounded-[1.25rem] border-border/65 shadow-[0_14px_36px_-32px_rgba(16,24,40,0.45)] transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_22px_56px_-34px_rgba(8,47,73,0.5)] active:translate-y-0"
+      style="opacity: 0; transform: translateY(10px);"
+      tabindex="0"
+    >
+      <div
+        class="space-y-2.5 p-4"
+      >
+        <div
+          class="flex items-start justify-between gap-2"
+        >
+          <p
+            class="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground"
+          >
+            Consistency
+          </p>
+          <span
+            class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] border-amber-200 bg-amber-100/80 text-amber-700"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-trending-down h-3 w-3"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <polyline
+                points="22 17 13.5 8.5 8.5 13.5 2 7"
+              />
+              <polyline
+                points="16 17 22 17 22 11"
+              />
+            </svg>
+            Needs lift
+          </span>
+        </div>
+        <div
+          class="flex items-end gap-1"
+        >
+          <p
+            class="text-[1.55rem] font-semibold leading-none tracking-tight tabular-nums text-amber-700"
+          >
+            <span>
+              67%
+            </span>
+          </p>
+        </div>
+        <div
+          class="h-1.5 overflow-hidden rounded-full bg-muted"
+        >
+          <div
+            class="h-full rounded-full bg-amber-500/90"
+            style="width: 0px;"
+          />
+        </div>
+        <p
+          class="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-activity mt-0.5 h-3 w-3 shrink-0"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"
+            />
+          </svg>
+          <span>
+            One extra session gets you back on track
+          </span>
+        </p>
+      </div>
+    </article>
+    <article
+      class="relative overflow-hidden border bg-card/95 text-card-foreground backdrop-blur supports-[backdrop-filter]:bg-card/90 rounded-[1.25rem] border-border/65 shadow-[0_14px_36px_-32px_rgba(16,24,40,0.45)] transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_22px_56px_-34px_rgba(8,47,73,0.5)] active:translate-y-0"
+      style="opacity: 0; transform: translateY(10px);"
+      tabindex="0"
+    >
+      <div
+        class="space-y-2.5 p-4"
+      >
+        <div
+          class="flex items-start justify-between gap-2"
+        >
+          <p
+            class="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground"
+          >
+            Coach Confidence
+          </p>
+          <span
+            class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] border-emerald-200 bg-emerald-100/80 text-emerald-700"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-trending-up h-3 w-3"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <polyline
+                points="22 7 13.5 15.5 8.5 10.5 2 17"
+              />
+              <polyline
+                points="16 7 22 7 22 13"
+              />
+            </svg>
+            Trusted
+          </span>
+        </div>
+        <div
+          class="flex items-end gap-1"
+        >
+          <p
+            class="text-[1.55rem] font-semibold leading-none tracking-tight tabular-nums text-emerald-700"
+          >
+            <span>
+              72%
+            </span>
+          </p>
+        </div>
+        <div
+          class="h-1.5 overflow-hidden rounded-full bg-muted"
+        >
+          <div
+            class="h-full rounded-full bg-emerald-500/90"
+            style="width: 0px;"
+          />
+        </div>
+        <p
+          class="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-activity mt-0.5 h-3 w-3 shrink-0"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"
+            />
+          </svg>
+          <span>
+            Good confidence from your recent sessions
+          </span>
+        </p>
+      </div>
+    </article>
+  </div>
+</section>
+`;
+
+exports[`Today visual snapshots > matches progress chart snapshot 1`] = `
+<section
+  aria-labelledby="today-progress-heading"
+>
+  <div
+    class="relative overflow-hidden border bg-card/95 text-card-foreground backdrop-blur supports-[backdrop-filter]:bg-card/90 rounded-[1.45rem] border-border/75 shadow-[0_20px_48px_-34px_rgba(16,24,40,0.5)] transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_22px_56px_-34px_rgba(8,47,73,0.5)] active:translate-y-0"
+  >
+    <div
+      class="pointer-events-none absolute -top-20 right-0 h-44 w-44 rounded-full bg-primary/10 blur-3xl"
+    />
+    <div
+      class="flex flex-col space-y-1.5 p-6 pb-2"
+    >
+      <div
+        class="flex items-start justify-between gap-3"
+      >
+        <div>
+          <div
+            class="tracking-tight text-sm font-semibold text-foreground"
+            id="today-progress-heading"
+          >
+            Weekly progress
+          </div>
+          <p
+            class="mt-1 text-xs text-muted-foreground"
+          >
+            2 of 4 planned runs completed
+          </p>
+        </div>
+        <span
+          class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] border-amber-300/80 bg-amber-100/90 text-amber-800"
+        >
+          Needs focus
+        </span>
+      </div>
+    </div>
+    <div
+      class="p-6 pt-0 space-y-4"
+    >
+      <div
+        class="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-border/65 bg-background/70 p-3.5"
+      >
+        <div>
+          <div
+            class="mb-1 flex items-center justify-between text-xs text-muted-foreground"
+          >
+            <span>
+              Completion
+            </span>
+            <span
+              class="font-medium text-foreground tabular-nums"
+            >
+              <span>
+                62%
+              </span>
+            </span>
+          </div>
+          <div
+            aria-valuemax="100"
+            aria-valuemin="0"
+            class="relative w-full overflow-hidden rounded-full bg-secondary h-2.5"
+            data-max="100"
+            data-state="indeterminate"
+            role="progressbar"
+          >
+            <div
+              class="h-full w-full flex-1 bg-primary transition-all"
+              data-max="100"
+              data-state="indeterminate"
+              style="transform: translateX(-38%);"
+            />
+          </div>
+          <p
+            class="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-calendar-clock h-3 w-3"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"
+              />
+              <path
+                d="M16 2v4"
+              />
+              <path
+                d="M8 2v4"
+              />
+              <path
+                d="M3 10h5"
+              />
+              <path
+                d="M17.5 17.5 16 16.3V14"
+              />
+              <circle
+                cx="16"
+                cy="16"
+                r="6"
+              />
+            </svg>
+            One additional session gets you back on plan.
+          </p>
+        </div>
+        <div
+          class="grid h-16 w-16 place-items-center rounded-full border border-border/70 bg-background"
+          style="background-image: conic-gradient(oklch(var(--primary)) 62%, oklch(var(--muted)) 62% 100%);"
+        >
+          <div
+            class="grid h-11 w-11 place-items-center rounded-full bg-card text-xs font-semibold text-foreground"
+          >
+            <span>
+              62%
+            </span>
+          </div>
+        </div>
+      </div>
+      <div
+        class="flex items-center justify-between"
+      >
+        <span
+          class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] border-slate-200 bg-slate-100/90 text-slate-600"
+        >
+          <svg
+            class="lucide lucide-activity h-3 w-3"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"
+            />
+          </svg>
+          Avg 
+          37
+          %
+        </span>
+        <span
+          class="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground"
+        >
+          7-day trend
+        </span>
+      </div>
+      <div
+        style="opacity: 0; transform: translateY(6px);"
+      >
+        <div
+          class="h-40 w-full rounded-2xl border border-border/65 bg-background/75 p-2"
+        >
+          <div
+            data-testid="chart-container"
+          >
+            <svg
+              data-testid="chart-svg"
+            >
+              <defs>
+                <lineargradient
+                  id="todayProgressArea"
+                  x1="0"
+                  x2="0"
+                  y1="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="5%"
+                    stop-color="oklch(var(--primary))"
+                    stop-opacity="0.32"
+                  />
+                  <stop
+                    offset="95%"
+                    stop-color="oklch(var(--primary))"
+                    stop-opacity="0.04"
+                  />
+                </lineargradient>
+              </defs>
+              <path
+                data-testid="chart-area"
+              />
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+`;
+
+exports[`Today visual snapshots > matches workout card snapshot 1`] = `
+<section
+  aria-labelledby="today-workout-heading"
+>
+  <div
+    class="relative overflow-hidden border bg-card/95 text-card-foreground backdrop-blur supports-[backdrop-filter]:bg-card/90 rounded-[1.45rem] border-border/75 shadow-[0_20px_48px_-34px_rgba(16,24,40,0.5)] transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_22px_56px_-34px_rgba(8,47,73,0.5)] active:translate-y-0"
+  >
+    <div
+      class="flex flex-col p-6 space-y-2 pb-1"
+    >
+      <div
+        class="flex items-start justify-between gap-3"
+      >
+        <div>
+          <p
+            class="text-xs uppercase tracking-[0.12em] text-muted-foreground"
+          >
+            Today's workout
+          </p>
+          <div
+            class="font-semibold tracking-tight mt-1 text-[1.45rem] leading-tight"
+            id="today-workout-heading"
+          >
+            Tempo Run
+          </div>
+        </div>
+        <div
+          class="transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] border-emerald-300/80 bg-emerald-100/90 text-emerald-800"
+        >
+          Planned
+        </div>
+      </div>
+    </div>
+    <div
+      class="p-6 pt-0 space-y-4"
+    >
+      <div
+        class="rounded-2xl border border-border/70 bg-background/80 p-4"
+      >
+        <div
+          class="flex items-center justify-between gap-2"
+        >
+          <p
+            class="text-xs text-muted-foreground"
+          >
+            Target distance / duration
+          </p>
+          <span
+            class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] border-sky-300/80 bg-sky-100/90 text-sky-800"
+          >
+            Goal 
+            58
+            %
+          </span>
+        </div>
+        <p
+          class="mt-1 text-3xl font-semibold tracking-tight text-foreground"
+        >
+          8.0 km • 50 min
+        </p>
+        <div
+          aria-valuemax="100"
+          aria-valuemin="0"
+          class="relative w-full overflow-hidden rounded-full bg-secondary mt-3 h-2.5"
+          data-max="100"
+          data-state="indeterminate"
+          role="progressbar"
+        >
+          <div
+            class="h-full w-full flex-1 bg-primary transition-all"
+            data-max="100"
+            data-state="indeterminate"
+            style="transform: translateX(-42%);"
+          />
+        </div>
+      </div>
+      <div
+        class="rounded-xl border border-border/70 bg-background p-3.5"
+      >
+        <div
+          class="mb-1 flex items-center gap-2 text-xs uppercase tracking-[0.1em] text-muted-foreground"
+        >
+          <svg
+            class="lucide lucide-zap h-3.5 w-3.5 text-primary"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"
+            />
+          </svg>
+          Coach cue
+        </div>
+        <p
+          class="text-sm leading-relaxed text-foreground"
+        >
+          Stay controlled through the first half and finish strong.
+        </p>
+      </div>
+      <div
+        class="grid grid-cols-3 gap-2"
+      >
+        <button
+          class="inline-flex items-center justify-center whitespace-nowrap text-sm ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 col-span-2 h-11 gap-2 rounded-xl font-semibold"
+        >
+          <svg
+            class="lucide lucide-play h-4 w-4"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <polygon
+              points="6 3 20 12 6 21 6 3"
+            />
+          </svg>
+          Start Run
+        </button>
+        <button
+          class="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground px-4 py-2 h-11 rounded-xl"
+        >
+          <svg
+            class="lucide lucide-map-pin h-4 w-4"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"
+            />
+            <circle
+              cx="12"
+              cy="10"
+              r="3"
+            />
+          </svg>
+        </button>
+      </div>
+      <button
+        aria-controls="today-workout-breakdown"
+        aria-expanded="false"
+        class="inline-flex items-center gap-2 whitespace-nowrap font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:text-accent-foreground px-4 py-2 h-10 w-full justify-between rounded-xl border border-transparent text-sm hover:border-border/65 hover:bg-muted/30"
+      >
+        Workout breakdown
+        <svg
+          class="lucide lucide-chevron-down h-4 w-4"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="m6 9 6 6 6-6"
+          />
+        </svg>
+      </button>
+    </div>
+  </div>
+</section>
+`;

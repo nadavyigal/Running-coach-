@@ -27,6 +27,24 @@ test.describe('Today redesign', () => {
         await expect(page.getByRole('button', { name: /open training plan/i })).toBeVisible()
       }
 
+      const heroCard = page.locator('section[aria-labelledby="today-daily-focus-heading"]').first()
+      await expect(heroCard).toBeVisible()
+      await heroCard.screenshot({
+        path: `test-results/today-redesign-component-hero-${viewport.name}.png`,
+      })
+
+      const metricsSection = page.locator('section[aria-labelledby="today-key-metrics-heading"]').first()
+      await expect(metricsSection).toBeVisible()
+      await metricsSection.screenshot({
+        path: `test-results/today-redesign-component-metrics-${viewport.name}.png`,
+      })
+
+      const progressSection = page.locator('section[aria-labelledby="today-progress-heading"]').first()
+      await expect(progressSection).toBeVisible()
+      await progressSection.screenshot({
+        path: `test-results/today-redesign-component-progress-${viewport.name}.png`,
+      })
+
       const dataQualityBanner = page.getByText(/partial data today|device connected|profile setup incomplete|sync issue detected/i).first()
       if (await dataQualityBanner.isVisible().catch(() => false)) {
         await expect(dataQualityBanner).toBeVisible()

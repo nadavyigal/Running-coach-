@@ -11,7 +11,15 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import { AnimatedMetricValue } from "@/components/today/AnimatedMetricValue"
 import { todayCardVariants, todayStatusBadgeVariants, todayTrendBadgeVariants } from "@/components/today/today-ui"
+import {
+  todayChartAxisTick,
+  todayChartGridStroke,
+  TodayChartEmptyState,
+  TodayChartPanel,
+  TodayChartTooltipContent,
+} from "@/components/today/TodayChartPrimitives"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -78,7 +86,9 @@ export function ProgressSummaryChart({
             <div>
               <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
                 <span>Completion</span>
-                <span className="font-medium text-foreground">{Math.round(normalizedProgress)}%</span>
+                <span className="font-medium text-foreground tabular-nums">
+                  <AnimatedMetricValue value={normalizedProgress} formatter={(value) => `${Math.round(value)}%`} />
+                </span>
               </div>
               <Progress value={normalizedProgress} className="h-2.5" />
               <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -93,7 +103,7 @@ export function ProgressSummaryChart({
               }}
             >
               <div className="grid h-11 w-11 place-items-center rounded-full bg-card text-xs font-semibold text-foreground">
-                {Math.round(normalizedProgress)}%
+                <AnimatedMetricValue value={normalizedProgress} formatter={(value) => `${Math.round(value)}%`} />
               </div>
             </div>
           </div>
@@ -109,60 +119,45 @@ export function ProgressSummaryChart({
           </div>
 
           {!hasData ? (
-            <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-5 text-center">
-              <p className="text-sm font-medium text-foreground">No completed sessions yet</p>
-              <p className="mt-1 text-xs text-muted-foreground">Start today&apos;s run to unlock your weekly trend chart.</p>
-            </div>
+            <TodayChartEmptyState
+              title="No completed sessions yet"
+              description="Start today's run to unlock your weekly trend chart."
+            />
           ) : (
             <motion.div
               initial={prefersReducedMotion ? false : { opacity: 0, y: 6 }}
               animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
               transition={prefersReducedMotion ? undefined : { duration: 0.2 }}
-              className="h-40 w-full rounded-2xl border border-border/65 bg-background/75 p-2"
             >
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data} margin={{ top: 8, right: 6, left: -20, bottom: 2 }}>
-                  <defs>
-                    <linearGradient id="todayProgressArea" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="oklch(var(--primary))" stopOpacity={0.32} />
-                      <stop offset="95%" stopColor="oklch(var(--primary))" stopOpacity={0.04} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="4 4" stroke="oklch(var(--border))" vertical={false} />
-                  <XAxis
-                    dataKey="day"
-                    tickLine={false}
-                    axisLine={false}
-                    fontSize={11}
-                    tick={{ fill: "oklch(var(--muted-foreground))" }}
-                  />
-                  <YAxis hide domain={[0, 100]} />
-                  <Tooltip
-                    cursor={{ stroke: "oklch(var(--primary))", strokeWidth: 1, strokeOpacity: 0.2 }}
-                    content={({ active, payload, label }) => {
-                      if (!active || !payload?.length) return null
-                      return (
-                        <div className="rounded-xl border border-border/80 bg-card px-3 py-2 text-xs shadow-lg">
-                          <p className="font-semibold text-foreground">{label}</p>
-                          <p className="mt-0.5 text-muted-foreground">
-                            Completion <span className="font-semibold text-foreground">{payload[0]?.value}%</span>
-                          </p>
-                        </div>
-                      )
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="completion"
-                    stroke="oklch(var(--primary))"
-                    strokeWidth={2.5}
-                    fill="url(#todayProgressArea)"
-                    activeDot={{ r: 4, strokeWidth: 0, fill: "oklch(var(--primary))" }}
-                    dot={{ r: 2, strokeWidth: 0, fill: "oklch(var(--primary))" }}
-                    isAnimationActive={!prefersReducedMotion}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              <TodayChartPanel>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={data} margin={{ top: 8, right: 6, left: -20, bottom: 2 }}>
+                    <defs>
+                      <linearGradient id="todayProgressArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="oklch(var(--primary))" stopOpacity={0.32} />
+                        <stop offset="95%" stopColor="oklch(var(--primary))" stopOpacity={0.04} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="4 4" stroke={todayChartGridStroke} vertical={false} />
+                    <XAxis dataKey="day" tickLine={false} axisLine={false} tick={todayChartAxisTick} />
+                    <YAxis hide domain={[0, 100]} />
+                    <Tooltip
+                      cursor={{ stroke: "oklch(var(--primary))", strokeWidth: 1, strokeOpacity: 0.2 }}
+                      content={(props) => <TodayChartTooltipContent {...props} valueLabel="Completion" valueSuffix="%" />}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="completion"
+                      stroke="oklch(var(--primary))"
+                      strokeWidth={2.5}
+                      fill="url(#todayProgressArea)"
+                      activeDot={{ r: 4, strokeWidth: 0, fill: "oklch(var(--primary))" }}
+                      dot={{ r: 2, strokeWidth: 0, fill: "oklch(var(--primary))" }}
+                      isAnimationActive={!prefersReducedMotion}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </TodayChartPanel>
             </motion.div>
           )}
         </CardContent>
