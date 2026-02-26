@@ -95,6 +95,7 @@ describe('TodayScreen', () => {
       userId: 1,
       plan: { id: 10, title: 'Base Plan' },
       primaryGoal: null,
+      weeklyRuns: [],
       weeklyWorkouts: [],
       weeklyStats: {
         runsCompleted: 0,
@@ -118,7 +119,7 @@ describe('TodayScreen', () => {
     render(<TodayScreen />)
 
     expect(await screen.findByText('Easy Run')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /start run/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /start run/i }).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Add Run' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Activity' })).toBeInTheDocument()
   })
@@ -129,7 +130,7 @@ describe('TodayScreen', () => {
     render(<TodayScreen />)
 
     expect(await screen.findByText('Rest Day')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /record a run/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /record run/i })).toBeInTheDocument()
   })
 
   it('opens add run modal when Add Run is clicked', async () => {
@@ -172,6 +173,7 @@ describe('TodayScreen', () => {
       userId: 1,
       plan: { id: 10, title: 'Base Plan' },
       primaryGoal,
+      weeklyRuns: [],
       weeklyWorkouts: [],
       weeklyStats: {
         runsCompleted: 0,
