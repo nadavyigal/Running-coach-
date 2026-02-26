@@ -109,6 +109,20 @@ class GarminActivitiesFallbackError extends Error {
   }
 }
 
+class GarminSleepFallbackError extends Error {
+  status: number
+  body: string
+  source: 'sleep-upload' | 'sleep-backfill'
+
+  constructor(source: 'sleep-upload' | 'sleep-backfill', status: number, body: string) {
+    super(`Garmin ${source} returned ${status}`)
+    this.name = 'GarminSleepFallbackError'
+    this.status = status
+    this.body = body
+    this.source = source
+  }
+}
+
 const DATASET_CONFIGS: GarminDatasetConfig[] = [
   {
     key: 'activities',
@@ -257,6 +271,24 @@ interface RunSmartActivity {
   telemetry: Record<string, unknown>
 }
 
+interface RunSmartSleepRecord {
+  date: string
+  sleepStartTimestampGMT: number | null
+  sleepEndTimestampGMT: number | null
+  totalSleepSeconds: number | null
+  deepSleepSeconds: number | null
+  lightSleepSeconds: number | null
+  remSleepSeconds: number | null
+  awakeSleepSeconds: number | null
+  sleepScores:
+    | {
+        overall: {
+          value: number
+        }
+      }
+    | null
+}
+
 function getNestedValue(record: Record<string, unknown>, path: string[]): unknown {
   let current: unknown = record
   for (const segment of path) {
@@ -348,6 +380,10 @@ function isActivityBackfillNotProvisioned(body: string): boolean {
   return /Endpoint not enabled for summary type:\s*CONNECT_ACTIVITY/i.test(body)
 }
 
+function isSleepBackfillNotProvisioned(body: string): boolean {
+  return /Endpoint not enabled for summary type:\s*CONNECT_SLEEP/i.test(body)
+}
+
 function dedupeActivities(rawActivities: Record<string, unknown>[]): Record<string, unknown>[] {
   const seen = new Set<string>()
   const deduped: Record<string, unknown>[] = []
@@ -358,6 +394,21 @@ function dedupeActivities(rawActivities: Record<string, unknown>[]): Record<stri
     if (seen.has(id)) continue
     seen.add(id)
     deduped.push(activity)
+  }
+
+  return deduped
+}
+
+function dedupeSleepRows(rawRows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const seen = new Set<string>()
+  const deduped: Record<string, unknown>[] = []
+
+  for (const row of rawRows) {
+    const fallbackId = `${row.calendarDate ?? 'none'}-${row.startTimeInSeconds ?? row.startTimeGMT ?? 'none'}`
+    const id = String(row.sleepSummaryId ?? row.summaryId ?? fallbackId)
+    if (seen.has(id)) continue
+    seen.add(id)
+    deduped.push(row)
   }
 
   return deduped
@@ -405,6 +456,48 @@ async function fetchWellnessActivities(
   return dedupeActivities(rawChunks)
 }
 
+async function fetchWellnessSleep(
+  accessToken: string,
+  startTime: number,
+  endTime: number,
+  mode: 'upload' | 'backfill'
+): Promise<Record<string, unknown>[]> {
+  const source = mode === 'upload' ? 'sleep-upload' : 'sleep-backfill'
+  const rawChunks: Record<string, unknown>[] = []
+  let windowStart = startTime
+
+  while (windowStart <= endTime) {
+    const windowEnd = Math.min(windowStart + GARMIN_MAX_WINDOW_SECONDS - 1, endTime)
+    const path = mode === 'upload' ? '/wellness-api/rest/sleeps' : '/wellness-api/rest/backfill/sleeps'
+    const url = new URL(`${GARMIN_API_BASE}${path}`)
+
+    if (mode === 'upload') {
+      url.searchParams.set('uploadStartTimeInSeconds', String(windowStart))
+      url.searchParams.set('uploadEndTimeInSeconds', String(windowEnd))
+    } else {
+      url.searchParams.set('summaryStartTimeInSeconds', String(windowStart))
+      url.searchParams.set('summaryEndTimeInSeconds', String(windowEnd))
+    }
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    })
+
+    const responseText = await response.text()
+    if (!response.ok) {
+      throw new GarminSleepFallbackError(source, response.status, responseText)
+    }
+
+    rawChunks.push(...parseJsonArray(responseText))
+    windowStart = windowEnd + 1
+  }
+
+  return dedupeSleepRows(rawChunks)
+}
+
 async function fetchRecentGarminActivities(
   accessToken: string,
   permissions: string[],
@@ -442,6 +535,47 @@ async function fetchRecentGarminActivities(
 
   const mapped = rawActivities.map((activity) => toRunSmartActivity(activity))
   return { activities: mapped, source }
+}
+
+async function fetchRecentGarminSleep(
+  accessToken: string,
+  permissions: string[],
+  lookbackDays: number
+): Promise<{
+  sleep: RunSmartSleepRecord[]
+  source: 'sleep-upload' | 'sleep-backfill'
+}> {
+  const endTime = Math.floor(Date.now() / 1000)
+  const startTime = Math.max(0, endTime - lookbackDays * 86400 + 1)
+
+  let source: 'sleep-upload' | 'sleep-backfill' = 'sleep-upload'
+  let rawSleep: Record<string, unknown>[]
+
+  try {
+    rawSleep = await fetchWellnessSleep(accessToken, startTime, endTime, 'upload')
+  } catch (uploadError) {
+    if (
+      uploadError instanceof GarminSleepFallbackError &&
+      uploadError.source === 'sleep-upload' &&
+      (isInvalidPullToken(uploadError.body) ||
+        isMissingTimeRange(uploadError.body) ||
+        isFallbackWorthyWellnessStatus(uploadError.status))
+    ) {
+      if (!permissions.includes('HISTORICAL_DATA_EXPORT')) {
+        throw uploadError
+      }
+
+      source = 'sleep-backfill'
+      rawSleep = await fetchWellnessSleep(accessToken, startTime, endTime, 'backfill')
+    } else {
+      throw uploadError
+    }
+  }
+
+  const mapped = rawSleep
+    .map((entry) => toRunSmartSleepRecord(entry))
+    .filter((entry): entry is RunSmartSleepRecord => entry != null)
+  return { sleep: mapped, source }
 }
 
 function getActivityStartSeconds(activity: Record<string, unknown>): number | null {
@@ -684,7 +818,7 @@ async function fetchRecentStoredGarminActivities(
   )
 }
 
-function toRunSmartSleepRecord(entry: Record<string, unknown>) {
+function toRunSmartSleepRecord(entry: Record<string, unknown>): RunSmartSleepRecord | null {
   const calendarDate = getString(entry.calendarDate)
   if (!calendarDate) return null
 
@@ -777,7 +911,7 @@ function buildCapabilities(params: {
 }): GarminDatasetCapability[] {
   const { permissions, datasetCounts, storeAvailable, storeError, lookbackDays } = params
 
-  const capabilities = DATASET_CONFIGS.map((config) => {
+  const capabilities: GarminDatasetCapability[] = DATASET_CONFIGS.map((config) => {
     const permissionGranted = permissions.includes(config.permission)
     const rowCount = datasetCounts[config.key] ?? 0
 
@@ -798,7 +932,7 @@ function buildCapabilities(params: {
       enabledForSync: permissionGranted && storeAvailable,
       supportedByRunSmart: true,
       ...(reason ? { reason } : {}),
-    } satisfies GarminDatasetCapability
+    }
   })
 
   const hasWorkoutImport = permissions.includes('WORKOUT_IMPORT')
@@ -849,7 +983,7 @@ async function computeCatalog(params: {
       permissions,
       datasetCounts,
       storeAvailable: readResult.storeAvailable,
-      storeError: readResult.storeError,
+      ...(readResult.storeError ? { storeError: readResult.storeError } : {}),
       lookbackDays,
     }),
     datasets,
@@ -1156,9 +1290,60 @@ export async function runGarminSyncForUser(params: {
       notices.push(fallbackFailureNotice)
     }
 
-    const sleep = datasets.sleeps
+    const missingDatasetsSet = new Set<string>(
+      capabilities
+        .filter((capability) => capability.supportedByRunSmart && capability.permissionGranted)
+        .filter((capability) => (datasetCounts[capability.key as GarminDatasetKey] ?? 0) === 0)
+        .map((capability) => capability.key)
+    )
+    const usedFallbackDatasets: string[] = []
+
+    let sleep = datasets.sleeps
       .map((entry) => toRunSmartSleepRecord(entry))
       .filter((entry): entry is NonNullable<typeof entry> => entry != null)
+
+    if (sleep.length > 0) {
+      missingDatasetsSet.delete('sleeps')
+    } else if (permissions.includes('HEALTH_EXPORT')) {
+      try {
+        const fallbackAccessToken = await getValidGarminAccessToken(userId)
+        const fallbackSleep = await fetchRecentGarminSleep(
+          fallbackAccessToken,
+          permissions,
+          syncWindow.lookbackDays
+        )
+        if (fallbackSleep.sleep.length > 0) {
+          sleep = fallbackSleep.sleep
+          usedFallbackDatasets.push('sleeps')
+          missingDatasetsSet.delete('sleeps')
+          notices.push(
+            `Sleep webhook feeds were empty, so RunSmart pulled ${fallbackSleep.sleep.length} sleep summaries directly from Garmin ${fallbackSleep.source}.`
+          )
+        } else {
+          missingDatasetsSet.add('sleeps')
+        }
+      } catch (fallbackSleepError) {
+        missingDatasetsSet.add('sleeps')
+        if (fallbackSleepError instanceof GarminSleepFallbackError) {
+          if (
+            fallbackSleepError.source === 'sleep-backfill' &&
+            isSleepBackfillNotProvisioned(fallbackSleepError.body)
+          ) {
+            notices.push('Sleep webhook feeds were empty and Garmin sleep backfill is not provisioned for this app.')
+          } else {
+            notices.push(
+              `Sleep webhook feeds were empty and direct Garmin sleep pull failed (${fallbackSleepError.status} ${fallbackSleepError.source}).`
+            )
+          }
+          logger.warn(
+            `Garmin sleep fallback error (${fallbackSleepError.status} ${fallbackSleepError.source}): ${summarizeUpstreamBody(fallbackSleepError.body)}`
+          )
+        } else {
+          notices.push('Sleep webhook feeds were empty and direct Garmin sleep pull failed.')
+          logger.warn('Garmin sleep fallback error:', fallbackSleepError)
+        }
+      }
+    }
 
     let persistence: {
       activitiesUpserted: number
@@ -1279,6 +1464,10 @@ export async function runGarminSyncForUser(params: {
         sleep,
         persistence,
         deriveQueue,
+        datasetCompleteness: {
+          missingDatasets: Array.from(missingDatasetsSet.values()),
+          usedFallbackDatasets,
+        },
         notices,
         lastSyncCursor: nowIso,
         lastSyncAt: nowIso,

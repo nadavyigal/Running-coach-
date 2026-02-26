@@ -80,6 +80,7 @@ import { CoachInsightsPanel, type CoachInsight } from "@/components/today/CoachI
 import { TodayWorkoutCard } from "@/components/today/TodayWorkoutCard"
 import { AdvancedAnalyticsAccordion } from "@/components/today/AdvancedAnalyticsAccordion"
 import { DataQualityBanner } from "@/components/today/DataQualityBanner"
+import { MorningCheckInModal, type MorningCheckInData } from "@/components/morning-checkin-modal"
 
 export function TodayScreen() {
   // Get shared data from context
@@ -121,6 +122,8 @@ export function TodayScreen() {
   const [showRescheduleModal, setShowRescheduleModal] = useState(false)
   const [showDateWorkoutModal, setShowDateWorkoutModal] = useState(false)
   const [selectedDateWorkout, setSelectedDateWorkout] = useState<any>(null)
+  const [showMorningCheckInModal, setShowMorningCheckInModal] = useState(false)
+  const [isSavingMorningCheckIn, setIsSavingMorningCheckIn] = useState(false)
   const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate; dailyData: DailyChallengeData } | null>(null)
   const [workoutToDelete, setWorkoutToDelete] = useState<number | null>(null)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(new Date())
@@ -138,6 +141,7 @@ export function TodayScreen() {
   const [localAuthEmail, setLocalAuthEmail] = useState<string | null>(null)
   const [localAuthUserId, setLocalAuthUserId] = useState<string | null>(null)
   const [authSnapshotChecked, setAuthSnapshotChecked] = useState(false)
+  const [recoveryReloadKey, setRecoveryReloadKey] = useState(0)
 
   const accountName = localUser?.name?.trim()
   const accountShortName = accountName ? accountName.split(' ')[0] : null
@@ -249,23 +253,66 @@ export function TodayScreen() {
     setIsGarminFitSyncing(true)
     setGarminSyncError(null)
     try {
-      const res = await fetch('/api/garmin/sync-fit', {
+      const res = await fetch(`/api/devices/garmin/sync?userId=${encodeURIComponent(String(userId))}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId }),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': String(userId),
+        },
       })
-      const data = (await res.json()) as { processed?: number; message?: string; error?: string; code?: string }
+      const data = (await res.json()) as {
+        success?: boolean
+        error?: string
+        detail?: string
+        needsReauth?: boolean
+        activities?: unknown[]
+        sleep?: unknown[]
+        notices?: string[]
+        datasetCompleteness?: {
+          usedFallbackDatasets?: string[]
+        }
+      }
 
       if (!res.ok) {
-        if (data.code === 'not_connected') return // Garmin not linked - silently skip
         setGarminSyncError(data.error ?? 'Unknown error')
-        toast({ title: 'Sync failed', description: data.error ?? 'Unknown error', variant: 'destructive' })
+        toast({
+          title: data.needsReauth ? 'Reconnect Garmin' : 'Sync failed',
+          description: data.error ?? 'Unknown error',
+          variant: 'destructive',
+        })
         return
       }
 
-      toast({ title: data.processed ? 'Run synced!' : 'Up to date', description: data.message })
+      const activitiesCount = Array.isArray(data.activities) ? data.activities.length : 0
+      const sleepCount = Array.isArray(data.sleep) ? data.sleep.length : 0
+      const usedFallback = data.datasetCompleteness?.usedFallbackDatasets ?? []
+
+      toast({
+        title: activitiesCount > 0 || sleepCount > 0 ? 'Garmin sync complete' : 'No new Garmin data',
+        description:
+          activitiesCount > 0 || sleepCount > 0
+            ? `Synced ${activitiesCount} activities and ${sleepCount} sleep summaries.`
+            : 'No new records were available from Garmin.',
+      })
+
+      if (usedFallback.length > 0) {
+        toast({
+          title: 'Fallback data used',
+          description: `Used direct Garmin pull for: ${usedFallback.join(', ')}`,
+        })
+      }
+
+      if (Array.isArray(data.notices) && data.notices.length > 0) {
+        toast({
+          title: 'Sync notices',
+          description: data.notices[0] ?? '',
+          duration: 9000,
+        })
+      }
+
       setGarminSyncError(null)
-      if (data.processed) await refreshContext()
+      await refreshContext()
+      setRecoveryReloadKey((value) => value + 1)
     } catch {
       setGarminSyncError('Could not reach server. Please try again.')
       toast({ title: 'Sync failed', description: 'Could not reach server. Please try again.', variant: 'destructive' })
@@ -286,6 +333,74 @@ export function TodayScreen() {
     if (score >= 65) return 'Moderate training is OK'
     if (score >= 50) return 'Take it easy today'
     return 'Prioritize recovery'
+  }
+
+  const normalizeSleepEfficiency = (quality: number) =>
+    Math.max(60, Math.min(95, Math.round(60 + quality * 3.5)))
+
+  const handleMorningCheckInSubmit = async (data: MorningCheckInData) => {
+    const resolvedUserId = userId ?? (await dbUtils.getCurrentUser())?.id ?? null
+    if (!resolvedUserId) {
+      toast({
+        title: "Morning check-in failed",
+        description: "No active user found. Please refresh and try again.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSavingMorningCheckIn(true)
+    try {
+      await dbUtils.saveSubjectiveWellness({
+        userId: resolvedUserId,
+        date: new Date(data.date),
+        energyLevel: data.energyLevel,
+        moodScore: data.moodScore,
+        sorenessLevel: data.sorenessLevel,
+        stressLevel: data.stressLevel,
+        motivationLevel: data.motivationLevel,
+      })
+
+      if (typeof data.sleepHours === "number" && data.sleepHours > 0) {
+        await dbUtils.saveSleepData({
+          userId: resolvedUserId,
+          deviceId: "self_report",
+          sleepDate: new Date(data.date),
+          totalSleepTime: Math.round(data.sleepHours * 60),
+          sleepEfficiency: normalizeSleepEfficiency(data.sleepQuality),
+          sleepScore: Math.round((data.sleepQuality / 10) * 100),
+        })
+      }
+
+      await RecoveryEngine.calculateRecoveryScore(resolvedUserId, new Date(data.date))
+      setRecoveryReloadKey((value) => value + 1)
+      setShowMorningCheckInModal(false)
+
+      void trackAnalyticsEvent("morning_checkin_completed", {
+        source: "today_screen",
+        user_id: resolvedUserId,
+        sleep_hours: data.sleepHours,
+        sleep_quality: data.sleepQuality,
+        energy_level: data.energyLevel,
+        mood_score: data.moodScore,
+        soreness_level: data.sorenessLevel,
+        stress_level: data.stressLevel,
+        motivation_level: data.motivationLevel,
+      })
+
+      toast({
+        title: "Morning check-in saved",
+        description: "Today's readiness guidance is now more accurate.",
+      })
+    } catch {
+      toast({
+        title: "Morning check-in failed",
+        description: "Could not save your check-in. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSavingMorningCheckIn(false)
+    }
   }
 
   // Initialize local data (todaysWorkout and visibleWorkouts are screen-specific)
@@ -322,7 +437,7 @@ export function TodayScreen() {
     }
 
     initializeLocalData()
-  }, [userId])
+  }, [userId, recoveryReloadKey])
 
   const loadChallengeData = useCallback(async () => {
     if (!userId) {
@@ -902,9 +1017,9 @@ export function TodayScreen() {
         tone: "warning" as const,
         title: "Partial data today",
         description: "Add sleep or wellness inputs to improve recommendation quality.",
-        actionLabel: "Add Activity",
+        actionLabel: isGarminConnected ? "Sync Garmin" : "Morning check-in",
         actionDisabled: false,
-        action: () => setShowAddActivityModal(true),
+        action: isGarminConnected ? () => void handleGarminFitSync() : () => setShowMorningCheckInModal(true),
       }
     }
     if (isGarminConnected) {
@@ -961,7 +1076,11 @@ export function TodayScreen() {
           coachInsight={dailyCoachInsight}
           primaryAction={{
             label: primaryActionLabel,
-            onClick: isRunDay ? startRecordFlow : () => setShowAddActivityModal(true),
+            onClick: isRunDay
+              ? startRecordFlow
+              : isGarminConnected
+                ? () => setShowAddActivityModal(true)
+                : () => setShowMorningCheckInModal(true),
             disabled: isLoadingWorkout,
             icon: <Play className="h-4 w-4" />,
           }}
@@ -981,12 +1100,14 @@ export function TodayScreen() {
         />
 
         <DataQualityBanner
-          tone={dataQualityState?.tone}
-          title={dataQualityState?.title}
-          description={dataQualityState?.description}
-          actionLabel={dataQualityState?.actionLabel}
-          actionDisabled={dataQualityState?.actionDisabled}
-          onAction={dataQualityState?.action}
+          {...(dataQualityState?.tone ? { tone: dataQualityState.tone } : {})}
+          {...(dataQualityState?.title ? { title: dataQualityState.title } : {})}
+          {...(dataQualityState?.description ? { description: dataQualityState.description } : {})}
+          {...(dataQualityState?.actionLabel ? { actionLabel: dataQualityState.actionLabel } : {})}
+          {...(dataQualityState?.actionDisabled !== undefined
+            ? { actionDisabled: dataQualityState.actionDisabled }
+            : {})}
+          {...(dataQualityState?.action ? { onAction: dataQualityState.action } : {})}
         />
 
         <KeyMetricsGrid metrics={keyMetrics} isLoading={isLoadingRecovery} />
@@ -1295,7 +1416,13 @@ export function TodayScreen() {
           <CardContent className="grid grid-cols-3 gap-2 p-2">
             <Button
               className="h-10 text-xs"
-              onClick={isRunDay ? startRecordFlow : () => setShowAddActivityModal(true)}
+              onClick={
+                isRunDay
+                  ? startRecordFlow
+                  : isGarminConnected
+                    ? () => setShowAddActivityModal(true)
+                    : () => setShowMorningCheckInModal(true)
+              }
               aria-label={isRunDay ? "Start run from sticky actions" : "Open recovery action"}
             >
               <Play className="mr-1 h-3.5 w-3.5" />
@@ -1337,6 +1464,15 @@ export function TodayScreen() {
           open={showAddActivityModal}
           onOpenChange={setShowAddActivityModal}
           onActivityAdded={refreshWorkouts}
+        />
+      </ModalErrorBoundary>
+
+      <ModalErrorBoundary modalName="Morning Check-In" onClose={() => setShowMorningCheckInModal(false)}>
+        <MorningCheckInModal
+          open={showMorningCheckInModal}
+          onOpenChange={setShowMorningCheckInModal}
+          loading={isSavingMorningCheckIn}
+          onSubmit={handleMorningCheckInSubmit}
         />
       </ModalErrorBoundary>
 
