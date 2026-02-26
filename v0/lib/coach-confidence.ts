@@ -22,7 +22,7 @@ export async function calculateCoachConfidence(
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
   sevenDaysAgo.setHours(0, 0, 0, 0)
 
-  const [wellnessToday, sleepToday, recentRuns, recentHrv] = await Promise.all([
+  const [wellnessToday, sleepToday, recentRuns, recentHrv, garminSignalsToday] = await Promise.all([
     db.subjectiveWellness
       .where('userId')
       .equals(userId)
@@ -50,6 +50,15 @@ export async function calculateCoachConfidence(
       .and((hrv) => hrv.measurementDate >= sevenDaysAgo)
       .limit(1)
       .first(),
+    db.garminSummaryRecords
+      .where('[userId+recordedAt]')
+      .between([userId, startOfDay], [userId, endOfDay], true, true)
+      .toArray()
+      .then((rows) =>
+        rows.filter((row) =>
+          ['sleeps', 'dailies', 'stressDetails', 'epochs', 'allDayRespiration', 'hrv'].includes(row.datasetKey)
+        )
+      ),
   ])
 
   const hasWearableSignals = Boolean(recentHrv)
@@ -61,9 +70,14 @@ export async function calculateCoachConfidence(
     }
   }
 
+  const hasGarminWellnessSignals = garminSignalsToday.some((signal) =>
+    ['dailies', 'stressDetails', 'epochs', 'allDayRespiration', 'hrv'].includes(signal.datasetKey)
+  )
+  const hasGarminSleepSignals = garminSignalsToday.some((signal) => signal.datasetKey === 'sleeps')
+
   const hasRunData = recentRuns.length > 0
   const hasWellness = Boolean(wellnessToday)
-  const hasSleep = Boolean(sleepToday)
+  const hasSleep = Boolean(sleepToday) || hasGarminSleepSignals
   const hasRecentRpe = recentRuns.some((run) => typeof run.rpe === 'number')
   const consistentDays = new Set(
     recentRuns.map((run) => new Date(run.completedAt).toDateString())
@@ -72,12 +86,13 @@ export async function calculateCoachConfidence(
   let confidence = 0
   if (hasRunData) confidence += 15
   if (hasWellness) confidence += 25
+  if (hasGarminWellnessSignals) confidence += 20
   if (hasSleep) confidence += 15
   if (hasRecentRpe) confidence += 10
   if (consistentDays >= 5) confidence += 10
 
   const nextSteps: string[] = []
-  if (!hasWellness) {
+  if (!hasWellness && !hasGarminWellnessSignals) {
     nextSteps.push('Complete your morning check-in')
   }
   if (!hasSleep) {

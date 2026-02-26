@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -54,6 +54,7 @@ interface SubjectiveWellness {
 }
 
 export default function RecoveryDashboard() {
+  const [resolvedUserId, setResolvedUserId] = useState<number | null>(null);
   const [currentScore, setCurrentScore] = useState<RecoveryScore | null>(null);
   const [trends, setTrends] = useState<RecoveryTrends | null>(null);
   const [wellnessData, setWellnessData] = useState<SubjectiveWellness | null>(null);
@@ -63,16 +64,34 @@ export default function RecoveryDashboard() {
   const [showWellnessModal, setShowWellnessModal] = useState(false);
 
   useEffect(() => {
-    loadRecoveryData();
-  }, [selectedDate]);
+    let cancelled = false;
+
+    const resolveUser = async () => {
+      const user = await dbUtils.getCurrentUser();
+      if (!cancelled) {
+        setResolvedUserId(user?.id ?? null);
+      }
+    };
+
+    void resolveUser();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!resolvedUserId) return;
+    void loadRecoveryData();
+  }, [resolvedUserId, selectedDate]);
 
   const loadRecoveryData = async () => {
     try {
+      if (!resolvedUserId) return;
       setLoading(true);
       setError(null);
 
       // Load current recovery score
-      const scoreResponse = await fetch(`/api/recovery/score?userId=1&date=${selectedDate.toISOString()}`);
+      const scoreResponse = await fetch(`/api/recovery/score?userId=${resolvedUserId}&date=${selectedDate.toISOString()}`);
       const scoreData = await scoreResponse.json();
       
       if (scoreData.success) {
@@ -80,7 +99,7 @@ export default function RecoveryDashboard() {
       }
 
       // Load recovery trends
-      const trendsResponse = await fetch('/api/recovery/trends?userId=1&days=30');
+      const trendsResponse = await fetch(`/api/recovery/trends?userId=${resolvedUserId}&days=30`);
       const trendsData = await trendsResponse.json();
       
       if (trendsData.success) {
@@ -88,7 +107,7 @@ export default function RecoveryDashboard() {
       }
 
       // Load wellness data
-      const wellnessResponse = await fetch(`/api/recovery/wellness?userId=1&date=${selectedDate.toISOString()}`);
+      const wellnessResponse = await fetch(`/api/recovery/wellness?userId=${resolvedUserId}&date=${selectedDate.toISOString()}`);
       const wellnessData = await wellnessResponse.json();
       
       if (wellnessData.success) {
@@ -144,16 +163,14 @@ export default function RecoveryDashboard() {
   const handleWellnessSubmit = async (wellnessData: any) => {
     try {
       setLoading(true);
-      
-      // Get current user
-      const user = await dbUtils.getCurrentUser();
-      if (!user?.id) {
+
+      if (!resolvedUserId) {
         throw new Error('No user found');
       }
 
       // Create wellness entry
       const wellnessId = await dbUtils.saveSubjectiveWellness({
-        userId: user.id,
+        userId: resolvedUserId,
         date: new Date(wellnessData.date),
         energyLevel: wellnessData.energyLevel,
         moodScore: wellnessData.moodScore,
@@ -167,7 +184,7 @@ export default function RecoveryDashboard() {
           ? wellnessData.sleepQuality
           : 6;
         await dbUtils.saveSleepData({
-          userId: user.id,
+          userId: resolvedUserId,
           deviceId: 'self_report',
           sleepDate: new Date(wellnessData.date),
           totalSleepTime: Math.round(wellnessData.sleepHours * 60),

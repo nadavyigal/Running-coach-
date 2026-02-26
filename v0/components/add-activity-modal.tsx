@@ -129,15 +129,32 @@ export function AddActivityModal({
             toast({ title: "Garmin not connected", description: "Go to Profile > Devices & Apps to connect Garmin first.", variant: "destructive" })
             return
           }
-          const response = await fetch("/api/garmin/sync-fit", {
+          const response = await fetch(`/api/devices/garmin/sync?userId=${encodeURIComponent(String(user.id))}`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: user.id }),
+            headers: {
+              "Content-Type": "application/json",
+              "x-user-id": String(user.id),
+            },
           })
           const data = await response.json()
           if (!response.ok) throw new Error((data as { error?: string }).error ?? "Sync failed")
-          toast({ title: (data as { processed?: boolean }).processed ? "Run synced!" : "Up to date", description: (data as { message?: string }).message })
-          if ((data as { processed?: boolean }).processed) onActivityAdded?.()
+
+          const activitiesCount = Array.isArray((data as { activities?: unknown[] }).activities)
+            ? ((data as { activities?: unknown[] }).activities?.length ?? 0)
+            : 0
+          const sleepCount = Array.isArray((data as { sleep?: unknown[] }).sleep)
+            ? ((data as { sleep?: unknown[] }).sleep?.length ?? 0)
+            : 0
+
+          toast({
+            title: activitiesCount > 0 || sleepCount > 0 ? "Garmin sync complete" : "Up to date",
+            description:
+              activitiesCount > 0 || sleepCount > 0
+                ? `Synced ${activitiesCount} activities and ${sleepCount} sleep summaries.`
+                : "No new Garmin data was available.",
+          })
+
+          if (activitiesCount > 0 || sleepCount > 0) onActivityAdded?.()
           onOpenChange(false)
         } catch {
           toast({ title: "Sync failed", description: "Could not sync from Garmin. Please try again.", variant: "destructive" })

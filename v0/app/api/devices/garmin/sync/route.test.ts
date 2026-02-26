@@ -489,6 +489,64 @@ describe('/api/devices/garmin/sync', () => {
     ).toBe(true)
   })
 
+  it('falls back to direct Garmin sleep pull when webhook sleep rows are empty', async () => {
+    readRowsMock.mockResolvedValue({
+      ok: true,
+      storeAvailable: true,
+      rows: [],
+    })
+
+    const fetchMock = vi.fn((url: RequestInfo | URL) => {
+      const parsed = new URL(String(url))
+
+      if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
+        return Promise.resolve(new Response(JSON.stringify(['HEALTH_EXPORT']), { status: 200 }))
+      }
+      if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
+        return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
+      }
+      if (parsed.pathname.endsWith('/wellness-api/rest/sleeps')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                sleepSummaryId: 'sleep-fallback-1',
+                calendarDate: '2026-02-18',
+                startTimeInSeconds: 1771372800,
+                durationInSeconds: 25200,
+              },
+            ]),
+            { status: 200 }
+          )
+        )
+      }
+
+      return Promise.resolve(new Response('not-found', { status: 404 }))
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const req = new Request('http://localhost/api/devices/garmin/sync', {
+      method: 'POST',
+      headers: { 'x-user-id': '42' },
+    })
+
+    const { POST } = await loadRoute()
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.success).toBe(true)
+    expect(body.sleep).toHaveLength(1)
+    expect(body.datasetCompleteness.usedFallbackDatasets).toContain('sleeps')
+    expect(body.datasetCompleteness.missingDatasets).not.toContain('sleeps')
+    expect(
+      body.notices.some((notice: string) =>
+        notice.includes('RunSmart pulled 1 sleep summaries directly from Garmin sleep-upload')
+      )
+    ).toBe(true)
+  })
+
   it('imports cached garmin_activities rows when webhook and direct pull are unavailable', async () => {
     readRowsMock.mockResolvedValue({
       ok: true,
