@@ -30,6 +30,7 @@ const DEFAULT_INCREMENTAL_DAYS = 7
 const DEFAULT_ACTIVITY_SYNC_DAYS = 7
 const BACKFILL_DAILY_DAYS = 56
 const BACKFILL_ACTIVITY_DAYS = 56
+const CURSOR_OVERLAP_MS = 24 * 60 * 60 * 1000
 
 type GarminPermission = 'ACTIVITY_EXPORT' | 'HEALTH_EXPORT'
 type GarminSyncDatasetKey = GarminDatasetKey | 'workoutImport'
@@ -705,9 +706,45 @@ function getActivityStartSeconds(activity: Record<string, unknown>): number | nu
   return Math.floor(parsed / 1000)
 }
 
+function extractActivityTypeKey(value: unknown): string | null {
+  const direct = getString(value)
+  if (direct) return direct.toLowerCase().trim()
+
+  const record = asRecord(value)
+  const fromRecord =
+    getString(record.typeKey) ??
+    getString(record.key) ??
+    getString(record.activityTypeKey) ??
+    getString(record.type) ??
+    getString(record.sport)
+
+  return fromRecord ? fromRecord.toLowerCase().trim() : null
+}
+
+function resolveActivityTypeKey(activity: Record<string, unknown>): string {
+  const candidates: unknown[] = [
+    activity.activityType,
+    activity.activityTypeDTO,
+    activity.sport,
+    activity.sportType,
+    activity.type,
+  ]
+
+  for (const candidate of candidates) {
+    const normalized = extractActivityTypeKey(candidate)
+    if (normalized) return normalized
+  }
+
+  const activityName = getString(activity.activityName)?.toLowerCase() ?? ''
+  if (activityName.includes('run')) {
+    return 'running'
+  }
+
+  return 'unknown'
+}
+
 function toRunSmartActivity(activity: Record<string, unknown>): RunSmartActivity {
-  const activityTypeValue = asRecord(activity.activityType).typeKey ?? activity.activityType ?? ''
-  const activityTypeRaw = String(activityTypeValue).toLowerCase().trim()
+  const activityTypeRaw = resolveActivityTypeKey(activity)
   const normalizedActivityType = activityTypeRaw.replace(/ /g, '_')
   const startInSeconds = getActivityStartSeconds(activity)
   const startIso = startInSeconds != null ? new Date(startInSeconds * 1000).toISOString() : null
@@ -868,7 +905,14 @@ async function fetchRecentStoredGarminActivities(
     .map((row) => asRecord(row))
     .map((row) => {
       const raw = asRecord(row.raw_json)
-      const activityType = getString(row.sport) ?? getString(raw.activityType) ?? 'running'
+      const activityType = resolveActivityTypeKey({
+        activityType: row.sport ?? raw.activityType,
+        activityTypeDTO: raw.activityTypeDTO,
+        sport: raw.sport,
+        sportType: raw.sportType,
+        type: raw.type,
+        activityName: raw.activityName ?? raw.activity_name,
+      })
       const distanceMeters =
         getNumber(row.distance_m) ?? getNumber(raw.distanceInMeters) ?? getNumber(raw.distance) ?? 0
       const durationSeconds =
@@ -1190,8 +1234,12 @@ function resolveSyncWindow(params: {
 
   const cursorIso = parseValidIso(params.lastSyncCursor)
   if (cursorIso) {
+    const cursorMs = Date.parse(cursorIso)
+    const overlappedCursorIso = Number.isFinite(cursorMs)
+      ? new Date(Math.max(0, cursorMs - CURSOR_OVERLAP_MS)).toISOString()
+      : cursorIso
     return {
-      sinceIso: cursorIso,
+      sinceIso: overlappedCursorIso,
       lookbackDays: params.defaultLookbackDays,
       source: 'cursor',
     }
@@ -1291,6 +1339,7 @@ export async function runGarminSyncForUser(params: {
             defaultLookbackDays: options.defaultLookbackDays,
             requestedSinceIso: options.sinceIso ?? null,
           })
+    const syncStartedAtIso = new Date().toISOString()
 
     const { permissions, capabilities, datasets, datasetCounts, ingestion } = await computeCatalogWithAutoRefresh({
       userId,
@@ -1299,6 +1348,11 @@ export async function runGarminSyncForUser(params: {
     })
 
     const nowIso = new Date().toISOString()
+    const nextSyncCursorIso =
+      [syncStartedAtIso, ingestion.latestReceivedAt]
+        .map((candidate) => parseValidIso(candidate))
+        .filter((candidate): candidate is string => candidate != null)
+        .sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? nowIso
     const notices: string[] = []
     const webhookEndpointHint = '/api/devices/garmin/webhook/<GARMIN_WEBHOOK_SECRET>'
 
@@ -1546,7 +1600,7 @@ export async function runGarminSyncForUser(params: {
     await safeMarkSyncState({
       userId,
       lastSyncAt: nowIso,
-      lastSyncCursor: nowIso,
+      lastSyncCursor: nextSyncCursorIso,
       errorState: null,
     })
 
@@ -1631,7 +1685,7 @@ export async function runGarminSyncForUser(params: {
           usedFallbackDatasets,
         },
         notices,
-        lastSyncCursor: nowIso,
+        lastSyncCursor: nextSyncCursorIso,
         lastSyncAt: nowIso,
       },
     }

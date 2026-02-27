@@ -274,6 +274,21 @@ describe('/api/devices/garmin/sync', () => {
         },
         {
           garminUserId: 'garmin-user-1',
+          datasetKey: 'activityDetails',
+          summaryId: 'a3',
+          source: 'ping_pull',
+          recordedAt: '2026-02-18T11:00:00.000Z',
+          receivedAt: '2026-02-18T11:01:00.000Z',
+          payload: {
+            activityId: 'run-2',
+            activityTypeDTO: { typeKey: 'running' },
+            startTimeInSeconds: 1771403600,
+            durationInSeconds: 1500,
+            distanceInMeters: 4200,
+          },
+        },
+        {
+          garminUserId: 'garmin-user-1',
           datasetKey: 'sleeps',
           summaryId: 's1',
           source: 'ping_pull',
@@ -314,11 +329,14 @@ describe('/api/devices/garmin/sync', () => {
 
     expect(res.status).toBe(200)
     expect(body.success).toBe(true)
-    expect(body.activities).toHaveLength(1)
-    expect(body.activities[0].activityId).toBe('run-1')
+    expect(body.activities).toHaveLength(2)
+    expect(body.activities.map((activity: { activityId: string }) => activity.activityId)).toEqual(
+      expect.arrayContaining(['run-1', 'run-2'])
+    )
     expect(body.sleep).toHaveLength(1)
     expect(body.datasetCounts.activities).toBe(1)
     expect(body.datasetCounts.manuallyUpdatedActivities).toBe(1)
+    expect(body.datasetCounts.activityDetails).toBe(1)
     expect(body.datasetCounts.sleeps).toBe(1)
     expect(body.notices.some((notice: string) => notice.includes('No Garmin export records'))).toBe(false)
     expect(body.deriveQueue.queued).toBe(true)
@@ -768,7 +786,7 @@ describe('/api/devices/garmin/sync', () => {
     expect(body.success).toBe(true)
     expect(readRowsMock).toHaveBeenCalledWith({
       garminUserId: 'garmin-user-1',
-      sinceIso: '2026-02-18T08:00:00.000Z',
+      sinceIso: '2026-02-17T08:00:00.000Z',
     })
     expect(markGarminSyncStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
