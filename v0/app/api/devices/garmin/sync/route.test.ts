@@ -547,6 +547,67 @@ describe('/api/devices/garmin/sync', () => {
     ).toBe(true)
   })
 
+  it('falls back to direct Garmin dailies pull when webhook dailies rows are empty', async () => {
+    readRowsMock.mockResolvedValue({
+      ok: true,
+      storeAvailable: true,
+      rows: [],
+    })
+
+    const fetchMock = vi.fn((url: RequestInfo | URL) => {
+      const parsed = new URL(String(url))
+
+      if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
+        return Promise.resolve(new Response(JSON.stringify(['HEALTH_EXPORT']), { status: 200 }))
+      }
+      if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
+        return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
+      }
+      if (parsed.pathname.endsWith('/wellness-api/rest/dailies')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                summaryId: 'daily-fallback-1',
+                calendarDate: '2026-02-18',
+                bodyBatteryChargedValue: 62,
+                bodyBatteryDrainedValue: 47,
+              },
+            ]),
+            { status: 200 }
+          )
+        )
+      }
+      if (parsed.pathname.endsWith('/wellness-api/rest/sleeps')) {
+        return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
+      }
+
+      return Promise.resolve(new Response('not-found', { status: 404 }))
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const req = new Request('http://localhost/api/devices/garmin/sync', {
+      method: 'POST',
+      headers: { 'x-user-id': '42' },
+    })
+
+    const { POST } = await loadRoute()
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.success).toBe(true)
+    expect(body.datasets.dailies).toHaveLength(1)
+    expect(body.datasetCompleteness.usedFallbackDatasets).toContain('dailies')
+    expect(body.datasetCompleteness.missingDatasets).not.toContain('dailies')
+    expect(
+      body.notices.some((notice: string) =>
+        notice.includes('RunSmart pulled 1 daily summaries directly from Garmin dailies-upload')
+      )
+    ).toBe(true)
+  })
+
   it('imports cached garmin_activities rows when webhook and direct pull are unavailable', async () => {
     readRowsMock.mockResolvedValue({
       ok: true,

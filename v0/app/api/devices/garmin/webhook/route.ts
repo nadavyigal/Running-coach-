@@ -151,8 +151,9 @@ function getWebhookAuthResult(req: Request): { authorized: boolean; status: numb
   }
 
   const headerSecret = req.headers.get('x-garmin-webhook-secret')?.trim()
+  const querySecret = new URL(req.url).searchParams.get('secret')?.trim()
 
-  if (headerSecret === configuredSecret) {
+  if (headerSecret === configuredSecret || querySecret === configuredSecret) {
     return { authorized: true, status: 200 }
   }
 
@@ -207,6 +208,10 @@ async function fetchPingPullRows(callbackUrl: string): Promise<{
 export async function GET(req: Request) {
   const authResult = getWebhookAuthResult(req)
   if (!authResult.authorized) {
+    logger.warn('Rejected unauthorized Garmin webhook GET request', {
+      hasHeaderSecret: Boolean(req.headers.get('x-garmin-webhook-secret')),
+      hasQuerySecret: Boolean(new URL(req.url).searchParams.get('secret')),
+    })
     return NextResponse.json(
       { ok: false, error: authResult.error ?? 'Unauthorized Garmin webhook request' },
       { status: authResult.status }
@@ -223,6 +228,10 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const authResult = getWebhookAuthResult(req)
   if (!authResult.authorized) {
+    logger.warn('Rejected unauthorized Garmin webhook POST request', {
+      hasHeaderSecret: Boolean(req.headers.get('x-garmin-webhook-secret')),
+      hasQuerySecret: Boolean(new URL(req.url).searchParams.get('secret')),
+    })
     return NextResponse.json(
       { ok: false, error: authResult.error ?? 'Unauthorized Garmin webhook request' },
       { status: authResult.status }

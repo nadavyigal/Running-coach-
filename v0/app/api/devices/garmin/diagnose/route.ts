@@ -12,6 +12,7 @@ import {
   refreshGarminAccessToken,
 } from '@/lib/server/garmin-oauth-store'
 import { getGarminWebhookSecret } from '@/lib/server/garmin-webhook-secret'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +23,24 @@ interface EndpointResult {
   status: number
   ok: boolean
   body: unknown
+}
+
+interface ProbeResult {
+  ok: boolean
+  error?: string
+}
+
+interface BackendReadinessResult {
+  env: {
+    supabaseUrlConfigured: boolean
+    supabaseServiceRoleConfigured: boolean
+    garminClientIdConfigured: boolean
+    garminClientSecretConfigured: boolean
+    garminWebhookSecretConfigured: boolean
+  }
+  tables: Record<string, ProbeResult>
+  columns: Record<string, ProbeResult>
+  blockers: string[]
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -102,6 +121,105 @@ async function runDiagnosticProbe(accessToken: string) {
   return { profile, permissionsResult }
 }
 
+function summarizeProbeError(error: unknown): string {
+  if (!error) return 'Unknown error'
+  if (typeof error === 'string') return error
+  if (typeof error === 'object' && error && 'message' in error) {
+    const message = String((error as { message?: unknown }).message ?? '')
+    return message.length > 0 ? message : 'Unknown error'
+  }
+  return String(error)
+}
+
+async function runBackendReadinessProbe(): Promise<BackendReadinessResult> {
+  const env = {
+    supabaseUrlConfigured: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    supabaseServiceRoleConfigured: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    garminClientIdConfigured: Boolean(process.env.GARMIN_CLIENT_ID),
+    garminClientSecretConfigured: Boolean(process.env.GARMIN_CLIENT_SECRET),
+    garminWebhookSecretConfigured: Boolean(getGarminWebhookSecret().value),
+  }
+
+  const blockers: string[] = []
+  if (!env.supabaseUrlConfigured) blockers.push('NEXT_PUBLIC_SUPABASE_URL is not configured.')
+  if (!env.supabaseServiceRoleConfigured) blockers.push('SUPABASE_SERVICE_ROLE_KEY is not configured.')
+  if (!env.garminClientIdConfigured) blockers.push('GARMIN_CLIENT_ID is not configured.')
+  if (!env.garminClientSecretConfigured) blockers.push('GARMIN_CLIENT_SECRET is not configured.')
+  if (!env.garminWebhookSecretConfigured) blockers.push('GARMIN_WEBHOOK_SECRET is not configured.')
+
+  const tables: Record<string, ProbeResult> = {}
+  const columns: Record<string, ProbeResult> = {}
+
+  if (!env.supabaseUrlConfigured || !env.supabaseServiceRoleConfigured) {
+    return {
+      env,
+      tables,
+      columns,
+      blockers,
+    }
+  }
+
+  let admin
+  try {
+    admin = createAdminClient()
+  } catch (error) {
+    return {
+      env,
+      tables,
+      columns,
+      blockers: [...blockers, `Supabase admin client could not be created: ${summarizeProbeError(error)}`],
+    }
+  }
+
+  const tableProbes: Array<{ name: string; select: string }> = [
+    { name: 'garmin_connections', select: 'id,user_id,garmin_user_id' },
+    { name: 'garmin_tokens', select: 'id,user_id,expires_at' },
+    { name: 'garmin_activities', select: 'id,user_id,activity_id,start_time' },
+    { name: 'garmin_daily_metrics', select: 'id,user_id,date,body_battery' },
+    { name: 'user_memory_snapshots', select: 'id,device_id,updated_at' },
+  ]
+
+  for (const probe of tableProbes) {
+    const { error } = await admin.from(probe.name).select(probe.select).limit(1)
+    if (error) {
+      tables[probe.name] = { ok: false, error: error.message }
+      blockers.push(`Supabase table probe failed for ${probe.name}: ${error.message}`)
+    } else {
+      tables[probe.name] = { ok: true }
+    }
+  }
+
+  const columnProbes: Array<{ name: string; table: string; select: string }> = [
+    {
+      name: 'garmin_daily_metrics_body_battery_columns',
+      table: 'garmin_daily_metrics',
+      select: 'body_battery,body_battery_charged,body_battery_drained,body_battery_balance,raw_json',
+    },
+    {
+      name: 'garmin_activities_telemetry_columns',
+      table: 'garmin_activities',
+      select: 'lap_summaries,split_summaries,interval_summaries,telemetry_json',
+    },
+  ]
+
+  for (const probe of columnProbes) {
+    const { error } = await admin.from(probe.table).select(probe.select).limit(1)
+    if (error) {
+      columns[probe.name] = { ok: false, error: error.message }
+      blockers.push(`Supabase column probe failed for ${probe.table}: ${error.message}`)
+    } else {
+      columns[probe.name] = { ok: true }
+    }
+  }
+
+  return {
+    env,
+    tables,
+    columns,
+    blockers,
+  }
+}
+
 export async function GET(req: Request) {
   const userId = parseUserId(req)
   if (!userId) {
@@ -140,6 +258,7 @@ export async function GET(req: Request) {
   const permissions = parsePermissions(permissionsResult)
   const profileBody = asRecord(profile.body)
   const garminUserId = getString(profileBody.userId) ?? getString(profileBody.id)
+  const backendReadiness = await runBackendReadinessProbe()
 
   const exportRowsResult = garminUserId
     ? await readGarminExportRows({
@@ -192,6 +311,11 @@ export async function GET(req: Request) {
       blockers.push('GARMIN_WEBHOOK_SECRET is not configured.')
     }
   }
+  for (const backendBlocker of backendReadiness.blockers) {
+    if (!blockers.includes(backendBlocker)) {
+      blockers.push(backendBlocker)
+    }
+  }
 
   return NextResponse.json({
     timestamp: now.toISOString(),
@@ -212,6 +336,7 @@ export async function GET(req: Request) {
       mode: 'Garmin ping/pull + push',
       secretSource: configuredSecretSource,
     },
+    backendReadiness,
     blockers,
     warnings,
     results: {

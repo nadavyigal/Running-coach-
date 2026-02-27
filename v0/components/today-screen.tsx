@@ -81,6 +81,7 @@ import { TodayWorkoutCard } from "@/components/today/TodayWorkoutCard"
 import { AdvancedAnalyticsAccordion } from "@/components/today/AdvancedAnalyticsAccordion"
 import { DataQualityBanner } from "@/components/today/DataQualityBanner"
 import { MorningCheckInModal, type MorningCheckInData } from "@/components/morning-checkin-modal"
+import { syncGarminEnabledData } from "@/lib/garminSync"
 
 export function TodayScreen() {
   // Get shared data from context
@@ -235,6 +236,31 @@ export function TodayScreen() {
     "Track your progress! Celebrate small wins - every kilometer counts towards your goal.",
   ]
 
+  const getLocalDateKey = (date = new Date()) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  const parseLocalCheckInDate = (dateValue: string | undefined) => {
+    if (!dateValue) return new Date()
+    const parts = dateValue.split('-').map((part) => Number.parseInt(part, 10))
+    if (parts.length !== 3 || parts.some((part) => !Number.isFinite(part))) {
+      return new Date()
+    }
+    const [year, month, day] = parts
+    return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1, 12, 0, 0, 0)
+  }
+
+  const getLocalDayBounds = (date: Date) => {
+    const start = new Date(date)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(date)
+    end.setHours(23, 59, 59, 999)
+    return { start, end }
+  }
+
   const getDaysRemaining = (goal?: Goal | null) => {
     if (!goal?.timeBound?.deadline) return null
     const deadline = new Date(goal.timeBound.deadline)
@@ -253,59 +279,45 @@ export function TodayScreen() {
     setIsGarminFitSyncing(true)
     setGarminSyncError(null)
     try {
-      const res = await fetch(`/api/devices/garmin/sync?userId=${encodeURIComponent(String(userId))}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': String(userId),
-        },
-      })
-      const data = (await res.json()) as {
-        success?: boolean
-        error?: string
-        detail?: string
-        needsReauth?: boolean
-        activities?: unknown[]
-        sleep?: unknown[]
-        notices?: string[]
-        datasetCompleteness?: {
-          usedFallbackDatasets?: string[]
-        }
-      }
+      const result = await syncGarminEnabledData(userId)
 
-      if (!res.ok) {
-        setGarminSyncError(data.error ?? 'Unknown error')
+      if (result.needsReauth || result.errors.length > 0) {
+        const errorMessage = result.errors[0] ?? 'Unknown error'
+        setGarminSyncError(errorMessage)
         toast({
-          title: data.needsReauth ? 'Reconnect Garmin' : 'Sync failed',
-          description: data.error ?? 'Unknown error',
+          title: result.needsReauth ? 'Reconnect Garmin' : 'Sync failed',
+          description: errorMessage,
           variant: 'destructive',
         })
         return
       }
 
-      const activitiesCount = Array.isArray(data.activities) ? data.activities.length : 0
-      const sleepCount = Array.isArray(data.sleep) ? data.sleep.length : 0
-      const usedFallback = data.datasetCompleteness?.usedFallbackDatasets ?? []
+      const activitiesCount = result.activitiesImported
+      const sleepCount = result.sleepImported
+      const additionalCount = result.additionalSummaryImported
+      const syncedCount = activitiesCount + sleepCount + additionalCount
+      const fallbackNotices = result.notices.filter((notice) =>
+        /webhook feeds were empty|directly from Garmin/i.test(notice)
+      )
 
       toast({
-        title: activitiesCount > 0 || sleepCount > 0 ? 'Garmin sync complete' : 'No new Garmin data',
-        description:
-          activitiesCount > 0 || sleepCount > 0
-            ? `Synced ${activitiesCount} activities and ${sleepCount} sleep summaries.`
-            : 'No new records were available from Garmin.',
+        title: syncedCount > 0 ? 'Garmin sync complete' : 'No new Garmin data',
+        description: syncedCount > 0
+          ? `Imported ${activitiesCount} activities, ${sleepCount} sleep records, and ${additionalCount} wellness summaries.`
+          : 'No new records were available from Garmin.',
       })
 
-      if (usedFallback.length > 0) {
+      if (fallbackNotices.length > 0) {
         toast({
           title: 'Fallback data used',
-          description: `Used direct Garmin pull for: ${usedFallback.join(', ')}`,
+          description: fallbackNotices[0] ?? 'RunSmart used direct Garmin pull for missing webhook datasets.',
         })
       }
 
-      if (Array.isArray(data.notices) && data.notices.length > 0) {
+      if (result.notices.length > 0) {
         toast({
           title: 'Sync notices',
-          description: data.notices[0] ?? '',
+          description: result.notices[0] ?? '',
           duration: 9000,
         })
       }
@@ -351,9 +363,11 @@ export function TodayScreen() {
 
     setIsSavingMorningCheckIn(true)
     try {
+      const normalizedDate = parseLocalCheckInDate(data.date)
       await dbUtils.saveSubjectiveWellness({
         userId: resolvedUserId,
-        date: new Date(data.date),
+        date: normalizedDate,
+        assessmentDate: normalizedDate,
         energyLevel: data.energyLevel,
         moodScore: data.moodScore,
         sorenessLevel: data.sorenessLevel,
@@ -365,14 +379,14 @@ export function TodayScreen() {
         await dbUtils.saveSleepData({
           userId: resolvedUserId,
           deviceId: "self_report",
-          sleepDate: new Date(data.date),
+          sleepDate: normalizedDate,
           totalSleepTime: Math.round(data.sleepHours * 60),
           sleepEfficiency: normalizeSleepEfficiency(data.sleepQuality),
           sleepScore: Math.round((data.sleepQuality / 10) * 100),
         })
       }
 
-      await RecoveryEngine.calculateRecoveryScore(resolvedUserId, new Date(data.date))
+      await RecoveryEngine.calculateRecoveryScore(resolvedUserId, normalizedDate)
       setRecoveryReloadKey((value) => value + 1)
       setShowMorningCheckInModal(false)
 
@@ -392,6 +406,14 @@ export function TodayScreen() {
         title: "Morning check-in saved",
         description: "Today's readiness guidance is now more accurate.",
       })
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`morning-checkin:auto-prompt:${resolvedUserId}:${getLocalDateKey(normalizedDate)}`, 'shown')
+        } catch {
+          // Ignore localStorage failures; core check-in persistence already succeeded.
+        }
+      }
     } catch {
       toast({
         title: "Morning check-in failed",
@@ -402,6 +424,47 @@ export function TodayScreen() {
       setIsSavingMorningCheckIn(false)
     }
   }
+
+  useEffect(() => {
+    if (!userId || isGarminConnected) return
+    if (typeof window === 'undefined') return
+
+    let cancelled = false
+    const run = async () => {
+      const today = new Date()
+      const dateKey = getLocalDateKey(today)
+      const promptKey = `morning-checkin:auto-prompt:${userId}:${dateKey}`
+      try {
+        if (localStorage.getItem(promptKey)) return
+      } catch {
+        // Continue without localStorage gating if storage is unavailable.
+      }
+
+      const { start, end } = getLocalDayBounds(today)
+      const existingCheckIn = await db.subjectiveWellness
+        .where('userId')
+        .equals(userId)
+        .and((entry) => {
+          const date = entry.assessmentDate ?? entry.date
+          return date ? date >= start && date <= end : false
+        })
+        .first()
+
+      if (existingCheckIn || cancelled) return
+
+      try {
+        localStorage.setItem(promptKey, 'shown')
+      } catch {
+        // Ignore localStorage failures and still show the prompt.
+      }
+      setShowMorningCheckInModal(true)
+    }
+
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [userId, isGarminConnected])
 
   // Initialize local data (todaysWorkout and visibleWorkouts are screen-specific)
   useEffect(() => {
@@ -452,7 +515,7 @@ export function TodayScreen() {
       console.error("Error loading challenge data:", error)
       setActiveChallenge(null)
     }
-  }, [userId])
+  }, [userId, recoveryReloadKey])
 
   // Load active challenge data
   useEffect(() => {

@@ -123,6 +123,20 @@ class GarminSleepFallbackError extends Error {
   }
 }
 
+class GarminDailiesFallbackError extends Error {
+  status: number
+  body: string
+  source: 'dailies-upload' | 'dailies-backfill'
+
+  constructor(source: 'dailies-upload' | 'dailies-backfill', status: number, body: string) {
+    super(`Garmin ${source} returned ${status}`)
+    this.name = 'GarminDailiesFallbackError'
+    this.status = status
+    this.body = body
+    this.source = source
+  }
+}
+
 const DATASET_CONFIGS: GarminDatasetConfig[] = [
   {
     key: 'activities',
@@ -384,6 +398,10 @@ function isSleepBackfillNotProvisioned(body: string): boolean {
   return /Endpoint not enabled for summary type:\s*CONNECT_SLEEP/i.test(body)
 }
 
+function isDailiesBackfillNotProvisioned(body: string): boolean {
+  return /Endpoint not enabled for summary type:\s*CONNECT_DAIL/i.test(body)
+}
+
 function dedupeActivities(rawActivities: Record<string, unknown>[]): Record<string, unknown>[] {
   const seen = new Set<string>()
   const deduped: Record<string, unknown>[] = []
@@ -406,6 +424,21 @@ function dedupeSleepRows(rawRows: Record<string, unknown>[]): Record<string, unk
   for (const row of rawRows) {
     const fallbackId = `${row.calendarDate ?? 'none'}-${row.startTimeInSeconds ?? row.startTimeGMT ?? 'none'}`
     const id = String(row.sleepSummaryId ?? row.summaryId ?? fallbackId)
+    if (seen.has(id)) continue
+    seen.add(id)
+    deduped.push(row)
+  }
+
+  return deduped
+}
+
+function dedupeDailiesRows(rawRows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const seen = new Set<string>()
+  const deduped: Record<string, unknown>[] = []
+
+  for (const row of rawRows) {
+    const fallbackId = `${row.calendarDate ?? row.date ?? 'none'}-${row.startTimeInSeconds ?? row.startTimeGMT ?? 'none'}`
+    const id = String(row.summaryId ?? row.dailySummaryId ?? fallbackId)
     if (seen.has(id)) continue
     seen.add(id)
     deduped.push(row)
@@ -498,6 +531,48 @@ async function fetchWellnessSleep(
   return dedupeSleepRows(rawChunks)
 }
 
+async function fetchWellnessDailies(
+  accessToken: string,
+  startTime: number,
+  endTime: number,
+  mode: 'upload' | 'backfill'
+): Promise<Record<string, unknown>[]> {
+  const source = mode === 'upload' ? 'dailies-upload' : 'dailies-backfill'
+  const rawChunks: Record<string, unknown>[] = []
+  let windowStart = startTime
+
+  while (windowStart <= endTime) {
+    const windowEnd = Math.min(windowStart + GARMIN_MAX_WINDOW_SECONDS - 1, endTime)
+    const path = mode === 'upload' ? '/wellness-api/rest/dailies' : '/wellness-api/rest/backfill/dailies'
+    const url = new URL(`${GARMIN_API_BASE}${path}`)
+
+    if (mode === 'upload') {
+      url.searchParams.set('uploadStartTimeInSeconds', String(windowStart))
+      url.searchParams.set('uploadEndTimeInSeconds', String(windowEnd))
+    } else {
+      url.searchParams.set('summaryStartTimeInSeconds', String(windowStart))
+      url.searchParams.set('summaryEndTimeInSeconds', String(windowEnd))
+    }
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    })
+
+    const responseText = await response.text()
+    if (!response.ok) {
+      throw new GarminDailiesFallbackError(source, response.status, responseText)
+    }
+
+    rawChunks.push(...parseJsonArray(responseText))
+    windowStart = windowEnd + 1
+  }
+
+  return dedupeDailiesRows(rawChunks)
+}
+
 async function fetchRecentGarminActivities(
   accessToken: string,
   permissions: string[],
@@ -576,6 +651,44 @@ async function fetchRecentGarminSleep(
     .map((entry) => toRunSmartSleepRecord(entry))
     .filter((entry): entry is RunSmartSleepRecord => entry != null)
   return { sleep: mapped, source }
+}
+
+async function fetchRecentGarminDailies(
+  accessToken: string,
+  permissions: string[],
+  lookbackDays: number
+): Promise<{
+  dailies: Record<string, unknown>[]
+  source: 'dailies-upload' | 'dailies-backfill'
+}> {
+  const endTime = Math.floor(Date.now() / 1000)
+  const startTime = Math.max(0, endTime - lookbackDays * 86400 + 1)
+
+  let source: 'dailies-upload' | 'dailies-backfill' = 'dailies-upload'
+  let rawDailies: Record<string, unknown>[]
+
+  try {
+    rawDailies = await fetchWellnessDailies(accessToken, startTime, endTime, 'upload')
+  } catch (uploadError) {
+    if (
+      uploadError instanceof GarminDailiesFallbackError &&
+      uploadError.source === 'dailies-upload' &&
+      (isInvalidPullToken(uploadError.body) ||
+        isMissingTimeRange(uploadError.body) ||
+        isFallbackWorthyWellnessStatus(uploadError.status))
+    ) {
+      if (!permissions.includes('HISTORICAL_DATA_EXPORT')) {
+        throw uploadError
+      }
+
+      source = 'dailies-backfill'
+      rawDailies = await fetchWellnessDailies(accessToken, startTime, endTime, 'backfill')
+    } else {
+      throw uploadError
+    }
+  }
+
+  return { dailies: rawDailies, source }
 }
 
 function getActivityStartSeconds(activity: Record<string, unknown>): number | null {
@@ -1298,7 +1411,56 @@ export async function runGarminSyncForUser(params: {
     )
     const usedFallbackDatasets: string[] = []
 
-    let sleep = datasets.sleeps
+    let dailies = datasets.dailies
+    if (dailies.length > 0) {
+      missingDatasetsSet.delete('dailies')
+    } else if (permissions.includes('HEALTH_EXPORT')) {
+      try {
+        const fallbackAccessToken = await getValidGarminAccessToken(userId)
+        const fallbackDailies = await fetchRecentGarminDailies(
+          fallbackAccessToken,
+          permissions,
+          syncWindow.lookbackDays
+        )
+        if (fallbackDailies.dailies.length > 0) {
+          dailies = fallbackDailies.dailies
+          usedFallbackDatasets.push('dailies')
+          missingDatasetsSet.delete('dailies')
+          notices.push(
+            `Daily wellness webhook feeds were empty, so RunSmart pulled ${fallbackDailies.dailies.length} daily summaries directly from Garmin ${fallbackDailies.source}.`
+          )
+        } else {
+          missingDatasetsSet.add('dailies')
+        }
+      } catch (fallbackDailiesError) {
+        missingDatasetsSet.add('dailies')
+        if (fallbackDailiesError instanceof GarminDailiesFallbackError) {
+          if (
+            fallbackDailiesError.source === 'dailies-backfill' &&
+            isDailiesBackfillNotProvisioned(fallbackDailiesError.body)
+          ) {
+            notices.push('Daily wellness webhook feeds were empty and Garmin dailies backfill is not provisioned for this app.')
+          } else {
+            notices.push(
+              `Daily wellness webhook feeds were empty and direct Garmin dailies pull failed (${fallbackDailiesError.status} ${fallbackDailiesError.source}).`
+            )
+          }
+          logger.warn(
+            `Garmin dailies fallback error (${fallbackDailiesError.status} ${fallbackDailiesError.source}): ${summarizeUpstreamBody(fallbackDailiesError.body)}`
+          )
+        } else {
+          notices.push('Daily wellness webhook feeds were empty and direct Garmin dailies pull failed.')
+          logger.warn('Garmin dailies fallback error:', fallbackDailiesError)
+        }
+      }
+    }
+
+    const datasetsForSync: Record<GarminDatasetKey, Record<string, unknown>[]> = {
+      ...datasets,
+      dailies,
+    }
+
+    let sleep = datasetsForSync.sleeps
       .map((entry) => toRunSmartSleepRecord(entry))
       .filter((entry): entry is NonNullable<typeof entry> => entry != null)
 
@@ -1374,7 +1536,7 @@ export async function runGarminSyncForUser(params: {
         userId,
         activities: activitiesForSync,
         sleep,
-        datasets,
+        datasets: datasetsForSync,
       })
     } catch (storageError) {
       notices.push('Garmin analytics storage unavailable; sync data was not persisted to analytics tables.')
@@ -1458,7 +1620,7 @@ export async function runGarminSyncForUser(params: {
         availableToEnable: AVAILABLE_TO_ENABLE,
         capabilities,
         ingestion,
-        datasets,
+        datasets: datasetsForSync,
         datasetCounts,
         activities: activitiesForSync,
         sleep,

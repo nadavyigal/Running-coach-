@@ -22,6 +22,8 @@ interface AggregatedDailyRow extends GarminDailyMetricsRow {
 export interface DailyValuePoint {
   date: string
   value: number | null
+  source?: "direct" | "balance" | "none"
+  fallbackBalance?: number | null
 }
 
 export interface GarminAcwrTimelinePoint {
@@ -58,6 +60,8 @@ export interface GarminDashboardData {
   hrvTrend7d: DailyValuePoint[]
   hrvBaseline28: number | null
   bodyBatteryToday: number | null
+  bodyBatteryTodaySource: "direct" | "balance" | "none"
+  bodyBatteryTodayBalance: number | null
   bodyBattery7d: DailyValuePoint[]
   sleepStages7d: GarminSleepStagePoint[]
   sleepScoreTrend7d: DailyValuePoint[]
@@ -69,6 +73,8 @@ export interface GarminDashboardData {
 interface MergedDay {
   date: string
   bodyBattery: number | null
+  bodyBatterySource: "direct" | "balance" | "none"
+  bodyBatteryBalance: number | null
   spo2: number | null
   hrv: number | null
   sleepScore: number | null
@@ -257,38 +263,39 @@ function buildMergedDays(params: {
   const { wellnessDays, sleepMap, hrvMap, summaryActiveMap, runActiveMap } = params
   const merged = new Map<string, MergedDay>()
 
+  const createEmptyDay = (date: string): MergedDay => ({
+    date,
+    bodyBattery: null,
+    bodyBatterySource: "none",
+    bodyBatteryBalance: null,
+    spo2: null,
+    hrv: null,
+    sleepScore: null,
+    restingHr: null,
+    stress: null,
+    activeMinutes: null,
+    deepSleep: null,
+    lightSleep: null,
+    remSleep: null,
+    awakeSleep: null,
+  })
+
   for (const day of wellnessDays) {
     merged.set(day.date, {
-      date: day.date,
+      ...createEmptyDay(day.date),
       bodyBattery: day.bodyBattery,
+      bodyBatterySource: day.bodyBatterySource,
+      bodyBatteryBalance: day.bodyBatteryBalance,
       spo2: day.spo2,
       hrv: day.hrv,
       sleepScore: day.sleepScore,
       restingHr: day.restingHr,
       stress: day.stress,
-      activeMinutes: null,
-      deepSleep: null,
-      lightSleep: null,
-      remSleep: null,
-      awakeSleep: null,
     })
   }
 
   for (const [date, sleep] of sleepMap) {
-    const existing = merged.get(date) ?? {
-      date,
-      bodyBattery: null,
-      spo2: null,
-      hrv: null,
-      sleepScore: null,
-      restingHr: null,
-      stress: null,
-      activeMinutes: null,
-      deepSleep: null,
-      lightSleep: null,
-      remSleep: null,
-      awakeSleep: null,
-    }
+    const existing = merged.get(date) ?? createEmptyDay(date)
 
     const deep = sleep.deepSleepTime ?? null
     const light = sleep.lightSleepTime ?? null
@@ -311,20 +318,7 @@ function buildMergedDays(params: {
   }
 
   for (const [date, hrv] of hrvMap) {
-    const existing = merged.get(date) ?? {
-      date,
-      bodyBattery: null,
-      spo2: null,
-      hrv: null,
-      sleepScore: null,
-      restingHr: null,
-      stress: null,
-      activeMinutes: null,
-      deepSleep: null,
-      lightSleep: null,
-      remSleep: null,
-      awakeSleep: null,
-    }
+    const existing = merged.get(date) ?? createEmptyDay(date)
 
     merged.set(date, {
       ...existing,
@@ -334,20 +328,7 @@ function buildMergedDays(params: {
 
   const allDates = new Set([...summaryActiveMap.keys(), ...runActiveMap.keys()])
   for (const date of allDates) {
-    const existing = merged.get(date) ?? {
-      date,
-      bodyBattery: null,
-      spo2: null,
-      hrv: null,
-      sleepScore: null,
-      restingHr: null,
-      stress: null,
-      activeMinutes: null,
-      deepSleep: null,
-      lightSleep: null,
-      remSleep: null,
-      awakeSleep: null,
-    }
+    const existing = merged.get(date) ?? createEmptyDay(date)
 
     const summaryValue = summaryActiveMap.get(date)
     const runValue = runActiveMap.get(date)
@@ -480,15 +461,22 @@ export async function loadGarminDashboardData(userId: number): Promise<GarminDas
   }
 
   const bodyBattery7d = dates7.map((date) => {
+    const mergedDay = mergedDays.get(date)
     const sampleValue = bodyBatteryByDay.get(date)?.value
-    const fallbackValue = mergedDays.get(date)?.bodyBattery ?? null
+    const fallbackValue = mergedDay?.bodyBattery ?? null
+    const hasDirectValue = sampleValue != null || fallbackValue != null
+    const source = hasDirectValue ? "direct" : (mergedDay?.bodyBatterySource ?? "none")
     return {
       date,
       value: sampleValue ?? fallbackValue,
+      source,
+      fallbackBalance: mergedDay?.bodyBatteryBalance ?? null,
     }
   })
 
   const bodyBatteryToday = bodyBattery7d.at(-1)?.value ?? null
+  const bodyBatteryTodaySource = bodyBattery7d.at(-1)?.source ?? "none"
+  const bodyBatteryTodayBalance = bodyBattery7d.at(-1)?.fallbackBalance ?? null
 
   const sleepStages7d: GarminSleepStagePoint[] = dates7.map((date) => {
     const day = mergedDays.get(date)
@@ -573,6 +561,8 @@ export async function loadGarminDashboardData(userId: number): Promise<GarminDas
     hrvTrend7d: hrvTrend7d.map((point) => ({ ...point, value: roundOrNull(point.value, 2) })),
     hrvBaseline28,
     bodyBatteryToday,
+    bodyBatteryTodaySource,
+    bodyBatteryTodayBalance,
     bodyBattery7d,
     sleepStages7d,
     sleepScoreTrend7d,
