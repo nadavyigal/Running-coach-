@@ -62,6 +62,8 @@ function buildWindowedData(data: GarminDashboardData, rangeDays: RangeDays): {
     bodyBattery: dates.map((date) => ({
       date,
       value: byDate.get(date)?.bodyBattery ?? null,
+      source: byDate.get(date)?.bodyBatterySource ?? "none",
+      fallbackBalance: byDate.get(date)?.bodyBatteryBalance ?? null,
     })),
     sleepStages: dates.map((date) => ({
       date,
@@ -190,7 +192,9 @@ export function GarminWellnessDashboard({ userId }: GarminWellnessDashboardProps
   }
 
   const lastDate = formatShortDate(data.endDateIso)
-  const bodyBatteryToday = windowed.bodyBattery.at(-1)?.value ?? null
+  const bodyBatteryToday = data.bodyBatteryToday
+  const bodyBatteryTodaySource = data.bodyBatteryTodaySource
+  const bodyBatteryTodayBalance = data.bodyBatteryTodayBalance
   const spo2LastNight = windowed.spo2.at(-1)?.value ?? null
 
   return (
@@ -252,6 +256,8 @@ export function GarminWellnessDashboard({ userId }: GarminWellnessDashboardProps
         <TabsContent value="body-battery" className="mt-3">
           <GarminBodyBatteryCard
             todayValue={bodyBatteryToday}
+            todaySource={bodyBatteryTodaySource}
+            fallbackBalance={bodyBatteryTodayBalance}
             trend7d={windowed.bodyBattery}
             confidenceBadge={data.confidenceBadge}
             lastSyncAt={data.lastSyncAt}

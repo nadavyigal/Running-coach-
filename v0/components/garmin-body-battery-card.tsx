@@ -9,6 +9,8 @@ import { clampScore, formatShortDate, type DailyValuePoint } from "@/lib/garminD
 
 interface GarminBodyBatteryCardProps {
   todayValue: number | null
+  todaySource: "direct" | "balance" | "none"
+  fallbackBalance: number | null
   trend7d: DailyValuePoint[]
   confidenceBadge: string
   lastSyncAt: Date | null
@@ -18,20 +20,26 @@ interface GarminBodyBatteryCardProps {
 
 export function GarminBodyBatteryCard({
   todayValue,
+  todaySource,
+  fallbackBalance,
   trend7d,
   confidenceBadge,
   lastSyncAt,
   onRefresh,
   isRefreshing = false,
 }: GarminBodyBatteryCardProps) {
-  const score = clampScore(todayValue)
+  const score = todayValue != null ? clampScore(todayValue) : null
+  const fallbackLabel =
+    todaySource === "balance" && fallbackBalance != null
+      ? `Net ${fallbackBalance >= 0 ? "+" : ""}${fallbackBalance.toFixed(0)}`
+      : null
 
   return (
     <Card className="mx-auto w-full max-w-md">
       <CardHeader className="space-y-3 pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">Body Battery</CardTitle>
-          <Badge className="bg-sky-100 text-sky-800">{score} ⚡</Badge>
+          <Badge className="bg-sky-100 text-sky-800">{score != null ? `${score} ⚡` : "n/a"}</Badge>
         </div>
 
         <GarminSyncStatusBar lastSyncAt={lastSyncAt} onRefresh={onRefresh} isRefreshing={isRefreshing} />
@@ -41,6 +49,11 @@ export function GarminBodyBatteryCard({
         <p className="text-sm text-muted-foreground">
           Today&apos;s level may indicate available energy. Consider easier work if this stays low.
         </p>
+        {fallbackLabel ? (
+          <p className="text-xs text-muted-foreground">
+            Direct Body Battery was unavailable. Showing wellness balance fallback: {fallbackLabel}.
+          </p>
+        ) : null}
 
         <Badge variant="secondary" className="text-xs">
           {confidenceBadge}

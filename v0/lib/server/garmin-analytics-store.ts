@@ -57,6 +57,9 @@ interface DailyMetricAccumulator {
   restingHr: number | null
   stress: number | null
   bodyBattery: number | null
+  bodyBatteryCharged: number | null
+  bodyBatteryDrained: number | null
+  bodyBatteryBalance: number | null
   trainingReadiness: number | null
   vo2max: number | null
   weight: number | null
@@ -150,6 +153,9 @@ function getOrCreateDailyMetric(map: Map<string, DailyMetricAccumulator>, date: 
     restingHr: null,
     stress: null,
     bodyBattery: null,
+    bodyBatteryCharged: null,
+    bodyBatteryDrained: null,
+    bodyBatteryBalance: null,
     trainingReadiness: null,
     vo2max: null,
     weight: null,
@@ -221,7 +227,15 @@ function buildDailyMetricsRows(input: {
       metric.restingHr
     metric.stress =
       pickNumber(daily, ['averageStressLevel', 'stressLevel', 'overallStressLevel']) ?? metric.stress
-    metric.bodyBattery = pickNumber(daily, ['bodyBattery', 'bodyBatteryMostRecentValue']) ?? metric.bodyBattery
+    metric.bodyBattery =
+      pickNumber(daily, ['bodyBattery', 'bodyBatteryMostRecentValue', 'bodyBatteryValue']) ?? metric.bodyBattery
+    metric.bodyBatteryCharged = pickNumber(daily, ['bodyBatteryChargedValue']) ?? metric.bodyBatteryCharged
+    metric.bodyBatteryDrained = pickNumber(daily, ['bodyBatteryDrainedValue']) ?? metric.bodyBatteryDrained
+    metric.bodyBatteryBalance =
+      pickNumber(daily, ['bodyBatteryBalance']) ??
+      (metric.bodyBatteryCharged != null && metric.bodyBatteryDrained != null
+        ? Number((metric.bodyBatteryCharged - metric.bodyBatteryDrained).toFixed(2))
+        : metric.bodyBatteryBalance)
     metric.trainingReadiness =
       pickNumber(daily, ['trainingReadiness', 'trainingReadinessScore']) ?? metric.trainingReadiness
     addRawDataset(metric, 'dailies', daily)
@@ -347,6 +361,9 @@ export async function persistGarminSyncSnapshot(input: PersistGarminSyncInput): 
       resting_hr: row.restingHr,
       stress: row.stress,
       body_battery: row.bodyBattery,
+      body_battery_charged: row.bodyBatteryCharged,
+      body_battery_drained: row.bodyBatteryDrained,
+      body_battery_balance: row.bodyBatteryBalance,
       training_readiness: row.trainingReadiness,
       vo2max: row.vo2max,
       weight: row.weight,

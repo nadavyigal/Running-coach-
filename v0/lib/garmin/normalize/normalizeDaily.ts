@@ -9,6 +9,9 @@ export interface GarminNormalizedDailyMetric {
   resting_hr: number | null
   stress: number | null
   body_battery: number | null
+  body_battery_charged: number | null
+  body_battery_drained: number | null
+  body_battery_balance: number | null
   vo2max: number | null
   calories: number | null
   raw_json: Record<string, unknown>
@@ -53,6 +56,17 @@ export function normalizeGarminDailyMetric(input: {
 
   if (!date) return null
 
+  const bodyBatteryCharged =
+    getNumber(record.body_battery_charged) ?? getNumber(record.bodyBatteryChargedValue)
+  const bodyBatteryDrained =
+    getNumber(record.body_battery_drained) ?? getNumber(record.bodyBatteryDrainedValue)
+  const bodyBatteryBalance =
+    getNumber(record.body_battery_balance) ??
+    getNumber(record.bodyBatteryBalance) ??
+    (bodyBatteryCharged != null && bodyBatteryDrained != null
+      ? bodyBatteryCharged - bodyBatteryDrained
+      : null)
+
   return {
     user_id: input.userId,
     auth_user_id: input.authUserId ?? null,
@@ -73,7 +87,11 @@ export function normalizeGarminDailyMetric(input: {
           0
       ) || null,
     stress: getNumber(record.stress) ?? getNumber(record.stressLevel) ?? getNumber(record.averageStressLevel),
-    body_battery: getNumber(record.body_battery) ?? getNumber(record.bodyBattery) ?? getNumber(record.bodyBatteryMostRecentValue),
+    body_battery:
+      getNumber(record.body_battery) ?? getNumber(record.bodyBattery) ?? getNumber(record.bodyBatteryMostRecentValue),
+    body_battery_charged: bodyBatteryCharged,
+    body_battery_drained: bodyBatteryDrained,
+    body_battery_balance: bodyBatteryBalance,
     vo2max: getNumber(record.vo2max) ?? getNumber(record.vo2Max),
     calories: getNumber(record.calories) ?? getNumber(record.activeKilocalories),
     raw_json: record,

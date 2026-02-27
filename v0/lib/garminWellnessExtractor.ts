@@ -1,6 +1,9 @@
 export interface GarminDailyMetricsRow {
   date: string
   body_battery?: number | null
+  body_battery_balance?: number | null
+  body_battery_charged?: number | null
+  body_battery_drained?: number | null
   hrv?: number | null
   sleep_score?: number | null
   resting_hr?: number | null
@@ -11,6 +14,10 @@ export interface GarminDailyMetricsRow {
 export interface GarminWellnessDay {
   date: string
   bodyBattery: number | null
+  bodyBatterySource: 'direct' | 'balance' | 'none'
+  bodyBatteryBalance: number | null
+  bodyBatteryCharged: number | null
+  bodyBatteryDrained: number | null
   spo2: number | null
   hrv: number | null
   sleepScore: number | null
@@ -72,6 +79,18 @@ export function extractGarminWellnessDays(rows: GarminDailyMetricsRow[]): Garmin
       const bodyBatteryRaw =
         toNumber(row.body_battery) ??
         firstNumberFromDatasetEntries(dailiesEntries, ['bodyBattery', 'bodyBatteryMostRecentValue', 'bodyBatteryValue'])
+      const bodyBatteryChargedRaw =
+        toNumber(row.body_battery_charged) ??
+        firstNumberFromDatasetEntries(dailiesEntries, ['bodyBatteryChargedValue'])
+      const bodyBatteryDrainedRaw =
+        toNumber(row.body_battery_drained) ??
+        firstNumberFromDatasetEntries(dailiesEntries, ['bodyBatteryDrainedValue'])
+      const bodyBatteryBalanceRaw =
+        toNumber(row.body_battery_balance) ??
+        firstNumberFromDatasetEntries(dailiesEntries, ['bodyBatteryBalance']) ??
+        (bodyBatteryChargedRaw != null && bodyBatteryDrainedRaw != null
+          ? bodyBatteryChargedRaw - bodyBatteryDrainedRaw
+          : null)
       const hrvRaw =
         toNumber(row.hrv) ??
         firstNumberFromDatasetEntries(hrvEntries, ['hrvValue', 'dailyAvg', 'lastNightAvg', 'value'])
@@ -101,6 +120,13 @@ export function extractGarminWellnessDays(rows: GarminDailyMetricsRow[]): Garmin
       return {
         date: row.date,
         bodyBattery: bodyBatteryRaw != null ? Math.max(0, Math.min(100, Math.round(bodyBatteryRaw))) : null,
+        bodyBatterySource: bodyBatteryRaw != null ? 'direct' : bodyBatteryBalanceRaw != null ? 'balance' : 'none',
+        bodyBatteryBalance:
+          bodyBatteryBalanceRaw != null ? Number(bodyBatteryBalanceRaw.toFixed(2)) : null,
+        bodyBatteryCharged:
+          bodyBatteryChargedRaw != null ? Number(bodyBatteryChargedRaw.toFixed(2)) : null,
+        bodyBatteryDrained:
+          bodyBatteryDrainedRaw != null ? Number(bodyBatteryDrainedRaw.toFixed(2)) : null,
         spo2: spo2Raw != null ? Math.max(50, Math.min(100, Math.round(spo2Raw))) : null,
         hrv: hrvRaw != null ? Math.max(0, Number(hrvRaw.toFixed(2))) : null,
         sleepScore: sleepScoreRaw != null ? Math.max(0, Math.min(100, Math.round(sleepScoreRaw))) : null,

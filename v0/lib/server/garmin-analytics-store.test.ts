@@ -89,6 +89,8 @@ describe('persistGarminSyncSnapshot', () => {
             calendarDate: '2026-02-20',
             steps: 9820,
             restingHeartRateInBeatsPerMinute: 49,
+            bodyBatteryChargedValue: 63,
+            bodyBatteryDrainedValue: 41,
           },
         ],
         epochs: [],
@@ -110,6 +112,11 @@ describe('persistGarminSyncSnapshot', () => {
 
     expect(activitiesByKey.size).toBe(1)
     expect(dailyByKey.size).toBe(1)
+    const dailyRow = dailyByKey.get('42:2026-02-20')
+    expect(dailyRow?.body_battery).toBeNull()
+    expect(dailyRow?.body_battery_charged).toBe(63)
+    expect(dailyRow?.body_battery_drained).toBe(41)
+    expect(dailyRow?.body_battery_balance).toBe(22)
     expect(
       upsertCalls.some((call) => call.table === 'garmin_activities' && call.onConflict === 'user_id,activity_id')
     ).toBe(true)

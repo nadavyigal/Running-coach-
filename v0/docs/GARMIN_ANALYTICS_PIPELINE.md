@@ -70,6 +70,9 @@ Events are emitted through server telemetry helpers and mirrored to logs.
 - Confirm Garmin callback URL includes path secret endpoint.
 - Check recent export rows in storage and ingestion counters.
 - Validate queue enqueue responses (`deriveQueue`, `ai-insights`).
+- The webhook endpoint accepts either:
+  - `x-garmin-webhook-secret` header, or
+  - `?secret=<GARMIN_WEBHOOK_SECRET>` query parameter (used by path-secret forwarding route).
 
 ### 3) Token refresh flow
 
@@ -79,15 +82,41 @@ Events are emitted through server telemetry helpers and mirrored to logs.
   - sync/diagnose routes return reconnect hints
 - Reconnect Garmin if refresh token is unavailable/revoked.
 
-### 4) AI insight missing
+### 4) Fallback pull behavior
+
+- If webhook rows are empty, sync can pull directly from Garmin for:
+  - activities
+  - sleeps
+  - dailies
+- Upload-window endpoints are attempted first; backfill endpoints are used only when required and provisioned.
+- Fallback usage is surfaced in sync `notices` and `datasetCompleteness.usedFallbackDatasets`.
+
+### 5) AI insight missing
 
 - Confirm `training_derived_metrics` exists for the user/date.
 - Confirm AI queue is configured (Redis env vars).
 - Inspect worker logs for `ai-insights` job failures.
 - Validate `OPENAI_API_KEY` and `OPENAI_MODEL`.
 
-### 5) Chat lacks Garmin context
+### 6) Chat lacks Garmin context
 
 - Ensure chat request includes valid numeric `userId`.
 - Check `buildGarminContext()` output shape in logs/tests.
 - Confirm context summary token budget logic did not drop all fields due missing data.
+
+### 7) Body battery shows as missing
+
+- `garmin_daily_metrics.body_battery` remains strict for direct Garmin body battery fields.
+- When Garmin only sends `bodyBatteryChargedValue` / `bodyBatteryDrainedValue`, RunSmart stores:
+  - `body_battery_charged`
+  - `body_battery_drained`
+  - `body_battery_balance` (`charged - drained`)
+- UI displays direct body battery when available, otherwise shows `n/a` with a balance fallback label (for example `Net +12`).
+
+### 8) Backend readiness checks
+
+- `GET /api/devices/garmin/diagnose?userId=<id>` now includes `backendReadiness`:
+  - env flags (`NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, Garmin OAuth/webhook vars)
+  - required table probes
+  - required column probes (including body battery balance columns)
+- Any failed readiness probe is promoted into `blockers` with actionable error text.

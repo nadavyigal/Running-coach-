@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast"
 import { AiActivityAnalysisError, analyzeActivityImage } from "@/lib/ai-activity-client"
 import { trackAnalyticsEvent } from "@/lib/analytics"
 import { recordRunWithSideEffects } from "@/lib/run-recording"
+import { syncGarminEnabledData } from "@/lib/garminSync"
 
 interface AddActivityModalProps {
   open: boolean
@@ -129,28 +130,20 @@ export function AddActivityModal({
             toast({ title: "Garmin not connected", description: "Go to Profile > Devices & Apps to connect Garmin first.", variant: "destructive" })
             return
           }
-          const response = await fetch(`/api/devices/garmin/sync?userId=${encodeURIComponent(String(user.id))}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-user-id": String(user.id),
-            },
-          })
-          const data = await response.json()
-          if (!response.ok) throw new Error((data as { error?: string }).error ?? "Sync failed")
+          const syncResult = await syncGarminEnabledData(user.id)
+          if (syncResult.needsReauth || syncResult.errors.length > 0) {
+            throw new Error(syncResult.errors[0] ?? "Sync failed")
+          }
 
-          const activitiesCount = Array.isArray((data as { activities?: unknown[] }).activities)
-            ? ((data as { activities?: unknown[] }).activities?.length ?? 0)
-            : 0
-          const sleepCount = Array.isArray((data as { sleep?: unknown[] }).sleep)
-            ? ((data as { sleep?: unknown[] }).sleep?.length ?? 0)
-            : 0
+          const activitiesCount = syncResult.activitiesImported
+          const sleepCount = syncResult.sleepImported
+          const additionalCount = syncResult.additionalSummaryImported
 
           toast({
-            title: activitiesCount > 0 || sleepCount > 0 ? "Garmin sync complete" : "Up to date",
+            title: activitiesCount > 0 || sleepCount > 0 || additionalCount > 0 ? "Garmin sync complete" : "Up to date",
             description:
-              activitiesCount > 0 || sleepCount > 0
-                ? `Synced ${activitiesCount} activities and ${sleepCount} sleep summaries.`
+              activitiesCount > 0 || sleepCount > 0 || additionalCount > 0
+                ? `Imported ${activitiesCount} activities, ${sleepCount} sleep records, and ${additionalCount} wellness summaries.`
                 : "No new Garmin data was available.",
           })
 

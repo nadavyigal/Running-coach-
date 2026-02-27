@@ -79,6 +79,19 @@ export function extractGarminBodyBatteryTimeseries(
 
     for (const entry of dailiesEntries) {
       const record = asRecord(entry)
+      const directFromDaily =
+        toNumber(record.bodyBattery) ??
+        toNumber(record.bodyBatteryMostRecentValue) ??
+        toNumber(record.bodyBatteryValue)
+      if (directFromDaily != null) {
+        const timestamp = resolveSampleTimestamp(record, fallbackDate, 0)
+        samples.set(timestamp, {
+          timestamp,
+          value: clampBodyBattery(directFromDaily),
+          source: 'daily',
+        })
+      }
+
       const arrays = [
         asArray(record.bodyBatteryValues),
         asArray(record.bodyBatteryValuesArray),
