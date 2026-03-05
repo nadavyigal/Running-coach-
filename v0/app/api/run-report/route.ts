@@ -578,6 +578,52 @@ function getAverageAccuracy(accuracyData: GPSAccuracyData[]): number | null {
   return total / accuracyData.length
 }
 
+function detectStridesFromTelemetry(
+  telemetry: z.infer<typeof GarminTelemetrySchema>
+): { detected: boolean; count?: number; peakPaceFormatted?: string; speedRatio?: number } {
+  const avgPaceSec = telemetry.avgPaceSecPerKm
+  const maxSpeedMps = telemetry.maxSpeedMps
+  const avgCadenceSpm = telemetry.avgCadenceSpm
+  const maxCadenceSpm = telemetry.maxCadenceSpm
+
+  // Primary: max speed significantly faster than average indicates strides or surges
+  if (avgPaceSec && avgPaceSec > 0 && maxSpeedMps && maxSpeedMps > 0) {
+    const avgSpeedMps = 1000 / avgPaceSec
+    const ratio = maxSpeedMps / avgSpeedMps
+    if (ratio >= 1.2) {
+      const peakPaceSec = Math.round(1000 / maxSpeedMps)
+      return {
+        detected: true,
+        peakPaceFormatted: formatPace(peakPaceSec),
+        speedRatio: Math.round(ratio * 100) / 100,
+      }
+    }
+  }
+
+  // Secondary: significant cadence spike indicates fast turnover during strides
+  if (avgCadenceSpm && avgCadenceSpm > 0 && maxCadenceSpm && maxCadenceSpm > 0) {
+    if (maxCadenceSpm / avgCadenceSpm >= 1.15) {
+      return { detected: true }
+    }
+  }
+
+  // Tertiary: short fast laps or intervals
+  const allLaps = [...(telemetry.laps ?? []), ...(telemetry.intervals ?? [])]
+  const shortFastLaps = allLaps.filter(
+    (lap) =>
+      lap.durationSec != null &&
+      lap.durationSec < 45 &&
+      lap.paceSecPerKm != null &&
+      avgPaceSec != null &&
+      lap.paceSecPerKm < avgPaceSec * 0.85
+  )
+  if (shortFastLaps.length >= 2) {
+    return { detected: true, count: shortFastLaps.length }
+  }
+
+  return { detected: false }
+}
+
 function buildSkillInput(
   input: NormalizedRunReportInput,
   gpsQuality?: { score: number; level: string; averageAccuracy: number },
@@ -586,6 +632,10 @@ function buildSkillInput(
   const durationMinutes = input.durationSeconds > 0 ? Math.round((input.durationSeconds / 60) * 10) / 10 : 0
   const avgPaceFormatted =
     input.avgPaceSecondsPerKm > 0 ? formatPace(input.avgPaceSecondsPerKm) : undefined
+
+  const strideInfo = input.garminTelemetry
+    ? detectStridesFromTelemetry(input.garminTelemetry)
+    : null
 
   const pacingPayload =
     paceStats && input.paceData.length > 0
@@ -639,6 +689,9 @@ function buildSkillInput(
             ...(Array.isArray(input.garminTelemetry.intervals)
               ? { intervalCount: input.garminTelemetry.intervals.length }
               : {}),
+            ...(typeof input.garminTelemetry.maxSpeedMps === 'number'
+              ? { maxSpeedMps: input.garminTelemetry.maxSpeedMps }
+              : {}),
             analytics: input.garminTelemetry.analytics ?? {},
           },
         }
@@ -648,6 +701,16 @@ function buildSkillInput(
     derivedMetrics: input.derivedMetrics,
     upcomingWorkouts: input.upcomingWorkouts,
     ...(input.userFeedback ? { userFeedback: input.userFeedback } : {}),
+    ...(strideInfo?.detected
+      ? {
+          strideDetection: {
+            detected: true,
+            ...(strideInfo.count != null ? { estimatedCount: strideInfo.count } : {}),
+            ...(strideInfo.peakPaceFormatted ? { peakPace: strideInfo.peakPaceFormatted } : {}),
+            ...(strideInfo.speedRatio != null ? { speedRatioVsAvg: strideInfo.speedRatio } : {}),
+          },
+        }
+      : {}),
   }
 }
 
@@ -670,14 +733,22 @@ function buildFallbackInsight(input: NormalizedRunReportInput): RunInsight {
   else summary.push('Short run still counts for habit building.')
 
   const telemetry = input.garminTelemetry
-  if (telemetry?.analytics?.pacing?.splitDeltaSecPerKm != null) {
+  const stridesFallback = telemetry ? detectStridesFromTelemetry(telemetry) : null
+
+  if (stridesFallback?.detected) {
+    const strideText = stridesFallback.peakPaceFormatted
+      ? `Speed surges detected (peak ${stridesFallback.peakPaceFormatted}/km) — good neuromuscular stimulus.`
+      : 'Speed surges detected — solid neuromuscular activation.'
+    summary.push(strideText)
+    summary.push('Strides build leg turnover and running economy; adaptation happens during rest.')
+  } else if (telemetry?.analytics?.pacing?.splitDeltaSecPerKm != null) {
     if (telemetry.analytics.pacing.splitDeltaSecPerKm <= -8) {
       summary.push('Strong finish with a negative split.')
     } else if (telemetry.analytics.pacing.splitDeltaSecPerKm >= 8) {
       summary.push('You faded in the second half; start slightly easier next time.')
     }
   }
-  if (telemetry?.analytics?.intervals?.count && telemetry.analytics.intervals.count > 0) {
+  if (!stridesFallback?.detected && telemetry?.analytics?.intervals?.count && telemetry.analytics.intervals.count > 0) {
     const consistency = telemetry.analytics.intervals.consistencyPct
     if (typeof consistency === 'number') {
       summary.push(`Interval consistency was ${Math.round(consistency)}%.`)
@@ -735,6 +806,8 @@ function buildFallbackInsight(input: NormalizedRunReportInput): RunInsight {
     nextSessionNudge = 'Next session: rest or gentle cross-training; stop if pain persists.'
   } else if (effort === 'hard') {
     nextSessionNudge = 'Next session: 30-45 min easy or rest if legs feel heavy.'
+  } else if (stridesFallback?.detected) {
+    nextSessionNudge = 'Next session: easy 30-40 min — strides today mean let the neuromuscular adaptations set before the next quality session.'
   } else if (typeof telemetry?.avgCadenceSpm === 'number' && telemetry.avgCadenceSpm < 162) {
     nextSessionNudge = 'Next session: easy run with short strides; focus on relaxed, quicker turnover.'
   }
@@ -866,7 +939,7 @@ const handler = async (req: ApiRequest) => {
         {
           role: 'system',
           content:
-            'You are Run-Smart, an evidence-based running coach. Be supportive, concise, and practical. No medical diagnosis. If pain or dizziness is noted, advise stopping and consulting a professional. Keep total output under 120 words.',
+            'You are Run-Smart, an evidence-based running coach. Be supportive, specific, and practical. No medical diagnosis. If pain or dizziness is noted, advise stopping and consulting a professional.\n\nFill all 4 summary slots with distinct coaching value:\n- summary[0]: Headline with key stats (distance, duration, avg pace)\n- summary[1]: What went well — celebrate a specific achievement from this run\n- summary[2]: Training adaptation this run builds (aerobic base, neuromuscular efficiency, endurance, etc.)\n- summary[3]: How this run connects to the training plan and prepares the next session\n\nIf strideDetection.detected=true in the input: pacingAnalysis must explicitly describe the strides — what they accomplish physiologically (neuromuscular activation, leg turnover, economy) and how the peak pace compares to average. If no stride data, assess pace consistency.\n\nnextSessionNudge: Give a specific, actionable next workout that accounts for today\'s effort and any strides. Name the session type (e.g. easy run, tempo, rest), target duration, and one coaching cue.\n\nrecovery: Concrete steps matched to today\'s effort level.',
         },
         {
           role: 'user',
