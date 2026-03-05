@@ -912,13 +912,18 @@ function createInsightArray(
   const insights: Insight[] = []
 
   if (notes) {
+    const insightTitles = ['What went well', 'Training benefit', 'Plan fit']
     if (notes.positives && notes.positives.length > 0) {
-      insights.push({
-        type: 'general',
-        title: 'What went well',
-        message: notes.positives[0] ?? '',
-        confidence: 'High',
-        isPositive: true
+      notes.positives.slice(0, 3).forEach((positive, idx) => {
+        if (positive) {
+          insights.push({
+            type: 'general',
+            title: insightTitles[idx] ?? 'Coach note',
+            message: positive,
+            confidence: 'High',
+            isPositive: true
+          })
+        }
       })
     }
 
