@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
 import { trackAnalyticsEvent } from '@/lib/analytics'
-import { db, type Run } from '@/lib/db'
+import { db, type Run, type Workout } from '@/lib/db'
 import { dbUtils } from '@/lib/dbUtils'
 import { ENABLE_AUTO_PAUSE, ENABLE_PACE_CHART } from '@/lib/featureFlags'
 import type { LatLng } from '@/lib/mapConfig'
@@ -607,8 +607,8 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
           latestRecovery.sort((a: { scoreDate?: Date; date?: Date }, b: { scoreDate?: Date; date?: Date }) =>
             new Date(b.scoreDate ?? b.date ?? 0).getTime() - new Date(a.scoreDate ?? a.date ?? 0).getTime()
           )
-          if (latestRecovery.length > 0) {
-            const rec = latestRecovery[0]
+          const rec = latestRecovery[0]
+          if (rec) {
             ctx.recoveryScore = rec.overallScore
             ctx.sleepScore = rec.sleepScore
             ctx.readinessScore = rec.readinessScore
@@ -859,7 +859,94 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   if (typeof _el === 'number') sharedMetrics.elevationLossM = _el
 
   const onShare = () => toast({ title: 'Share', description: 'Sharing functionality coming soon.' })
-  const onSaveToPlan = () => toast({ title: 'Saved to plan', description: 'Workout added to your schedule.' })
+
+  const parseSuggestedWorkout = (suggestion: string): { type: Workout['type']; distance: number; notes: string } => {
+    const distanceMatch = suggestion.match(/(\d+\.?\d*)\s*(km|k|miles?)/i)
+    const distance = distanceMatch?.[1] ? parseFloat(distanceMatch[1]) : 5
+
+    let type: Workout['type'] = 'easy'
+    const lower = suggestion.toLowerCase()
+    if (lower.includes('tempo')) type = 'tempo'
+    else if (lower.includes('interval')) type = 'intervals'
+    else if (lower.includes('long')) type = 'long'
+    else if (lower.includes('hill')) type = 'hill'
+    else if (lower.includes('race')) type = 'time-trial'
+    else if (lower.includes('fartlek')) type = 'fartlek'
+    else if (lower.includes('recovery')) type = 'recovery'
+
+    return { type, distance, notes: suggestion }
+  }
+
+  const onSaveToPlan = async () => {
+    if (!coachNotes?.suggestedNextWorkout) return
+    try {
+      const user = await dbUtils.getCurrentUser()
+      if (!user?.id) {
+        toast({ title: 'Not signed in', description: 'Please sign in to save workouts.', variant: 'destructive' })
+        return
+      }
+      const plan = await dbUtils.getActivePlan(user.id)
+      if (!plan?.id) {
+        toast({ title: 'No active plan', description: 'Create a training plan first.', variant: 'destructive' })
+        return
+      }
+      const { type, distance, notes } = parseSuggestedWorkout(coachNotes.suggestedNextWorkout)
+
+      // Find the next open day (tomorrow first, then up to 7 days)
+      const startOfDay = new Date()
+      startOfDay.setHours(0, 0, 0, 0)
+      const startOfWeek = new Date(startOfDay)
+      startOfWeek.setDate(startOfDay.getDate() + 1)
+      const endOfSearch = new Date(startOfDay)
+      endOfSearch.setDate(startOfDay.getDate() + 7)
+      endOfSearch.setHours(23, 59, 59, 999)
+
+      const existingWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfWeek, endOfSearch, { planScope: 'active' })
+      const occupiedKeys = new Set(existingWorkouts.map(w => {
+        const d = w.scheduledDate
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      }))
+
+      let scheduledDate: Date | null = null
+      for (let i = 1; i <= 7; i++) {
+        const candidate = new Date(startOfDay)
+        candidate.setDate(startOfDay.getDate() + i)
+        const key = `${candidate.getFullYear()}-${String(candidate.getMonth() + 1).padStart(2, '0')}-${String(candidate.getDate()).padStart(2, '0')}`
+        if (!occupiedKeys.has(key)) {
+          scheduledDate = candidate
+          break
+        }
+      }
+
+      if (!scheduledDate) {
+        toast({ title: 'No open slot', description: 'All days this week are occupied.', variant: 'destructive' })
+        return
+      }
+
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
+      const day = dayNames[scheduledDate.getDay()] ?? 'Mon'
+
+      await dbUtils.createWorkout({
+        planId: plan.id,
+        week: 1,
+        day,
+        type,
+        distance,
+        notes,
+        completed: false,
+        scheduledDate,
+      })
+
+      window.dispatchEvent(new CustomEvent('plan-updated'))
+      toast({
+        title: 'Saved to plan',
+        description: `${type} run (${distance}km) added on ${scheduledDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}.`,
+      })
+    } catch (error) {
+      console.error('[run-report] Failed to save to plan:', error)
+      toast({ title: 'Error', description: 'Failed to save workout. Please try again.', variant: 'destructive' })
+    }
+  }
 
   // ─── FULL GARMIN DARK REPORT ────────────────────────────────────────────
   if (isGarminFullReport) {
