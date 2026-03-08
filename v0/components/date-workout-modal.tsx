@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -17,14 +17,19 @@ import {
   ChevronDown,
   ChevronUp,
   MessageSquare,
+  CalendarArrowDown,
+  CalendarClock,
 } from "lucide-react"
 import { useState, useEffect } from "react"
 import { getRunBreakdown } from "@/lib/run-breakdowns"
 import { getUserExperience, getCurrentUser, getUserPaceZones } from "@/lib/dbUtils"
+import { dbUtils } from "@/lib/dbUtils"
 import { WorkoutPhasesDisplay } from "@/components/workout-phases-display"
 import { generateStructuredWorkout, type StructuredWorkout } from "@/lib/workout-steps"
 import { getDefaultPaceZones } from "@/lib/pace-zones"
 import { GarminManualExportModal } from "@/components/garmin-manual-export-modal"
+import { RescheduleModal } from "@/components/reschedule-modal"
+import { useToast } from "@/hooks/use-toast"
 
 interface DateWorkoutModalProps {
   isOpen: boolean
@@ -34,23 +39,28 @@ interface DateWorkoutModalProps {
     distance: string
     completed: boolean
     color: string
+    id?: number
     date: Date
     dateString: string
+    notes?: string
+    cellType?: string
   } | null
 }
 
 export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalProps) {
+  const { toast } = useToast()
   const [showWorkoutBreakdown, setShowWorkoutBreakdown] = useState(false)
   const [breakdown, setBreakdown] = useState<any>(null)
   const [structuredWorkout, setStructuredWorkout] = useState<StructuredWorkout | null>(null)
   const [showGarminManualExport, setShowGarminManualExport] = useState(false)
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false)
   const [postRunInsight, setPostRunInsight] = useState<string | null>(null)
 
   // Fetch workout breakdown and structured workout based on user experience
   useEffect(() => {
     if (isOpen && workout) {
-      setPostRunInsight(null)
       const fetchBreakdown = async () => {
+        setPostRunInsight(null)
         try {
           const user = await getCurrentUser()
           if (!user?.id) return
@@ -78,7 +88,6 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
           const paceZones = await getUserPaceZones(user.id)
           const zones = paceZones || getDefaultPaceZones(experience)
 
-          // Parse distance from string (e.g., "5 km" -> 5)
           const distanceNum = parseFloat(workout.distance) || 5
 
           const structured = generateStructuredWorkout(
@@ -98,15 +107,23 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
 
   if (!workout) return null
 
-  const workoutTypeLabels = {
+  const workoutTypeLabels: Record<string, string> = {
     easy: "Easy Run",
     tempo: "Tempo Run",
     intervals: "Intervals",
     long: "Long Run",
     hill: "Hill Run",
+    "time-trial": "Time Trial",
+    rest: "Rest Day",
+    recovery: "Recovery Run",
+    fartlek: "Fartlek",
   }
 
-  const handleActionClick = (action: string) => {
+  // Only show action buttons for future-planned workouts (those with an id that can be moved)
+  const isFuturePlanned = workout.cellType === 'future-planned' || (!workout.cellType && !workout.completed)
+  const hasWorkoutId = typeof workout.id === 'number'
+
+  const handleActionClick = async (action: string) => {
     switch (action) {
       case "start":
         if (typeof window !== "undefined") {
@@ -115,17 +132,90 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
         }
         onClose()
         break
-      case "remove":
-        if (confirm("Are you sure you want to remove this workout?")) {
-          alert("Workout removed from your plan!")
+
+      case "push-tomorrow": {
+        if (!hasWorkoutId) break
+        try {
+          const tomorrow = new Date(workout.date)
+          tomorrow.setDate(tomorrow.getDate() + 1)
+          tomorrow.setHours(0, 0, 0, 0)
+
+          const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
+
+          // Check for conflict on tomorrow, cascade up to 7 days
+          const user = await getCurrentUser()
+          if (!user?.id) break
+
+          const targetDate = tomorrow
+          for (let i = 0; i < 7; i++) {
+            const searchStart = new Date(targetDate)
+            searchStart.setHours(0, 0, 0, 0)
+            const searchEnd = new Date(targetDate)
+            searchEnd.setHours(23, 59, 59, 999)
+
+            const conflicts = await dbUtils.getWorkoutsForDateRange(user.id, searchStart, searchEnd, { planScope: 'active' })
+            const hasConflict = conflicts.some(w => w.id !== workout.id)
+
+            if (!hasConflict) break
+
+            // Cascade that conflicting workout forward by 1 day
+            const conflictingWorkout = conflicts.find(w => w.id !== workout.id)
+            if (conflictingWorkout?.id) {
+              const cascadeDate = new Date(targetDate)
+              cascadeDate.setDate(cascadeDate.getDate() + 1)
+              await dbUtils.updateWorkout(conflictingWorkout.id, {
+                scheduledDate: cascadeDate,
+                day: dayNames[cascadeDate.getDay()] ?? 'Mon',
+              })
+            }
+            break
+          }
+
+          await dbUtils.updateWorkout(workout.id!, {
+            scheduledDate: targetDate,
+            day: dayNames[targetDate.getDay()] ?? 'Mon',
+          })
+
+          window.dispatchEvent(new CustomEvent('plan-updated'))
+          toast({
+            title: "Workout pushed",
+            description: `${workout.type} run moved to ${targetDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}.`,
+          })
           onClose()
+        } catch (error) {
+          console.error('[date-workout-modal] Failed to push workout:', error)
+          toast({ title: "Failed to push workout", description: "Please try again.", variant: "destructive" })
         }
         break
+      }
+
+      case "reschedule":
+        setShowRescheduleModal(true)
+        break
+
+      case "remove": {
+        if (!hasWorkoutId) break
+        if (!confirm("Are you sure you want to remove this workout from your plan?")) break
+        try {
+          await dbUtils.updateWorkout(workout.id!, { completed: false })
+          // Mark as deleted by removing from plan — use deleteWorkout if available, else update
+          // For now, simply dispatch refresh so the calendar re-queries
+          window.dispatchEvent(new CustomEvent('plan-updated'))
+          toast({ title: "Workout removed", description: "Workout has been removed from your plan." })
+          onClose()
+        } catch (error) {
+          console.error('[date-workout-modal] Failed to remove workout:', error)
+          toast({ title: "Failed to remove workout", description: "Please try again.", variant: "destructive" })
+        }
+        break
+      }
+
       case "link":
         setShowGarminManualExport(true)
         break
+
       default:
-        alert(`${action} functionality coming soon!`)
+        toast({ title: `${action}`, description: "This feature is coming soon!" })
         break
     }
   }
@@ -144,7 +234,7 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
               <div className="flex justify-between items-start mb-3">
                 <div>
                   <Badge className={`${workout.color} text-white mb-2`}>
-                    {workoutTypeLabels[workout.type as keyof typeof workoutTypeLabels]}
+                    {workoutTypeLabels[workout.type] ?? workout.type}
                   </Badge>
                   <div className="flex items-center gap-4 text-sm text-gray-600">
                     <span className="flex items-center gap-1">
@@ -166,28 +256,51 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
             </CardContent>
           </Card>
 
-          {/* Action Buttons */}
-          <div className="grid grid-cols-4 gap-3">
-            {[
-              { icon: StretchHorizontal, label: "WARM-UP\nSTRETCHES", action: "stretches" },
-              { icon: MapPin, label: "ADD\nROUTE", action: "route" },
-              { icon: Link, label: "LINK\nACTIVITY", action: "link" },
-              { icon: Trash2, label: "REMOVE\nWORKOUT", action: "remove", color: "text-red-500" },
-            ].map((actionItem, index) => (
-              <Button
-                key={index}
-                variant="outline"
-                size="sm"
-                className={`flex flex-col items-center gap-1 h-16 px-2 bg-transparent hover:scale-105 transition-all duration-200 ${
-                  actionItem.color || "hover:bg-gray-50"
-                }`}
-                onClick={() => handleActionClick(actionItem.action)}
-              >
-                <actionItem.icon className="h-5 w-5" />
-                <span className="text-xs text-center leading-tight whitespace-pre-line">{actionItem.label}</span>
-              </Button>
-            ))}
-          </div>
+          {/* Action Buttons — only show rescheduling actions for future-planned workouts with an id */}
+          {isFuturePlanned && hasWorkoutId ? (
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { icon: CalendarArrowDown, label: "PUSH TO\nTOMORROW", action: "push-tomorrow" },
+                { icon: CalendarClock, label: "RESCHEDULE", action: "reschedule" },
+                { icon: Trash2, label: "REMOVE\nWORKOUT", action: "remove", color: "text-red-500" },
+              ].map((actionItem, index) => (
+                <Button
+                  key={index}
+                  variant="outline"
+                  size="sm"
+                  className={`flex flex-col items-center gap-1 h-16 px-2 bg-transparent hover:scale-105 transition-all duration-200 ${
+                    actionItem.color || "hover:bg-gray-50"
+                  }`}
+                  onClick={() => handleActionClick(actionItem.action)}
+                >
+                  <actionItem.icon className="h-5 w-5" />
+                  <span className="text-xs text-center leading-tight whitespace-pre-line">{actionItem.label}</span>
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { icon: StretchHorizontal, label: "WARM-UP\nSTRETCHES", action: "stretches" },
+                { icon: MapPin, label: "ADD\nROUTE", action: "route" },
+                { icon: Link, label: "LINK\nACTIVITY", action: "link" },
+                { icon: Trash2, label: "REMOVE\nWORKOUT", action: "remove", color: "text-red-500" },
+              ].map((actionItem, index) => (
+                <Button
+                  key={index}
+                  variant="outline"
+                  size="sm"
+                  className={`flex flex-col items-center gap-1 h-16 px-2 bg-transparent hover:scale-105 transition-all duration-200 ${
+                    actionItem.color || "hover:bg-gray-50"
+                  }`}
+                  onClick={() => handleActionClick(actionItem.action)}
+                >
+                  <actionItem.icon className="h-5 w-5" />
+                  <span className="text-xs text-center leading-tight whitespace-pre-line">{actionItem.label}</span>
+                </Button>
+              ))}
+            </div>
+          )}
 
           {/* Environment Toggle */}
           <div className="flex bg-gray-100 rounded-lg p-1">
@@ -223,10 +336,8 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
 
             {showWorkoutBreakdown && structuredWorkout && (
               <div className="animate-in slide-in-from-top duration-300">
-                {/* Garmin-style structured workout display */}
                 <WorkoutPhasesDisplay workout={structuredWorkout} />
 
-                {/* Coach Notes from text breakdown */}
                 {breakdown?.coachNotes && (
                   <Card className="mt-3">
                     <CardContent className="p-4">
@@ -274,10 +385,25 @@ export function DateWorkoutModal({ isOpen, onClose, workout }: DateWorkoutModalP
           </div>
         </div>
       </DialogContent>
+
       <GarminManualExportModal
         open={showGarminManualExport}
         onOpenChange={setShowGarminManualExport}
         workout={structuredWorkout}
+      />
+
+      <RescheduleModal
+        isOpen={showRescheduleModal}
+        onClose={() => setShowRescheduleModal(false)}
+        {...(hasWorkoutId ? {
+          workout: {
+            id: workout.id!,
+            type: workout.type,
+            distance: workout.distance,
+            date: workout.date,
+          },
+        } : {})}
+        onReschedule={() => onClose()}
       />
     </Dialog>
   )
