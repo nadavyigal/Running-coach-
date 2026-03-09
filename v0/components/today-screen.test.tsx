@@ -131,7 +131,8 @@ describe('TodayScreen', () => {
     render(<TodayScreen />)
 
     expect(await screen.findByText('Rest Day')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /record run/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /log unplanned run/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^record run$/i })).not.toBeInTheDocument()
   })
 
   it('shows the next workout when today is empty but the active plan has an upcoming session', async () => {
@@ -166,6 +167,67 @@ describe('TodayScreen', () => {
     await waitFor(() => {
       expect(screen.getByTestId('add-run-modal')).toBeInTheDocument()
     })
+  })
+
+  it('shows completed workout state when todaysWorkout.completed is true', async () => {
+    const completedWorkout = { ...baseWorkout, completed: true }
+    ;(dbUtils.getTodaysWorkout as any).mockResolvedValueOnce(completedWorkout)
+
+    render(<TodayScreen />)
+
+    expect(await screen.findByText('Workout Complete')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^start run$/i })).not.toBeInTheDocument()
+    // Hero card shows "Done for today" status
+    expect(screen.getByText('Done for today')).toBeInTheDocument()
+  })
+
+  it('does not render Start Run as primary CTA on a rest day workout', async () => {
+    const restWorkout = { ...baseWorkout, type: 'rest' }
+    ;(dbUtils.getTodaysWorkout as any).mockResolvedValueOnce(restWorkout)
+    ;(dbUtils.getNextWorkoutForPlan as any).mockResolvedValueOnce(null)
+
+    render(<TodayScreen />)
+
+    expect(await screen.findByText('Rest Day')).toBeInTheDocument()
+    // Primary hero action should NOT be "Start Run"
+    expect(screen.queryByRole('button', { name: /^start run$/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /log unplanned run/i })).toBeInTheDocument()
+  })
+
+  it('shows create plan prompt when onboarding is complete but no plan exists', async () => {
+    ;(dbUtils.getTodaysWorkout as any).mockResolvedValueOnce(null)
+    ;(dbUtils.getActivePlan as any).mockResolvedValueOnce(null)
+    mockUseData.mockReturnValue({
+      userId: 1,
+      user: { id: 1, onboardingComplete: true },
+      plan: null,
+      primaryGoal: null,
+      weeklyRuns: [],
+      weeklyWorkouts: [],
+      weeklyStats: {
+        runsCompleted: 0,
+        totalDistanceKm: 0,
+        totalDurationSeconds: 0,
+        plannedWorkouts: 0,
+        completedWorkouts: 0,
+        consistencyRate: 0,
+      },
+      refresh: vi.fn().mockResolvedValue(undefined),
+    })
+
+    render(<TodayScreen />)
+
+    expect(await screen.findByText('Ready to start training?')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /create plan/i })).toBeInTheDocument()
+  })
+
+  it('does not render sticky bottom action bar', async () => {
+    render(<TodayScreen />)
+
+    await screen.findByText('Easy Run')
+    // Sticky bar had aria-label "Start run from sticky actions" / "Open recovery action"
+    expect(screen.queryByRole('button', { name: /start run from sticky actions/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /open recovery action/i })).not.toBeInTheDocument()
   })
 
   it('shows the active goal card when a primary goal exists', async () => {

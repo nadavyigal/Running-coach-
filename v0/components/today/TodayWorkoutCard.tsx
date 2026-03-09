@@ -1,7 +1,7 @@
 "use client"
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Award, ChevronDown, ChevronUp, HeartPulse, MapPin, Play, Zap } from "lucide-react"
+import { Award, CheckCircle, ChevronDown, ChevronUp, HeartPulse, MapPin, Play, Zap } from "lucide-react"
 import { todayCardVariants, todayStatusBadgeVariants } from "@/components/today/today-ui"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,9 +21,10 @@ interface TodayWorkoutCardProps {
   workoutCoachCue: string
   goalProgressPercent: number
   showBreakdown: boolean
-  isUpcoming?: boolean
-  upcomingDateLabel?: string
-  primaryActionLabel?: string
+  isUpcoming?: boolean | undefined
+  upcomingDateLabel?: string | undefined
+  primaryActionLabel?: string | undefined
+  isCompleted?: boolean | undefined
   onToggleBreakdown: () => void
   onPrimaryAction: () => void
   onSelectRoute: () => void
@@ -41,6 +42,7 @@ export function TodayWorkoutCard({
   isUpcoming = false,
   upcomingDateLabel,
   primaryActionLabel = "Start Run",
+  isCompleted = false,
   onToggleBreakdown,
   onPrimaryAction,
   onSelectRoute,
@@ -59,6 +61,28 @@ export function TodayWorkoutCard({
           <Skeleton className="h-24 w-full rounded-2xl" />
           <Skeleton className="h-16 w-full rounded-xl" />
           <Skeleton className="h-11 w-full" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (isCompleted && workout) {
+    const completedName =
+      structuredWorkout?.name ??
+      `${workout.type.charAt(0).toUpperCase()}${workout.type.slice(1)} Run`
+    return (
+      <Card className={todayCardVariants({ level: "primary" })}>
+        <CardContent className="space-y-3 p-5 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100/90">
+            <CheckCircle className="h-6 w-6 text-emerald-700" aria-hidden="true" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-foreground">Workout Complete</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {completedName}
+              {workoutDistanceLabel !== "--" ? ` · ${workoutDistanceLabel}` : ""}
+            </p>
+          </div>
         </CardContent>
       </Card>
     )
@@ -84,16 +108,10 @@ export function TodayWorkoutCard({
             </p>
             <p className="mt-1 text-emerald-800/90">Light mobility or a short walk helps absorb previous training load.</p>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Button onClick={onPrimaryAction} className="h-11 gap-2 rounded-xl">
-              <Play className="h-4 w-4" />
-              Record Run
-            </Button>
-            <Button variant="outline" onClick={onSelectRoute} className="h-11 gap-2 rounded-xl">
-              <MapPin className="h-4 w-4" />
-              Route
-            </Button>
-          </div>
+          <Button variant="ghost" size="sm" onClick={onPrimaryAction} className="w-full gap-2 rounded-xl text-sm">
+            <Play className="h-3.5 w-3.5" />
+            Log Unplanned Run
+          </Button>
         </CardContent>
       </Card>
     )

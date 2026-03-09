@@ -82,6 +82,7 @@ import { AdvancedAnalyticsAccordion } from "@/components/today/AdvancedAnalytics
 import { DataQualityBanner } from "@/components/today/DataQualityBanner"
 import { MorningCheckInModal, type MorningCheckInData } from "@/components/morning-checkin-modal"
 import { syncGarminEnabledData } from "@/lib/garminSync"
+import { formatRelativeTime } from "@/lib/garminDashboardData"
 
 function isActionableWorkout(workout: Workout | null): workout is Workout {
   return Boolean(workout && workout.type !== "rest" && !workout.completed)
@@ -991,16 +992,38 @@ export function TodayScreen() {
     }
   })
 
-  const isRunDay = Boolean(todaysWorkout && todaysWorkout.type !== "rest")
-  const primaryActionLabel = isRunDay ? "Start Run" : "Recovery Action"
-  const dailyStatusLabel = isRunDay ? "Workout day" : "Recovery day"
-  const dailyStatusTone = isRunDay ? "positive" as const : "info" as const
-  const dailyHeadline = isRunDay
-    ? `${todaysWorkout?.type ? `${todaysWorkout.type.charAt(0).toUpperCase()}${todaysWorkout.type.slice(1)}` : "Workout"} focus`
-    : "Recovery and reset"
-  const dailyCoachInsight = isRunDay
-    ? workoutCoachCue || "Keep effort controlled and focus on smooth form."
-    : getRecoveryRecommendation(recoveryScoreValue)
+  type TodayState = "run" | "rest" | "completed"
+  const todayState: TodayState = (() => {
+    if (!todaysWorkout) return "rest"
+    if (todaysWorkout.completed) return "completed"
+    if (todaysWorkout.type === "rest") return "rest"
+    return "run"
+  })()
+  const isRunDay = todayState === "run"
+  const primaryActionLabel =
+    todayState === "run" ? "Start Run" :
+    todayState === "completed" ? "Log Recovery" :
+    "Recovery Action"
+  const dailyStatusLabel =
+    todayState === "run" ? "Workout day" :
+    todayState === "completed" ? "Done for today" :
+    "Recovery day"
+  const dailyStatusTone =
+    todayState === "run" ? "positive" as const :
+    todayState === "completed" ? "positive" as const :
+    "info" as const
+  const dailyHeadline =
+    todayState === "run"
+      ? `${todaysWorkout!.type.charAt(0).toUpperCase()}${todaysWorkout!.type.slice(1)} focus`
+      : todayState === "completed"
+        ? `${todaysWorkout!.type.charAt(0).toUpperCase()}${todaysWorkout!.type.slice(1)} complete`
+        : "Recovery and reset"
+  const dailyCoachInsight =
+    todayState === "run"
+      ? workoutCoachCue || "Keep effort controlled and focus on smooth form."
+      : todayState === "completed"
+        ? "Great work! Prioritize recovery for your next session."
+        : getRecoveryRecommendation(recoveryScoreValue)
 
   const keyMetrics: KeyMetric[] = [
     {
@@ -1163,6 +1186,19 @@ export function TodayScreen() {
       )}
 
       <main className="space-y-4 px-4">
+        {localUser?.onboardingComplete && !plan && !isLoadingWorkout ? (
+          <Card className="rounded-[1.25rem] border-border/70">
+            <CardContent className="space-y-3 p-5 text-center">
+              <p className="font-semibold text-foreground">Ready to start training?</p>
+              <p className="text-sm text-muted-foreground">Create your personalized plan to get your first workout scheduled.</p>
+              <Button onClick={openPlanScreen} className="w-full gap-2">
+                <BarChart3 className="h-4 w-4" />
+                Create Plan
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
+
         <DailyFocusCard
           isLoading={isLoadingWorkout}
           dateLabel={new Date().toLocaleDateString("en-US", {
@@ -1176,11 +1212,14 @@ export function TodayScreen() {
           coachInsight={dailyCoachInsight}
           primaryAction={{
             label: primaryActionLabel,
-            onClick: isRunDay
-              ? startRecordFlow
-              : isGarminConnected
-                ? () => setShowAddActivityModal(true)
-                : () => setShowMorningCheckInModal(true),
+            onClick:
+              todayState === "run"
+                ? startRecordFlow
+                : todayState === "completed"
+                  ? () => setShowMorningCheckInModal(true)
+                  : isGarminConnected
+                    ? () => setShowAddActivityModal(true)
+                    : () => setShowMorningCheckInModal(true),
             disabled: isLoadingWorkout,
             icon: <Play className="h-4 w-4" />,
           }}
@@ -1189,12 +1228,6 @@ export function TodayScreen() {
               label: "View Plan",
               onClick: openPlanScreen,
               icon: <BarChart3 className="h-3.5 w-3.5" />,
-            },
-            {
-              label: isGarminFitSyncing ? "Syncing" : "Sync",
-              onClick: () => void handleGarminFitSync(),
-              disabled: isGarminFitSyncing || !userId,
-              icon: <RefreshCw className="h-3.5 w-3.5" />,
             },
           ]}
         />
@@ -1218,6 +1251,11 @@ export function TodayScreen() {
           summaryLabel={`${totalRuns} of ${plannedRuns || 0} planned runs completed`}
           isLoading={isLoadingWorkout}
         />
+        {plan?.updatedAt ? (
+          <p className="px-1 text-xs text-muted-foreground">
+            Plan updated {formatRelativeTime(new Date(plan.updatedAt))}
+          </p>
+        ) : null}
 
         <CoachInsightsPanel insights={coachInsights} isLoading={isLoadingRecovery} />
 
@@ -1265,16 +1303,17 @@ export function TodayScreen() {
           </h2>
           <TodayWorkoutCard
             isLoading={isLoadingWorkout}
-            workout={displayWorkout}
+            workout={todayState === "completed" ? todaysWorkout : displayWorkout}
             structuredWorkout={structuredWorkout}
             selectedRoute={selectedRoute}
             workoutDistanceLabel={workoutDistanceLabel}
             workoutCoachCue={workoutCoachCue}
             goalProgressPercent={getGoalProgressPercent()}
             showBreakdown={showWorkoutBreakdown}
-            isUpcoming={showingUpcomingWorkout}
+            isUpcoming={todayState !== "completed" && showingUpcomingWorkout}
             upcomingDateLabel={upcomingWorkoutDateLabel}
             primaryActionLabel={showingUpcomingWorkout ? "View Plan" : "Start Run"}
+            isCompleted={todayState === "completed"}
             onToggleBreakdown={() => setShowWorkoutBreakdown((prev) => !prev)}
             onPrimaryAction={showingUpcomingWorkout ? openPlanScreen : startRecordFlow}
             onSelectRoute={() => setShowRouteSelectorModal(true)}
@@ -1513,39 +1552,6 @@ export function TodayScreen() {
           ]}
         />
       </main>
-
-      <div className="fixed bottom-[5.4rem] left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 px-4">
-        <Card className="border-border/70 bg-background/95 shadow-[0_10px_30px_rgba(0,0,0,0.12)] backdrop-blur">
-          <CardContent className="grid grid-cols-3 gap-2 p-2">
-            <Button
-              className="h-10 text-xs"
-              onClick={
-                isRunDay
-                  ? startRecordFlow
-                  : isGarminConnected
-                    ? () => setShowAddActivityModal(true)
-                    : () => setShowMorningCheckInModal(true)
-              }
-              aria-label={isRunDay ? "Start run from sticky actions" : "Open recovery action"}
-            >
-              <Play className="mr-1 h-3.5 w-3.5" />
-              {isRunDay ? "Start" : "Recover"}
-            </Button>
-            <Button variant="outline" className="h-10 text-xs" onClick={openPlanScreen} aria-label="Open training plan">
-              Plan
-            </Button>
-            <Button
-              variant="outline"
-              className="h-10 text-xs"
-              onClick={() => void handleGarminFitSync()}
-              disabled={!userId || isGarminFitSyncing}
-              aria-label="Sync device data"
-            >
-              {isGarminFitSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Sync"}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
 
       <AuthModal
         open={showAuthModal}
