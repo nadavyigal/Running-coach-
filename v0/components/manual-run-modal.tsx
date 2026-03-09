@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -394,12 +394,18 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" aria-describedby="manual-run-modal-description">
+        <DialogDescription id="manual-run-modal-description" className="sr-only">
+          Log a recent run manually or import it from a workout screenshot to keep your training history accurate.
+        </DialogDescription>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Activity className="h-5 w-5" />
             Manual Run Entry
           </DialogTitle>
+          <DialogDescription>
+            Log a recent run manually or import it from a workout screenshot to keep your training history accurate.
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">

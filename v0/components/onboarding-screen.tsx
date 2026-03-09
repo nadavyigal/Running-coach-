@@ -481,6 +481,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   }
 
   const prevStep = () => {
+    if (isGeneratingPlan) return
     if (currentStep > 1) {
       trackStepProgression(currentStep - 1, `step_${currentStep - 1}`, 'backward')
       setCurrentStep(currentStep - 1)
@@ -562,6 +563,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const isStepValid = canProceed()
   const isFinalStep = currentStep === totalSteps
   const isActionDisabled = !isStepValid || (isFinalStep && isGeneratingPlan)
+  const finalStepStatusMessage = isGeneratingPlan
+    ? "Saving your profile and creating your starter plan. This may take a few seconds."
+    : "Finish setup to save your profile and create your starter plan."
 
   const applyAiProfile = (profile: {
     goal?: string
@@ -597,6 +601,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   }
 
   const handleComplete = async () => {
+    if (isGeneratingPlan) return
     console.log('🚀 ONBOARDING COMPLETION STARTED - WITH USER CREATION')
 
     setIsGeneratingPlan(true)
@@ -1307,7 +1312,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 size="icon"
                 className="text-white hover:bg-white/5 -ml-2"
                 onClick={prevStep}
-                disabled={currentStep === 1}
+                disabled={currentStep === 1 || isGeneratingPlan}
+                aria-label="Go back to the previous onboarding step"
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
@@ -1344,6 +1350,11 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           )}
           style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom, 2rem))' }}
         >
+          {isFinalStep && (
+            <div className="mb-3 text-center" role="status" aria-live="polite">
+              <p className="text-sm text-white/70">{finalStepStatusMessage}</p>
+            </div>
+          )}
           <Button
             type="button"
             className={cn(
@@ -1353,7 +1364,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             onClick={isFinalStep ? handleComplete : nextStep}
             disabled={isActionDisabled}
           >
-            {isFinalStep ? (isGeneratingPlan ? "Completing..." : "Complete setup") : "Continue"}
+            {isFinalStep ? (isGeneratingPlan ? "Creating your plan..." : "Create my plan") : "Continue"}
           </Button>
         </div>
       </div>

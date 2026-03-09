@@ -344,6 +344,7 @@ type CompletionModalData = {
 export function RecordScreen() {
   const [isRunning, setIsRunning] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
+  const [isSavingRun, setIsSavingRun] = useState(false)
   const [hasRecoveredRun, setHasRecoveredRun] = useState(false)
   const [autoPauseActive, setAutoPauseActive] = useState(false)
   const [autoPauseStartTime, setAutoPauseStartTime] = useState<number | null>(null)
@@ -2207,6 +2208,8 @@ export function RecordScreen() {
   }
 
   const stopRun = async () => {
+    if (isSavingRun) return
+
     stopTracking()
     setIsInitializingGps(false)
     setIsRunning(false)
@@ -2233,6 +2236,7 @@ export function RecordScreen() {
     speakCoachMessage("Run stopped. Great work today.", { interrupt: true, force: true })
 
     if (totalDistance > 0 && finalDuration > 0) {
+      setIsSavingRun(true)
       await saveRun(totalDistance, finalDuration)
     } else {
       toast({
@@ -2460,6 +2464,8 @@ export function RecordScreen() {
         description: "Failed to save run. Please try again.",
         variant: "destructive"
       })
+    } finally {
+      setIsSavingRun(false)
     }
   }
 
@@ -3214,16 +3220,19 @@ export function RecordScreen() {
                   <Button
                     onClick={handleStartRunPress}
                     className="h-10 bg-green-600 px-4 text-sm hover:bg-green-700"
-                    disabled={gpsPermission === 'denied' || gpsPermission === 'unsupported' || isInitializingGps || isGpsWarmingUp}
+                    disabled={gpsPermission === 'denied' || gpsPermission === 'unsupported' || isInitializingGps || isGpsWarmingUp || isSavingRun}
                   >
-                    {isInitializingGps || isGpsWarmingUp ? (
+                    {isSavingRun ? (
+                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                    ) : isInitializingGps || isGpsWarmingUp ? (
                       <Loader2 className="h-5 w-5 mr-2 animate-spin" />
                     ) : isGpsTracking && currentGPSAccuracy && currentGPSAccuracy.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START ? (
                       <CheckCircle className="h-5 w-5 mr-2" />
                     ) : (
                       <Play className="h-5 w-5 mr-2" />
                     )}
-                    {isInitializingGps ? 'Initializing GPS...' :
+                    {isSavingRun ? 'Saving run...' :
+                      isInitializingGps ? 'Initializing GPS...' :
                       isGpsWarmingUp ? 'Warming Up GPS...' :
                         isGpsTracking && currentGPSAccuracy && currentGPSAccuracy.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START ?
                           `Start Run (${currentGPSAccuracy.signalStrength}% GPS)` :
@@ -3236,6 +3245,7 @@ export function RecordScreen() {
                     <Button
                       onClick={resumeRun}
                       className="h-10 bg-green-600 px-4 text-sm hover:bg-green-700"
+                      disabled={isSavingRun}
                     >
                       <Play className="h-5 w-5 mr-2" />
                       Resume
@@ -3245,6 +3255,7 @@ export function RecordScreen() {
                       onClick={pauseRun}
                       className="h-10 px-4 text-sm"
                       variant="outline"
+                      disabled={isSavingRun}
                     >
                       <Pause className="h-5 w-5 mr-2" />
                       Pause
@@ -3254,6 +3265,7 @@ export function RecordScreen() {
                     onClick={stopRun}
                     className="h-10 px-4 text-sm"
                     variant="destructive"
+                    disabled={isSavingRun}
                   >
                     <Square className="h-5 w-5 mr-2" />
                     Stop
@@ -3262,6 +3274,16 @@ export function RecordScreen() {
               )}
             </div>
 
+            {isSavingRun && (
+              <div
+                className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
+                role="status"
+                aria-live="polite"
+              >
+                Saving your run and preparing your post-run check-in...
+              </div>
+            )}
+
             {/* Manual Entry Option */}
             {!isRunning && (
               <div className="pt-4 border-t space-y-2">
@@ -3269,6 +3291,7 @@ export function RecordScreen() {
                   variant="ghost"
                   onClick={() => setShowManualModal(true)}
                   className="text-gray-600 w-full"
+                  disabled={isSavingRun}
                 >
                   <Volume2 className="h-4 w-4 mr-2" />
                   Add Manual Run
@@ -3277,6 +3300,7 @@ export function RecordScreen() {
                   variant="outline"
                   onClick={() => setShowAddActivityModal(true)}
                   className="w-full"
+                  disabled={isSavingRun}
                 >
                   <Sparkles className="h-4 w-4 mr-2" />
                   Upload photo & use AI

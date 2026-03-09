@@ -1580,6 +1580,7 @@ export function TodayScreen() {
           open={showAddRunModal}
           onOpenChange={setShowAddRunModal}
           onRunAdded={refreshWorkouts}
+          onRecordWorkout={startRecordFlow}
         />
       </ModalErrorBoundary>
 

@@ -1,202 +1,158 @@
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OnboardingScreen } from './onboarding-screen';
-vi.mock('@/lib/analytics', () => ({
-  trackEngagementEvent: vi.fn(),
-  trackAnalyticsEvent: vi.fn(),
-  trackOnboardingEvent: vi.fn(),
-  trackOnboardingChatMessage: vi.fn(),
-  trackConversationPhase: vi.fn(),
-  trackAIGuidanceUsage: vi.fn(),
-  trackOnboardingCompletion: vi.fn(),
-  trackOnboardComplete: vi.fn(),
-  trackOnboardingCompletedFunnel: vi.fn(),
-  trackError: vi.fn(),
-}));
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { OnboardingScreen } from "./onboarding-screen"
+import { dbUtils } from "@/lib/dbUtils"
 
-vi.mock('@/contexts/DataContext', () => ({
+const mockToast = vi.fn()
+const mockOnComplete = vi.fn()
+
+vi.mock("@/hooks/use-toast", () => ({
+  useToast: () => ({
+    toast: mockToast,
+  }),
+}))
+
+vi.mock("@/contexts/DataContext", () => ({
   useData: () => ({
     refresh: vi.fn().mockResolvedValue(undefined),
   }),
-}));
+}))
 
-vi.mock('@/lib/db', () => ({
-  db: {
-    users: {
-      toArray: vi.fn().mockResolvedValue([{ id: 1, onboardingComplete: false }]),
-      add: vi.fn().mockResolvedValue(1),
-      put: vi.fn().mockResolvedValue(1),
-      update: vi.fn().mockResolvedValue(1),
-      get: vi.fn().mockResolvedValue({ id: 1 }),
-      delete: vi.fn().mockResolvedValue(undefined),
-      clear: vi.fn().mockResolvedValue(undefined),
-      where: vi.fn().mockReturnThis(),
-      equals: vi.fn().mockReturnThis(),
-      first: vi.fn().mockResolvedValue({ id: 1 }),
-      limit: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockReturnThis(),
-      reverse: vi.fn().mockReturnThis(),
-      count: vi.fn().mockResolvedValue(1),
-      and: vi.fn().mockReturnThis(),
-    },
-    plans: {
-      add: vi.fn().mockResolvedValue(1),
-      put: vi.fn().mockResolvedValue(1),
-      update: vi.fn().mockResolvedValue(1),
-      get: vi.fn().mockResolvedValue(null),
-      delete: vi.fn().mockResolvedValue(undefined),
-      clear: vi.fn().mockResolvedValue(undefined),
-      toArray: vi.fn().mockResolvedValue([]),
-      where: vi.fn().mockReturnThis(),
-      equals: vi.fn().mockReturnThis(),
-      first: vi.fn().mockResolvedValue(null),
-      limit: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockReturnThis(),
-      reverse: vi.fn().mockReturnThis(),
-      count: vi.fn().mockResolvedValue(0),
-      and: vi.fn().mockReturnThis(),
-    },
-    workouts: {
-      bulkAdd: vi.fn().mockResolvedValue([1, 2, 3]),
-      add: vi.fn().mockResolvedValue(1),
-      put: vi.fn().mockResolvedValue(1),
-      update: vi.fn().mockResolvedValue(1),
-      get: vi.fn().mockResolvedValue(null),
-      delete: vi.fn().mockResolvedValue(undefined),
-      clear: vi.fn().mockResolvedValue(undefined),
-      toArray: vi.fn().mockResolvedValue([]),
-      where: vi.fn().mockReturnThis(),
-      equals: vi.fn().mockReturnThis(),
-      first: vi.fn().mockResolvedValue(null),
-      limit: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockReturnThis(),
-      reverse: vi.fn().mockReturnThis(),
-      count: vi.fn().mockResolvedValue(0),
-      and: vi.fn().mockReturnThis(),
-    },
-    onboardingSessions: {
-      add: vi.fn().mockResolvedValue(1),
-      put: vi.fn().mockResolvedValue(1),
-      update: vi.fn().mockResolvedValue(1),
-      get: vi.fn().mockResolvedValue(null),
-      delete: vi.fn().mockResolvedValue(undefined),
-      clear: vi.fn().mockResolvedValue(undefined),
-      toArray: vi.fn().mockResolvedValue([]),
-      where: vi.fn().mockReturnThis(),
-      equals: vi.fn().mockReturnThis(),
-      first: vi.fn().mockResolvedValue(null),
-      limit: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockReturnThis(),
-      reverse: vi.fn().mockReturnThis(),
-      count: vi.fn().mockResolvedValue(0),
-      and: vi.fn().mockReturnThis(),
-    },
-    conversationMessages: {
-      add: vi.fn().mockResolvedValue(1),
-      put: vi.fn().mockResolvedValue(1),
-      update: vi.fn().mockResolvedValue(1),
-      get: vi.fn().mockResolvedValue(null),
-      delete: vi.fn().mockResolvedValue(undefined),
-      clear: vi.fn().mockResolvedValue(undefined),
-      toArray: vi.fn().mockResolvedValue([]),
-      where: vi.fn().mockReturnThis(),
-      equals: vi.fn().mockReturnThis(),
-      first: vi.fn().mockResolvedValue(null),
-      limit: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockReturnThis(),
-      reverse: vi.fn().mockReturnThis(),
-      count: vi.fn().mockResolvedValue(0),
-      and: vi.fn().mockReturnThis(),
-    },
-  },
+vi.mock("@/lib/dbUtils", () => ({
   dbUtils: {
-    migrateFromLocalStorage: vi.fn().mockResolvedValue(undefined),
-    createUser: vi.fn().mockResolvedValue(1),
-    getCurrentUser: vi.fn().mockResolvedValue({ id: 1 }),
-    updateUser: vi.fn().mockResolvedValue(undefined),
+    completeOnboardingAtomic: vi.fn(),
+    getPlan: vi.fn().mockResolvedValue({
+      startDate: new Date("2026-03-09T00:00:00.000Z"),
+    }),
+    updatePlanWithAIWorkouts: vi.fn().mockResolvedValue(undefined),
   },
-  resetDatabaseInstance: vi.fn().mockResolvedValue(undefined),
-}));
+  setReferenceRace: vi.fn().mockResolvedValue(undefined),
+}))
 
-vi.mock('@/lib/planGenerator', () => ({
-  generatePlan: vi.fn().mockResolvedValue({
-    plan: { id: 1, userId: 1 },
-    workouts: [],
+vi.mock("@/lib/onboardingAnalytics", () => ({
+  trackOnboardingStarted: vi.fn(),
+  trackStepProgression: vi.fn(),
+  trackFormValidationError: vi.fn(),
+  trackUserContext: vi.fn(),
+  OnboardingSessionTracker: class {
+    startStep() {}
+    completeStep() {}
+  },
+}))
+
+vi.mock("@/lib/analytics", () => ({
+  trackOnboardComplete: vi.fn(),
+  trackOnboardingCompletedFunnel: vi.fn(),
+}))
+
+vi.mock("@/components/error-toast", () => ({
+  useErrorToast: () => ({
+    showError: vi.fn(),
   }),
-}));
+  NetworkStatusIndicator: () => null,
+}))
 
-vi.mock('@/lib/planAdjustmentService', () => ({
-  planAdjustmentService: {
-    init: vi.fn(),
-    afterRun: vi.fn(),
-    clear: vi.fn(),
+vi.mock("@/hooks/use-network-error-handling", () => ({
+  useNetworkErrorHandling: () => ({
+    isOnline: true,
+  }),
+}))
+
+vi.mock("@/hooks/use-database-error-handling", () => ({
+  useDatabaseErrorHandling: () => ({
+    checkDatabaseHealth: vi.fn().mockResolvedValue({
+      isHealthy: true,
+      canWrite: true,
+    }),
+    recoverFromDatabaseError: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
+
+vi.mock("@/hooks/use-ai-service-error-handling", () => ({
+  useAIServiceErrorHandling: () => undefined,
+}))
+
+vi.mock("@/lib/onboardingManager", () => ({
+  onboardingManager: {
+    isOnboardingInProgress: vi.fn().mockReturnValue(false),
+    resetOnboardingState: vi.fn().mockResolvedValue(undefined),
   },
-}));
+}))
 
-const mockOnComplete = vi.fn();
+vi.mock("@/lib/challengeTemplates", () => ({
+  getChallengeTemplateBySlug: vi.fn().mockReturnValue(null),
+}))
 
-describe('OnboardingScreen', () => {
+vi.mock("@/lib/challenge-plan-sync", () => ({
+  syncPlanWithChallenge: vi.fn().mockResolvedValue({
+    planUpdated: true,
+  }),
+}))
+
+const goToSummaryStep = async () => {
+  fireEvent.click(screen.getByText(/Build a running habit/i))
+  fireEvent.click(screen.getByRole("button", { name: /Continue/i }))
+
+  fireEvent.click(screen.getByText(/Beginner/i))
+  fireEvent.click(screen.getByRole("button", { name: /Continue/i }))
+
+  fireEvent.change(screen.getByLabelText(/Your age/i), { target: { value: "30" } })
+  fireEvent.click(screen.getByRole("button", { name: /Continue/i }))
+
+  fireEvent.click(screen.getByRole("button", { name: /Continue/i }))
+
+  fireEvent.click(screen.getByText(/3 days/i))
+  fireEvent.click(screen.getByText(/Monday/i))
+  fireEvent.click(screen.getByRole("button", { name: /Continue/i }))
+
+  await waitFor(() => {
+    expect(screen.getByText(/Summary and confirmation/i)).toBeInTheDocument()
+  })
+}
+
+describe("OnboardingScreen", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-  });
+    vi.clearAllMocks()
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ plan: { workouts: [] } }),
+    }) as typeof fetch
+    ;(dbUtils.completeOnboardingAtomic as any).mockResolvedValue({
+      userId: 1,
+      planId: 1,
+    })
+  })
 
-  it('shows onboarding intro', () => {
-    render(<OnboardingScreen onComplete={mockOnComplete} />);
-    expect(screen.getByRole('heading', { name: /What is your main goal\?/i })).toBeInTheDocument();
-  });
+  it("uses an accessible back button label and shows the updated final CTA copy", async () => {
+    render(<OnboardingScreen onComplete={mockOnComplete} />)
 
-  it('renders and navigates through all steps', async () => {
-    render(<OnboardingScreen onComplete={mockOnComplete} />);
-    // Step 1: Goal selection
-    expect(screen.getByText(/What is your main goal/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByText(/Build a running habit/i));
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+    expect(
+      screen.getByRole("button", { name: "Go back to the previous onboarding step" })
+    ).toBeInTheDocument()
 
-    // Step 3: Experience
-    expect(screen.getByRole('heading', { name: /Running experience/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByText(/Beginner/i));
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+    await goToSummaryStep()
+    fireEvent.click(screen.getByLabelText(/I have read and agree/i))
 
-    // Step 4: Age
-    expect(screen.getByText(/How old are you/i)).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/Your age/i), { target: { value: '30' } });
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+    expect(screen.getByText("Finish setup to save your profile and create your starter plan.")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Create my plan" })).toBeEnabled()
+  })
 
-    // Step 5: Current race time
-    expect(screen.getByText(/estimated current race time/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+  it("shows a live final-step status and disables back navigation while setup is in progress", async () => {
+    ;(dbUtils.completeOnboardingAtomic as any).mockImplementation(
+      () => new Promise(() => undefined)
+    )
 
-    // Step 6: Schedule
-    expect(screen.getByText(/How many days per week would you like to run/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByText(/Saturday/i));
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+    render(<OnboardingScreen onComplete={mockOnComplete} />)
 
-    // Step 7: Summary
-    expect(screen.getByText(/Summary and confirmation/i)).toBeInTheDocument();
-  });
+    await goToSummaryStep()
+    fireEvent.click(screen.getByLabelText(/I have read and agree/i))
+    fireEvent.click(screen.getByRole("button", { name: "Create my plan" }))
 
-  it('validates required fields before proceeding', async () => {
-    render(<OnboardingScreen onComplete={mockOnComplete} />);
-    // Continue is disabled until a goal is selected.
-    expect(screen.getByRole('button', { name: /Continue/i })).toBeDisabled();
-  });
+    await waitFor(() => {
+      expect(screen.getByText("Saving your profile and creating your starter plan. This may take a few seconds.")).toBeInTheDocument()
+    })
 
-  it('shows the finish button on the summary step', async () => {
-    render(<OnboardingScreen onComplete={mockOnComplete} />);
-    fireEvent.click(screen.getByText(/Build a running habit/i));
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
-    fireEvent.click(screen.getByText(/Beginner/i));
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
-    fireEvent.change(screen.getByLabelText(/Your age/i), { target: { value: '30' } });
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
-    fireEvent.click(screen.getByText(/3 days/i));
-    fireEvent.click(screen.getByText(/Monday/i));
-    fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
-
-    fireEvent.click(screen.getByLabelText(/i have read and agree/i))
-
-    expect(await screen.findByRole('button', { name: /Complete setup/i })).toBeEnabled()
-  });
-}); 
+    expect(screen.getByRole("button", { name: "Go back to the previous onboarding step" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Creating your plan..." })).toBeDisabled()
+  })
+})

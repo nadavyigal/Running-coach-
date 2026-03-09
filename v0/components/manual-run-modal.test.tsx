@@ -13,7 +13,8 @@ vi.mock('@/components/ui/dialog', () => ({
   Dialog: ({ open, children }: any) => open ? <div>{children}</div> : null,
   DialogContent: ({ children }: any) => <div>{children}</div>,
   DialogHeader: ({ children }: any) => <div>{children}</div>,
-  DialogTitle: ({ children }: any) => <div>{children}</div>
+  DialogTitle: ({ children }: any) => <div>{children}</div>,
+  DialogDescription: ({ children }: any) => <div>{children}</div>,
 }))
 vi.mock('@/lib/dbUtils')
 vi.mock('@/lib/run-recording')
