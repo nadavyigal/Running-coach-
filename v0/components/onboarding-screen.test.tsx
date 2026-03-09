@@ -10,7 +10,15 @@ vi.mock('@/lib/analytics', () => ({
   trackConversationPhase: vi.fn(),
   trackAIGuidanceUsage: vi.fn(),
   trackOnboardingCompletion: vi.fn(),
+  trackOnboardComplete: vi.fn(),
+  trackOnboardingCompletedFunnel: vi.fn(),
   trackError: vi.fn(),
+}));
+
+vi.mock('@/contexts/DataContext', () => ({
+  useData: () => ({
+    refresh: vi.fn().mockResolvedValue(undefined),
+  }),
 }));
 
 vi.mock('@/lib/db', () => ({

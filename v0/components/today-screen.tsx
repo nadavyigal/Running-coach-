@@ -83,6 +83,10 @@ import { DataQualityBanner } from "@/components/today/DataQualityBanner"
 import { MorningCheckInModal, type MorningCheckInData } from "@/components/morning-checkin-modal"
 import { syncGarminEnabledData } from "@/lib/garminSync"
 
+function isActionableWorkout(workout: Workout | null): workout is Workout {
+  return Boolean(workout && workout.type !== "rest" && !workout.completed)
+}
+
 export function TodayScreen() {
   // Get shared data from context
   const {
@@ -111,6 +115,7 @@ export function TodayScreen() {
 
   const [showWorkoutBreakdown, setShowWorkoutBreakdown] = useState(false)
   const [todaysWorkout, setTodaysWorkout] = useState<Workout | null>(null)
+  const [nextWorkout, setNextWorkout] = useState<Workout | null>(null)
   const [isLoadingWorkout, setIsLoadingWorkout] = useState(true)
   const [structuredWorkout, setStructuredWorkout] = useState<StructuredWorkout | null>(null)
   const [engineGoalProgress, setEngineGoalProgress] = useState<GoalProgress | null>(null)
@@ -470,6 +475,8 @@ export function TodayScreen() {
   useEffect(() => {
     const initializeLocalData = async () => {
       if (!userId) {
+        setTodaysWorkout(null)
+        setNextWorkout(null)
         setIsLoadingWorkout(false)
         return
       }
@@ -485,13 +492,21 @@ export function TodayScreen() {
         stripEnd.setDate(today.getDate() + 3)
         stripEnd.setHours(23, 59, 59, 999)
 
+        const activePlan = plan?.id ? plan : await dbUtils.getActivePlan(userId)
         const [stripWorkouts, todayWorkout] = await Promise.all([
           dbUtils.getWorkoutsForDateRange(userId, stripStart, stripEnd, { planScope: "active" }),
           dbUtils.getTodaysWorkout(userId),
         ])
+        const endOfToday = new Date(today)
+        endOfToday.setHours(23, 59, 59, 999)
+        const upcomingWorkout =
+          !isActionableWorkout(todayWorkout) && activePlan?.id
+            ? await dbUtils.getNextWorkoutForPlan(activePlan.id, endOfToday)
+            : null
 
         setVisibleWorkouts(stripWorkouts)
         setTodaysWorkout(todayWorkout)
+        setNextWorkout(upcomingWorkout)
         setIsLoadingWorkout(false)
       } catch (error) {
         console.error("Error initializing local data:", error)
@@ -500,7 +515,7 @@ export function TodayScreen() {
     }
 
     initializeLocalData()
-  }, [userId, recoveryReloadKey])
+  }, [userId, recoveryReloadKey, plan])
 
   const loadChallengeData = useCallback(async () => {
     if (!userId) {
@@ -693,7 +708,11 @@ export function TodayScreen() {
   const refreshWorkouts = async () => {
     try {
       const resolvedUserId = userId ?? (await dbUtils.getCurrentUser())?.id ?? null
-      if (!resolvedUserId) return
+      if (!resolvedUserId) {
+        setTodaysWorkout(null)
+        setNextWorkout(null)
+        return
+      }
 
       // Refresh context data (weeklyRuns, weeklyWorkouts, goals, etc.)
       await refreshContext()
@@ -708,13 +727,21 @@ export function TodayScreen() {
       stripEnd.setDate(today.getDate() + 3)
       stripEnd.setHours(23, 59, 59, 999)
 
+      const activePlan = plan?.id ? plan : await dbUtils.getActivePlan(resolvedUserId)
       const [stripWorkouts, todayWorkout] = await Promise.all([
         dbUtils.getWorkoutsForDateRange(resolvedUserId, stripStart, stripEnd, { planScope: "active" }),
         dbUtils.getTodaysWorkout(resolvedUserId),
       ])
+      const endOfToday = new Date(today)
+      endOfToday.setHours(23, 59, 59, 999)
+      const upcomingWorkout =
+        !isActionableWorkout(todayWorkout) && activePlan?.id
+          ? await dbUtils.getNextWorkoutForPlan(activePlan.id, endOfToday)
+          : null
 
       setVisibleWorkouts(stripWorkouts)
       setTodaysWorkout(todayWorkout)
+      setNextWorkout(upcomingWorkout)
     } catch (error) {
       console.error("Error refreshing workouts:", error)
     }
@@ -897,14 +924,24 @@ export function TodayScreen() {
   const recoveryScoreValue = recoverySnapshot?.overallScore ?? 50
   const recoveryConfidenceValue = coachConfidence?.confidence ?? 0
   const recoveryNextStep = coachConfidence?.nextSteps?.[0] ?? 'Complete your morning check-in'
-  const workoutDistanceLabel = todaysWorkout
-    ? (todaysWorkout.distance && todaysWorkout.distance > 0
-        ? `${todaysWorkout.distance} km`
-        : todaysWorkout.duration && todaysWorkout.duration > 0
-          ? `${todaysWorkout.duration} min`
+  const displayWorkout = isActionableWorkout(todaysWorkout) ? todaysWorkout : nextWorkout
+  const showingUpcomingWorkout = Boolean(displayWorkout && displayWorkout.id === nextWorkout?.id && !isActionableWorkout(todaysWorkout))
+  const upcomingWorkoutDateLabel =
+    showingUpcomingWorkout && nextWorkout?.scheduledDate
+      ? new Date(nextWorkout.scheduledDate).toLocaleDateString("en-US", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        })
+      : undefined
+  const workoutDistanceLabel = displayWorkout
+    ? (displayWorkout.distance && displayWorkout.distance > 0
+        ? `${displayWorkout.distance} km`
+        : displayWorkout.duration && displayWorkout.duration > 0
+          ? `${displayWorkout.duration} min`
           : '--')
     : '--'
-  const workoutCoachCue = todaysWorkout
+  const workoutCoachCue = displayWorkout
     ? ({
         easy: 'Keep your breathing easy and conversational.',
         tempo: 'Hold a steady strong effort, not an all-out sprint.',
@@ -913,7 +950,7 @@ export function TodayScreen() {
         hill: 'Short stride, quick cadence, drive the arms uphill.',
         rest: 'Use this session for active recovery and mobility.',
         'time-trial': 'Settle early, then build effort in the final third.',
-      }[todaysWorkout.type] ?? 'Focus on relaxed form and steady breathing.')
+      }[displayWorkout.type] ?? 'Focus on relaxed form and steady breathing.')
     : ''
 
   const handleRouteSelected = (route: Route) => {
@@ -1228,15 +1265,18 @@ export function TodayScreen() {
           </h2>
           <TodayWorkoutCard
             isLoading={isLoadingWorkout}
-            workout={todaysWorkout}
+            workout={displayWorkout}
             structuredWorkout={structuredWorkout}
             selectedRoute={selectedRoute}
             workoutDistanceLabel={workoutDistanceLabel}
             workoutCoachCue={workoutCoachCue}
             goalProgressPercent={getGoalProgressPercent()}
             showBreakdown={showWorkoutBreakdown}
+            isUpcoming={showingUpcomingWorkout}
+            upcomingDateLabel={upcomingWorkoutDateLabel}
+            primaryActionLabel={showingUpcomingWorkout ? "View Plan" : "Start Run"}
             onToggleBreakdown={() => setShowWorkoutBreakdown((prev) => !prev)}
-            onStartRun={startRecordFlow}
+            onPrimaryAction={showingUpcomingWorkout ? openPlanScreen : startRecordFlow}
             onSelectRoute={() => setShowRouteSelectorModal(true)}
           />
 

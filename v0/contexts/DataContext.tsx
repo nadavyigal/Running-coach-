@@ -202,12 +202,25 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // Full refresh
   const refresh = useCallback(async () => {
-    if (!userId) return
-
     setIsLoading(true)
     setError(null)
 
     try {
+      const resolvedUser = userId ? await dbUtils.getUser(userId) : await dbUtils.getCurrentUser()
+      const resolvedUserId = resolvedUser?.id ?? null
+
+      if (!resolvedUserId) {
+        setUser(null)
+        setPlan(null)
+        setPrimaryGoal(null)
+        setActiveGoals([])
+        setWeeklyRuns([])
+        setRecentRuns([])
+        setAllRuns([])
+        setWeeklyWorkouts([])
+        return
+      }
+
       const { start, end } = getWeekBoundaries()
 
       // Fetch all data in parallel
@@ -221,18 +234,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         all,
         workouts,
       ] = await Promise.all([
-        dbUtils.getUser(userId),
-        dbUtils.getActivePlan(userId),
-        dbUtils.getPrimaryGoal(userId),
-        dbUtils.getUserGoals(userId, "active"),
-        dbUtils.getRunsInTimeRange(userId, start, end),
-        dbUtils.getUserRuns(userId, 30),
-        dbUtils.getRunsByUser(userId),
-        dbUtils.getWorkoutsForDateRange(userId, start, end, { planScope: "active" }),
+        dbUtils.getUser(resolvedUserId),
+        dbUtils.getActivePlan(resolvedUserId),
+        dbUtils.getPrimaryGoal(resolvedUserId),
+        dbUtils.getUserGoals(resolvedUserId, "active"),
+        dbUtils.getRunsInTimeRange(resolvedUserId, start, end),
+        dbUtils.getUserRuns(resolvedUserId, 30),
+        dbUtils.getRunsByUser(resolvedUserId),
+        dbUtils.getWorkoutsForDateRange(resolvedUserId, start, end, { planScope: "active" }),
       ])
 
       if (refreshedUser) {
         setUser(refreshedUser)
+      } else if (resolvedUser) {
+        setUser(resolvedUser)
       }
       setPlan(activePlan)
       setPrimaryGoal(primary)

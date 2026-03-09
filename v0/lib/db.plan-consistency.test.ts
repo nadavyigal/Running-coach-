@@ -60,6 +60,10 @@ async function addWorkout(planId: number, scheduledDate: Date, overrides: Partia
   })) as number
 }
 
+function getWeekdayKey(date: Date): Workout['day'] {
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()] as Workout['day']
+}
+
 describe('Training plan consistency', () => {
   beforeEach(async () => {
     await db.delete()
@@ -155,5 +159,75 @@ describe('Training plan consistency', () => {
     expect(workouts).toHaveLength(1)
     expect(workouts[0]?.id).toBe(expectedWorkoutId)
     expect(workouts[0]?.type).toBe('intervals')
+  })
+
+  it('creates a weekday-aligned starter plan that respects training days and long run day', async () => {
+    const { userId, planId } = await dbUtils.completeOnboardingAtomic({
+      goal: 'distance',
+      experience: 'beginner',
+      preferredTimes: ['morning'],
+      daysPerWeek: 3,
+      consents: { data: true, gdpr: true, push: false },
+      planPreferences: {
+        trainingDays: ['Tue', 'Thu', 'Sat'],
+        longRunDay: 'Sat',
+      } as any,
+    })
+
+    const activePlan = await dbUtils.getActivePlan(userId)
+    const workouts = await db.workouts.where('planId').equals(planId).toArray()
+    const upcomingWorkout = await dbUtils.getNextWorkoutForPlan(planId, new Date(Date.now() - 60 * 1000))
+
+    expect(activePlan?.id).toBe(planId)
+    expect(workouts.length).toBeGreaterThan(0)
+    expect(upcomingWorkout).not.toBeNull()
+
+    for (const workout of workouts) {
+      expect(['Tue', 'Thu', 'Sat']).toContain(workout.day)
+      expect(getWeekdayKey(new Date(workout.scheduledDate))).toBe(workout.day)
+      if (workout.day === 'Sat') {
+        expect(workout.type).toBe('long')
+      } else {
+        expect(workout.type).toBe('easy')
+      }
+      expect(workout.completed).toBe(false)
+    }
+  })
+
+  it('repairs an existing active plan that has no workouts', async () => {
+    const userId = await dbUtils.createUser({
+      goal: 'fitness',
+      experience: 'beginner',
+      preferredTimes: ['morning'],
+      daysPerWeek: 3,
+      consents: { data: true, gdpr: true, push: false },
+      onboardingComplete: false,
+    })
+    const existingPlanId = await addPlan(userId, {
+      isActive: true,
+      title: 'Draft Plan',
+      startDate: new Date('2026-03-01T00:00:00.000Z'),
+      endDate: new Date('2026-03-14T00:00:00.000Z'),
+    })
+
+    const result = await dbUtils.completeOnboardingAtomic({
+      goal: 'habit',
+      experience: 'beginner',
+      preferredTimes: ['morning'],
+      daysPerWeek: 3,
+      consents: { data: true, gdpr: true, push: false },
+      planPreferences: {
+        trainingDays: ['Mon', 'Wed', 'Sat'],
+        longRunDay: 'Sat',
+      } as any,
+    })
+
+    const repairedPlan = await db.plans.get(existingPlanId)
+    const workouts = await db.workouts.where('planId').equals(existingPlanId).toArray()
+
+    expect(result.planId).toBe(existingPlanId)
+    expect(repairedPlan?.isActive).toBe(true)
+    expect(workouts.length).toBeGreaterThan(0)
+    expect(await dbUtils.getNextWorkoutForPlan(existingPlanId, new Date(Date.now() - 60 * 1000))).not.toBeNull()
   })
 })

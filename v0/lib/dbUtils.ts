@@ -441,6 +441,150 @@ function validatePlanContract(candidate: Partial<Plan>): void {
   }
 }
 
+const SHORT_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+
+type ShortWeekday = typeof SHORT_WEEKDAYS[number];
+
+const SHORT_WEEKDAY_INDEX: Record<ShortWeekday, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+function isShortWeekday(value: unknown): value is ShortWeekday {
+  return typeof value === 'string' && SHORT_WEEKDAYS.includes(value as ShortWeekday);
+}
+
+function getDefaultStarterTrainingDays(daysPerWeek: number): ShortWeekday[] {
+  const resolvedDays = Math.min(Math.max(Math.round(daysPerWeek || 3), 2), 6);
+
+  switch (resolvedDays) {
+    case 2:
+      return ['Tue', 'Sat'];
+    case 3:
+      return ['Mon', 'Wed', 'Sat'];
+    case 4:
+      return ['Mon', 'Wed', 'Fri', 'Sun'];
+    case 5:
+      return ['Mon', 'Tue', 'Thu', 'Fri', 'Sun'];
+    default:
+      return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  }
+}
+
+function resolveStarterTrainingDays(
+  planPreferences: User['planPreferences'] | undefined,
+  daysPerWeek: number
+): ShortWeekday[] {
+  const candidateDays = (planPreferences?.trainingDays ?? planPreferences?.availableDays ?? [])
+    .filter(isShortWeekday);
+  const dedupedDays = Array.from(new Set(candidateDays));
+  const resolvedDays = Math.min(Math.max(Math.round(daysPerWeek || 3), 2), 6);
+
+  if (dedupedDays.length >= resolvedDays) {
+    return dedupedDays.slice(0, resolvedDays);
+  }
+
+  return getDefaultStarterTrainingDays(resolvedDays);
+}
+
+function resolveStarterLongRunDay(
+  trainingDays: ShortWeekday[],
+  planPreferences: User['planPreferences'] | undefined
+): ShortWeekday {
+  if (isShortWeekday(planPreferences?.longRunDay) && trainingDays.includes(planPreferences.longRunDay)) {
+    return planPreferences.longRunDay;
+  }
+
+  return trainingDays[trainingDays.length - 1] ?? 'Sat';
+}
+
+function calculatePlanWorkoutDate(planStartDate: Date, week: number, day: ShortWeekday): Date {
+  const start = new Date(planStartDate);
+  start.setHours(0, 0, 0, 0);
+
+  const targetDay = SHORT_WEEKDAY_INDEX[day];
+  const firstOffset = (targetDay - start.getDay() + 7) % 7;
+  start.setDate(start.getDate() + firstOffset + (week - 1) * 7);
+
+  return start;
+}
+
+function buildStarterWorkoutNotes(type: Workout['type']): string {
+  if (type === 'long') {
+    return 'Keep the effort relaxed and steady. Focus on time on feet over speed.';
+  }
+
+  return 'Run at a conversational pace and finish feeling controlled.';
+}
+
+function buildStarterWorkoutSeeds(params: {
+  planId: number;
+  planStartDate: Date;
+  daysPerWeek: number;
+  planPreferences: User['planPreferences'] | undefined;
+  totalWeeks?: number;
+}): Omit<Workout, 'id'>[] {
+  const totalWeeks = params.totalWeeks ?? 2;
+  const trainingDays = resolveStarterTrainingDays(params.planPreferences, params.daysPerWeek);
+  const longRunDay = resolveStarterLongRunDay(trainingDays, params.planPreferences);
+  const baseDistance = Math.max(2, Math.min(6, params.daysPerWeek <= 3 ? 3 : 4));
+  const workouts: Omit<Workout, 'id'>[] = [];
+
+  for (let week = 1; week <= totalWeeks; week += 1) {
+    for (const day of trainingDays) {
+      const type: Workout['type'] = day === longRunDay ? 'long' : 'easy';
+      const distance =
+        type === 'long'
+          ? Math.round((baseDistance + week) * 10) / 10
+          : Math.round((baseDistance + (week - 1) * 0.5) * 10) / 10;
+
+      workouts.push({
+        planId: params.planId,
+        week,
+        day,
+        type,
+        distance,
+        duration: type === 'long' ? 40 + (week - 1) * 5 : 28 + (week - 1) * 4,
+        intensity: type === 'long' ? 'moderate' : 'easy',
+        completed: false,
+        notes: buildStarterWorkoutNotes(type),
+        scheduledDate: calculatePlanWorkoutDate(params.planStartDate, week, day),
+        createdAt: nowUTC(),
+        updatedAt: nowUTC(),
+      });
+    }
+  }
+
+  return workouts;
+}
+
+async function planHasActionableUpcomingWorkout(
+  database: NonNullable<ReturnType<typeof getDatabase>>,
+  planId: number,
+  referenceDate: Date = nowUTC()
+): Promise<boolean> {
+  const workouts = await database.workouts.where('planId').equals(planId).toArray();
+  const today = new Date(referenceDate);
+  today.setHours(0, 0, 0, 0);
+
+  return workouts.some((workout) => {
+    const scheduledDate =
+      workout.scheduledDate instanceof Date ? workout.scheduledDate : new Date(workout.scheduledDate);
+
+    if (Number.isNaN(scheduledDate.getTime())) {
+      return false;
+    }
+
+    scheduledDate.setHours(0, 0, 0, 0);
+    return !workout.completed && scheduledDate >= today;
+  });
+}
+
 /**
  * Atomically persist onboarding profile and a minimal active plan, idempotent.
  * Returns when profile is fully written and readable in the same transaction.
@@ -521,6 +665,10 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
       // Mobile browsers have strict transaction timeouts (~500ms)
       // setTimeout/sleep inside transactions is forbidden by Dexie.js
 
+      const planStartDate = nowUTC();
+      planStartDate.setHours(0, 0, 0, 0);
+      const planEndDate = addDaysUTC(14, planStartDate);
+
       // Ensure one active plan exists
       const activePlan = await database.plans.where('userId').equals(userId).and(p => p.isActive).first();
       let planId: number;
@@ -529,8 +677,8 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
           userId,
           title: 'Default Running Plan',
           description: 'A basic running plan to get you started',
-          startDate: nowUTC(),
-          endDate: addDaysUTC(14),
+          startDate: planStartDate,
+          endDate: planEndDate,
           totalWeeks: 2,
           isActive: true,
           planType: 'basic',
@@ -544,31 +692,34 @@ export async function completeOnboardingAtomic(profile: Partial<User>, options?:
         } as any;
         validatePlanContract(planData);
         planId = (await database.plans.add(planData)) as number;
-
-        // Seed a few workouts so Today/Plan screens render content immediately
-        // Use bulkAdd for better performance and faster transaction completion on mobile
-        const workoutDays = ['Mon', 'Wed', 'Fri'];
-        const workoutsToAdd: Omit<Workout, 'id'>[] = [];
-        for (let week = 1; week <= 2; week++) {
-          for (const day of workoutDays.slice(0, planData.trainingDaysPerWeek || 3)) {
-            workoutsToAdd.push({
-              planId,
-              week,
-              day,
-              type: 'easy',
-              distance: 3,
-              duration: 30,
-              intensity: 'easy',
-              completed: false,
-              scheduledDate: addDaysUTC((week - 1) * 7),
-              createdAt: nowUTC(),
-              updatedAt: nowUTC(),
-            } as Omit<Workout, 'id'>);
-          }
-        }
-        await database.workouts.bulkAdd(workoutsToAdd);
       } else {
         planId = activePlan.id!;
+      }
+
+      const shouldRepairStarterPlan =
+        !activePlan || !(await planHasActionableUpcomingWorkout(database, planId, planStartDate));
+
+      if (shouldRepairStarterPlan) {
+        await database.plans.update(planId, {
+          startDate: planStartDate,
+          endDate: planEndDate,
+          totalWeeks: 2,
+          trainingDaysPerWeek: normalizedProfileRequired.daysPerWeek || 3,
+          peakWeeklyVolume: 20,
+          complexityScore: 25,
+          complexityLevel: 'basic',
+          createdInTimezone: getUserTimezone(),
+          updatedAt: nowUTC(),
+        } as Partial<Plan>);
+
+        await database.workouts.where('planId').equals(planId).delete();
+        const workoutsToAdd = buildStarterWorkoutSeeds({
+          planId,
+          planStartDate,
+          daysPerWeek: normalizedProfileRequired.daysPerWeek || 3,
+          planPreferences: normalizedProfileRequired.planPreferences,
+        });
+        await database.workouts.bulkAdd(workoutsToAdd);
       }
 
       return { userId, planId };
@@ -1031,6 +1182,47 @@ export async function updatePlanWithAIWorkouts(planId: number, aiPlan: any): Pro
     const database = getDatabase();
     if (!database) throw new Error('Database not available');
 
+    const existingPlan = await database.plans.get(planId);
+    if (!existingPlan) {
+      throw new Error(`Plan ${planId} not found`);
+    }
+
+    if (!Array.isArray(aiPlan?.workouts) || aiPlan.workouts.length === 0) {
+      console.warn('[updatePlanWithAIWorkouts] Skipping AI replacement due to empty workouts payload');
+      return;
+    }
+
+    const planStartDate =
+      existingPlan.startDate instanceof Date ? existingPlan.startDate : new Date(existingPlan.startDate);
+    const normalizedPlanStartDate = Number.isNaN(planStartDate.getTime()) ? nowUTC() : planStartDate;
+    normalizedPlanStartDate.setHours(0, 0, 0, 0);
+
+    const workoutsToAdd = aiPlan.workouts
+      .filter((aiWorkout: any) => typeof aiWorkout?.week === 'number' && isShortWeekday(aiWorkout?.day))
+      .map((aiWorkout: any) => ({
+        planId,
+        week: aiWorkout.week,
+        day: aiWorkout.day,
+        type: aiWorkout.type,
+        distance: aiWorkout.distance,
+        duration: aiWorkout.duration,
+        notes: aiWorkout.notes,
+        intensity: aiWorkout.type === 'easy' ? 'easy' : aiWorkout.type === 'tempo' ? 'threshold' : 'moderate',
+        completed: false,
+        scheduledDate: calculatePlanWorkoutDate(
+          normalizedPlanStartDate,
+          aiWorkout.week,
+          aiWorkout.day as ShortWeekday
+        ),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } satisfies Omit<Workout, 'id'>));
+
+    if (workoutsToAdd.length === 0) {
+      console.warn('[updatePlanWithAIWorkouts] Skipping AI replacement because no valid workouts were produced');
+      return;
+    }
+
     // Update plan metadata
     await database.plans.update(planId, {
       title: aiPlan.title || 'AI-Generated Running Plan',
@@ -1043,32 +1235,7 @@ export async function updatePlanWithAIWorkouts(planId: number, aiPlan: any): Pro
     await database.workouts.where('planId').equals(planId).delete();
 
     // Add AI-generated workouts
-    if (aiPlan.workouts && Array.isArray(aiPlan.workouts)) {
-      for (const aiWorkout of aiPlan.workouts) {
-        // Calculate scheduled date based on week and day
-        const weekOffset = (aiWorkout.week - 1) * 7;
-        const dayMap: Record<string, number> = {
-          'Mon': 0, 'Tue': 1, 'Wed': 2, 'Thu': 3, 'Fri': 4, 'Sat': 5, 'Sun': 6
-        };
-        const dayOffset = dayMap[aiWorkout.day] || 0;
-        const scheduledDate = addDaysUTC(weekOffset + dayOffset);
-
-        await database.workouts.add({
-          planId,
-          week: aiWorkout.week,
-          day: aiWorkout.day,
-          type: aiWorkout.type,
-          distance: aiWorkout.distance,
-          duration: aiWorkout.duration,
-          notes: aiWorkout.notes,
-          intensity: aiWorkout.type === 'easy' ? 'easy' : aiWorkout.type === 'tempo' ? 'threshold' : 'moderate',
-          completed: false,
-          scheduledDate,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        });
-      }
-    }
+    await database.workouts.bulkAdd(workoutsToAdd);
 
     console.log('✅ Plan updated with AI workouts:', planId);
   }, 'updatePlanWithAIWorkouts');

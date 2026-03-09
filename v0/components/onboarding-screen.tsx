@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { dbUtils, setReferenceRace } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
+import { useData } from "@/contexts/DataContext"
 import {
   trackOnboardingStarted,
   trackStepProgression,
@@ -21,6 +22,7 @@ import {
   trackUserContext,
   OnboardingSessionTracker
 } from '@/lib/onboardingAnalytics'
+import { trackOnboardComplete, trackOnboardingCompletedFunnel } from '@/lib/analytics'
 import { useErrorToast, NetworkStatusIndicator } from '@/components/error-toast'
 import { useNetworkErrorHandling } from '@/hooks/use-network-error-handling'
 import { useDatabaseErrorHandling } from '@/hooks/use-database-error-handling'
@@ -438,6 +440,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   })
   const [selectedChallenge, setSelectedChallenge] = useState<ChallengeTemplate | null>(null)
   const { toast } = useToast()
+  const { refresh: refreshData } = useData()
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -612,6 +615,12 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           longRunDay,
           currentRaceTimeSeconds: referenceRaceTimeSeconds,
         }
+        const analyticsExperience =
+          selectedExperience === 'regular'
+            ? 'advanced'
+            : selectedExperience === 'occasional'
+              ? 'intermediate'
+              : 'beginner'
 
         // Prepare form data
         const formData = {
@@ -652,6 +661,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           privacySettings: formData.privacySettings,
           planPreferences: formData.planPreferences as any
         }, { artificialDelayMs: 300 })
+        const starterPlan = await dbUtils.getPlan(planId)
         console.log('✅ Atomic commit complete:', { userId, planId })
 
         // If a challenge was selected, start the challenge
@@ -706,6 +716,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
+                    userId,
                     user: {
                       experience: formData.experience,
                       goal: formData.goal,
@@ -713,7 +724,22 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                       preferredTimes: formData.selectedTimes,
                       age: formData.age,
                       averageWeeklyKm: formData.averageWeeklyKm ?? undefined
-                    }
+                    },
+                    userContext: {
+                      userId,
+                      experience: formData.experience,
+                      goal: formData.goal,
+                      daysPerWeek: formData.daysPerWeek,
+                      preferredTimes: formData.selectedTimes,
+                      age: formData.age,
+                      averageWeeklyKm: formData.averageWeeklyKm ?? undefined
+                    },
+                    planPreferences: formData.planPreferences,
+                    startDate:
+                      starterPlan?.startDate instanceof Date
+                        ? starterPlan.startDate.toISOString()
+                        : starterPlan?.startDate,
+                    currentRaceTimeSeconds: referenceRaceTimeSeconds || undefined
                   }),
                   signal: controller.signal
                 });
@@ -769,6 +795,38 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             }
           })()
         }
+
+        try {
+          await refreshData()
+        } catch (refreshError) {
+          console.warn('Failed to refresh onboarding data before navigation:', refreshError)
+        }
+
+        void Promise.allSettled([
+          trackOnboardComplete({
+            age: age ?? undefined,
+            goalDist: selectedGoal === 'distance' ? referenceRaceDistance : 0,
+            rookieChallenge: Boolean(selectedChallenge),
+            daysPerWeek,
+            experience: analyticsExperience,
+          }),
+          trackOnboardingCompletedFunnel({
+            goal: selectedGoal,
+            experience: analyticsExperience,
+            daysPerWeek,
+          }),
+        ])
+
+        sessionTracker.complete({
+          completionMethod: 'guided_form',
+          userDemographics: {
+            age: age ?? undefined,
+            experience: analyticsExperience,
+            daysPerWeek,
+            preferredTimes: selectedTimes,
+          },
+          planGeneratedSuccessfully: true,
+        })
 
         return true
 

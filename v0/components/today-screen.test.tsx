@@ -113,6 +113,7 @@ describe('TodayScreen', () => {
     ;(dbUtils.getPrimaryGoal as any).mockResolvedValue(null)
     ;(dbUtils.getWorkoutsForDateRange as any).mockResolvedValue([])
     ;(dbUtils.getTodaysWorkout as any).mockResolvedValue(baseWorkout)
+    ;(dbUtils.getNextWorkoutForPlan as any).mockResolvedValue(null)
   })
 
   it('renders today workout details and quick actions', async () => {
@@ -131,6 +132,27 @@ describe('TodayScreen', () => {
 
     expect(await screen.findByText('Rest Day')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /record run/i })).toBeInTheDocument()
+  })
+
+  it('shows the next workout when today is empty but the active plan has an upcoming session', async () => {
+    const nextWorkout = {
+      ...baseWorkout,
+      id: 202,
+      type: 'long',
+      day: 'Wed',
+      distance: 12,
+      duration: 75,
+      scheduledDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+    }
+
+    ;(dbUtils.getTodaysWorkout as any).mockResolvedValueOnce(null)
+    ;(dbUtils.getNextWorkoutForPlan as any).mockResolvedValueOnce(nextWorkout)
+
+    render(<TodayScreen />)
+
+    expect(await screen.findByText('Next workout')).toBeInTheDocument()
+    expect(screen.getByText('Long Run')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /view plan/i }).length).toBeGreaterThan(0)
   })
 
   it('opens add run modal when Add Run is clicked', async () => {
