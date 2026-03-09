@@ -706,7 +706,7 @@ export function TodayScreen() {
     return engineGoalProgress?.trajectory ?? null
   }
 
-  const refreshWorkouts = async () => {
+  const refreshWorkouts = useCallback(async () => {
     try {
       const resolvedUserId = userId ?? (await dbUtils.getCurrentUser())?.id ?? null
       if (!resolvedUserId) {
@@ -746,7 +746,22 @@ export function TodayScreen() {
     } catch (error) {
       console.error("Error refreshing workouts:", error)
     }
-  }
+  }, [plan, refreshContext, userId])
+
+  useEffect(() => {
+    const refreshAfterSave = () => {
+      void refreshWorkouts()
+      void loadChallengeData()
+    }
+
+    window.addEventListener("run-saved", refreshAfterSave)
+    window.addEventListener("plan-updated", refreshAfterSave)
+
+    return () => {
+      window.removeEventListener("run-saved", refreshAfterSave)
+      window.removeEventListener("plan-updated", refreshAfterSave)
+    }
+  }, [loadChallengeData, refreshWorkouts])
 
   const startRecordFlow = () => {
     try {

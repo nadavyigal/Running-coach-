@@ -30,7 +30,7 @@ describe('ManualRunModal manual overrides', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     ;(dbUtils.getCurrentUser as any).mockResolvedValue({ id: 1 })
-    ;(recordRunWithSideEffects as any).mockResolvedValue({ runId: 1 })
+    ;(recordRunWithSideEffects as any).mockResolvedValue({ runId: 1, adaptation: { status: 'not_needed' } })
     ;(planAdjustmentService.afterRun as any).mockResolvedValue(undefined)
   })
 

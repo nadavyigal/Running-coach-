@@ -2958,6 +2958,14 @@ export async function getWorkoutsByPlan(planId: number): Promise<Workout[]> {
   }, 'getWorkoutsByPlan', []);
 }
 
+export async function getWorkoutById(workoutId: number): Promise<Workout | null> {
+  return safeDbOperation(async () => {
+    if (!db) return null;
+    const workout = await db.workouts.get(workoutId);
+    return workout ?? null;
+  }, 'getWorkoutById', null);
+}
+
 
 /**
  * Delete workout
@@ -5121,6 +5129,7 @@ export const dbUtils = {
   completeWorkout,
   getPlanWorkouts,
   getWorkoutsForDateRange,
+  getWorkoutById,
   getTodaysWorkout,
   getNextWorkoutForPlan,
   markWorkoutCompleted,

@@ -20,7 +20,7 @@ import { trackAnalyticsEvent } from "@/lib/analytics"
 import { getActiveChallenge, updateChallengeOnWorkoutComplete } from "@/lib/challengeEngine"
 import { startChallengeAndSyncPlan } from "@/lib/challenge-plan-sync"
 import { ENABLE_AUTO_PAUSE, ENABLE_VIBRATION_COACH, ENABLE_AUDIO_COACH } from "@/lib/featureFlags"
-import { recordRunWithSideEffects } from "@/lib/run-recording"
+import { recordRunWithSideEffects, retryPostRunAdaptation } from "@/lib/run-recording"
 import {
   getCoachingCueState,
   initializeCoachingCues,
@@ -2298,7 +2298,7 @@ export function RecordScreen() {
           : 0,
       })
 
-      const { runId, matchedWorkout, adaptationTriggered } = await recordRunWithSideEffects({
+      const { runId, matchedWorkout, adaptation } = await recordRunWithSideEffects({
         userId: user.id,
         distanceKm: distance,
         durationSeconds: duration,
@@ -2382,7 +2382,7 @@ export function RecordScreen() {
         title: "Run Saved",
         description: `${distance.toFixed(2)}km in ${formatTime(duration)}`,
       })
-      if (adaptationTriggered) {
+      if (adaptation.status === "completed") {
         toast({
           title: "Plan updated based on your recent performance",
           action: (
@@ -2392,6 +2392,50 @@ export function RecordScreen() {
               }}
             >
               View Changes
+            </ToastAction>
+          ),
+        })
+      } else if (
+        adaptation.status === "failed" &&
+        adaptation.reason &&
+        matchedWorkout?.planId
+      ) {
+        toast({
+          title: "Run saved, but the adaptive update did not finish",
+          description: adaptation.errorMessage ?? "You can retry the update without losing this run.",
+          variant: "destructive",
+          action: (
+            <ToastAction
+              onClick={() => {
+                void retryPostRunAdaptation({
+                  userId: user.id,
+                  planId: matchedWorkout.planId,
+                  runId,
+                  adaptationReason: adaptation.reason,
+                }).then((retryResult) => {
+                  if (retryResult.status === "completed") {
+                    toast({
+                      title: "Plan updated",
+                      description: "Your next sessions now reflect this completed run.",
+                    })
+                    try {
+                      window.dispatchEvent(new CustomEvent("navigate-to-plan"))
+                    } catch {
+                      router.push("/plan")
+                    }
+                    return
+                  }
+
+                  toast({
+                    title: "Adaptive update still pending",
+                    description:
+                      retryResult.errorMessage ?? "The run is saved. You can retry again from your plan.",
+                    variant: "destructive",
+                  })
+                })
+              }}
+            >
+              Retry
             </ToastAction>
           ),
         })
@@ -2423,7 +2467,15 @@ export function RecordScreen() {
     try {
       window.dispatchEvent(new CustomEvent("navigate-to-run-report", { detail: { runId } }))
     } catch {
-      router.push('/')
+      router.push(`/runs/${runId}/report`)
+    }
+  }
+
+  const navigateToToday = () => {
+    try {
+      window.dispatchEvent(new CustomEvent("navigate-to-today"))
+    } catch {
+      router.push("/")
     }
   }
 
@@ -3444,8 +3496,7 @@ export function RecordScreen() {
           onClose={() => setShowManualModal(false)}
           {...(currentWorkout?.id ? { workoutId: currentWorkout.id } : {})}
           onSaved={() => {
-            // Navigate back to today screen after saving manual run
-            router.push('/')
+            navigateToToday()
           }}
         />
       )}
@@ -3455,8 +3506,7 @@ export function RecordScreen() {
           onOpenChange={setShowAddActivityModal}
           onActivityAdded={() => {
             setShowAddActivityModal(false)
-            // Navigate back to today screen after adding activity
-            router.push('/')
+            navigateToToday()
           }}
           initialStep="upload"
           {...(currentWorkout?.id ? { workoutId: currentWorkout.id } : {})}

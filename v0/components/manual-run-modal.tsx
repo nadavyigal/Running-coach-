@@ -14,10 +14,11 @@ import { format } from "date-fns"
 import { Clock, Activity, Save, Upload, CalendarIcon } from "lucide-react"
 import { type Run } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
-import { recordRunWithSideEffects } from "@/lib/run-recording"
+import { recordRunWithSideEffects, retryPostRunAdaptation } from "@/lib/run-recording"
 import { useToast } from "@/hooks/use-toast"
 import { AiActivityAnalysisError, analyzeActivityImage } from "@/lib/ai-activity-client"
 import { trackAnalyticsEvent } from "@/lib/analytics"
+import { ToastAction } from "@/components/ui/toast"
 
 interface ManualRunModalProps {
   isOpen: boolean
@@ -118,7 +119,7 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
 	      const calories = Math.round(runDetails.distanceKm * 60 + (runDetails.durationSeconds / 60) * 3)
 	      const resolvedNotes = (runDetails.notes ?? notes).trim()
 
-      await recordRunWithSideEffects({
+	      const result = await recordRunWithSideEffects({
         userId: user.id,
         distanceKm: runDetails.distanceKm,
         durationSeconds: runDetails.durationSeconds,
@@ -138,7 +139,42 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
         description: `Great job! ${runDetails.distanceKm}km in ${formatDuration(runDetails.durationSeconds)}`,
       })
 
-      resetForm()
+	      if (
+	        result.adaptation.status === "failed" &&
+	        result.adaptation.reason &&
+	        result.matchedWorkout?.planId
+	      ) {
+	        toast({
+	          title: "Run saved, adaptive update needs retry",
+	          description: result.adaptation.errorMessage ?? "Your run is safe. Retry the plan update when you're ready.",
+	          variant: "destructive",
+	          action: (
+	            <ToastAction
+	              onClick={() => {
+	                void retryPostRunAdaptation({
+	                  userId: user.id,
+	                  planId: result.matchedWorkout!.planId,
+	                  runId: result.runId,
+	                  adaptationReason: result.adaptation.reason!,
+	                }).then((retryResult) => {
+	                  toast({
+	                    title: retryResult.status === "completed" ? "Plan updated" : "Adaptive update still pending",
+	                    description:
+	                      retryResult.status === "completed"
+	                        ? "Your next sessions now reflect this run."
+	                        : retryResult.errorMessage ?? "The run is saved. You can retry again later.",
+	                    ...(retryResult.status === "completed" ? {} : { variant: "destructive" as const }),
+	                  })
+	                })
+	              }}
+	            >
+	              Retry
+	            </ToastAction>
+	          ),
+	        })
+	      }
+
+	      resetForm()
 
       if (autoClose) {
         onSaved?.()

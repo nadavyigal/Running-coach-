@@ -3,6 +3,7 @@ import type { Goal, Run, Workout } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { trackAnalyticsEvent } from "@/lib/analytics"
 import { ENABLE_COMPLETION_LOOP } from "@/lib/featureFlags"
+import { generateFallbackPlan, generatePlan } from "@/lib/planGenerator"
 import { endOfDayUTC, startOfDayUTC } from "@/lib/timezone-utils"
 
 export type RunImportMeta = {
@@ -42,10 +43,21 @@ export type RecordRunWithSideEffectsInput = {
 
 export type AdaptationReason = 'performance_below_target' | 'distance_not_met' | 'consecutive_misses'
 
+export type RunAdaptationStatus = "not_needed" | "completed" | "failed"
+
+export type RunAdaptationResult = {
+  status: RunAdaptationStatus
+  reason?: AdaptationReason
+  planId?: number
+  errorMessage?: string
+  retryable?: boolean
+}
+
 export type RecordRunWithSideEffectsResult = {
   runId: number
   workoutId?: number
   matchedWorkout?: Workout
+  adaptation: RunAdaptationResult
   adaptationTriggered?: boolean
   adaptationReason?: AdaptationReason
 }
@@ -295,10 +307,16 @@ export async function findMatchingWorkout(run: Run): Promise<Workout | null> {
   return sortedMatches.at(0) ?? null
 }
 
-export async function confirmWorkoutCompletion(run: Run): Promise<Workout | null> {
-  if (!ENABLE_COMPLETION_LOOP) return null
+async function resolveCompletedWorkout(run: Run, linkedWorkout?: Workout | null): Promise<Workout | null> {
+  if (linkedWorkout) return linkedWorkout
+  if (typeof run.workoutId === "number") {
+    return await dbUtils.getWorkoutById(run.workoutId)
+  }
+  return await findMatchingWorkout(run)
+}
 
-  const matchedWorkout = await findMatchingWorkout(run)
+export async function confirmWorkoutCompletion(run: Run, linkedWorkout?: Workout | null): Promise<Workout | null> {
+  const matchedWorkout = await resolveCompletedWorkout(run, linkedWorkout)
   const variancePct =
     matchedWorkout && Number.isFinite(run.distance)
       ? computeDistanceVariancePct(run.distance, matchedWorkout.distance)
@@ -319,22 +337,19 @@ export async function confirmWorkoutCompletion(run: Run): Promise<Workout | null
   }
 
   const completionTimestamp = new Date()
-  await dbUtils.updateWorkout(matchedWorkout.id, {
+  const completionUpdate = {
     completed: true,
     completedAt: completionTimestamp,
     actualDistanceKm: run.distance,
     actualDurationMinutes: run.duration / 60,
-    actualPace: run.pace,
-  })
+    ...(typeof run.pace === "number" ? { actualPace: run.pace } : {}),
+  }
+  await dbUtils.updateWorkout(matchedWorkout.id, completionUpdate)
   await dbUtils.markWorkoutCompleted(matchedWorkout.id)
 
   return {
     ...matchedWorkout,
-    completed: true,
-    completedAt: completionTimestamp,
-    actualDistanceKm: run.distance,
-    actualDurationMinutes: run.duration / 60,
-    actualPace: run.pace,
+    ...completionUpdate,
   }
 }
 
@@ -437,41 +452,169 @@ const serializeRunForAdaptation = (run: Run) => ({
   updatedAt: run.updatedAt instanceof Date ? run.updatedAt.toISOString() : run.updatedAt,
 })
 
-const triggerPlanAdaptation = async (
+const buildAdaptationFailure = (
+  adaptationReason: AdaptationReason,
+  error: unknown
+): RunAdaptationResult => ({
+  status: "failed",
+  reason: adaptationReason,
+  errorMessage: error instanceof Error ? error.message : "Adaptive update failed",
+  retryable: true,
+})
+
+const dispatchWindowEvent = (name: string, detail?: Record<string, unknown>) => {
+  try {
+    window.dispatchEvent(new CustomEvent(name, detail ? { detail } : undefined))
+  } catch {
+    // Ignore environments without window/custom events
+  }
+}
+
+const executePlanAdaptation = async (
   userId: number,
   planId: number,
   run: Run,
   adaptationReason: AdaptationReason
-) => {
-  if (!userId || !planId) return
+): Promise<RunAdaptationResult> => {
+  if (!userId || !planId) {
+    return {
+      status: "failed",
+      reason: adaptationReason,
+      errorMessage: "Missing plan context for adaptive update",
+      retryable: false,
+    }
+  }
+
   try {
-    const response = await fetch("/api/plan/adapt", {
+    const [currentPlan, user] = await Promise.all([
+      dbUtils.getPlan(planId),
+      dbUtils.getCurrentUser(),
+    ])
+
+    if (!currentPlan) {
+      return {
+        status: "failed",
+        reason: adaptationReason,
+        errorMessage: "Current plan not found",
+        retryable: false,
+      }
+    }
+
+    if (!user?.id || user.id !== userId) {
+      return {
+        status: "failed",
+        reason: adaptationReason,
+        errorMessage: "Current user context unavailable",
+        retryable: true,
+      }
+    }
+
+    const startDate = new Date()
+    let planData
+    let generationSource: "ai" | "fallback" = "ai"
+
+    try {
+      planData = await generatePlan({
+        user,
+        startDate,
+        totalWeeks: currentPlan.totalWeeks,
+      })
+    } catch (generationError) {
+      generationSource = "fallback"
+      console.warn("AI plan adaptation generation failed, using fallback", generationError)
+      planData = await generateFallbackPlan(user, startDate, false, {
+        totalWeeks: currentPlan.totalWeeks,
+      })
+    }
+
+    await dbUtils.updatePlan(planId, { isActive: false })
+
+    const nextPlanId = await dbUtils.createPlan({
+      ...planData.plan,
+      title: `${currentPlan.title} (Adapted)`,
+      description: `${planData.plan.description} Adapted after ${adaptationReason.replace(/_/g, " ")}.`,
+      isActive: true,
+    })
+
+    for (const workout of planData.workouts) {
+      await dbUtils.createWorkout({
+        ...workout,
+        planId: nextPlanId,
+      })
+    }
+
+    await fetch("/api/plan/adjustments", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-user-id": String(userId),
       },
       body: JSON.stringify({
-        planId,
         userId,
-        adaptationReason,
-        recentRun: serializeRunForAdaptation(run),
+        sessionDate: run.completedAt instanceof Date ? run.completedAt.toISOString() : run.completedAt,
+        oldSession: {
+          planId: currentPlan.id,
+          title: currentPlan.title,
+          description: currentPlan.description,
+        },
+        newSession: {
+          planId: nextPlanId,
+          title: `${currentPlan.title} (Adapted)`,
+          description: `${planData.plan.description} Adapted after ${adaptationReason.replace(/_/g, " ")}.`,
+        },
+        reasons: [adaptationReason],
+        evidence: {
+          source: "run_recording",
+          generationSource,
+          recentRun: serializeRunForAdaptation(run),
+        },
       }),
+    }).catch((error) => {
+      console.warn("Failed to write plan adjustment entry", error)
     })
 
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => null)
-      console.warn("Plan adaptation request failed", response.status, errorBody)
-      return
-    }
+    dispatchWindowEvent("plan-updated", {
+      userId,
+      planId: nextPlanId,
+      previousPlanId: planId,
+      adaptationReason,
+    })
 
     void trackAnalyticsEvent("plan_adapted", {
       adaptation_reason: adaptationReason,
-      plan_id: planId,
+      plan_id: nextPlanId,
+      previous_plan_id: planId,
+      generation_source: generationSource,
       trigger: "workout_completion",
     })
+
+    return {
+      status: "completed",
+      reason: adaptationReason,
+      planId: nextPlanId,
+    }
   } catch (error) {
     console.warn("Failed to trigger plan adaptation", error)
+    return buildAdaptationFailure(adaptationReason, error)
   }
+}
+
+export async function retryPostRunAdaptation(input: {
+  userId: number
+  planId: number
+  runId: number
+  adaptationReason: AdaptationReason
+}): Promise<RunAdaptationResult> {
+  const run = await dbUtils.getRunById(input.runId)
+  if (!run) {
+    return {
+      status: "failed",
+      reason: input.adaptationReason,
+      errorMessage: "Saved run not found for retry",
+      retryable: false,
+    }
+  }
+  return executePlanAdaptation(input.userId, input.planId, run, input.adaptationReason)
 }
 
 const resolveRunDate = (run: Run) => normalizeDate(run.completedAt ?? run.createdAt)
@@ -631,16 +774,17 @@ export async function recordRunWithSideEffects(
     throw new Error("Please provide a valid date")
   }
 
+  const explicitWorkout =
+    typeof input.workoutId === "number" ? await dbUtils.getWorkoutById(input.workoutId) : null
   const workoutCandidate =
-    typeof input.workoutId === "number"
-      ? undefined
-      : await resolveWorkoutCandidate({
-          userId: input.userId,
-          completedAt,
-          workoutId: input.workoutId,
-          autoMatchWorkout: input.autoMatchWorkout,
-        })
-  const resolvedWorkoutId = typeof input.workoutId === "number" ? input.workoutId : workoutCandidate?.id
+    explicitWorkout ??
+    (await resolveWorkoutCandidate({
+      userId: input.userId,
+      completedAt,
+      ...(typeof input.workoutId === "number" ? { workoutId: input.workoutId } : {}),
+      ...(typeof input.autoMatchWorkout === "boolean" ? { autoMatchWorkout: input.autoMatchWorkout } : {}),
+    }))
+  const resolvedWorkoutId = workoutCandidate?.id
 
   const type =
     input.type ??
@@ -685,10 +829,13 @@ export async function recordRunWithSideEffects(
   }
 
   const runId = await dbUtils.createRun(runData)
-
-  if (typeof resolvedWorkoutId === "number") {
-    await dbUtils.markWorkoutCompleted(resolvedWorkoutId)
-  }
+  void trackAnalyticsEvent("run_saved", {
+    run_id: runId,
+    distance_km: distanceKm,
+    duration_seconds: durationSeconds,
+    source: input.importSource ?? "gps",
+    workout_id: resolvedWorkoutId ?? null,
+  }).catch(() => undefined)
 
   const runRecord: Run = {
     ...runData,
@@ -697,17 +844,25 @@ export async function recordRunWithSideEffects(
     updatedAt: new Date(),
   }
 
-  const matchedWorkout = await confirmWorkoutCompletion(runRecord)
+  const matchedWorkout = await confirmWorkoutCompletion(runRecord, workoutCandidate)
   const linkedWorkoutId =
     matchedWorkout?.id ?? (typeof resolvedWorkoutId === "number" ? resolvedWorkoutId : undefined)
   let adaptationReason: AdaptationReason | null = null
-  if (ENABLE_COMPLETION_LOOP && matchedWorkout) {
+  let adaptation: RunAdaptationResult = {
+    status: "not_needed",
+  }
+  if (ENABLE_COMPLETION_LOOP && matchedWorkout?.planId) {
     adaptationReason = await determineAdaptationReason(runRecord, matchedWorkout)
     if (adaptationReason) {
-      void triggerPlanAdaptation(runRecord.userId, matchedWorkout.planId, runRecord, adaptationReason)
+      adaptation = await executePlanAdaptation(
+        runRecord.userId,
+        matchedWorkout.planId,
+        runRecord,
+        adaptationReason
+      )
     }
   }
-  const adaptationTriggered = Boolean(adaptationReason)
+  const adaptationTriggered = adaptation.status === "completed"
 
     try {
       await updateGoalsFromRuns({
@@ -722,24 +877,18 @@ export async function recordRunWithSideEffects(
 
     await trackLocationQualityFromRun(input, completedAt)
 
-    try {
-      window.dispatchEvent(
-        new CustomEvent("run-saved", {
-        detail: {
-          userId: input.userId,
-          runId,
-          ...(typeof linkedWorkoutId === "number" ? { workoutId: linkedWorkoutId } : {}),
-        },
-      })
-    )
-  } catch {
-    // Ignore environments without window/custom events
-  }
+    dispatchWindowEvent("run-saved", {
+      userId: input.userId,
+      runId,
+      ...(typeof linkedWorkoutId === "number" ? { workoutId: linkedWorkoutId } : {}),
+      adaptation,
+    })
 
   return {
     runId,
     ...(typeof linkedWorkoutId === "number" ? { workoutId: linkedWorkoutId } : {}),
     ...(matchedWorkout ? { matchedWorkout } : {}),
+    adaptation,
     ...(adaptationTriggered && adaptationReason
       ? { adaptationTriggered, adaptationReason }
       : {}),
@@ -783,7 +932,7 @@ export async function syncUserRunData(userId: number): Promise<{
       userId,
       completedAt,
       autoMatchWorkout: true,
-      preferredPlanId: activePlanId,
+      ...(typeof activePlanId === "number" ? { preferredPlanId: activePlanId } : {}),
       excludedWorkoutIds: usedWorkoutIds,
     })
 
