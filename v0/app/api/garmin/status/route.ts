@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { getGarminConnectionStatus } from '@/lib/garmin/sync/syncUser'
+import { getGarminSyncState } from '@/lib/integrations/garmin/service'
 import { getGarminConfidenceLabel, getGarminFreshnessLabel } from '@/lib/garmin/ui/freshness'
 
 export const dynamic = 'force-dynamic'
@@ -35,14 +35,19 @@ export async function GET(req: Request) {
     )
   }
 
-  const status = await getGarminConnectionStatus(userId)
-  const freshnessLabel = getGarminFreshnessLabel(status.lastSyncAt)
-  const confidenceLabel = getGarminConfidenceLabel(status.lastSyncAt)
+  const status = await getGarminSyncState(userId)
+  const freshnessLabel = getGarminFreshnessLabel(status.lastSuccessfulSyncAt ?? status.lastSyncAt)
+  const confidenceLabel = getGarminConfidenceLabel(status.lastSuccessfulSyncAt ?? status.lastSyncAt)
 
   return NextResponse.json({
     connected: status.connected,
-    connectionStatus: status.status,
+    connectionStatus: status.connectionStatus,
+    syncState: status.syncState,
     lastSyncAt: status.lastSyncAt,
+    lastSuccessfulSyncAt: status.lastSuccessfulSyncAt,
+    lastWebhookReceivedAt: status.lastWebhookReceivedAt,
+    pendingJobs: status.pendingJobs,
+    lastSyncError: status.lastSyncError,
     errorState: status.errorState,
     freshnessLabel,
     confidenceLabel,

@@ -9,7 +9,12 @@ import { Button } from "@/components/ui/button"
 interface GarminStatusResponse {
   connected: boolean
   connectionStatus?: string
+  syncState?: string
   lastSyncAt: string | null
+  lastSuccessfulSyncAt?: string | null
+  lastWebhookReceivedAt?: string | null
+  pendingJobs?: number
+  lastSyncError?: string | null
   errorState: Record<string, unknown> | null
   freshnessLabel?: string
   confidenceLabel?: string
@@ -20,6 +25,10 @@ interface GarminSyncResponse {
   connected: boolean
   lastSyncAt: string | null
   errorState: Record<string, unknown> | null
+  details?: {
+    syncState?: string
+    pendingJobs?: number
+  }
   freshnessLabel?: string
   confidenceLabel?: string
 }
@@ -37,6 +46,22 @@ function formatLastSync(value: string | null): string {
 
 function asText(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null
+}
+
+function getSyncMessage(status: GarminStatusResponse | null): string {
+  if (!status?.connected) return "Not connected"
+  switch (status.syncState) {
+    case "syncing":
+      return "Syncing…"
+    case "waiting_for_first_activity":
+      return "Waiting for first Garmin activity"
+    case "delayed":
+      return "Delayed, Garmin may be experiencing sync lag"
+    case "reauth_required":
+      return "Reconnect Garmin"
+    default:
+      return "Connected"
+  }
 }
 
 export function SyncStatus({ userId }: SyncStatusProps) {
@@ -95,8 +120,10 @@ export function SyncStatus({ userId }: SyncStatusProps) {
       setStatus((current) => ({
         connected: payload.connected,
         connectionStatus: current?.connectionStatus ?? "connected",
+        syncState: payload.details?.syncState ?? current?.syncState,
         lastSyncAt: payload.lastSyncAt,
         errorState: payload.errorState,
+        pendingJobs: payload.details?.pendingJobs ?? current?.pendingJobs,
         freshnessLabel: payload.freshnessLabel ?? current?.freshnessLabel,
         confidenceLabel: payload.confidenceLabel ?? current?.confidenceLabel,
       }))
@@ -119,7 +146,7 @@ export function SyncStatus({ userId }: SyncStatusProps) {
     return "outline"
   }, [status])
 
-  const errorMessage = error ?? asText(status?.errorState?.message)
+  const errorMessage = error ?? asText(status?.lastSyncError) ?? asText(status?.errorState?.message)
 
   return (
     <div className="space-y-2" data-testid="garmin-sync-status">
@@ -148,7 +175,7 @@ export function SyncStatus({ userId }: SyncStatusProps) {
 
       <div className="flex items-center justify-between">
         <p className="text-xs text-emerald-100/70">
-          {status?.connected ? "Connected" : "Not connected"}
+          {getSyncMessage(status)}
         </p>
         <Button
           type="button"
@@ -156,11 +183,11 @@ export function SyncStatus({ userId }: SyncStatusProps) {
           variant="outline"
           className="border-emerald-300/40 bg-white/5 text-emerald-100 hover:bg-white/10"
           onClick={() => void refreshSync()}
-          disabled={Boolean(!userId || isLoading || isRefreshing || !status?.connected)}
+          disabled={Boolean(!userId || isLoading || isRefreshing || !status?.connected || status?.syncState === "reauth_required")}
           data-testid="garmin-sync-refresh"
         >
           <RefreshCw className={`mr-2 h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-          {isRefreshing ? "Refreshing..." : "Refresh"}
+          {isRefreshing ? "Refreshing..." : status?.syncState === "waiting_for_first_activity" ? "Start Backfill" : "Refresh"}
         </Button>
       </div>
     </div>

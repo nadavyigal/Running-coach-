@@ -14,6 +14,8 @@ export interface IntegrationRow {
 
 interface IntegrationsListCardProps {
   garminConnected: boolean
+  garminStatusLabel?: string
+  garminStatusTone?: "connected" | "available" | "warning"
   onGarminConnect: () => void
   onGarminDetails: () => void
   rows: IntegrationRow[]
@@ -21,6 +23,8 @@ interface IntegrationsListCardProps {
 
 export function IntegrationsListCard({
   garminConnected,
+  garminStatusLabel,
+  garminStatusTone = "connected",
   onGarminConnect,
   onGarminDetails,
   rows,
@@ -42,12 +46,18 @@ export function IntegrationsListCard({
             </span>
             <div className="min-w-0">
               <p className="font-medium">Garmin</p>
-              <p className="truncate text-sm text-muted-foreground">{garminConnected ? "Connected and syncing" : "Not connected"}</p>
+              <p className="truncate text-sm text-muted-foreground">
+                {garminStatusLabel ?? (garminConnected ? "Connected and syncing" : "Not connected")}
+              </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {garminConnected ? <span className={statusChipVariants({ tone: "connected" })}>Connected</span> : null}
+            {garminConnected ? (
+              <span className={statusChipVariants({ tone: garminStatusTone === "warning" ? "warning" : "connected" })}>
+                {garminStatusTone === "warning" ? "Attention" : "Connected"}
+              </span>
+            ) : null}
             {garminConnected ? (
               <Button variant="ghost" size="sm" className="h-8" onClick={onGarminDetails}>
                 Details

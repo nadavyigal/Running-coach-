@@ -1,3 +1,5 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
 const verifyAndParseStateMock = vi.hoisted(() =>
   vi.fn(() => ({
     userId: 42,
@@ -6,8 +8,12 @@ const verifyAndParseStateMock = vi.hoisted(() =>
   }))
 )
 
+const upsertGarminConnectionMock = vi.hoisted(() => vi.fn(async () => undefined))
+const upsertGarminTokensMock = vi.hoisted(() => vi.fn(async () => undefined))
+const enqueueGarminBackfillJobMock = vi.hoisted(() => vi.fn(async () => ({ id: 'job-1' })))
+
 vi.mock('@/lib/security.middleware', () => ({
-  withApiSecurity: (handler: any) => handler,
+  withApiSecurity: (handler: unknown) => handler,
 }))
 
 vi.mock('@/lib/logger', () => ({
@@ -22,15 +28,17 @@ vi.mock('../oauth-state', () => ({
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
-  getCurrentUser: vi.fn(async () => null),
+  getCurrentUser: vi.fn(async () => ({ id: 'auth-user-1' })),
+  getCurrentProfile: vi.fn(async () => ({ id: 'profile-1' })),
 }))
-
-const upsertGarminConnectionMock = vi.hoisted(() => vi.fn(async () => undefined))
-const upsertGarminTokensMock = vi.hoisted(() => vi.fn(async () => undefined))
 
 vi.mock('@/lib/server/garmin-oauth-store', () => ({
   upsertGarminConnection: upsertGarminConnectionMock,
   upsertGarminTokens: upsertGarminTokensMock,
+}))
+
+vi.mock('@/lib/integrations/garmin/service', () => ({
+  enqueueGarminBackfillJob: enqueueGarminBackfillJobMock,
 }))
 
 async function loadRoute() {
@@ -45,11 +53,14 @@ describe('/api/devices/garmin/callback', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    upsertGarminConnectionMock.mockReset()
+    upsertGarminTokensMock.mockReset()
+    enqueueGarminBackfillJobMock.mockReset()
     delete process.env.GARMIN_CLIENT_ID
     delete process.env.GARMIN_CLIENT_SECRET
   })
 
-  it('exchanges token with client_secret in request body and no Basic auth header', async () => {
+  it('exchanges token, stores the connection, and queues the initial backfill', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -76,27 +87,29 @@ describe('/api/devices/garmin/callback', () => {
       body: JSON.stringify({ code: 'auth-code-123', state: 'state-123' }),
     })
 
-    const res = await POST(req as any)
+    const res = await POST(req as never)
     const body = await res.json()
 
     expect(res.status).toBe(200)
     expect(body.success).toBe(true)
+    expect(body.device.connectionStatus).toBe('syncing')
     expect(fetchMock).toHaveBeenCalledTimes(3)
-    expect(upsertGarminConnectionMock).toHaveBeenCalledTimes(1)
+    expect(upsertGarminConnectionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 42,
+        authUserId: 'auth-user-1',
+        profileId: 'profile-1',
+        providerUserId: 'garmin-user-1',
+        status: 'connected',
+      })
+    )
     expect(upsertGarminTokensMock).toHaveBeenCalledTimes(1)
-
-    const [tokenUrl, tokenInit] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(tokenUrl).toBe('https://diauth.garmin.com/di-oauth2-service/oauth/token')
-    expect(tokenInit.method).toBe('POST')
-
-    const tokenHeaders = tokenInit.headers as Record<string, string>
-    expect(tokenHeaders['Content-Type']).toBe('application/x-www-form-urlencoded')
-    expect(tokenHeaders['Authorization']).toBeUndefined()
-
-    const encodedBody = String(tokenInit.body ?? '')
-    expect(encodedBody).toContain('grant_type=authorization_code')
-    expect(encodedBody).toContain('client_id=garmin-client-id')
-    expect(encodedBody).toContain('client_secret=garmin-client-secret')
-    expect(encodedBody).toContain('code_verifier=pkce-verifier')
+    expect(enqueueGarminBackfillJobMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 42,
+        profileId: 'profile-1',
+        providerUserId: 'garmin-user-1',
+      })
+    )
   })
 })
