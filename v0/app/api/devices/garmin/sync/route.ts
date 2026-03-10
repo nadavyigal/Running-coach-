@@ -1284,7 +1284,7 @@ function isOptionalDeriveQueueNotice(reason: string | null | undefined): boolean
   return normalized.includes('redis not configured') || normalized.includes('derive queue unavailable')
 }
 
-async function runGarminSyncForUser(params: {
+export async function runGarminSyncForUser(params: {
   userId: number
   options: GarminSyncExecutionOptions
 }): Promise<{
