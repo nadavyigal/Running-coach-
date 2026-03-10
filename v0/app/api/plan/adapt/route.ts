@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbUtils } from '@/lib/dbUtils';
-import { planAdaptationEngine } from '@/lib/planAdaptationEngine';
 import { logger } from '@/lib/logger';
+import { planAdaptationEngine } from '@/lib/planAdaptationEngine';
 import { recordPlanAdjustment } from '@/lib/server/plan-adjustments';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
 
+const AUTO_ADAPTATION_BOUNDARY_ERROR =
+  'Automatic completion-loop adaptation is local-only and must run in the browser-backed Dexie flow.';
 
 // Validation schema for manual adaptation requests
 const ManualAdaptationRequestSchema = z.object({
@@ -29,51 +31,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const autoParse = AutoAdaptationRequestSchema.safeParse(body);
     if (autoParse.success) {
-      const { userId, planId, adaptationReason } = autoParse.data;
-
-      const plan = await dbUtils.getPlan(planId);
-      if (!plan) {
-        return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
-      }
-
-      if (plan.userId !== userId) {
-        return NextResponse.json(
-          { error: 'User does not own requested plan' },
-          { status: 403 }
-        );
-      }
-
-      const adaptedPlan = await planAdaptationEngine.adaptExistingPlan(
-        planId,
-        adaptationReason
-      );
-
-      await recordPlanAdjustment({
-        userId,
-        sessionDate: new Date().toISOString(),
-        oldSession: {
-          planId: plan.id,
-          title: plan.title,
-          description: plan.description,
-        },
-        newSession: {
-          planId: adaptedPlan.id,
-          title: adaptedPlan.title,
-          description: adaptedPlan.description,
-        },
-        reasons: [adaptationReason],
-        evidence: {
-          source: 'api/plan/adapt:auto',
-        },
-      }).catch(() => {
-        // Do not fail adaptation when logging fails.
-      });
-
       return NextResponse.json({
-        success: true,
-        message: 'Plan adapted successfully',
-        plan: adaptedPlan,
-      });
+        error: AUTO_ADAPTATION_BOUNDARY_ERROR,
+        code: 'LOCAL_DB_BOUNDARY',
+      }, { status: 409 });
     }
 
     const { userId, reason, adaptationType, confidence } = ManualAdaptationRequestSchema.parse(body);

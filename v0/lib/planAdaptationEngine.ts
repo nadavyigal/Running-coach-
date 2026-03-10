@@ -117,8 +117,9 @@ export class PlanAdaptationEngine {
         throw new Error('Plan not found');
       }
 
-	      // Get user context
-	      const user = await dbUtils.getCurrentUser();
+	      // Read the owner from the plan so adaptation stays on the same local DB boundary
+	      // as onboarding, Today, and run save.
+	      const user = await dbUtils.getUser(currentPlan.userId);
 	      if (!user?.id) {
 	        throw new Error('User not found');
 	      }
@@ -152,13 +153,25 @@ export class PlanAdaptationEngine {
       }
 
       const { plan } = await response.json();
+      if (!plan || !Array.isArray(plan.workouts) || plan.workouts.length === 0) {
+        throw new Error('Adapted plan payload did not include workouts');
+      }
 
       // Create new adapted plan
-      const adaptedPlanData = {
-        ...currentPlan,
+      const adaptedPlanData: Omit<Plan, 'id' | 'createdAt' | 'updatedAt'> = {
+        userId: currentPlan.userId,
         title: `${currentPlan.title} (Adapted)`,
         description: `${currentPlan.description} - Adapted based on: ${adaptationReason}`,
-        isActive: true
+        startDate: currentPlan.startDate,
+        endDate: currentPlan.endDate,
+        totalWeeks: typeof plan.totalWeeks === 'number' ? plan.totalWeeks : currentPlan.totalWeeks,
+        isActive: true,
+        planType: currentPlan.planType,
+        trainingDaysPerWeek: currentPlan.trainingDaysPerWeek,
+        peakWeeklyVolume: currentPlan.peakWeeklyVolume,
+        complexityScore: currentPlan.complexityScore,
+        complexityLevel: currentPlan.complexityLevel,
+        createdInTimezone: currentPlan.createdInTimezone,
       };
 
       // Deactivate old plan
@@ -166,21 +179,7 @@ export class PlanAdaptationEngine {
 
       // Create new plan
       const newPlanId = await dbUtils.createPlan(adaptedPlanData);
-
-	      // Create workouts for the new plan
-	      for (const workout of plan.workouts) {
-	        await dbUtils.createWorkout({
-	          planId: newPlanId,
-	          week: workout.week,
-	          day: workout.day,
-	          type: workout.type,
-	          distance: workout.distance,
-	          completed: false,
-	          scheduledDate: new Date(), // Will be calculated based on plan start date
-	          ...(typeof workout.duration === 'number' ? { duration: workout.duration } : {}),
-	          ...(workout.notes ? { notes: workout.notes } : {}),
-	        });
-	      }
+      await dbUtils.updatePlanWithAIWorkouts(newPlanId, plan);
 
 	      const newPlan = await dbUtils.getPlan(newPlanId)
 	      if (!newPlan) throw new Error('Failed to load adapted plan')

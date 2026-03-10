@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
 import FDBFactory from 'fake-indexeddb/lib/FDBFactory'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { db, type Plan, type Workout } from './db'
 import { dbUtils } from './dbUtils'
 

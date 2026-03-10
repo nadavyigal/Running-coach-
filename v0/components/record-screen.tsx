@@ -2301,7 +2301,6 @@ export function RecordScreen() {
           ? rejectedPointCountRef.current / (acceptedPointCountRef.current + rejectedPointCountRef.current)
           : 0,
       })
-
       const { runId, matchedWorkout, adaptation } = await recordRunWithSideEffects({
         userId: user.id,
         distanceKm: distance,

@@ -1,7 +1,6 @@
-import type { Goal, Run, Workout } from "@/lib/db"
-
-import { dbUtils } from "@/lib/dbUtils"
 import { trackAnalyticsEvent } from "@/lib/analytics"
+import type { Goal, Run, Workout } from "@/lib/db"
+import { dbUtils } from "@/lib/dbUtils"
 import { ENABLE_COMPLETION_LOOP } from "@/lib/featureFlags"
 import { generateFallbackPlan, generatePlan } from "@/lib/planGenerator"
 import { endOfDayUTC, startOfDayUTC } from "@/lib/timezone-utils"
@@ -60,6 +59,7 @@ export type RecordRunWithSideEffectsResult = {
   adaptation: RunAdaptationResult
   adaptationTriggered?: boolean
   adaptationReason?: AdaptationReason
+  adaptationError?: string
 }
 
 const estimateCalories = (distanceKm: number) => Math.round(distanceKm * 60)
@@ -452,6 +452,8 @@ const serializeRunForAdaptation = (run: Run) => ({
   updatedAt: run.updatedAt instanceof Date ? run.updatedAt.toISOString() : run.updatedAt,
 })
 
+const getRunId = (run: Run) => (typeof run.id === "number" ? run.id : undefined)
+
 const buildAdaptationFailure = (
   adaptationReason: AdaptationReason,
   error: unknown
@@ -579,6 +581,14 @@ const executePlanAdaptation = async (
       previousPlanId: planId,
       adaptationReason,
     })
+    dispatchWindowEvent("plan-adapted", {
+      userId,
+      planId,
+      adaptedPlanId: nextPlanId,
+      adaptationReason,
+      ...(typeof getRunId(run) === "number" ? { runId: getRunId(run) } : {}),
+      recentRun: serializeRunForAdaptation(run),
+    })
 
     void trackAnalyticsEvent("plan_adapted", {
       adaptation_reason: adaptationReason,
@@ -595,6 +605,14 @@ const executePlanAdaptation = async (
     }
   } catch (error) {
     console.warn("Failed to trigger plan adaptation", error)
+    dispatchWindowEvent("plan-adaptation-failed", {
+      userId,
+      planId,
+      adaptationReason,
+      error: error instanceof Error ? error.message : "Adaptive update failed",
+      ...(typeof getRunId(run) === "number" ? { runId: getRunId(run) } : {}),
+      recentRun: serializeRunForAdaptation(run),
+    })
     return buildAdaptationFailure(adaptationReason, error)
   }
 }
@@ -715,7 +733,7 @@ const updateGoalsFromRuns = async ({
       goal.currentValue = goal.baselineValue
       goal.progressPercentage = 0
       updatedGoals += 1
-      console.log(`[updateGoalsFromRuns] Fixed stale goal ${goal.id}: set currentValue to baselineValue (${goal.baselineValue})`)
+      console.warn(`[updateGoalsFromRuns] Fixed stale goal ${goal.id}: set currentValue to baselineValue (${goal.baselineValue})`)
     }
 
     const window = resolveGoalWindow(goal, resolvedMeasurementDate)
@@ -891,6 +909,11 @@ export async function recordRunWithSideEffects(
     adaptation,
     ...(adaptationTriggered && adaptationReason
       ? { adaptationTriggered, adaptationReason }
+      : {}),
+    ...(adaptation.reason ? { adaptationReason: adaptation.reason } : {}),
+    ...(adaptation.reason ? { adaptationTriggered } : {}),
+    ...(adaptation.status === "failed" && adaptation.errorMessage
+      ? { adaptationError: adaptation.errorMessage }
       : {}),
   }
 }

@@ -2169,6 +2169,15 @@ export async function getTodaysWorkout(userId: number): Promise<Workout | null> 
   }, 'getTodaysWorkout', null);
 }
 
+export async function getWorkout(workoutId: number): Promise<Workout | null> {
+  return safeDbOperation(async () => {
+    const database = getDatabase();
+    if (!database) return null;
+
+    return (await database.workouts.get(workoutId)) ?? null;
+  }, 'getWorkout', null);
+}
+
 export async function getNextWorkoutForPlan(
   planId: number,
   referenceDate?: Date
@@ -5131,6 +5140,7 @@ export const dbUtils = {
   getWorkoutsForDateRange,
   getWorkoutById,
   getTodaysWorkout,
+  getWorkout,
   getNextWorkoutForPlan,
   markWorkoutCompleted,
   getWorkoutsByPlan,
