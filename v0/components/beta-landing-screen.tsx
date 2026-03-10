@@ -316,13 +316,6 @@ export function BetaLandingScreen({
     }
   };
 
-  const _handleSkip = () => {
-    trackAnalyticsEvent("beta_signup_skipped", {
-      source: "landing_page",
-    });
-    handleContinue();
-  };
-
   const legalLinksMarkup = showLegalLinks ? (
     <div className={`mt-6 text-center text-xs text-white/60 ${isHebrew ? 'space-x-reverse space-x-3' : 'space-x-3'}`}>
       <Link href={mergedLegalLinks.privacyHref} className="hover:text-white/80 transition-colors">

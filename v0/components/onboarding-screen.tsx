@@ -825,10 +825,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         sessionTracker.complete({
           completionMethod: 'guided_form',
           userDemographics: {
-            age: age ?? undefined,
             experience: analyticsExperience,
             daysPerWeek,
             preferredTimes: selectedTimes,
+            ...(typeof age === 'number' ? { age } : {}),
           },
           planGeneratedSuccessfully: true,
         })

@@ -135,6 +135,7 @@ export function GoalCreationWizard({ isOpen, onClose, userId, onGoalCreated }: G
   const [validationSuggestions, setValidationSuggestions] = useState<string[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [isDeadlineCalendarOpen, setIsDeadlineCalendarOpen] = useState(false);
+  const currentWizardStep = WIZARD_STEPS[currentStep] ?? WIZARD_STEPS[0]!;
 
   const [formData, setFormData] = useState<GoalFormData>({
     title: '',
@@ -189,7 +190,7 @@ export function GoalCreationWizard({ isOpen, onClose, userId, onGoalCreated }: G
     const errors: string[] = [];
     const suggestions: string[] = [];
 
-    switch (WIZARD_STEPS[currentStep].id) {
+    switch (currentWizardStep.id) {
       case 'specific':
         if (!formData.title || formData.title.length < 5) {
           errors.push('Goal title must be at least 5 characters long');
@@ -253,11 +254,11 @@ export function GoalCreationWizard({ isOpen, onClose, userId, onGoalCreated }: G
     setValidationSuggestions([]);
   };
 
-  const calculateFeasibilityScore = () => {
+  const calculateFeasibilityScore = (): void => {
     const { currentLevel, targetLevel } = formData.achievableAssessment;
     const { deadline } = formData.timeBound;
     
-    if (currentLevel <= 0 || targetLevel <= 0) return 50;
+    if (currentLevel <= 0 || targetLevel <= 0) return;
 
     const improvementNeeded = Math.abs(targetLevel - currentLevel);
     const timeAvailable = Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
@@ -392,7 +393,7 @@ export function GoalCreationWizard({ isOpen, onClose, userId, onGoalCreated }: G
   };
 
   const renderStepContent = () => {
-    switch (WIZARD_STEPS[currentStep].id) {
+    switch (currentWizardStep.id) {
       case 'template':
         return (
           <div className="space-y-6">
@@ -819,7 +820,7 @@ export function GoalCreationWizard({ isOpen, onClose, userId, onGoalCreated }: G
                       }}
                       disabled={(date) => date < new Date()}
                       defaultMonth={formData.timeBound.deadline || new Date()}
-                      captionLayout="dropdown-buttons"
+                      captionLayout="dropdown"
                     />
                   </PopoverContent>
                 </Popover>

@@ -66,7 +66,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     // Log to analytics
     if (typeof window !== 'undefined' && window.posthog) {
-      window.posthog.capture('error_boundary_triggered', {
+      window.posthog?.capture?.('error_boundary_triggered', {
         error: error.message,
         stack: error.stack,
         componentStack: errorInfo.componentStack,

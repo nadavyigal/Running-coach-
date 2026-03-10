@@ -52,6 +52,8 @@ export function WelcomeModal() {
 
       return () => clearTimeout(timer)
     }
+
+    return undefined
   }, [user])
 
   const handleCreateAccount = () => {

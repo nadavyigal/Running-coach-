@@ -147,7 +147,7 @@ export function GoalDiscoveryWizard({
     }
   ]
 
-  const currentStep = steps[currentStepIndex]
+  const currentStep = steps[currentStepIndex] ?? steps[0]
   const progressPercentage = ((currentStepIndex + 1) / steps.length) * 100
 
   if (!currentStep) return null
@@ -221,7 +221,9 @@ export function GoalDiscoveryWizard({
       })
 
       setDiscoveryResult(result)
-      steps[currentStepIndex].isComplete = true
+      if (steps[currentStepIndex]) {
+        steps[currentStepIndex].isComplete = true
+      }
 
       toast({
         title: "Goals Discovered!",

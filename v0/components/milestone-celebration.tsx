@@ -11,7 +11,7 @@ import {
   Star,
   Award,
   Sparkles,
-  Fire,
+  Flame,
   Crown,
   Medal,
   TrendingUp,
@@ -84,6 +84,8 @@ export function MilestoneCelebration({
         clearTimeout(confettiTimer);
       };
     }
+
+    return undefined;
   }, [isOpen, milestones]);
 
   const currentMilestone = milestones[currentMilestoneIndex];
@@ -110,7 +112,7 @@ export function MilestoneCelebration({
 
   const getRandomMessage = (level: 'bronze' | 'silver' | 'gold' | 'diamond') => {
     const messages = motivationalMessages[level];
-    return messages[Math.floor(Math.random() * messages.length)];
+    return messages[Math.floor(Math.random() * messages.length)] ?? messages[0];
   };
 
   const formatValue = (value: number, unit: string) => {
@@ -241,7 +243,7 @@ export function MilestoneCelebration({
 
                 {currentMilestone.streakCount && currentMilestone.streakCount > 1 && (
                   <div className="flex items-center gap-2 p-2 bg-orange-50 rounded-lg">
-                    <Fire className="h-4 w-4 text-orange-500" />
+                    <Flame className="h-4 w-4 text-orange-500" />
                     <span className="text-sm font-medium text-orange-700">
                       {currentMilestone.streakCount} milestone streak!
                     </span>

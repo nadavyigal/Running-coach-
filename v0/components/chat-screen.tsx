@@ -636,7 +636,7 @@ export function ChatScreen() {
 
       if (activePlan) {
         context += `
-      - Training Plan: ${activePlan.name} (${activePlan.difficulty} level)`;
+      - Training Plan: ${activePlan.title}${activePlan.fitnessLevel ? ` (${activePlan.fitnessLevel} level)` : ''}`;
       }
 
       if (lastThreeRuns.length > 0) {
@@ -981,7 +981,7 @@ export function ChatScreen() {
             </div>
             <div className="p-4">
               <CoachingPreferencesSettings
-                userId={user.id!}
+                userId={user?.id ?? 0}
                 onClose={() => setShowCoachingPreferences(false)}
               />
             </div>

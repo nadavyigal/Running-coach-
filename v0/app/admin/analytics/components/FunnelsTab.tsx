@@ -179,7 +179,7 @@ export function FunnelsTab() {
                   <YAxis label={{ value: 'Users', angle: -90, position: 'insideLeft' }} />
                   <Tooltip
                     content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
+                      if (active && payload?.length && payload[0]) {
                         const data = payload[0].payload
                         return (
                           <div className="bg-white p-4 rounded shadow-lg border">
@@ -268,13 +268,13 @@ export function FunnelsTab() {
             </CardHeader>
             <CardContent className="space-y-2">
               <p className="text-sm text-blue-800">
-                • {data.steps.length > 1 && data.steps[1].dropOff > 50 && (
+                • {data.steps.length > 1 && data.steps[1]?.dropOff != null && data.steps[1].dropOff > 50 && (
                   <>
                     <strong>High drop-off at Step 2:</strong> {data.steps[1].dropOff}% of users do not
                     reach {data.steps[1].stepName}. Consider simplifying onboarding.
                   </>
                 )}
-                {data.steps.length > 1 && data.steps[1].dropOff <= 50 && (
+                {data.steps.length > 1 && data.steps[1]?.dropOff != null && data.steps[1].dropOff <= 50 && (
                   <>
                     <strong>Strong Step 1-2 retention:</strong> {100 - data.steps[1].dropOff}% of users
                     continue to {data.steps[1].stepName}.
