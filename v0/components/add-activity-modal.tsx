@@ -321,6 +321,7 @@ export function AddActivityModal({
       variant: "destructive",
       action: (
         <ToastAction
+          altText="Retry adaptive plan update"
           onClick={() => {
             void retryPostRunAdaptation({
               userId: payload.userId,
@@ -397,6 +398,10 @@ export function AddActivityModal({
 
     try {
       const result = await analyzeActivityImage(file)
+      const normalizedGpsCoordinates = result.gpsCoordinates
+        ?.filter((point): point is { lat: number; lng: number } =>
+          typeof point?.lat === "number" && typeof point?.lng === "number"
+        )
       trackAnalyticsEvent("run_image_analysis_succeeded", {
         source: "add_activity_modal",
         confidence: result.confidence ?? 0,
@@ -417,7 +422,7 @@ export function AddActivityModal({
         ...(result.parserVersion ? { parserVersion: result.parserVersion } : {}),
         ...(typeof result.hasRouteMap === "boolean" ? { hasRouteMap: result.hasRouteMap } : {}),
         ...(result.routeType ? { routeType: result.routeType } : {}),
-        ...(result.gpsCoordinates ? { gpsCoordinates: result.gpsCoordinates } : {}),
+        ...(normalizedGpsCoordinates?.length ? { gpsCoordinates: normalizedGpsCoordinates } : {}),
         ...(result.mapImageDescription ? { mapImageDescription: result.mapImageDescription } : {}),
       })
 

@@ -11,7 +11,7 @@ import {
   Star,
   Award,
   Sparkles,
-  Fire,
+  Flame,
   Crown,
   Medal,
   TrendingUp,
@@ -241,7 +241,7 @@ export function MilestoneCelebration({
 
                 {currentMilestone.streakCount && currentMilestone.streakCount > 1 && (
                   <div className="flex items-center gap-2 p-2 bg-orange-50 rounded-lg">
-                    <Fire className="h-4 w-4 text-orange-500" />
+                    <Flame className="h-4 w-4 text-orange-500" />
                     <span className="text-sm font-medium text-orange-700">
                       {currentMilestone.streakCount} milestone streak!
                     </span>

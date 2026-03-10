@@ -819,7 +819,7 @@ export function GoalCreationWizard({ isOpen, onClose, userId, onGoalCreated }: G
                       }}
                       disabled={(date) => date < new Date()}
                       defaultMonth={formData.timeBound.deadline || new Date()}
-                      captionLayout="dropdown-buttons"
+                      captionLayout="dropdown"
                     />
                   </PopoverContent>
                 </Popover>

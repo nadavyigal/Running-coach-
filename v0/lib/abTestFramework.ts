@@ -344,7 +344,7 @@ export class ABTestFramework {
       }
 
       // Check cohorts
-      if (criteria.cohorts && user.cohortId && !criteria.cohorts.includes(user.cohortId)) {
+      if (criteria.cohorts && user.cohortId && !criteria.cohorts.includes(String(user.cohortId))) {
         return false
       }
 

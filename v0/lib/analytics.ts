@@ -5,6 +5,9 @@ import { logger } from './logger'
 type PosthogInstance = {
   init?: (apiKey: string, config?: Record<string, unknown>) => void
   capture?: (eventName: string, properties?: Record<string, any>) => void
+  identify?: (distinctId: string, properties?: Record<string, unknown>) => void
+  setPersonProperties?: (properties: Record<string, unknown>) => void
+  flush?: (callback?: () => void) => void
 }
 
 declare global {

@@ -22,7 +22,7 @@ import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
 import { getActiveChallenge } from "@/lib/challengeEngine"
 import type { DailyChallengeData } from "@/lib/challengeEngine"
 import { NextChallengeRecommendation } from "@/components/next-challenge-recommendation"
-import { getNextChallengeRecommendation } from "@/lib/challengeTemplates"
+import { getNextChallengeRecommendation, type ChallengeTemplateSeed } from "@/lib/challengeTemplates"
 import { startChallengeAndSyncPlan } from "@/lib/challenge-plan-sync"
 import { PlanAdjustmentNotice } from "@/components/plan/PlanAdjustmentNotice"
 
@@ -44,7 +44,7 @@ export function PlanScreen() {
   const [isLoading, setIsLoading] = useState(true)
   const [garminRefreshKey, setGarminRefreshKey] = useState(0)
   const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate; dailyData: DailyChallengeData } | null>(null)
-  const [recommendedChallenge, setRecommendedChallenge] = useState<ChallengeTemplate | null>(null)
+  const [recommendedChallenge, setRecommendedChallenge] = useState<ChallengeTemplateSeed | null>(null)
   const { toast } = useToast()
 
   const collapseToSingleWorkoutPerDay = (input: Workout[]): Workout[] => {
@@ -158,7 +158,7 @@ export function PlanScreen() {
   const challengeProgress = calculateChallengeProgress()
 
   // Handle starting a new challenge
-  const handleStartChallenge = async (template: ChallengeTemplate) => {
+  const handleStartChallenge = async (template: ChallengeTemplateSeed) => {
     if (!userId || !plan) {
       toast({
         title: "Cannot start challenge",

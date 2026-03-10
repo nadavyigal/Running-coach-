@@ -31,8 +31,7 @@ import { onboardingManager } from "@/lib/onboardingManager"
 import OnboardingErrorBoundary from "@/components/onboarding-error-boundary"
 import { UserPrivacySettings } from "@/components/privacy-dashboard"
 import { cn } from "@/lib/utils"
-import type { ChallengeTemplate } from "@/lib/db"
-import { getChallengeTemplateBySlug } from "@/lib/challengeTemplates"
+import { getChallengeTemplateBySlug, type ChallengeTemplateSeed } from "@/lib/challengeTemplates"
 import { syncPlanWithChallenge } from "@/lib/challenge-plan-sync"
 
 type Weekday = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
@@ -438,7 +437,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     exportData: false,
     deleteData: false,
   })
-  const [selectedChallenge, setSelectedChallenge] = useState<ChallengeTemplate | null>(null)
+  const [selectedChallenge, setSelectedChallenge] = useState<ChallengeTemplateSeed | null>(null)
   const { toast } = useToast()
   const { refresh: refreshData } = useData()
 

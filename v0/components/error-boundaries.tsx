@@ -282,7 +282,7 @@ export function withErrorBoundary<P extends object>(
       {...(fallback ? { fallback } : {})}
       componentName={Component.displayName || Component.name}
     >
-      <Component {...props} />
+      <Component {...(props as P)} />
     </ComponentErrorBoundary>
   ));
 

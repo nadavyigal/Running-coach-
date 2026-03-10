@@ -12,14 +12,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Trophy, ArrowRight, Sparkles, Calendar, Flame } from 'lucide-react';
 import { type ChallengeTemplate, type ChallengeProgress } from '@/lib/db';
-import { getNextChallengeRecommendation } from '@/lib/challengeTemplates';
+import { getNextChallengeRecommendation, type ChallengeTemplateSeed } from '@/lib/challengeTemplates';
 
 export interface ChallengeCompletionModalProps {
   isOpen: boolean;
   onClose: () => void;
   completedTemplate: ChallengeTemplate;
   progress: ChallengeProgress;
-  onStartNextChallenge?: (template: ChallengeTemplate) => void;
+  onStartNextChallenge?: (template: ChallengeTemplateSeed) => void;
 }
 
 export function ChallengeCompletionModal({
