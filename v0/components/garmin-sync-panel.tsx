@@ -19,7 +19,6 @@ import { useToast } from "@/hooks/use-toast"
 import { db } from "@/lib/db"
 import {
   getGarminSyncCatalog,
-  syncGarminEnabledData,
   type GarminDatasetCapability,
   type GarminEnabledSyncResult,
   type GarminSyncCatalogResult,
@@ -91,12 +90,12 @@ function capabilityStatus(capability: GarminDatasetCapability): string {
 
 export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
   const [device, setDevice] = useState<DeviceInfo | null>(null)
-  const [isSyncing, setIsSyncing] = useState(false)
+  const [isSyncing, _setIsSyncing] = useState(false)
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false)
   const [isDiagnosing, setIsDiagnosing] = useState(false)
   const [catalog, setCatalog] = useState<GarminSyncCatalogResult | null>(null)
-  const [lastResult, setLastResult] = useState<GarminEnabledSyncResult | null>(null)
-  const [syncError, setSyncError] = useState<string | null>(null)
+  const [lastResult, _setLastResult] = useState<GarminEnabledSyncResult | null>(null)
+  const [syncError, _setSyncError] = useState<string | null>(null)
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const [diagnoseResult, setDiagnoseResult] = useState<unknown>(null)
   const [showDiagnose, setShowDiagnose] = useState(false)
@@ -157,68 +156,6 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
     if (!device || device.connectionStatus === "error") return
     void refreshCatalog()
   }, [device, refreshCatalog])
-
-  const handleSyncEnabledData = async () => {
-    setIsSyncing(true)
-    setSyncError(null)
-
-    try {
-      const result = await syncGarminEnabledData(userId, { trigger: "backfill" })
-
-      if (result.needsReauth) {
-        toast({
-          title: "Reconnect required",
-          description: "Your Garmin session expired. Please reconnect.",
-          variant: "destructive",
-        })
-        onReconnect?.()
-        return
-      }
-
-      setLastResult(result)
-      setCatalog(result)
-
-      if (result.errors.length > 0) {
-        setSyncError(result.errors[0] ?? null)
-        toast({
-          title: "Sync failed",
-          description: result.errors[0],
-          variant: "destructive",
-          duration: 8000,
-        })
-        return
-      }
-
-      const importedTotal =
-        result.activitiesImported + result.sleepImported + result.additionalSummaryImported
-      const skippedTotal =
-        result.activitiesSkipped + result.sleepSkipped + result.additionalSummarySkipped
-
-      toast({
-        title: importedTotal > 0 ? "Garmin sync complete" : "No new Garmin data",
-        description:
-          importedTotal > 0
-            ? `Imported ${result.activitiesImported} activities, ${result.sleepImported} sleep summaries, and ${result.additionalSummaryImported} additional Garmin summaries.`
-            : `No new records were imported${skippedTotal > 0 ? ` (${skippedTotal} already existed).` : "."}`,
-      })
-
-      if (result.notices.length > 0) {
-        toast({
-          title: "Some datasets were skipped",
-          description: result.notices[0],
-          duration: 9000,
-        })
-      }
-
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("garmin-run-synced"))
-      }
-
-      await loadDevice()
-    } finally {
-      setIsSyncing(false)
-    }
-  }
 
   const handleDiagnose = async () => {
     setIsDiagnosing(true)

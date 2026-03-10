@@ -16,7 +16,7 @@ import { ChallengeCompletionModal } from "@/components/challenge-completion-moda
 import { PostRunRpeModal } from "@/components/post-run-rpe-modal"
 import { type Run, type Workout, type User, type Route, type ChallengeProgress, type ChallengeTemplate } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
-import { trackAnalyticsEvent } from "@/lib/analytics"
+import { trackAnalyticsEvent, trackRunStarted, trackRunCompleted, trackRunAbandoned } from "@/lib/analytics"
 import { getActiveChallenge, updateChallengeOnWorkoutComplete } from "@/lib/challengeEngine"
 import { startChallengeAndSyncPlan } from "@/lib/challenge-plan-sync"
 import { ENABLE_AUTO_PAUSE, ENABLE_VIBRATION_COACH, ENABLE_AUDIO_COACH } from "@/lib/featureFlags"
@@ -1958,6 +1958,7 @@ export function RecordScreen() {
     speakCoachMessage("Run started. GPS tracking active.", { force: true })
 
     logRunStats({ event: 'start', startedAt: Date.now() })
+    void trackRunStarted('gps', currentWorkout?.id)
 
     // Activate wake lock
     void requestWakeLock()
@@ -2244,9 +2245,12 @@ export function RecordScreen() {
     speakCoachMessage("Run stopped. Great work today.", { interrupt: true, force: true })
 
     if (totalDistance > 0 && finalDuration > 0) {
+      const avgPaceMinKm = finalDuration / 60 / totalDistance
+      void trackRunCompleted(totalDistance, finalDuration, avgPaceMinKm, currentWorkout?.id, 'gps')
       setIsSavingRun(true)
       await saveRun(totalDistance, finalDuration)
     } else {
+      void trackRunAbandoned(finalDuration, totalDistance, 'no_data')
       toast({
         title: "Run Stopped",
         description: "Run stopped. No data to save.",

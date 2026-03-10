@@ -218,7 +218,7 @@ export async function GET() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ color: '#22c55e', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                Today's Run
+                Today&apos;s Run
               </span>
               <div style={{ background: 'rgba(34,197,94,0.2)', borderRadius: '6px', padding: '2px 8px', display: 'flex' }}>
                 <span style={{ color: '#4ade80', fontSize: '11px', fontWeight: '600' }}>Easy</span>
