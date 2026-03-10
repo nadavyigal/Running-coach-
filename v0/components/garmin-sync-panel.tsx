@@ -158,7 +158,7 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
     void refreshCatalog()
   }, [device, refreshCatalog])
 
-  const handleSyncEnabledData = async () => {
+  const _handleSyncEnabledData = async () => {
     setIsSyncing(true)
     setSyncError(null)
 

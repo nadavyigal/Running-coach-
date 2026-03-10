@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Alert, AlertDescription } from './ui/alert';
@@ -42,6 +43,7 @@ export default function RecoveryRecommendations({
   showBreakdown = false,
   onRefresh
 }: RecoveryRecommendationsProps) {
+  const router = useRouter();
   const [recommendations, setRecommendations] = useState<RecoveryRecommendation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -418,14 +420,14 @@ export default function RecoveryRecommendations({
             <Button 
               variant="outline" 
               size="sm" 
-              onClick={() => window.open('/recovery', '_blank')}
+              onClick={() => router.push('/recovery')}
             >
               View Full Dashboard
             </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => window.open('/wellness', '_blank')}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push('/recovery')}
             >
               Log Wellness Data
             </Button>

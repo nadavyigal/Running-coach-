@@ -23,12 +23,6 @@ export class SubscriptionGate {
    * @returns True if user has access, false otherwise
    */
   static async hasAccess(userId: number, feature: ProFeature): Promise<boolean> {
-    // TEMPORARY: Grant Pro access to all users for testing
-    // TODO: Remove this before production launch with real subscriptions
-    logger.info(`[TESTING MODE] Granting Pro access to user ${userId} for ${feature}`);
-    return true;
-
-    /* eslint-disable no-unreachable */
     try {
       const user = await dbUtils.getUser(userId);
       if (!user) {
@@ -37,14 +31,13 @@ export class SubscriptionGate {
       }
 
       // Check if trial is active
-      if (user != null && user.trialEndDate && new Date() < user.trialEndDate) {
+      if (user.trialEndDate && new Date() < user.trialEndDate) {
         logger.info(`User ${userId} has active trial access to ${feature}`);
         return true;
       }
 
       // Check if subscription is active
       if (
-        user != null &&
         (user.subscriptionTier === 'pro' || user.subscriptionTier === 'premium') &&
         user.subscriptionStatus === 'active'
       ) {
@@ -61,10 +54,8 @@ export class SubscriptionGate {
       return false;
     } catch (error) {
       logger.error(`Error checking subscription access for user ${userId}:`, error);
-      // Fail open for better UX during errors
       return false;
     }
-    /* eslint-enable no-unreachable */
   }
 
   /**

@@ -6,25 +6,14 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
-  Sun,
   Plus,
-  MapPin,
   Play,
-  ChevronDown,
-  ChevronUp,
-  Zap,
   Loader2,
-  Flame,
   BarChart3,
   RefreshCw,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  Award,
   LogIn,
   LogOut,
   UserPlus,
-  Users,
 } from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
 import { AddActivityModal } from "@/components/add-activity-modal"
@@ -35,7 +24,6 @@ import ModalErrorBoundary from "@/components/modal-error-boundary"
 import { type Workout, type Route, type Goal, type RecoveryScore, resetDatabaseInstance, db } from "@/lib/db"
 import { dbUtils, getUserPaceZones } from "@/lib/dbUtils"
 import { useData, useGoalProgress } from "@/contexts/DataContext"
-import { WorkoutPhasesDisplay } from "@/components/workout-phases-display"
 import { generateStructuredWorkout, type StructuredWorkout } from "@/lib/workout-steps"
 import { getDefaultPaceZones } from "@/lib/pace-zones"
 import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine"
@@ -339,7 +327,7 @@ export function TodayScreen() {
     }
   }
 
-  const getRecoveryLabel = (score: number) => {
+  const _getRecoveryLabel = (score: number) => {
     if (score >= 80) return 'Excellent'
     if (score >= 65) return 'Good'
     if (score >= 50) return 'Fair'
@@ -936,7 +924,7 @@ export function TodayScreen() {
   const totalRuns = weeklyStats.runsCompleted
   const plannedRuns = weeklyStats.plannedWorkouts
   const consistency = weeklyStats.consistencyRate
-  const streak = calculateStreak()
+  const _streak = calculateStreak()
   const recoveryScoreValue = recoverySnapshot?.overallScore ?? 50
   const recoveryConfidenceValue = coachConfidence?.confidence ?? 0
   const recoveryNextStep = coachConfidence?.nextSteps?.[0] ?? 'Complete your morning check-in'
