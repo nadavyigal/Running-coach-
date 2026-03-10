@@ -1068,7 +1068,7 @@ function buildCapabilities(params: {
 }): GarminDatasetCapability[] {
   const { permissions, datasetCounts, storeAvailable, storeError, lookbackDays } = params
 
-  const capabilities: GarminDatasetCapability[] = DATASET_CONFIGS.map((config) => {
+  const capabilities: GarminDatasetCapability[] = DATASET_CONFIGS.map((config): GarminDatasetCapability => {
     const permissionGranted = permissions.includes(config.permission)
     const rowCount = datasetCounts[config.key] ?? 0
 
@@ -1284,7 +1284,7 @@ function isOptionalDeriveQueueNotice(reason: string | null | undefined): boolean
   return normalized.includes('redis not configured') || normalized.includes('derive queue unavailable')
 }
 
-export async function runGarminSyncForUser(params: {
+async function runGarminSyncForUser(params: {
   userId: number
   options: GarminSyncExecutionOptions
 }): Promise<{

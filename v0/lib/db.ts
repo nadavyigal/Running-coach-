@@ -203,6 +203,8 @@ export interface BetaSignup {
 export interface User {
   id?: number;
   name?: string;
+  email?: string;
+  dateOfBirth?: Date;
   goal: 'habit' | 'distance' | 'speed';
   experience: 'beginner' | 'intermediate' | 'advanced';
   preferredTimes: string[];
@@ -391,15 +393,21 @@ export interface PlanSetupPreferences {
 
 export interface OnboardingSession {
   id?: number;
-  userId: number;
+  userId?: number;
   conversationId: string;
   goalDiscoveryPhase: 'motivation' | 'assessment' | 'creation' | 'refinement' | 'complete';
   discoveredGoals: SmartGoal[];
   coachingStyle: 'supportive' | 'challenging' | 'analytical' | 'encouraging';
-  sessionProgress: number; // 0-100 percentage
-  isCompleted: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  sessionProgress?: number; // 0-100 percentage
+  isCompleted?: boolean;
+  conversationHistory?: Array<{
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: Date;
+  }>;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface ConversationMessage {
@@ -461,7 +469,7 @@ export interface WearableDevice {
     accessToken?: string;
     refreshToken?: string;
     expiresAt?: Date;
-  };
+  } | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -492,9 +500,12 @@ export interface HeartRateZone {
   userId: number;
   zoneNumber: number;
   name: string;
+  zoneName?: string;
   description: string;
   minBpm: number;
   maxBpm: number;
+  minHeartRate?: number;
+  maxHeartRate?: number;
   color: string;
   targetPercentage?: number;
   trainingBenefit: string;
@@ -791,6 +802,7 @@ export interface Plan {
   id?: number;
   userId: number;
   title: string;
+  name?: string;
   description?: string;
   startDate: Date;
   endDate: Date;
@@ -802,6 +814,7 @@ export interface Plan {
   targetDistance?: number; // kilometers
   targetTime?: number; // seconds
   fitnessLevel?: 'beginner' | 'intermediate' | 'advanced';
+  difficulty?: 'beginner' | 'intermediate' | 'advanced';
   trainingDaysPerWeek?: number;
   peakWeeklyVolume?: number; // kilometers
   // Progressive Plan Complexity fields
@@ -1077,8 +1090,8 @@ export interface ChallengeTemplate {
   isActive: boolean;
   isFeatured: boolean;              // For marketing/promotion
   sortOrder: number;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface ChallengeProgress {
@@ -1748,6 +1761,8 @@ export interface Route {
   endLng?: number; // Ending point longitude (for custom routes)
   routeType?: 'predefined' | 'custom'; // Route origin
   createdBy?: 'system' | 'user'; // Who created the route
+  matchScore?: number;
+  distanceFromUser?: number;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;

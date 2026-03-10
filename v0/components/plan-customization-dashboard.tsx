@@ -62,6 +62,7 @@ const workoutTypeIcons = {
 
 const formatPhaseLabel = (phase: string) => phase.charAt(0).toUpperCase() + phase.slice(1)
 export function PlanCustomizationDashboard({ userId, plan, raceGoal }: PlanCustomizationDashboardProps) {
+  const planId = plan.id
   const [selectedWeek, setSelectedWeek] = useState(1)
   const [activeTab, setActiveTab] = useState<'overview' | 'weekly' | 'calendar' | 'settings'>('overview')
   const [workouts, setWorkouts] = useState<Workout[]>([])
@@ -73,21 +74,25 @@ export function PlanCustomizationDashboard({ userId, plan, raceGoal }: PlanCusto
 
   useEffect(() => {
     loadWorkouts()
-  }, [plan.id])
+  }, [planId])
 
   const loadWorkouts = async () => {
     try {
       setLoading(true)
       setSafetyWarning(null)
+      if (!planId) {
+        setWorkouts([])
+        return
+      }
       let response: Response | null = null
       try {
         // In a real app, this would fetch from API
-        response = await fetch(`/api/training-plan/workouts?planId=${plan.id}`)
+        response = await fetch(`/api/training-plan/workouts?planId=${planId}`)
       } catch {
         response = null
       }
       if (!response || typeof response.json !== 'function') {
-        const localWorkouts = await dbUtils.getWorkoutsByPlan(plan.id)
+        const localWorkouts = await dbUtils.getWorkoutsByPlan(planId)
         setWorkouts(localWorkouts || [])
         return
       }
@@ -101,7 +106,7 @@ export function PlanCustomizationDashboard({ userId, plan, raceGoal }: PlanCusto
         throw new Error(data.error || 'Failed to load workout data')
       }
       if (!Array.isArray(data.workouts)) {
-        const localWorkouts = await dbUtils.getWorkoutsByPlan(plan.id)
+        const localWorkouts = await dbUtils.getWorkoutsByPlan(planId)
         setWorkouts(localWorkouts || [])
         return
       }
@@ -120,6 +125,7 @@ export function PlanCustomizationDashboard({ userId, plan, raceGoal }: PlanCusto
 
   const handleWorkoutUpdate = async (workoutId: number, updates: any) => {
     try {
+      if (!planId) return
       const response = await fetch('/api/training-plan/customize', {
         method: 'PUT',
         headers: {
@@ -127,7 +133,7 @@ export function PlanCustomizationDashboard({ userId, plan, raceGoal }: PlanCusto
         },
         body: JSON.stringify({
           userId,
-          planId: plan.id,
+          planId,
           workoutId,
           modifications: updates
         })
@@ -214,6 +220,7 @@ export function PlanCustomizationDashboard({ userId, plan, raceGoal }: PlanCusto
 
   const handleAddWorkout = async (workoutData: any) => {
     try {
+      if (!planId) return
       const response = await fetch('/api/training-plan/customize', {
         method: 'POST',
         headers: {
@@ -221,7 +228,7 @@ export function PlanCustomizationDashboard({ userId, plan, raceGoal }: PlanCusto
         },
         body: JSON.stringify({
           userId,
-          planId: plan.id,
+          planId,
           workoutData
         })
       })
@@ -485,7 +492,7 @@ export function PlanCustomizationDashboard({ userId, plan, raceGoal }: PlanCusto
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleWorkoutDelete(workout.id)}
+                        onClick={() => workout.id && handleWorkoutDelete(workout.id)}
                         aria-label="Delete Workout"
                       >
                         <Trash2 className="h-4 w-4" data-testid="trash-icon" />
@@ -602,7 +609,13 @@ export function PlanCustomizationDashboard({ userId, plan, raceGoal }: PlanCusto
           <span className="ml-1">{safetyWarning}</span>
         </div>
       )}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) =>
+          setActiveTab(value as 'overview' | 'weekly' | 'calendar' | 'settings')
+        }
+        className="w-full"
+      >
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview" onClick={() => setActiveTab("overview")}>
             Overview

@@ -84,6 +84,8 @@ export function MilestoneCelebration({
         clearTimeout(confettiTimer);
       };
     }
+
+    return undefined;
   }, [isOpen, milestones]);
 
   const currentMilestone = milestones[currentMilestoneIndex];
@@ -110,7 +112,7 @@ export function MilestoneCelebration({
 
   const getRandomMessage = (level: 'bronze' | 'silver' | 'gold' | 'diamond') => {
     const messages = motivationalMessages[level];
-    return messages[Math.floor(Math.random() * messages.length)];
+    return messages[Math.floor(Math.random() * messages.length)] ?? messages[0];
   };
 
   const formatValue = (value: number, unit: string) => {

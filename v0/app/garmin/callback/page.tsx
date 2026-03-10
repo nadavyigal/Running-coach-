@@ -90,7 +90,7 @@ function GarminCallbackContent() {
             lastSync: asDate(device.lastSync),
             capabilities: asStringArray(device.capabilities),
             settings: asRecord(device.settings),
-            authTokens: undefined,
+            authTokens: null,
             createdAt: asDate(device.createdAt) ?? now,
             updatedAt: asDate(device.updatedAt) ?? now,
           }

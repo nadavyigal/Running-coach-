@@ -81,7 +81,7 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
           .filter((device) => device.type === 'garmin' && Boolean(device.authTokens))
           .map((device) =>
             db.wearableDevices.update(device.id!, {
-              authTokens: undefined,
+              authTokens: null,
               updatedAt: new Date(),
             })
           )
@@ -250,7 +250,7 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
         await db.wearableDevices.update(device.id!, {
           connectionStatus: 'disconnected',
           lastSync: null,
-          authTokens: undefined,
+          authTokens: null,
           updatedAt: new Date()
         })
 

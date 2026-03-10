@@ -5,7 +5,7 @@ import { analyzeError } from '@/lib/errorHandling';
 interface ErrorLogData {
   error: Error;
   errorInfo?: React.ErrorInfo;
-  componentStack?: string;
+  componentStack?: string | undefined;
   timestamp: string;
   userId?: number;
   sessionId?: string;
@@ -47,7 +47,9 @@ export const logError = async (errorData: ErrorLogData): Promise<void> => {
       severity: determineSeverity(errorData.error),
       message: errorData.error.message || 'Unknown error',
       stack: errorData.error.stack || '',
-      componentStack: errorData.errorInfo?.componentStack || '',
+      ...(errorData.errorInfo?.componentStack
+        ? { componentStack: errorData.errorInfo.componentStack }
+        : {}),
       timestamp: errorData.timestamp,
       userId: errorData.userId,
       sessionId: errorData.sessionId,

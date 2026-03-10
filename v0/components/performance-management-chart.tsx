@@ -91,7 +91,10 @@ export function PerformanceManagementChart({ userId, days = 90 }: { userId: numb
                   <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={20} />
                   <YAxis tick={{ fontSize: 11 }} width={42} />
                   <Tooltip
-                    formatter={(value: number | null, name: string) => {
+                    formatter={(
+                      value: number | string | Array<number | string> | null | undefined,
+                      name: string | number
+                    ) => {
                       const numeric = typeof value === 'number' ? value : null
                       if (name === 'ctl') return [numeric?.toFixed(1) ?? '--', 'Fitness (CTL)']
                       if (name === 'atl') return [numeric?.toFixed(1) ?? '--', 'Fatigue (ATL)']

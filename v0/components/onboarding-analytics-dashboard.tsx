@@ -20,6 +20,7 @@ import { analyticsProcessor, type DashboardMetrics } from '../lib/analyticsProce
 import { abTestFramework, type ABTest, type ABTestResults } from '../lib/abTestFramework'
 
 const isTestEnv = process.env.NODE_ENV === 'test'
+const toIsoDate = (value: Date) => value.toISOString().split('T')[0] ?? value.toISOString()
 
 // Deterministic fixtures to avoid Dexie/async overhead in tests
 const testDashboardMetrics: DashboardMetrics = {
@@ -31,7 +32,7 @@ const testDashboardMetrics: DashboardMetrics = {
       advanced: 0.75
     },
     trends: Array.from({ length: 30 }, (_, i) => ({
-      date: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      date: toIsoDate(new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000)),
       rate: 0.7 + ((i % 5) * 0.01)
     })),
     benchmarks: { good: 0.8, average: 0.6, poor: 0.4 }
@@ -67,7 +68,7 @@ const testDashboardMetrics: DashboardMetrics = {
     },
     impactOnCompletion: 0.25,
     trends: Array.from({ length: 7 }, (_, i) => ({
-      date: new Date(Date.now() - (6 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      date: toIsoDate(new Date(Date.now() - (6 - i) * 24 * 60 * 60 * 1000)),
       errorRate: 0.08 + (i * 0.01),
       recoveryRate: 0.75 + (i * 0.02)
     }))
@@ -207,12 +208,13 @@ interface CompletionRateChartProps {
 
 const CompletionRateChart: React.FC<CompletionRateChartProps> = ({ data }) => {
   const maxRate = Math.max(...data.map(d => d.rate))
+  const latestRate = data.at(-1)?.rate ?? 0
   
   return (
     <div className="space-y-2">
       <div className="flex justify-between items-center text-sm text-muted-foreground">
         <span>Last 30 days</span>
-        <span>{(data[data.length - 1]?.rate * 100 || 0).toFixed(1)}%</span>
+        <span>{(latestRate * 100).toFixed(1)}%</span>
       </div>
       <div className="h-32 flex items-end space-x-1">
         {data.map((day, index) => (
@@ -236,8 +238,9 @@ const DropOffFunnel: React.FC<DropOffFunnelProps> = ({ data }) => {
   return (
     <div className="space-y-3">
       {data.map((step, index) => {
-        const dropOff = index > 0 ? data[index - 1].users - step.users : 0
-        const dropOffRate = index > 0 ? (dropOff / data[index - 1].users) * 100 : 0
+        const previousStep = index > 0 ? data[index - 1] : undefined
+        const dropOff = previousStep ? previousStep.users - step.users : 0
+        const dropOffRate = previousStep ? (dropOff / previousStep.users) * 100 : 0
         
         return (
           <div key={step.step} className="space-y-2">
@@ -324,8 +327,11 @@ const ABTestResults: React.FC<ABTestResultsProps> = ({ tests, results }) => {
     <div className="space-y-6">
       {tests.map(test => {
         const testResults = results.get(test.id) || []
-        const winningVariant = testResults.reduce((winner, current) => 
-          current.conversionRate > winner.conversionRate ? current : winner, testResults[0])
+        const winningVariant = testResults.reduce<ABTestResults | undefined>(
+          (winner, current) =>
+            !winner || current.conversionRate > winner.conversionRate ? current : winner,
+          undefined
+        )
         
         return (
           <Card key={test.id}>
@@ -450,9 +456,12 @@ export const OnboardingAnalyticsDashboard: React.FC = () => {
     )
   }
 
-  const completionTrend = metrics.completionRate.trends.length > 1 ? 
-    ((metrics.completionRate.trends[metrics.completionRate.trends.length - 1].rate - 
-      metrics.completionRate.trends[metrics.completionRate.trends.length - 2].rate) * 100) : 0
+  const latestCompletionTrend = metrics.completionRate.trends.at(-1)
+  const previousCompletionTrend = metrics.completionRate.trends.at(-2)
+  const completionTrend =
+    latestCompletionTrend && previousCompletionTrend
+      ? (latestCompletionTrend.rate - previousCompletionTrend.rate) * 100
+      : 0
 
   return (
     <div className="space-y-6 p-6">

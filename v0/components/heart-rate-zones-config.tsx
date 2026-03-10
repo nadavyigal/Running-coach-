@@ -46,10 +46,9 @@ export function HeartRateZonesConfig({ userId, onSave, onCancel }: HeartRateZone
     try {
       // Load user's current zones and profile
       const user = await db.users.get(userId)
-      if (user?.dateOfBirth) {
-        const calculatedAge = new Date().getFullYear() - new Date(user.dateOfBirth).getFullYear()
-        setAge(calculatedAge)
-        setMaxHR(calculateMaxHeartRate(calculatedAge))
+      if (typeof user?.age === 'number' && user.age > 0) {
+        setAge(user.age)
+        setMaxHR(calculateMaxHeartRate(user.age))
       }
 
       if (user?.restingHeartRate) {
@@ -73,7 +72,7 @@ export function HeartRateZonesConfig({ userId, onSave, onCancel }: HeartRateZone
         userZones.forEach(zone => {
           const zoneKey = `zone${zone.zoneNumber}` as keyof HeartRateZoneConfig
           if (zoneKey in zoneConfig) {
-            zoneConfig[zoneKey] = { min: zone.minHeartRate, max: zone.maxHeartRate }
+            zoneConfig[zoneKey] = { min: zone.minBpm, max: zone.maxBpm }
           }
         })
 
@@ -150,10 +149,15 @@ export function HeartRateZonesConfig({ userId, onSave, onCancel }: HeartRateZone
       const zonesToSave = Object.entries(zones).map(([_zoneKey, zoneConfig], index) => ({
         userId,
         zoneNumber: index + 1,
+        name: getZoneInfo(index + 1).name,
         zoneName: getZoneInfo(index + 1).name,
+        description: getZoneInfo(index + 1).description,
+        minBpm: zoneConfig.min,
+        maxBpm: zoneConfig.max,
         minHeartRate: zoneConfig.min,
         maxHeartRate: zoneConfig.max,
         color: getZoneInfo(index + 1).color,
+        trainingBenefit: getZoneInfo(index + 1).description,
         createdAt: new Date(),
         updatedAt: new Date()
       }))

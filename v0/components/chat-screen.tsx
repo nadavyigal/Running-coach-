@@ -981,7 +981,7 @@ export function ChatScreen() {
             </div>
             <div className="p-4">
               <CoachingPreferencesSettings
-                userId={user.id!}
+                userId={user?.id ?? 0}
                 onClose={() => setShowCoachingPreferences(false)}
               />
             </div>

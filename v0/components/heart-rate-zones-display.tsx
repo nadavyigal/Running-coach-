@@ -61,7 +61,7 @@ export function HeartRateZonesDisplay({
         userZones.forEach(zone => {
           const zoneKey = `zone${zone.zoneNumber}` as keyof HeartRateZoneConfig
           if (zoneKey in zoneConfig) {
-            zoneConfig[zoneKey] = { min: zone.minHeartRate, max: zone.maxHeartRate }
+            zoneConfig[zoneKey] = { min: zone.minBpm, max: zone.maxBpm }
           }
         })
 
@@ -69,9 +69,7 @@ export function HeartRateZonesDisplay({
       } else {
         // Calculate default zones based on age
         const user = await db.users.get(userId)
-        const age = user?.dateOfBirth 
-          ? new Date().getFullYear() - new Date(user.dateOfBirth).getFullYear() 
-          : 30
+        const age = user?.age ?? 30
         
         setUserAge(age)
         const maxHR = calculateMaxHeartRate(age)
