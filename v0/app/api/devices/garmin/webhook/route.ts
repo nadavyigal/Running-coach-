@@ -1,144 +1,15 @@
 import { NextResponse } from 'next/server'
+
 import { logger } from '@/lib/logger'
 import {
-  type GarminDatasetKey,
-  storeGarminExportRows,
-} from '@/lib/server/garmin-export-store'
-import { findRunSmartUserIdsByGarminUserId } from '@/lib/server/garmin-oauth-store'
-import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
+  enqueueGarminImportJobsForEvent,
+  recordGarminWebhookDelivery,
+} from '@/lib/integrations/garmin/service'
 import { getGarminWebhookSecret } from '@/lib/server/garmin-webhook-secret'
-import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
-const SUPPORTED_DATASETS: GarminDatasetKey[] = [
-  'activities',
-  'manuallyUpdatedActivities',
-  'activityDetails',
-  'dailies',
-  'epochs',
-  'sleeps',
-  'bodyComps',
-  'stressDetails',
-  'userMetrics',
-  'pulseox',
-  'allDayRespiration',
-  'healthSnapshot',
-  'hrv',
-  'bloodPressures',
-  'skinTemp',
-]
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
-}
-
-function getString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
-}
-
-function getNumber(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string') {
-    const n = Number(value)
-    return Number.isFinite(n) ? n : null
-  }
-  return null
-}
-
-function parseRows(value: unknown): Record<string, unknown>[] {
-  if (Array.isArray(value)) {
-    return value
-      .map((entry) => asRecord(entry))
-      .filter((entry) => Object.keys(entry).length > 0)
-  }
-
-  if (typeof value === 'object' && value !== null) {
-    for (const nested of Object.values(value as Record<string, unknown>)) {
-      if (Array.isArray(nested)) {
-        return nested
-          .map((entry) => asRecord(entry))
-          .filter((entry) => Object.keys(entry).length > 0)
-      }
-    }
-  }
-
-  return []
-}
-
-function extractGarminUserIdFromRows(rows: Record<string, unknown>[]): string | null {
-  for (const row of rows) {
-    const userId = getString(row.userId) ?? getString(row.userID) ?? getString(row.ownerUserId)
-    if (userId) return userId
-  }
-  return null
-}
-
-async function enqueueDeriveJobsForWebhook(params: {
-  datasetKey: GarminDatasetKey
-  garminUserId: string | null
-  queuedJobIds: string[]
-  queueErrors: string[]
-}): Promise<void> {
-  const { datasetKey, garminUserId, queuedJobIds, queueErrors } = params
-  const requestedAt = new Date().toISOString()
-
-  if (!garminUserId) return
-
-  try {
-    const mappedUsers = await findRunSmartUserIdsByGarminUserId(garminUserId)
-    if (mappedUsers.length === 0) {
-      const queued = await enqueueGarminDeriveJob({
-        garminUserId,
-        datasetKey,
-        source: 'webhook',
-        requestedAt,
-      })
-      if (queued.queued && queued.jobId) queuedJobIds.push(queued.jobId)
-      else queueErrors.push(queued.reason ?? 'Failed to enqueue Garmin derive job')
-      return
-    }
-
-    for (const userId of mappedUsers) {
-      const queued = await enqueueGarminDeriveJob({
-        userId,
-        garminUserId,
-        datasetKey,
-        source: 'webhook',
-        requestedAt,
-      })
-      if (queued.queued && queued.jobId) queuedJobIds.push(queued.jobId)
-      else queueErrors.push(queued.reason ?? `Failed to enqueue Garmin derive job for user ${userId}`)
-    }
-  } catch (error) {
-    queueErrors.push(error instanceof Error ? error.message : 'Failed to enqueue Garmin derive job')
-  }
-}
-
-function summarizeUpstreamBody(body: string): string {
-  const trimmed = body.trim()
-  if (!trimmed) return ''
-
-  try {
-    const parsed = JSON.parse(trimmed) as {
-      errorMessage?: unknown
-      message?: unknown
-      error?: unknown
-    }
-    const message = [parsed.errorMessage, parsed.message, parsed.error].find(
-      (value): value is string => typeof value === 'string' && value.trim().length > 0
-    )
-    if (message) return message.slice(0, 500)
-  } catch {
-    // keep text body
-  }
-
-  if (/<!doctype html|<html/i.test(trimmed)) {
-    return 'Garmin returned an HTML error page'
-  }
-
-  return trimmed.length > 500 ? `${trimmed.slice(0, 500)}...` : trimmed
-}
+const SUPPORTED_DATASETS = ['activities', 'manuallyUpdatedActivities', 'activityDetails', 'activityFiles']
 
 function getWebhookAuthResult(req: Request): { authorized: boolean; status: number; error?: string } {
   const { value: configuredSecret } = getGarminWebhookSecret()
@@ -164,54 +35,9 @@ function getWebhookAuthResult(req: Request): { authorized: boolean; status: numb
   }
 }
 
-async function fetchPingPullRows(callbackUrl: string): Promise<{
-  ok: boolean
-  rows: Record<string, unknown>[]
-  error?: string
-}> {
-  try {
-    const response = await fetch(callbackUrl, {
-      headers: {
-        Accept: 'application/json',
-      },
-    })
-
-    const bodyText = await response.text()
-    if (!response.ok) {
-      return {
-        ok: false,
-        rows: [],
-        error: `callbackURL returned ${response.status}: ${summarizeUpstreamBody(bodyText)}`,
-      }
-    }
-
-    let bodyJson: unknown = null
-    try {
-      bodyJson = bodyText ? JSON.parse(bodyText) : null
-    } catch {
-      bodyJson = bodyText
-    }
-
-    return {
-      ok: true,
-      rows: parseRows(bodyJson),
-    }
-  } catch (error) {
-    return {
-      ok: false,
-      rows: [],
-      error: error instanceof Error ? error.message : 'Failed to fetch callbackURL',
-    }
-  }
-}
-
 export async function GET(req: Request) {
   const authResult = getWebhookAuthResult(req)
   if (!authResult.authorized) {
-    logger.warn('Rejected unauthorized Garmin webhook GET request', {
-      hasHeaderSecret: Boolean(req.headers.get('x-garmin-webhook-secret')),
-      hasQuerySecret: Boolean(new URL(req.url).searchParams.get('secret')),
-    })
     return NextResponse.json(
       { ok: false, error: authResult.error ?? 'Unauthorized Garmin webhook request' },
       { status: authResult.status }
@@ -238,181 +64,51 @@ export async function POST(req: Request) {
     )
   }
 
-  let payload: unknown
+  let rawBody = ''
+  let payload: Record<string, unknown> = {}
+
   try {
-    payload = await req.json()
+    rawBody = await req.text()
+    payload = rawBody ? (JSON.parse(rawBody) as Record<string, unknown>) : {}
   } catch {
     return NextResponse.json({ ok: false, error: 'Invalid Garmin webhook JSON payload' }, { status: 400 })
   }
 
-  const payloadRecord = asRecord(payload)
-  const storeErrors: string[] = []
-  const callbackErrors: string[] = []
-  const queuedDeriveJobIds: string[] = []
-  const deriveQueueErrors: string[] = []
-  let acceptedRows = 0
-  let droppedRows = 0
+  try {
+    const { event, duplicate } = await recordGarminWebhookDelivery({
+      rawBody,
+      payload,
+      eventType: 'garmin_push',
+    })
 
-  for (const datasetKey of SUPPORTED_DATASETS) {
-    const entries = parseRows(payloadRecord[datasetKey])
-    if (entries.length === 0) continue
+    if (!event) {
+      return NextResponse.json({ ok: false, error: 'Failed to persist Garmin webhook event' }, { status: 500 })
+    }
 
-    for (const entry of entries) {
-      const callbackUrl = getString(entry.callbackURL) ?? getString(entry.callbackUrl)
-      const fallbackGarminUserId = getString(entry.userId)
-
-      if (callbackUrl) {
-        const pulled = await fetchPingPullRows(callbackUrl)
-        if (!pulled.ok) {
-          callbackErrors.push(`${datasetKey}: ${pulled.error ?? 'callbackURL request failed'}`)
-          continue
-        }
-
-        const storeResult = await storeGarminExportRows({
-          datasetKey,
-          rows: pulled.rows,
-          source: 'ping_pull',
-          fallbackGarminUserId,
-        })
-
-        acceptedRows += storeResult.storedRows
-        droppedRows += storeResult.droppedRows
-        if (!storeResult.ok) {
-          storeErrors.push(storeResult.storeError ?? `${datasetKey}: failed to store rows`)
-        }
-        if (storeResult.storedRows > 0) {
-          await enqueueDeriveJobsForWebhook({
-            datasetKey,
-            garminUserId: fallbackGarminUserId ?? extractGarminUserIdFromRows(pulled.rows),
-            queuedJobIds: queuedDeriveJobIds,
-            queueErrors: deriveQueueErrors,
-          })
-        }
-        continue
-      }
-
-      const storeResult = await storeGarminExportRows({
-        datasetKey,
-        rows: [entry],
-        source: 'push',
-        fallbackGarminUserId,
+    if (duplicate) {
+      return NextResponse.json({
+        ok: true,
+        duplicate: true,
+        queuedJobs: 0,
+        webhookEventId: event.id,
       })
-
-      acceptedRows += storeResult.storedRows
-      droppedRows += storeResult.droppedRows
-      if (!storeResult.ok) {
-        storeErrors.push(storeResult.storeError ?? `${datasetKey}: failed to store rows`)
-      }
-      if (storeResult.storedRows > 0) {
-        await enqueueDeriveJobsForWebhook({
-          datasetKey,
-          garminUserId: fallbackGarminUserId ?? extractGarminUserIdFromRows([entry]),
-          queuedJobIds: queuedDeriveJobIds,
-          queueErrors: deriveQueueErrors,
-        })
-      }
-    }
-  }
-
-  // ─── Activity Files (FIT binary push notifications) ────────────────────────
-  // These are from the Garmin Activity API, distinct from the Wellness API.
-  // The callbackURL is a binary FIT file download — do NOT call fetchPingPullRows.
-  const activityFileEntries = parseRows(payloadRecord['activityFiles'])
-  if (activityFileEntries.length > 0) {
-    const admin = createAdminClient()
-    const activityFilesAccepted: number[] = []
-    const activityFilesErrors: string[] = []
-
-    for (const entry of activityFileEntries) {
-      const garminUserId = getString(entry.userId)
-      const summaryId = getString(entry.summaryId)
-      const callbackUrl = getString(entry.callbackURL) ?? getString(entry.callbackUrl)
-      const activityId = getString(entry.activityId) ?? String(getNumber(entry.activityId) ?? '')
-
-      if (!summaryId || !callbackUrl) {
-        activityFilesErrors.push(`activityFiles: missing summaryId or callbackURL in entry`)
-        continue
-      }
-
-      // Resolve internal user IDs from garminUserId
-      const userIds: number[] = garminUserId
-        ? await findRunSmartUserIdsByGarminUserId(garminUserId).catch(() => [])
-        : []
-
-      if (userIds.length === 0) {
-        activityFilesErrors.push(
-          `activityFiles: no RunSmart user found for garminUserId=${garminUserId ?? 'unknown'}`
-        )
-        continue
-      }
-
-      for (const userId of userIds) {
-        const { error: upsertError } = await admin
-          .from('garmin_activity_files')
-          .upsert(
-            {
-              user_id: userId,
-              activity_id: activityId || summaryId,
-              summary_id: summaryId,
-              file_type: getString(entry.fileType) ?? 'FIT',
-              callback_url: callbackUrl,
-              start_time_seconds: getNumber(entry.startTimeInSeconds),
-              manual: Boolean(entry.manual),
-              status: 'pending',
-            },
-            { onConflict: 'summary_id' }
-          )
-
-        if (upsertError) {
-          activityFilesErrors.push(`activityFiles: upsert failed for userId=${userId}: ${upsertError.message}`)
-          continue
-        }
-
-        // Enqueue derive job so the worker downloads and parses the FIT file
-        const queued = await enqueueGarminDeriveJob({
-          userId,
-          datasetKey: 'activityFiles',
-          source: 'webhook',
-          requestedAt: new Date().toISOString(),
-        })
-
-        if (queued.queued && queued.jobId) {
-          activityFilesAccepted.push(userId)
-          queuedDeriveJobIds.push(queued.jobId)
-        } else {
-          deriveQueueErrors.push(queued.reason ?? `activityFiles: failed to enqueue derive job for userId=${userId}`)
-        }
-      }
     }
 
-    if (activityFilesErrors.length > 0) {
-      logger.warn('Garmin webhook activityFiles errors:', activityFilesErrors)
-    }
-    if (activityFilesAccepted.length > 0) {
-      logger.info(`Garmin webhook activityFiles: queued FIT download for ${activityFilesAccepted.length} user(s)`)
-    }
+    const enqueueResult = await enqueueGarminImportJobsForEvent(event)
+    return NextResponse.json({
+      ok: true,
+      duplicate: false,
+      queuedJobs: enqueueResult.queuedJobs,
+      webhookEventId: event.id,
+    })
+  } catch (error) {
+    logger.error('Garmin webhook persistence failure:', error)
+    return NextResponse.json(
+      {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Failed to process Garmin webhook',
+      },
+      { status: 500 }
+    )
   }
-
-  if (storeErrors.length > 0) {
-    logger.error('Garmin webhook store errors:', storeErrors)
-  }
-  if (callbackErrors.length > 0) {
-    logger.warn('Garmin webhook callbackURL errors:', callbackErrors)
-  }
-  if (deriveQueueErrors.length > 0) {
-    logger.warn('Garmin webhook derive queue errors:', deriveQueueErrors)
-  }
-
-  return NextResponse.json({
-    ok: storeErrors.length === 0,
-    acceptedRows,
-    droppedRows,
-    callbackErrors,
-    storeErrors,
-    deriveQueue: {
-      queued: queuedDeriveJobIds.length,
-      jobIds: queuedDeriveJobIds,
-      errors: deriveQueueErrors,
-    },
-  })
 }

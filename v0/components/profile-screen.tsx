@@ -115,6 +115,7 @@ export function ProfileScreen() {
   const [isSwitchingPrimary, setIsSwitchingPrimary] = useState(false)
   const [joiningChallengeSlug, setJoiningChallengeSlug] = useState<string | null>(null)
   const [garminConnected, setGarminConnected] = useState(false)
+  const [garminSyncState, setGarminSyncState] = useState<string | null>(null)
 
   const filterRunsToRecentWindow = useCallback((runs: Run[]): Run[] => {
     const cutoff = new Date()
@@ -145,14 +146,28 @@ export function ProfileScreen() {
   useEffect(() => {
     if (!userId) return
     let mounted = true
-    void db.wearableDevices
-      .where('[userId+type]' as any)
-      .equals([userId, 'garmin'])
-      .first()
-      .then((device) => {
-        if (mounted) setGarminConnected(!!device && device.connectionStatus !== 'disconnected')
+    void fetch(`/api/garmin/status?userId=${encodeURIComponent(String(userId))}`, {
+      headers: { 'x-user-id': String(userId) },
+    })
+      .then((response) => response.json())
+      .then((status: { connected?: boolean; syncState?: string }) => {
+        if (!mounted) return
+        setGarminConnected(Boolean(status.connected))
+        setGarminSyncState(status.syncState ?? null)
       })
-      .catch(() => { /* ignore */ })
+      .catch(() => {
+        void db.wearableDevices
+          .where('[userId+type]' as any)
+          .equals([userId, 'garmin'])
+          .first()
+          .then((device) => {
+            if (mounted) {
+              setGarminConnected(!!device && device.connectionStatus !== 'disconnected')
+              setGarminSyncState(device?.connectionStatus ?? null)
+            }
+          })
+          .catch(() => { /* ignore */ })
+      })
     return () => { mounted = false }
   }, [userId])
 
@@ -1213,7 +1228,7 @@ export function ProfileScreen() {
                                   <span className="text-sm text-muted-foreground">{formatPace(run.pace ?? run.duration / run.distance)}/km</span>
                                 </div>
                                 <p className="truncate text-xs text-muted-foreground">
-                                  {run.importSource === 'garmin' ? 'Garmin • ' : ''}
+                                  {run.importSource === 'garmin' ? 'Garmin Connect • ' : ''}
                                   {new Date(run.completedAt).toLocaleDateString()} • {run.notes ?? run.type}
                                 </p>
                               </div>
@@ -1274,6 +1289,20 @@ export function ProfileScreen() {
 
           <IntegrationsListCard
             garminConnected={garminConnected}
+            garminStatusLabel={
+              garminConnected
+                ? garminSyncState === 'waiting_for_first_activity'
+                  ? 'Waiting for first Garmin activity'
+                  : garminSyncState === 'syncing'
+                    ? 'Syncing from Garmin Connect'
+                    : garminSyncState === 'delayed'
+                      ? 'Delayed sync from Garmin Connect'
+                      : garminSyncState === 'reauth_required'
+                        ? 'Reconnect Garmin'
+                        : 'Connected to Garmin Connect'
+                : 'Not connected'
+            }
+            garminStatusTone={garminSyncState === 'delayed' || garminSyncState === 'reauth_required' ? 'warning' : 'connected'}
             onGarminConnect={() => void handleGarminConnect()}
             onGarminDetails={() => router.push('/garmin/details')}
             rows={integrationRows}

@@ -9,18 +9,23 @@ const GARMIN_REVOKE_URL = 'https://diauth.garmin.com/di-oauth2-service/oauth/rev
 const TOKEN_REFRESH_SKEW_SECONDS = 5 * 60
 const MAX_REFRESH_RETRIES = 3
 
-type GarminConnectionStatus = 'connected' | 'revoked' | 'error' | 'disconnected'
+type GarminConnectionStatus = 'connected' | 'revoked' | 'error' | 'disconnected' | 'reauth_required'
 
 interface GarminConnectionRow {
   user_id: number
   auth_user_id: string | null
+  profile_id: string | null
   garmin_user_id: string | null
+  provider_user_id: string | null
   scopes: string[] | null
   status: GarminConnectionStatus
   connected_at: string
   revoked_at: string | null
   last_sync_at: string | null
   last_sync_cursor: string | null
+  last_successful_sync_at: string | null
+  last_sync_error: string | null
+  last_webhook_received_at: string | null
   error_state: Record<string, unknown> | null
 }
 
@@ -35,12 +40,17 @@ interface GarminTokenRow {
 export interface GarminOAuthState {
   userId: number
   authUserId: string | null
+  profileId: string | null
   garminUserId: string | null
+  providerUserId: string | null
   scopes: string[]
   status: GarminConnectionStatus
   connectedAt: string
   lastSyncAt: string | null
   lastSyncCursor: string | null
+  lastSuccessfulSyncAt: string | null
+  lastSyncError: string | null
+  lastWebhookReceivedAt: string | null
   errorState: Record<string, unknown> | null
   accessToken: string
   refreshToken: string | null
@@ -50,13 +60,18 @@ export interface GarminOAuthState {
 interface UpsertGarminConnectionInput {
   userId: number
   authUserId?: string | null
+  profileId?: string | null
   garminUserId?: string | null
+  providerUserId?: string | null
   scopes?: string[]
   status?: GarminConnectionStatus
   connectedAt?: string
   revokedAt?: string | null
   lastSyncAt?: string | null
   lastSyncCursor?: string | null
+  lastSuccessfulSyncAt?: string | null
+  lastSyncError?: string | null
+  lastWebhookReceivedAt?: string | null
   errorState?: Record<string, unknown> | null
 }
 
@@ -211,13 +226,18 @@ export async function upsertGarminConnection(input: UpsertGarminConnectionInput)
   const payload = {
     user_id: input.userId,
     ...(input.authUserId !== undefined ? { auth_user_id: input.authUserId } : {}),
+    ...(input.profileId !== undefined ? { profile_id: input.profileId } : {}),
     ...(input.garminUserId !== undefined ? { garmin_user_id: input.garminUserId } : {}),
+    ...(input.providerUserId !== undefined ? { provider_user_id: input.providerUserId } : {}),
     ...(input.scopes !== undefined ? { scopes: input.scopes } : {}),
     ...(input.status !== undefined ? { status: input.status } : {}),
     ...(input.connectedAt !== undefined ? { connected_at: input.connectedAt } : {}),
     ...(input.revokedAt !== undefined ? { revoked_at: input.revokedAt } : {}),
     ...(input.lastSyncAt !== undefined ? { last_sync_at: input.lastSyncAt } : {}),
     ...(input.lastSyncCursor !== undefined ? { last_sync_cursor: input.lastSyncCursor } : {}),
+    ...(input.lastSuccessfulSyncAt !== undefined ? { last_successful_sync_at: input.lastSuccessfulSyncAt } : {}),
+    ...(input.lastSyncError !== undefined ? { last_sync_error: input.lastSyncError } : {}),
+    ...(input.lastWebhookReceivedAt !== undefined ? { last_webhook_received_at: input.lastWebhookReceivedAt } : {}),
     ...(input.errorState !== undefined ? { error_state: input.errorState } : {}),
     updated_at: nowIso,
   }
@@ -296,12 +316,17 @@ export async function getGarminOAuthState(userId: number): Promise<GarminOAuthSt
   return {
     userId,
     authUserId: connection.auth_user_id,
+    profileId: connection.profile_id,
     garminUserId: connection.garmin_user_id,
+    providerUserId: connection.provider_user_id ?? connection.garmin_user_id,
     scopes: connection.scopes ?? [],
     status: connection.status,
     connectedAt: connection.connected_at,
     lastSyncAt: connection.last_sync_at,
     lastSyncCursor: connection.last_sync_cursor,
+    lastSuccessfulSyncAt: connection.last_successful_sync_at,
+    lastSyncError: connection.last_sync_error,
+    lastWebhookReceivedAt: connection.last_webhook_received_at,
     errorState: connection.error_state,
     accessToken,
     refreshToken,
@@ -337,6 +362,7 @@ export async function refreshGarminAccessToken(userId: number): Promise<{
     userId,
     authUserId: state.authUserId,
     status: 'connected',
+    lastSyncError: null,
     errorState: null,
   })
 
@@ -424,22 +450,55 @@ export async function findRunSmartUserIdsByGarminUserId(garminUserId: string): P
   if (!normalized) return []
 
   const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('garmin_connections')
-    .select('user_id')
-    .eq('garmin_user_id', normalized)
+  const queryByColumn = async (column: 'provider_user_id' | 'garmin_user_id') =>
+    supabase
+      .from('garmin_connections')
+      .select('user_id')
+      .eq(column, normalized)
+
+  const [providerResult, garminResult] = await Promise.all([
+    queryByColumn('provider_user_id'),
+    queryByColumn('garmin_user_id'),
+  ])
+  const error = providerResult.error ?? garminResult.error
 
   if (error) {
     throw new Error(`Failed to map Garmin user to RunSmart user: ${error.message}`)
   }
 
   const mappedUserIds = new Set<number>()
-  for (const row of (data ?? []) as Array<{ user_id?: unknown }>) {
+  for (const row of [
+    ...((providerResult.data ?? []) as Array<{ user_id?: unknown }>),
+    ...((garminResult.data ?? []) as Array<{ user_id?: unknown }>),
+  ]) {
     if (typeof row.user_id === 'number' && Number.isFinite(row.user_id)) {
       mappedUserIds.add(row.user_id)
     }
   }
   return Array.from(mappedUserIds)
+}
+
+export async function getGarminConnectionByProviderUserId(providerUserId: string): Promise<GarminOAuthState | null> {
+  const normalized = providerUserId.trim()
+  if (!normalized) return null
+
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('garmin_connections')
+    .select('user_id')
+    .or(`provider_user_id.eq.${normalized},garmin_user_id.eq.${normalized}`)
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to read garmin_connections by provider user id: ${error.message}`)
+  }
+
+  if (!data?.user_id || typeof data.user_id !== 'number') {
+    return null
+  }
+
+  return getGarminOAuthState(data.user_id)
 }
 
 async function revokeTokenUpstream(token: string): Promise<void> {
@@ -513,7 +572,8 @@ export async function revokeGarminConnection(userId: number): Promise<{
 export async function markGarminAuthError(userId: number, errorMessage: string): Promise<void> {
   await upsertGarminConnection({
     userId,
-    status: 'error',
+    status: 'reauth_required',
+    lastSyncError: errorMessage,
     errorState: {
       message: errorMessage,
       recordedAt: new Date().toISOString(),

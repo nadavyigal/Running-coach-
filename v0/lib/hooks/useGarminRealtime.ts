@@ -1,14 +1,78 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+
 import { useToast } from '@/hooks/use-toast'
-import { db } from '@/lib/db'
+import { db, type Run } from '@/lib/db'
 import { updateRun } from '@/lib/dbUtils'
-import { syncGarminEnabledData } from '@/lib/garminSync'
 import { createClient } from '@/lib/supabase/client'
 
 function isLocalDevelopmentHost(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+}
+
+function asDate(value: string | null | undefined): Date {
+  const parsed = value ? new Date(value) : new Date()
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed
+}
+
+function mapSupabaseRunToDexie(userId: number, row: Record<string, unknown>): Omit<Run, 'id'> {
+  const route = Array.isArray(row.route) ? JSON.stringify(row.route) : undefined
+  const completedAt = typeof row.completed_at === 'string' ? row.completed_at : null
+  const updatedAt = typeof row.updated_at === 'string' ? row.updated_at : null
+
+  return {
+    userId,
+    type: typeof row.type === 'string' ? (row.type as Run['type']) : 'easy',
+    distance: Number(row.distance ?? 0),
+    duration: Number(row.duration ?? 0),
+    importSource: 'garmin',
+    completedAt: asDate(completedAt),
+    createdAt: asDate(typeof row.created_at === 'string' ? row.created_at : completedAt),
+    updatedAt: asDate(updatedAt ?? completedAt),
+    ...(typeof row.pace === 'number' ? { pace: row.pace } : {}),
+    ...(typeof row.heart_rate === 'number' ? { heartRate: row.heart_rate } : {}),
+    ...(typeof row.calories === 'number' ? { calories: row.calories } : {}),
+    ...(typeof row.notes === 'string' ? { notes: row.notes } : {}),
+    ...(route ? { route, gpsPath: route } : {}),
+    ...(typeof row.source_activity_id === 'string' ? { importRequestId: row.source_activity_id } : {}),
+  }
+}
+
+async function mirrorRecentGarminRunsToDexie(userId: number): Promise<number> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('runs')
+    .select('*')
+    .eq('source_provider', 'garmin')
+    .order('completed_at', { ascending: false })
+    .limit(10)
+
+  if (error) {
+    throw error
+  }
+
+  let imported = 0
+
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const importRequestId = typeof row.source_activity_id === 'string' ? row.source_activity_id : null
+    if (!importRequestId) continue
+
+    const mappedRun = mapSupabaseRunToDexie(userId, row)
+    const existing = await db.runs
+      .where('[userId+importRequestId]' as never)
+      .equals([userId, importRequestId] as never)
+      .first()
+
+    if (existing?.id) {
+      await updateRun(existing.id, mappedRun)
+    } else {
+      await db.runs.add(mappedRun as Run)
+      imported += 1
+    }
+  }
+
+  return imported
 }
 
 async function triggerRunReportsForNewGarminRuns(userId: number): Promise<void> {
@@ -74,53 +138,61 @@ export function useGarminRealtime(userId: number | null) {
     const hasMixedContentRisk = window.location.protocol === 'https:' && /^http:\/\//i.test(supabaseUrl)
 
     if (!hasWebSocket || !secureEnough || hasMixedContentRisk) {
-      console.warn(
-        '[useGarminRealtime] Skipping realtime subscription due to unsupported browser context',
-        {
-          hasWebSocket,
-          secureEnough,
-          hasMixedContentRisk,
-          protocol: window.location.protocol,
-        }
-      )
+      console.warn('[useGarminRealtime] Skipping realtime subscription due to unsupported browser context')
       return
     }
 
     let supabase: ReturnType<typeof createClient> | null = null
     let channel: ReturnType<ReturnType<typeof createClient>['channel']> | null = null
 
+    const refreshFromServer = async () => {
+      if (syncInFlightRef.current) return
+
+      syncInFlightRef.current = true
+      try {
+        const imported = await mirrorRecentGarminRunsToDexie(userId)
+        if (imported > 0) {
+          toast({
+            title: 'New Garmin run synced',
+            description: 'Your latest Garmin Connect activity is now in RunSmart.',
+          })
+        }
+        window.dispatchEvent(new Event('garmin-run-synced'))
+        window.dispatchEvent(new Event('plan-updated'))
+        void triggerRunReportsForNewGarminRuns(userId)
+      } catch (error) {
+        console.warn('[useGarminRealtime] Failed to refresh Garmin runs from Supabase:', error)
+      } finally {
+        syncInFlightRef.current = false
+      }
+    }
+
     try {
       supabase = createClient()
       channel = supabase
-        .channel('garmin-activities')
+        .channel('garmin-runs')
         .on(
           'postgres_changes',
           {
-            event: 'INSERT',
+            event: '*',
             schema: 'public',
-            table: 'garmin_activities',
+            table: 'runs',
+            filter: 'source_provider=eq.garmin',
+          },
+          async () => {
+            await refreshFromServer()
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'garmin_connections',
             filter: `user_id=eq.${userId}`,
           },
           async () => {
-            if (syncInFlightRef.current) return
-
-            syncInFlightRef.current = true
-            try {
-              await syncGarminEnabledData(userId)
-              toast({
-                title: 'New Garmin run synced',
-                description: 'Your latest activity is now in RunSmart.',
-              })
-              window.dispatchEvent(new Event('garmin-run-synced'))
-              window.dispatchEvent(new Event('plan-updated'))
-
-              // Auto-generate run reports for newly imported Garmin runs that don't have one yet
-              void triggerRunReportsForNewGarminRuns(userId)
-            } catch (error) {
-              console.warn('[useGarminRealtime] Failed to sync Garmin activity:', error)
-            } finally {
-              syncInFlightRef.current = false
-            }
+            await refreshFromServer()
           }
         )
         .subscribe((status) => {
@@ -133,6 +205,8 @@ export function useGarminRealtime(userId: number | null) {
       return
     }
 
+    void refreshFromServer()
+
     return () => {
       if (supabase && channel) {
         void supabase.removeChannel(channel)
@@ -140,4 +214,3 @@ export function useGarminRealtime(userId: number | null) {
     }
   }, [toast, userId])
 }
-

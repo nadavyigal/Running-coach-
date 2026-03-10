@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { withApiSecurity, ApiRequest } from '@/lib/security.middleware'
 import { verifyAndParseState } from '../oauth-state'
 import { logger } from '@/lib/logger'
-import { getCurrentUser } from '@/lib/supabase/server'
+import { getCurrentProfile, getCurrentUser } from '@/lib/supabase/server'
+import { enqueueGarminBackfillJob } from '@/lib/integrations/garmin/service'
 import {
   upsertGarminConnection,
   upsertGarminTokens,
@@ -18,6 +19,16 @@ async function resolveAuthUserId(): Promise<string | null> {
     return user?.id ?? null
   } catch (error) {
     logger.warn('Unable to resolve Supabase auth user in Garmin callback:', error)
+    return null
+  }
+}
+
+async function resolveCurrentProfileId(): Promise<string | null> {
+  try {
+    const profile = await getCurrentProfile()
+    return typeof profile?.id === 'string' ? profile.id : null
+  } catch (error) {
+    logger.warn('Unable to resolve Supabase profile in Garmin callback:', error)
     return null
   }
 }
@@ -166,18 +177,24 @@ async function handleGarminCallback(req: ApiRequest) {
       }
     }
 
-    const authUserIdFromSession = await resolveAuthUserId()
+    const [authUserIdFromSession, profileIdFromSession] = await Promise.all([
+      resolveAuthUserId(),
+      resolveCurrentProfileId(),
+    ])
     const nowIso = new Date().toISOString()
     const expiresAtIso = new Date(Date.now() + (tokenData.expires_in ?? 7776000) * 1000).toISOString()
 
     await upsertGarminConnection({
       userId,
       authUserId: authUserIdFromSession,
+      profileId: profileIdFromSession,
       garminUserId: profileUserId != null ? String(profileUserId) : null,
+      providerUserId: profileUserId != null ? String(profileUserId) : null,
       scopes,
       status: 'connected',
       connectedAt: nowIso,
       revokedAt: null,
+      lastSyncError: null,
       errorState: null,
     })
 
@@ -190,13 +207,19 @@ async function handleGarminCallback(req: ApiRequest) {
       rotatedAt: nowIso,
     })
 
+    await enqueueGarminBackfillJob({
+      userId,
+      profileId: profileIdFromSession,
+      providerUserId: profileUserId != null ? String(profileUserId) : null,
+    })
+
     const deviceData = {
       userId,
       type: 'garmin' as const,
       deviceId: profileUserId ? `garmin-${profileUserId}` : `garmin-${userId}-${Date.now()}`,
       name: 'Garmin Device',
-      connectionStatus: 'connected' as const,
-      lastSync: nowIso,
+      connectionStatus: 'syncing' as const,
+      lastSync: null,
       capabilities: ['heart_rate', 'activities', 'advanced_metrics', 'running_dynamics'],
       settings: {
         garminUserId: profileUserId != null ? String(profileUserId) : null,
@@ -205,6 +228,7 @@ async function handleGarminCallback(req: ApiRequest) {
           tokensStoredServerSide: true,
           expiresAt: expiresAtIso,
         },
+        syncState: 'syncing',
       },
       createdAt: nowIso,
       updatedAt: nowIso,
