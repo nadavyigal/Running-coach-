@@ -1,4 +1,5 @@
 import { db, isDatabaseAvailable, safeDbOperation, getDatabase, resetDatabaseInstance } from './db';
+import { logger } from './logger';
 import type {
   ActiveRecordingSession,
   ChallengeProgress,
@@ -166,7 +167,7 @@ export async function initializeDatabase(): Promise<boolean> {
     try {
       // Check if we're on the server
       if (typeof window === 'undefined') {
-        console.log('🔄 Server-side: Database initialization skipped');
+        logger.debug('Server-side: Database initialization skipped');
         return true; // Return true for server-side to not block
       }
       
@@ -179,7 +180,7 @@ export async function initializeDatabase(): Promise<boolean> {
       const database = getDatabase();
       if (database) {
         await database.open();
-        console.log(`✅ Database initialized successfully (attempt ${attempt})`);
+        logger.info(`Database initialized successfully (attempt ${attempt})`);
         return true;
       }
       return false;
@@ -189,7 +190,7 @@ export async function initializeDatabase(): Promise<boolean> {
       
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_DELAY_BASE * attempt;
-        console.log(`⏳ Retrying database initialization in ${delay}ms...`);
+        logger.debug(`Retrying database initialization in ${delay}ms...`);
         await new Promise(r => setTimeout(r, delay));
       } else {
         console.error('❌ All database initialization attempts failed');

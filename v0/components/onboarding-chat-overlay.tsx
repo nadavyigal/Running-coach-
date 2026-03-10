@@ -643,11 +643,11 @@ export function OnboardingChatOverlay({ isOpen, onClose, onComplete }: Onboardin
           });
           
           // Step 3: Track completion
-          const { trackEngagementEvent } = await import('@/lib/analytics');
-          trackEngagementEvent('onboard_complete', { 
-            rookieChallenge: true, 
-            age: userProfile.age || 0, 
-            goalDist: userProfile.goal === 'distance' ? 5 : 0 
+          const { trackOnboardComplete } = await import('@/lib/analytics');
+          trackOnboardComplete({
+            rookieChallenge: true,
+            age: userProfile.age || 0,
+            goalDist: userProfile.goal === 'distance' ? 5 : 0
           });
 
           // Track AI guidance success

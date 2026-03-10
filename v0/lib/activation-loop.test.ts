@@ -1,6 +1,6 @@
 import FDBFactory from 'fake-indexeddb/lib/FDBFactory'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { db, type Workout } from './db'
+import { db, type PlanSetupPreferences, type Workout } from './db'
 import { dbUtils } from './dbUtils'
 import { recordRunWithSideEffects } from './run-recording'
 
@@ -118,7 +118,7 @@ describe('activation loop', () => {
       planPreferences: {
         trainingDays: [today, 'Thu', 'Sat'],
         longRunDay: 'Sat',
-      } as any,
+      } satisfies PlanSetupPreferences,
     })
 
     const user = await dbUtils.getUser(userId)
@@ -202,7 +202,7 @@ describe('activation loop', () => {
       planPreferences: {
         trainingDays: [today, 'Thu', 'Sat'],
         longRunDay: 'Sat',
-      } as any,
+      } satisfies PlanSetupPreferences,
     })
 
     const todaysWorkout = await dbUtils.getTodaysWorkout(userId)
