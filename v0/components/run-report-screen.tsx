@@ -21,8 +21,9 @@ import { AdvancedDetails } from './run-report/AdvancedDetails'
 import { BiomechanicsCard, type Biomechanics, type RunningDynamicsData } from './run-report/BiomechanicsCard'
 import { CoachScoreRing, type CoachScore } from './run-report/CoachScoreRing'
 import { CoreSummaryCard } from './run-report/CoreSummaryCard'
+import { DarkPaceChart } from './run-report/DarkPaceChart'
+import { DarkRouteMap } from './run-report/DarkRouteMap'
 import { EffortAnalysis } from './run-report/EffortAnalysis'
-import { HRZoneWheel } from './run-report/HRZoneWheel'
 import { KeyInsights, type Insight } from './run-report/KeyInsights'
 import { NextStepCard } from './run-report/NextStepCard'
 import { PaceHRDualChart } from './run-report/PaceHRDualChart'
@@ -984,6 +985,10 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         {...(pacingInsight?.paceConsistency ? { paceConsistency: pacingInsight.paceConsistency } : {})}
         variant="garmin"
       />,
+      path.length > 0 && <DarkRouteMap key="route-map" path={path} />,
+      paceChartEnabled && pacePath.length >= 10 && (
+        <DarkPaceChart key="pace-chart" gpsPath={pacePath} />
+      ),
       telemetrySplits.length >= 3 && (
         <PaceHRDualChart key="pace-hr-chart" splits={telemetrySplits} />
       ),
@@ -996,13 +1001,6 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
       telemetryLaps.length > 0 && (
         <SplitsTable key="splits-lap" splits={telemetryLaps} type="lap" variant="garmin" />
       ),
-      (garminTelemetry?.avgHr ?? run.heartRate) != null && (
-        <HRZoneWheel
-          key="hr-wheel"
-          avgHr={(garminTelemetry?.avgHr ?? run.heartRate) as number}
-          maxHr={(garminTelemetry?.maxHr ?? run.maxHR) as any}
-        />
-      ),
       biomechanicsData && runningDynamics && (
         <BiomechanicsCard
           key="biomechanics"
@@ -1011,19 +1009,24 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
           variant="garmin"
         />
       ),
+      <KeyInsights
+        key="insights"
+        insights={createInsightArray(coachNotes, pacingInsight, garminInsight, {
+          avgPaceSecPerKm: avgPace,
+          avgHr: (garminTelemetry?.avgHr ?? run.heartRate) as number | null,
+          distanceKm: run.distance,
+          effortScore: runEffort,
+        })}
+        isGenerating={isGenerating || isGarminInsightLoading}
+        onRegenerate={() => void generateNotes()}
+        variant="garmin"
+      />,
       <AdvancedDetails
         key="advanced"
         runId={run.id!}
         hasGarminData={hasGarminData}
         gpsQualityScore={gpsQuality?.score as any}
         metrics={sharedMetrics}
-        variant="garmin"
-      />,
-      <KeyInsights
-        key="insights"
-        insights={createInsightArray(coachNotes, pacingInsight, garminInsight)}
-        isGenerating={isGenerating || isGarminInsightLoading}
-        onRegenerate={() => void generateNotes()}
         variant="garmin"
       />,
       detailedRecovery && (
@@ -1193,9 +1196,22 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
 function createInsightArray(
   notes: CoachNotes | null,
   pacing: any,
-  garmin: GarminInsightResponse | null
+  garmin: GarminInsightResponse | null,
+  extra?: {
+    avgPaceSecPerKm?: number | null
+    avgHr?: number | null
+    distanceKm?: number | null
+    effortScore?: string | null
+  }
 ): Insight[] {
   const insights: Insight[] = []
+
+  // Format avg pace as mm:ss min/km
+  const fmtPace = (secPerKm: number) => {
+    const mins = Math.floor(secPerKm / 60)
+    const secs = Math.round(secPerKm % 60)
+    return `${mins}:${secs.toString().padStart(2, '0')} min/km`
+  }
 
   if (notes) {
     const insightTitles = ['What went well', 'Training benefit', 'Plan fit']
@@ -1207,7 +1223,8 @@ function createInsightArray(
             title: insightTitles[idx] ?? 'Coach note',
             message: positive,
             confidence: 'High',
-            isPositive: true
+            isPositive: true,
+            ...(idx === 0 && extra?.distanceKm ? { metric: `${extra.distanceKm.toFixed(2)} km` } : {}),
           })
         }
       })
@@ -1219,7 +1236,20 @@ function createInsightArray(
         title: 'Area for improvement',
         message: notes.flags[0] ?? '',
         confidence: 'Med',
-        isPositive: false
+        isPositive: false,
+        actionItem: 'Focus on this in your next session',
+      })
+    }
+
+    // Recovery insight from recoveryNext24h
+    if (notes.recoveryNext24h) {
+      insights.push({
+        type: 'recovery',
+        title: 'Recovery',
+        message: notes.recoveryNext24h,
+        confidence: 'High',
+        isPositive: true,
+        actionItem: 'Plan your next 24h accordingly',
       })
     }
   }
@@ -1231,15 +1261,32 @@ function createInsightArray(
       title: 'Pacing Strategy',
       message: pacing.pacingAnalysis,
       confidence: 'High',
-      isPositive: isConsistent
+      isPositive: isConsistent,
+      ...(extra?.avgPaceSecPerKm ? { metric: fmtPace(extra.avgPaceSecPerKm) } : {}),
     })
   } else if (garmin?.insight_markdown) {
-    // Fallback to unstructured Garmin insight if no structured pacing insight
     insights.push({
       type: 'general',
       title: 'Garmin Coach Analysis',
       message: garmin.insight_markdown.substring(0, 150) + (garmin.insight_markdown.length > 150 ? '...' : ''),
-      confidence: (garmin.confidence ?? 0) > 0.8 ? 'High' : 'Med'
+      confidence: (garmin.confidence ?? 0) > 0.8 ? 'High' : 'Med',
+    })
+  }
+
+  // Training-load insight from effort + distance
+  if (extra?.effortScore && extra.distanceKm) {
+    const effortLabel = extra.effortScore === 'hard' ? 'high' : extra.effortScore === 'moderate' ? 'moderate' : 'low'
+    const isHardLong = extra.effortScore === 'hard' && extra.distanceKm >= 10
+    insights.push({
+      type: 'effort',
+      title: 'Training Load',
+      message: isHardLong
+        ? `Long run at ${effortLabel} effort — significant training stimulus. Allow 48h before your next hard session.`
+        : `${extra.distanceKm.toFixed(1)} km at ${effortLabel} effort contributes to your weekly load.`,
+      confidence: 'Med',
+      isPositive: !isHardLong,
+      ...(extra.avgHr ? { metric: `avg ${extra.avgHr} bpm` } : {}),
+      actionItem: isHardLong ? 'Schedule an easy day tomorrow' : undefined,
     })
   }
 

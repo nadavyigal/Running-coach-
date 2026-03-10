@@ -7,6 +7,8 @@ export interface Insight {
   message: string
   confidence?: 'High' | 'Med' | 'Low'
   isPositive?: boolean
+  actionItem?: string
+  metric?: string
 }
 
 interface KeyInsightsProps {
@@ -55,9 +57,12 @@ export function KeyInsights({ insights, isGenerating, onRegenerate, variant = 'l
             <Sparkles className="w-4 h-4 text-[#40DCBE] animate-pulse" />
             <span className="text-xs font-bold uppercase tracking-widest text-white/40">Coach Analysis</span>
           </div>
-          {[1, 2].map(i => (
-            <div key={i} className="h-14 rounded-xl bg-white/5 animate-pulse" />
-          ))}
+          <div className="h-8 rounded-lg bg-white/5 animate-pulse" />
+          <div className="grid grid-cols-2 gap-3">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="h-20 rounded-xl bg-white/5 animate-pulse" />
+            ))}
+          </div>
         </div>
       )
     }
@@ -76,8 +81,12 @@ export function KeyInsights({ insights, isGenerating, onRegenerate, variant = 'l
 
   if (!insights || insights.length === 0) return null
 
-  // ─── GARMIN DARK — bordered insight list ─────────────────────────────────
+  // ─── GARMIN DARK — hero + 2-col grid + overflow list ─────────────────────
   if (variant === 'garmin') {
+    const heroInsight = insights[0]
+    const gridInsights = insights.slice(1, 5)   // up to 4 tiles in 2-col grid
+    const listInsights = insights.slice(5)       // overflow as vertical list
+
     return (
       <div className="mx-4 bg-gradient-to-br from-slate-800/80 to-slate-900/80 border border-white/10 rounded-2xl p-5">
         <div className="flex items-center justify-between mb-4">
@@ -97,25 +106,82 @@ export function KeyInsights({ insights, isGenerating, onRegenerate, variant = 'l
           )}
         </div>
 
-        <div className="space-y-4">
-          {insights.map((insight, i) => (
-            <div
-              key={i}
-              className={`border-l-2 pl-3.5 ${
-                insight.isPositive !== false ? 'border-[#40DCBE]/50' : 'border-[#EED678]/50'
-              }`}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                {getIconForType(insight.type, insight.isPositive)}
-                <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider flex-1">
-                  {insight.title}
-                </span>
-                {getConfidenceBadge(insight.confidence, true)}
-              </div>
-              <p className="text-sm text-white/75 leading-relaxed">{insight.message}</p>
+        {/* Hero insight */}
+        {heroInsight && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-1.5">
+              {getIconForType(heroInsight.type, heroInsight.isPositive)}
+              <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">
+                {heroInsight.title}
+              </span>
+              {getConfidenceBadge(heroInsight.confidence, true)}
             </div>
-          ))}
-        </div>
+            <p className="text-base text-white/90 font-medium leading-snug">{heroInsight.message}</p>
+            {heroInsight.metric && (
+              <p className="text-xs text-white/40 mt-1 font-mono">{heroInsight.metric}</p>
+            )}
+            {heroInsight.actionItem && (
+              <p className="text-xs text-[#40DCBE] mt-1.5 font-medium">{heroInsight.actionItem}</p>
+            )}
+          </div>
+        )}
+
+        {/* 2-column grid for next insights */}
+        {gridInsights.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            {gridInsights.map((insight, i) => (
+              <div
+                key={i}
+                className="bg-white/5 rounded-xl p-3 border border-white/[0.08]"
+              >
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  {getIconForType(insight.type, insight.isPositive)}
+                  <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider truncate flex-1">
+                    {insight.title}
+                  </span>
+                </div>
+                <p className="text-xs text-white/70 leading-snug line-clamp-3">{insight.message}</p>
+                {insight.metric && (
+                  <p className="text-[10px] text-white/40 mt-1 font-mono">{insight.metric}</p>
+                )}
+                {insight.actionItem && (
+                  <p className="text-xs text-[#40DCBE] mt-1.5 font-medium leading-snug">{insight.actionItem}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Overflow vertical list */}
+        {listInsights.length > 0 && (
+          <div className="space-y-3 mt-1">
+            {listInsights.map((insight, i) => (
+              <div
+                key={i}
+                className={`border-l-2 pl-3.5 ${
+                  insight.isPositive !== false ? 'border-[#40DCBE]/50' : 'border-[#EED678]/50'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  {getIconForType(insight.type, insight.isPositive)}
+                  <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider flex-1">
+                    {insight.title}
+                  </span>
+                  {getConfidenceBadge(insight.confidence, true)}
+                </div>
+                <p className="text-sm text-white/75 leading-relaxed">{insight.message}</p>
+                {insight.actionItem && (
+                  <p className="text-xs text-[#40DCBE] mt-1 font-medium">{insight.actionItem}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Data source attribution */}
+        <p className="text-[10px] text-white/20 mt-4 text-center uppercase tracking-widest">
+          AI · Garmin · GPS
+        </p>
       </div>
     )
   }
