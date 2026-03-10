@@ -20,7 +20,7 @@ import { trackAnalyticsEvent } from "@/lib/analytics"
 import { getActiveChallenge, updateChallengeOnWorkoutComplete } from "@/lib/challengeEngine"
 import { startChallengeAndSyncPlan } from "@/lib/challenge-plan-sync"
 import { ENABLE_AUTO_PAUSE, ENABLE_VIBRATION_COACH, ENABLE_AUDIO_COACH } from "@/lib/featureFlags"
-import { recordRunWithSideEffects } from "@/lib/run-recording"
+import { recordRunWithSideEffects, retryPostRunAdaptation } from "@/lib/run-recording"
 import {
   getCoachingCueState,
   initializeCoachingCues,
@@ -344,6 +344,7 @@ type CompletionModalData = {
 export function RecordScreen() {
   const [isRunning, setIsRunning] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
+  const [isSavingRun, setIsSavingRun] = useState(false)
   const [hasRecoveredRun, setHasRecoveredRun] = useState(false)
   const [autoPauseActive, setAutoPauseActive] = useState(false)
   const [autoPauseStartTime, setAutoPauseStartTime] = useState<number | null>(null)
@@ -2207,6 +2208,8 @@ export function RecordScreen() {
   }
 
   const stopRun = async () => {
+    if (isSavingRun) return
+
     stopTracking()
     setIsInitializingGps(false)
     setIsRunning(false)
@@ -2233,6 +2236,7 @@ export function RecordScreen() {
     speakCoachMessage("Run stopped. Great work today.", { interrupt: true, force: true })
 
     if (totalDistance > 0 && finalDuration > 0) {
+      setIsSavingRun(true)
       await saveRun(totalDistance, finalDuration)
     } else {
       toast({
@@ -2297,8 +2301,7 @@ export function RecordScreen() {
           ? rejectedPointCountRef.current / (acceptedPointCountRef.current + rejectedPointCountRef.current)
           : 0,
       })
-
-      const { runId, matchedWorkout, adaptationTriggered } = await recordRunWithSideEffects({
+      const { runId, matchedWorkout, adaptation } = await recordRunWithSideEffects({
         userId: user.id,
         distanceKm: distance,
         durationSeconds: duration,
@@ -2382,7 +2385,7 @@ export function RecordScreen() {
         title: "Run Saved",
         description: `${distance.toFixed(2)}km in ${formatTime(duration)}`,
       })
-      if (adaptationTriggered) {
+      if (adaptation.status === "completed") {
         toast({
           title: "Plan updated based on your recent performance",
           action: (
@@ -2392,6 +2395,50 @@ export function RecordScreen() {
               }}
             >
               View Changes
+            </ToastAction>
+          ),
+        })
+      } else if (
+        adaptation.status === "failed" &&
+        adaptation.reason &&
+        matchedWorkout?.planId
+      ) {
+        toast({
+          title: "Run saved, but the adaptive update did not finish",
+          description: adaptation.errorMessage ?? "You can retry the update without losing this run.",
+          variant: "destructive",
+          action: (
+            <ToastAction
+              onClick={() => {
+                void retryPostRunAdaptation({
+                  userId: user.id,
+                  planId: matchedWorkout.planId,
+                  runId,
+                  adaptationReason: adaptation.reason,
+                }).then((retryResult) => {
+                  if (retryResult.status === "completed") {
+                    toast({
+                      title: "Plan updated",
+                      description: "Your next sessions now reflect this completed run.",
+                    })
+                    try {
+                      window.dispatchEvent(new CustomEvent("navigate-to-plan"))
+                    } catch {
+                      router.push("/plan")
+                    }
+                    return
+                  }
+
+                  toast({
+                    title: "Adaptive update still pending",
+                    description:
+                      retryResult.errorMessage ?? "The run is saved. You can retry again from your plan.",
+                    variant: "destructive",
+                  })
+                })
+              }}
+            >
+              Retry
             </ToastAction>
           ),
         })
@@ -2416,6 +2463,8 @@ export function RecordScreen() {
         description: "Failed to save run. Please try again.",
         variant: "destructive"
       })
+    } finally {
+      setIsSavingRun(false)
     }
   }
 
@@ -2423,7 +2472,15 @@ export function RecordScreen() {
     try {
       window.dispatchEvent(new CustomEvent("navigate-to-run-report", { detail: { runId } }))
     } catch {
-      router.push('/')
+      router.push(`/runs/${runId}/report`)
+    }
+  }
+
+  const navigateToToday = () => {
+    try {
+      window.dispatchEvent(new CustomEvent("navigate-to-today"))
+    } catch {
+      router.push("/")
     }
   }
 
@@ -3162,16 +3219,19 @@ export function RecordScreen() {
                   <Button
                     onClick={handleStartRunPress}
                     className="h-10 bg-green-600 px-4 text-sm hover:bg-green-700"
-                    disabled={gpsPermission === 'denied' || gpsPermission === 'unsupported' || isInitializingGps || isGpsWarmingUp}
+                    disabled={gpsPermission === 'denied' || gpsPermission === 'unsupported' || isInitializingGps || isGpsWarmingUp || isSavingRun}
                   >
-                    {isInitializingGps || isGpsWarmingUp ? (
+                    {isSavingRun ? (
+                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                    ) : isInitializingGps || isGpsWarmingUp ? (
                       <Loader2 className="h-5 w-5 mr-2 animate-spin" />
                     ) : isGpsTracking && currentGPSAccuracy && currentGPSAccuracy.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START ? (
                       <CheckCircle className="h-5 w-5 mr-2" />
                     ) : (
                       <Play className="h-5 w-5 mr-2" />
                     )}
-                    {isInitializingGps ? 'Initializing GPS...' :
+                    {isSavingRun ? 'Saving run...' :
+                      isInitializingGps ? 'Initializing GPS...' :
                       isGpsWarmingUp ? 'Warming Up GPS...' :
                         isGpsTracking && currentGPSAccuracy && currentGPSAccuracy.signalStrength >= GPS_MIN_SIGNAL_STRENGTH_TO_START ?
                           `Start Run (${currentGPSAccuracy.signalStrength}% GPS)` :
@@ -3184,6 +3244,7 @@ export function RecordScreen() {
                     <Button
                       onClick={resumeRun}
                       className="h-10 bg-green-600 px-4 text-sm hover:bg-green-700"
+                      disabled={isSavingRun}
                     >
                       <Play className="h-5 w-5 mr-2" />
                       Resume
@@ -3193,6 +3254,7 @@ export function RecordScreen() {
                       onClick={pauseRun}
                       className="h-10 px-4 text-sm"
                       variant="outline"
+                      disabled={isSavingRun}
                     >
                       <Pause className="h-5 w-5 mr-2" />
                       Pause
@@ -3202,6 +3264,7 @@ export function RecordScreen() {
                     onClick={stopRun}
                     className="h-10 px-4 text-sm"
                     variant="destructive"
+                    disabled={isSavingRun}
                   >
                     <Square className="h-5 w-5 mr-2" />
                     Stop
@@ -3210,6 +3273,16 @@ export function RecordScreen() {
               )}
             </div>
 
+            {isSavingRun && (
+              <div
+                className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
+                role="status"
+                aria-live="polite"
+              >
+                Saving your run and preparing your post-run check-in...
+              </div>
+            )}
+
             {/* Manual Entry Option */}
             {!isRunning && (
               <div className="pt-4 border-t space-y-2">
@@ -3217,6 +3290,7 @@ export function RecordScreen() {
                   variant="ghost"
                   onClick={() => setShowManualModal(true)}
                   className="text-gray-600 w-full"
+                  disabled={isSavingRun}
                 >
                   <Volume2 className="h-4 w-4 mr-2" />
                   Add Manual Run
@@ -3225,6 +3299,7 @@ export function RecordScreen() {
                   variant="outline"
                   onClick={() => setShowAddActivityModal(true)}
                   className="w-full"
+                  disabled={isSavingRun}
                 >
                   <Sparkles className="h-4 w-4 mr-2" />
                   Upload photo & use AI
@@ -3444,8 +3519,7 @@ export function RecordScreen() {
           onClose={() => setShowManualModal(false)}
           {...(currentWorkout?.id ? { workoutId: currentWorkout.id } : {})}
           onSaved={() => {
-            // Navigate back to today screen after saving manual run
-            router.push('/')
+            navigateToToday()
           }}
         />
       )}
@@ -3455,8 +3529,7 @@ export function RecordScreen() {
           onOpenChange={setShowAddActivityModal}
           onActivityAdded={() => {
             setShowAddActivityModal(false)
-            // Navigate back to today screen after adding activity
-            router.push('/')
+            navigateToToday()
           }}
           initialStep="upload"
           {...(currentWorkout?.id ? { workoutId: currentWorkout.id } : {})}

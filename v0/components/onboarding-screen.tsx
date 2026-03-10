@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { dbUtils, setReferenceRace } from "@/lib/dbUtils"
 import { useToast } from "@/hooks/use-toast"
+import { useData } from "@/contexts/DataContext"
 import {
   trackOnboardingStarted,
   trackStepProgression,
@@ -21,6 +22,7 @@ import {
   trackUserContext,
   OnboardingSessionTracker
 } from '@/lib/onboardingAnalytics'
+import { trackOnboardComplete, trackOnboardingCompletedFunnel } from '@/lib/analytics'
 import { useErrorToast, NetworkStatusIndicator } from '@/components/error-toast'
 import { useNetworkErrorHandling } from '@/hooks/use-network-error-handling'
 import { useDatabaseErrorHandling } from '@/hooks/use-database-error-handling'
@@ -438,6 +440,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   })
   const [selectedChallenge, setSelectedChallenge] = useState<ChallengeTemplate | null>(null)
   const { toast } = useToast()
+  const { refresh: refreshData } = useData()
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -478,6 +481,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   }
 
   const prevStep = () => {
+    if (isGeneratingPlan) return
     if (currentStep > 1) {
       trackStepProgression(currentStep - 1, `step_${currentStep - 1}`, 'backward')
       setCurrentStep(currentStep - 1)
@@ -559,6 +563,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const isStepValid = canProceed()
   const isFinalStep = currentStep === totalSteps
   const isActionDisabled = !isStepValid || (isFinalStep && isGeneratingPlan)
+  const finalStepStatusMessage = isGeneratingPlan
+    ? "Saving your profile and creating your starter plan. This may take a few seconds."
+    : "Finish setup to save your profile and create your starter plan."
 
   const applyAiProfile = (profile: {
     goal?: string
@@ -594,6 +601,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   }
 
   const handleComplete = async () => {
+    if (isGeneratingPlan) return
     console.log('🚀 ONBOARDING COMPLETION STARTED - WITH USER CREATION')
 
     setIsGeneratingPlan(true)
@@ -612,6 +620,12 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           longRunDay,
           currentRaceTimeSeconds: referenceRaceTimeSeconds,
         }
+        const analyticsExperience =
+          selectedExperience === 'regular'
+            ? 'advanced'
+            : selectedExperience === 'occasional'
+              ? 'intermediate'
+              : 'beginner'
 
         // Prepare form data
         const formData = {
@@ -652,6 +666,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           privacySettings: formData.privacySettings,
           planPreferences: formData.planPreferences as any
         }, { artificialDelayMs: 300 })
+        const starterPlan = await dbUtils.getPlan(planId)
         console.log('✅ Atomic commit complete:', { userId, planId })
 
         // If a challenge was selected, start the challenge
@@ -706,6 +721,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
+                    userId,
                     user: {
                       experience: formData.experience,
                       goal: formData.goal,
@@ -713,7 +729,22 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                       preferredTimes: formData.selectedTimes,
                       age: formData.age,
                       averageWeeklyKm: formData.averageWeeklyKm ?? undefined
-                    }
+                    },
+                    userContext: {
+                      userId,
+                      experience: formData.experience,
+                      goal: formData.goal,
+                      daysPerWeek: formData.daysPerWeek,
+                      preferredTimes: formData.selectedTimes,
+                      age: formData.age,
+                      averageWeeklyKm: formData.averageWeeklyKm ?? undefined
+                    },
+                    planPreferences: formData.planPreferences,
+                    startDate:
+                      starterPlan?.startDate instanceof Date
+                        ? starterPlan.startDate.toISOString()
+                        : starterPlan?.startDate,
+                    currentRaceTimeSeconds: referenceRaceTimeSeconds || undefined
                   }),
                   signal: controller.signal
                 });
@@ -769,6 +800,38 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             }
           })()
         }
+
+        try {
+          await refreshData()
+        } catch (refreshError) {
+          console.warn('Failed to refresh onboarding data before navigation:', refreshError)
+        }
+
+        void Promise.allSettled([
+          trackOnboardComplete({
+            age: age ?? undefined,
+            goalDist: selectedGoal === 'distance' ? referenceRaceDistance : 0,
+            rookieChallenge: Boolean(selectedChallenge),
+            daysPerWeek,
+            experience: analyticsExperience,
+          }),
+          trackOnboardingCompletedFunnel({
+            goal: selectedGoal,
+            experience: analyticsExperience,
+            daysPerWeek,
+          }),
+        ])
+
+        sessionTracker.complete({
+          completionMethod: 'guided_form',
+          userDemographics: {
+            age: age ?? undefined,
+            experience: analyticsExperience,
+            daysPerWeek,
+            preferredTimes: selectedTimes,
+          },
+          planGeneratedSuccessfully: true,
+        })
 
         return true
 
@@ -1249,7 +1312,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 size="icon"
                 className="text-white hover:bg-white/5 -ml-2"
                 onClick={prevStep}
-                disabled={currentStep === 1}
+                disabled={currentStep === 1 || isGeneratingPlan}
+                aria-label="Go back to the previous onboarding step"
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
@@ -1286,6 +1350,11 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           )}
           style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom, 2rem))' }}
         >
+          {isFinalStep && (
+            <div className="mb-3 text-center" role="status" aria-live="polite">
+              <p className="text-sm text-white/70">{finalStepStatusMessage}</p>
+            </div>
+          )}
           <Button
             type="button"
             className={cn(
@@ -1295,7 +1364,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             onClick={isFinalStep ? handleComplete : nextStep}
             disabled={isActionDisabled}
           >
-            {isFinalStep ? (isGeneratingPlan ? "Completing..." : "Complete setup") : "Continue"}
+            {isFinalStep ? (isGeneratingPlan ? "Creating your plan..." : "Create my plan") : "Continue"}
           </Button>
         </div>
       </div>

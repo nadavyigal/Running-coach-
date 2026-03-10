@@ -50,7 +50,6 @@ export class SecurityMonitor {
     /vbscript:/gi,
     /livescript:/gi,
     /expression\(/gi,
-    /url\(/gi,
     /import\(/gi,
   ];
 
@@ -85,8 +84,7 @@ export class SecurityMonitor {
     const enrichedEvent: SecurityEvent = {
       ...event,
       timestamp: event.timestamp || new Date().toISOString(),
-      userAgent: typeof window !== 'undefined' ? navigator.userAgent : undefined,
-      url: typeof window !== 'undefined' ? window.location.href : undefined,
+      ...(typeof window !== 'undefined' && { userAgent: navigator.userAgent, url: window.location.href }),
     };
 
     this.securityEvents.push(enrichedEvent);
@@ -177,8 +175,8 @@ export class SecurityMonitor {
     if (originalInnerHTML && originalInnerHTML.set) {
       const detectSuspiciousContent = this.detectSuspiciousContent.bind(this);
       const trackSecurityEvent = this.trackSecurityEvent.bind(this);
-      Object.defineProperty(Element.prototype, 'innerHTML', {
-        set(value: string) {
+      const descriptor: PropertyDescriptor = {
+        set(this: Element, value: string) {
           // Check for XSS patterns
           if (detectSuspiciousContent(value)) {
             trackSecurityEvent({
@@ -190,9 +188,12 @@ export class SecurityMonitor {
           }
           return originalInnerHTML.set!.call(this, value);
         },
-        get: originalInnerHTML.get,
         configurable: true,
-      });
+      };
+      if (originalInnerHTML.get) {
+        descriptor.get = originalInnerHTML.get;
+      }
+      Object.defineProperty(Element.prototype, 'innerHTML', descriptor);
     }
 
     // Monitor for script injection attempts
@@ -473,7 +474,7 @@ export class SecurityMonitor {
       warningEvents: warningEvents.length,
       suspiciousActivities: suspiciousActivities.length,
       blockedRequests: this.blockedIPs.size,
-      lastEvent: this.securityEvents[this.securityEvents.length - 1],
+      ...(this.securityEvents.length > 0 && { lastEvent: this.securityEvents[this.securityEvents.length - 1] }),
     };
   }
 

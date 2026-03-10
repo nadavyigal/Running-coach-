@@ -37,13 +37,14 @@ export class SubscriptionGate {
       }
 
       // Check if trial is active
-      if (user.trialEndDate && new Date() < user.trialEndDate) {
+      if (user != null && user.trialEndDate && new Date() < user.trialEndDate) {
         logger.info(`User ${userId} has active trial access to ${feature}`);
         return true;
       }
 
       // Check if subscription is active
       if (
+        user != null &&
         (user.subscriptionTier === 'pro' || user.subscriptionTier === 'premium') &&
         user.subscriptionStatus === 'active'
       ) {
@@ -63,6 +64,7 @@ export class SubscriptionGate {
       // Fail open for better UX during errors
       return false;
     }
+    /* eslint-enable no-unreachable */
   }
 
   /**

@@ -98,6 +98,17 @@ export function PlanAdjustmentNotice({ userId }: PlanAdjustmentNoticeProps) {
     }
   }, [loadLatest])
 
+  useEffect(() => {
+    const refresh = () => {
+      void loadLatest()
+    }
+
+    window.addEventListener('plan-updated', refresh)
+    return () => {
+      window.removeEventListener('plan-updated', refresh)
+    }
+  }, [loadLatest])
+
   if (!latest) return null
 
   return (

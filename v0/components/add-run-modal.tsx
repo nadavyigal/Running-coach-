@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -28,6 +28,7 @@ import {
   Play,
   ArrowLeft,
   RefreshCw,
+  AlertTriangle,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
@@ -35,6 +36,7 @@ interface AddRunModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onRunAdded?: () => void
+  onRecordWorkout?: () => void
 }
 
 interface WorkoutType {
@@ -319,7 +321,7 @@ const buildDefaultFallback = (
   }
 }
 
-export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps) {
+export function AddRunModal({ open, onOpenChange, onRunAdded, onRecordWorkout }: AddRunModalProps) {
   const [step, setStep] = useState<"select" | "configure" | "approve">("select")
   const [selectedWorkout, setSelectedWorkout] = useState<WorkoutType | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
@@ -329,6 +331,7 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
   const [targetValue, setTargetValue] = useState("5.0")
   const [selectedDifficulty, setSelectedDifficulty] = useState("open")
   const [generatedWorkout, setGeneratedWorkout] = useState<any>(null)
+  const [generationSource, setGenerationSource] = useState<"ai" | "fallback" | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [planEndDate, setPlanEndDate] = useState<Date | undefined>(undefined)
   const [planStartDate, setPlanStartDate] = useState<Date | undefined>(undefined)
@@ -400,10 +403,22 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
 
   const handleWorkoutSelect = (workout: WorkoutType) => {
     setSelectedWorkout(workout)
+    setGenerationSource(null)
     setTargetValue(
       selectedGoal === "distance" ? workout.defaultDistance.toString() : workout.defaultDuration.toString(),
     )
     setStep("configure")
+  }
+
+  const resetComposer = () => {
+    setStep("select")
+    setSelectedWorkout(null)
+    setTargetValue("5.0")
+    setSelectedDifficulty("open")
+    setSelectedGoal("distance")
+    setNotes("")
+    setGeneratedWorkout(null)
+    setGenerationSource(null)
   }
 
   const generateWorkoutDescription = async () => {
@@ -437,6 +452,7 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
       }
 
       setGeneratedWorkout(workoutData)
+      setGenerationSource("ai")
       setStep("approve")
     } catch (error) {
       console.error("Error generating workout:", error)
@@ -447,10 +463,35 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
           ? buildIntervalsFallback(selectedWorkout, goal, targetValue, difficulty)
           : buildDefaultFallback(selectedWorkout, goal, targetValue, difficulty)
       setGeneratedWorkout(fallback)
+      setGenerationSource("fallback")
       setStep("approve")
+      toast({
+        title: "Using a starter workout",
+        description: "Personalized generation was unavailable, so we built a safe starter version you can still schedule.",
+      })
     } finally {
       setIsGenerating(false)
     }
+  }
+
+  const handleRecordWorkout = () => {
+    if (!onRecordWorkout) {
+      toast({
+        title: "Recording unavailable here",
+        description: "Open this modal from Today to jump straight into recording.",
+      })
+      return
+    }
+
+    handleModalOpenChange(false)
+    onRecordWorkout()
+  }
+
+  const handleModalOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      resetComposer()
+    }
+    onOpenChange(nextOpen)
   }
 
   const handleSave = async () => {
@@ -557,13 +598,7 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
 	      })
 
       // Reset and close
-      setStep("select")
-      setSelectedWorkout(null)
-      setTargetValue("5.0")
-      setSelectedDifficulty("open")
-      setSelectedGoal("distance")
-      setNotes("")
-      setGeneratedWorkout(null)
+      resetComposer()
       onOpenChange(false)
 
       // Call onRunAdded callback to refresh data
@@ -586,8 +621,14 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={handleModalOpenChange}>
+      <DialogContent
+        className="max-w-md max-h-[90vh] overflow-y-auto"
+        aria-describedby="add-run-modal-description"
+      >
+        <DialogDescription id="add-run-modal-description" className="sr-only">
+          Add a workout to your plan, generate a guided version, or jump into live run recording.
+        </DialogDescription>
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle>
@@ -619,6 +660,9 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
               </Button>
             )}
           </div>
+          <DialogDescription>
+            Add a workout to your plan, generate a guided version, or jump into live run recording.
+          </DialogDescription>
         </DialogHeader>
 
         {step === "select" && (
@@ -695,7 +739,10 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
             </Card>
 
             {/* Record Workout Button */}
-            <Button className="w-full bg-black hover:bg-gray-800 text-white h-12 text-lg font-medium">
+            <Button
+              className="w-full bg-black hover:bg-gray-800 text-white h-12 text-lg font-medium"
+              onClick={handleRecordWorkout}
+            >
               <Clock className="h-5 w-5 mr-2" aria-hidden="true" />
               Record workout
             </Button>
@@ -883,6 +930,20 @@ export function AddRunModal({ open, onOpenChange, onRunAdded }: AddRunModalProps
 
         {step === "approve" && generatedWorkout && selectedWorkout && (
           <div className="space-y-6">
+            {generationSource === "fallback" && (
+              <Card className="border-amber-200 bg-amber-50 text-amber-950">
+                <CardContent className="flex items-start gap-3 p-4">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700" aria-hidden="true" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Starter workout shown</p>
+                    <p className="text-sm text-amber-900/80">
+                      We could not generate a personalized version right now, so this fallback keeps you moving safely.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Generated Workout Header */}
             <Card className={`bg-gradient-to-r ${selectedWorkout.color} text-white`}>
               <CardContent className="p-4">

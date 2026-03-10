@@ -17,8 +17,9 @@ import { Heart, Watch, Camera, Edit, Upload, CalendarIcon, Zap, Loader2 } from "
 import { useToast } from "@/hooks/use-toast"
 import { AiActivityAnalysisError, analyzeActivityImage } from "@/lib/ai-activity-client"
 import { trackAnalyticsEvent } from "@/lib/analytics"
-import { recordRunWithSideEffects } from "@/lib/run-recording"
+import { recordRunWithSideEffects, retryPostRunAdaptation } from "@/lib/run-recording"
 import { syncGarminEnabledData } from "@/lib/garminSync"
+import { ToastAction } from "@/components/ui/toast"
 
 interface AddActivityModalProps {
   open: boolean
@@ -283,7 +284,7 @@ export function AddActivityModal({
         })))
       : undefined
 
-    await recordRunWithSideEffects({
+    const result = await recordRunWithSideEffects({
       userId: user.id,
       ...(typeof workoutId === "number" ? { workoutId } : {}),
       autoMatchWorkout,
@@ -299,14 +300,58 @@ export function AddActivityModal({
       importSource: cleanedImportMeta ? "image" : "manual",
       ...(cleanedImportMeta ? { importMeta: cleanedImportMeta } : {}),
     })
+    return { userId: user.id, result }
+  }
+
+  const showAdaptationOutcome = (
+    payload: Awaited<ReturnType<typeof persistActivity>>
+  ) => {
+    if (
+      payload.result.adaptation.status !== "failed" ||
+      !payload.result.adaptation.reason ||
+      !payload.result.matchedWorkout?.planId
+    ) {
+      return
+    }
+
+    toast({
+      title: "Run saved, adaptive update needs retry",
+      description:
+        payload.result.adaptation.errorMessage ?? "Your run is safe. Retry the plan update when you're ready.",
+      variant: "destructive",
+      action: (
+        <ToastAction
+          onClick={() => {
+            void retryPostRunAdaptation({
+              userId: payload.userId,
+              planId: payload.result.matchedWorkout!.planId,
+              runId: payload.result.runId,
+              adaptationReason: payload.result.adaptation.reason!,
+            }).then((retryResult) => {
+              toast({
+                title: retryResult.status === "completed" ? "Plan updated" : "Adaptive update still pending",
+                description:
+                  retryResult.status === "completed"
+                    ? "Your next sessions now reflect this run."
+                    : retryResult.errorMessage ?? "The run is saved. You can retry again later.",
+                ...(retryResult.status === "completed" ? {} : { variant: "destructive" as const }),
+              })
+            })
+          }}
+        >
+          Retry
+        </ToastAction>
+      ),
+    })
   }
 
   const handleManualSave = async () => {
     setIsSaving(true)
     setError(null)
     try {
-      await persistActivity(activityData, selectedDate, imageImportMeta ?? undefined)
+      const savedRun = await persistActivity(activityData, selectedDate, imageImportMeta ?? undefined)
       toast({ title: "Activity saved", description: "Your run was added to Today's feed." })
+      showAdaptationOutcome(savedRun)
       resetForm()
       onOpenChange(false)
       if (onActivityAdded) {
@@ -394,7 +439,7 @@ export function AddActivityModal({
           requestId: result.requestId,
           method: result.method,
         }).catch(() => undefined)
-        await persistActivity(updatedActivity, normalizedDate, {
+        const savedRun = await persistActivity(updatedActivity, normalizedDate, {
           ...(result.requestId ? { requestId: result.requestId } : {}),
           ...(typeof result.confidence === "number" ? { confidence: result.confidence } : {}),
           ...(result.method ? { method: result.method } : {}),
@@ -402,6 +447,7 @@ export function AddActivityModal({
           ...(result.parserVersion ? { parserVersion: result.parserVersion } : {}),
         })
         toast({ title: "Activity logged", description: "AI imported your run automatically." })
+        showAdaptationOutcome(savedRun)
         resetForm()
         onOpenChange(false)
         if (onActivityAdded) {

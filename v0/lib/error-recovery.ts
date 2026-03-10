@@ -380,26 +380,13 @@ export class ErrorRecoveryManager {
 
   // Recovery action implementations
   private async retryNetworkRequest(_context: RecoveryContext): Promise<boolean> {
-    // Implementation would retry the original network request
-    // This is a placeholder - actual implementation would depend on the specific request
-    try {
-      // Simulate network retry
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return Math.random() > 0.3; // 70% success rate simulation
-    } catch {
-      return false;
-    }
+    // Not yet implemented: automatic network retry requires request replay context
+    return false;
   }
 
   private async switchToBackupEndpoint(_context: RecoveryContext): Promise<boolean> {
-    // Switch to backup API endpoint
-    try {
-      // Simulate endpoint switch
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return Math.random() > 0.2; // 80% success rate simulation
-    } catch {
-      return false;
-    }
+    // Not yet implemented: no backup endpoint configured
+    return false;
   }
 
   private async enableOfflineMode(_context: RecoveryContext): Promise<boolean> {
@@ -429,13 +416,8 @@ export class ErrorRecoveryManager {
   }
 
   private async rebuildDatabase(_context: RecoveryContext): Promise<boolean> {
-    try {
-      // Rebuild database from backup
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      return Math.random() > 0.1; // 90% success rate simulation
-    } catch {
-      return false;
-    }
+    // Not yet implemented: database rebuild requires safe backup source
+    return false;
   }
 
   private async useMemoryStorage(_context: RecoveryContext): Promise<boolean> {
@@ -448,13 +430,8 @@ export class ErrorRecoveryManager {
   }
 
   private async switchAIProvider(_context: RecoveryContext): Promise<boolean> {
-    try {
-      // Switch to backup AI provider
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return Math.random() > 0.4; // 60% success rate simulation
-    } catch {
-      return false;
-    }
+    // Not yet implemented: AI provider switching requires multi-provider configuration
+    return false;
   }
 
   private async useFallbackAIResponses(_context: RecoveryContext): Promise<boolean> {
@@ -476,12 +453,8 @@ export class ErrorRecoveryManager {
   }
 
   private async autoCorrectInput(_context: RecoveryContext): Promise<boolean> {
-    try {
-      // Attempt to auto-correct common input errors
-      return Math.random() > 0.3; // 70% success rate simulation
-    } catch {
-      return false;
-    }
+    // Not yet implemented: input auto-correction requires field-level context
+    return false;
   }
 
   private async applyDefaultValues(_context: RecoveryContext): Promise<boolean> {
@@ -503,13 +476,8 @@ export class ErrorRecoveryManager {
   }
 
   private async restoreFromBackup(_context: RecoveryContext): Promise<boolean> {
-    try {
-      // Restore application state from backup
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      return Math.random() > 0.2; // 80% success rate simulation
-    } catch {
-      return false;
-    }
+    // Not yet implemented: state restore requires versioned snapshot store
+    return false;
   }
 
   private getUserInterventionActions(_context: RecoveryContext): RecoveryAction[] {
@@ -559,10 +527,10 @@ export class ErrorRecoveryManager {
       const context = this.recoveryAttempts.get(errorKey);
       if (context) {
         return this.attemptRecovery(context.error, {
-          componentName: context.componentName,
-          userId: context.userId,
-          sessionId: context.sessionId,
-          userActions: context.userActions
+          ...(context.componentName !== undefined && { componentName: context.componentName }),
+          ...(context.userId !== undefined && { userId: context.userId }),
+          ...(context.sessionId !== undefined && { sessionId: context.sessionId }),
+          ...(context.userActions !== undefined && { userActions: context.userActions }),
         });
       }
     }

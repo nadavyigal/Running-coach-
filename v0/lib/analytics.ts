@@ -145,6 +145,10 @@ export const trackOnboardingCompletion = async (properties?: Record<string, any>
   await trackEvent('onboarding_completion', properties)
 }
 
+export const trackOnboardComplete = async (properties?: Record<string, any>) => {
+  await trackEvent('onboard_complete', properties)
+}
+
 export const trackError = async (properties?: Record<string, any>) => {
   await trackEvent('error_occurred', properties)
 }

@@ -3,6 +3,7 @@ import type { Run, Workout } from "@/lib/db"
 
 const mockGetWorkoutsForDateRange = vi.fn()
 const mockGetActivePlan = vi.fn()
+const mockGetPlan = vi.fn()
 const mockGetUserGoals = vi.fn()
 const mockUpdateGoal = vi.fn()
 const mockGetRunsInTimeRange = vi.fn()
@@ -11,12 +12,22 @@ const mockRecordGoalProgress = vi.fn()
 const mockCreateRun = vi.fn()
 const mockMarkWorkoutCompleted = vi.fn()
 const mockUpdateWorkout = vi.fn()
+const mockUpdatePlan = vi.fn()
+const mockCreatePlan = vi.fn()
+const mockCreateWorkout = vi.fn()
+const mockGetCurrentUser = vi.fn()
+const mockGetWorkoutById = vi.fn()
+const mockGetRunById = vi.fn()
 const mockTrackAnalyticsEvent = vi.fn()
+const mockGeneratePlan = vi.fn()
+const mockGenerateFallbackPlan = vi.fn()
+const fetchMock = vi.fn()
 
 vi.mock("@/lib/dbUtils", () => ({
   dbUtils: {
     getWorkoutsForDateRange: mockGetWorkoutsForDateRange,
     getActivePlan: mockGetActivePlan,
+    getPlan: mockGetPlan,
     getUserGoals: mockGetUserGoals,
     updateGoal: mockUpdateGoal,
     getRunsInTimeRange: mockGetRunsInTimeRange,
@@ -25,11 +36,22 @@ vi.mock("@/lib/dbUtils", () => ({
     createRun: mockCreateRun,
     markWorkoutCompleted: mockMarkWorkoutCompleted,
     updateWorkout: mockUpdateWorkout,
+    updatePlan: mockUpdatePlan,
+    createPlan: mockCreatePlan,
+    createWorkout: mockCreateWorkout,
+    getCurrentUser: mockGetCurrentUser,
+    getWorkoutById: mockGetWorkoutById,
+    getRunById: mockGetRunById,
   },
 }))
 
 vi.mock("@/lib/analytics", () => ({
   trackAnalyticsEvent: mockTrackAnalyticsEvent,
+}))
+
+vi.mock("@/lib/planGenerator", () => ({
+  generatePlan: mockGeneratePlan,
+  generateFallbackPlan: mockGenerateFallbackPlan,
 }))
 
 const loadRunRecording = async () => {
@@ -58,12 +80,72 @@ const buildWorkout = (overrides?: Partial<Workout>): Workout => ({
 
 beforeEach(async () => {
   vi.resetAllMocks()
+  vi.stubGlobal("fetch", fetchMock)
   process.env.NEXT_PUBLIC_ENABLE_COMPLETION_LOOP = "true"
   mockGetWorkoutsForDateRange.mockResolvedValue([])
   mockGetActivePlan.mockResolvedValue(null)
+  mockGetPlan.mockResolvedValue(null)
   mockGetUserGoals.mockResolvedValue([])
   mockGetRunsInTimeRange.mockResolvedValue([])
   mockCalculateGoalProgressPercentage.mockReturnValue(0)
+  mockUpdatePlan.mockResolvedValue(undefined)
+  mockCreatePlan.mockResolvedValue(101)
+  mockCreateWorkout.mockResolvedValue(201)
+  mockGetCurrentUser.mockResolvedValue({
+    id: 1,
+    goal: "habit",
+    experience: "beginner",
+    daysPerWeek: 3,
+    preferredTimes: ["morning"],
+  })
+  mockGetWorkoutById.mockResolvedValue(null)
+  mockGetRunById.mockResolvedValue(null)
+  mockTrackAnalyticsEvent.mockResolvedValue(undefined)
+  mockGeneratePlan.mockResolvedValue({
+    plan: {
+      userId: 1,
+      title: "Adapted plan",
+      description: "Adapted description",
+      startDate: new Date("2025-01-15T00:00:00Z"),
+      endDate: new Date("2025-02-12T00:00:00Z"),
+      totalWeeks: 4,
+      isActive: true,
+      planType: "basic",
+      fitnessLevel: "beginner",
+      trainingDaysPerWeek: 3,
+    },
+    workouts: [
+      {
+        planId: 0,
+        week: 1,
+        day: "Thu",
+        type: "easy",
+        distance: 4,
+        completed: false,
+        scheduledDate: new Date("2025-01-16T00:00:00Z"),
+      },
+    ],
+  })
+  mockGenerateFallbackPlan.mockResolvedValue({
+    plan: {
+      userId: 1,
+      title: "Fallback plan",
+      description: "Fallback description",
+      startDate: new Date("2025-01-15T00:00:00Z"),
+      endDate: new Date("2025-02-12T00:00:00Z"),
+      totalWeeks: 4,
+      isActive: true,
+      planType: "basic",
+      fitnessLevel: "beginner",
+      trainingDaysPerWeek: 3,
+    },
+    workouts: [],
+  })
+  fetchMock.mockResolvedValue({
+    ok: true,
+    json: vi.fn().mockResolvedValue({ success: true }),
+    text: vi.fn().mockResolvedValue(""),
+  })
 })
 
 describe("findMatchingWorkout", () => {
@@ -171,9 +253,10 @@ describe("confirmWorkoutCompletion", () => {
 
   })
 
-  it("short circuits when the completion loop flag is disabled", async () => {
+  it("still confirms an explicitly linked workout when the adaptation loop flag is disabled", async () => {
     process.env.NEXT_PUBLIC_ENABLE_COMPLETION_LOOP = "false"
     const runRecording = await loadRunRecording()
+    const linkedWorkout = buildWorkout({ id: 12, distance: 5 })
     const run: Run = {
       id: 12,
       userId: 1,
@@ -182,12 +265,15 @@ describe("confirmWorkoutCompletion", () => {
       duration: 1500,
       completedAt: new Date("2025-01-15T09:00:00Z"),
       createdAt: new Date(),
+      workoutId: 12,
     }
 
+    mockGetWorkoutById.mockResolvedValue(linkedWorkout)
     const result = await runRecording.confirmWorkoutCompletion(run)
 
-    expect(result).toBeNull()
-    expect(mockTrackAnalyticsEvent).not.toHaveBeenCalled()
+    expect(mockGetWorkoutById).toHaveBeenCalledWith(12)
+    expect(result?.id).toBe(12)
+    expect(mockMarkWorkoutCompleted).toHaveBeenCalledWith(12)
     process.env.NEXT_PUBLIC_ENABLE_COMPLETION_LOOP = "true"
   })
 })
@@ -265,5 +351,114 @@ describe("determineAdaptationReason", () => {
 
     const reason = await runRecording.determineAdaptationReason(run, workout)
     expect(reason).toBe("consecutive_misses")
+  })
+})
+
+describe("recordRunWithSideEffects", () => {
+  it("persists the run, links the planned workout, and completes adaptation when a linked workout underperforms", async () => {
+    const runRecording = await loadRunRecording()
+    const linkedWorkout = buildWorkout({
+      id: 31,
+      planId: 91,
+      type: "tempo",
+      distance: 5,
+      pace: 300,
+    })
+
+    mockCreateRun.mockResolvedValue(501)
+    mockGetWorkoutById.mockResolvedValue(linkedWorkout)
+    mockGetPlan.mockResolvedValue({
+      id: 91,
+      userId: 1,
+      title: "Current plan",
+      description: "Current plan description",
+      startDate: new Date("2025-01-01T00:00:00Z"),
+      endDate: new Date("2025-02-12T00:00:00Z"),
+      totalWeeks: 4,
+      isActive: true,
+    })
+
+    const result = await runRecording.recordRunWithSideEffects({
+      userId: 1,
+      workoutId: 31,
+      distanceKm: 4,
+      durationSeconds: 1500,
+      completedAt: new Date("2025-01-15T09:00:00Z"),
+      type: "tempo",
+      paceSecondsPerKm: 375,
+      autoMatchWorkout: true,
+      importSource: "manual",
+    })
+
+    expect(mockCreateRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workoutId: 31,
+        userId: 1,
+      })
+    )
+    expect(mockUpdateWorkout).toHaveBeenCalledWith(
+      31,
+      expect.objectContaining({
+        completed: true,
+        actualDistanceKm: 4,
+      })
+    )
+    expect(mockUpdatePlan).toHaveBeenCalledWith(91, { isActive: false })
+    expect(mockCreatePlan).toHaveBeenCalled()
+    expect(mockCreateWorkout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        planId: 101,
+      })
+    )
+    expect(result.workoutId).toBe(31)
+    expect(result.adaptation.status).toBe("completed")
+    expect(result.adaptation.reason).toBe("performance_below_target")
+    expect(result.adaptation.planId).toBe(101)
+    expect(result.adaptationTriggered).toBe(true)
+  })
+
+  it("keeps the run saved and returns a retryable failure when adaptation cannot complete", async () => {
+    const runRecording = await loadRunRecording()
+    const linkedWorkout = buildWorkout({
+      id: 44,
+      planId: 144,
+      type: "tempo",
+      distance: 5,
+      pace: 300,
+    })
+
+    mockCreateRun.mockResolvedValue(777)
+    mockGetWorkoutById.mockResolvedValue(linkedWorkout)
+    mockGetPlan.mockResolvedValue({
+      id: 144,
+      userId: 1,
+      title: "Current plan",
+      description: "Current plan description",
+      startDate: new Date("2025-01-01T00:00:00Z"),
+      endDate: new Date("2025-02-12T00:00:00Z"),
+      totalWeeks: 4,
+      isActive: true,
+    })
+    mockGeneratePlan.mockRejectedValueOnce(new Error("AI down"))
+    mockGenerateFallbackPlan.mockRejectedValueOnce(new Error("Fallback unavailable"))
+
+    const result = await runRecording.recordRunWithSideEffects({
+      userId: 1,
+      workoutId: 44,
+      distanceKm: 4,
+      durationSeconds: 1500,
+      completedAt: new Date("2025-01-15T09:00:00Z"),
+      type: "tempo",
+      paceSecondsPerKm: 375,
+      autoMatchWorkout: true,
+      importSource: "manual",
+    })
+
+    expect(mockCreateRun).toHaveBeenCalled()
+    expect(result.runId).toBe(777)
+    expect(result.adaptation.status).toBe("failed")
+    expect(result.adaptation.reason).toBe("performance_below_target")
+    expect(result.adaptation.retryable).toBe(true)
+    expect(mockUpdatePlan).not.toHaveBeenCalled()
   })
 })

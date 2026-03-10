@@ -13,7 +13,8 @@ vi.mock('@/components/ui/dialog', () => ({
   Dialog: ({ open, children }: any) => open ? <div>{children}</div> : null,
   DialogContent: ({ children }: any) => <div>{children}</div>,
   DialogHeader: ({ children }: any) => <div>{children}</div>,
-  DialogTitle: ({ children }: any) => <div>{children}</div>
+  DialogTitle: ({ children }: any) => <div>{children}</div>,
+  DialogDescription: ({ children }: any) => <div>{children}</div>,
 }))
 vi.mock('@/lib/dbUtils')
 vi.mock('@/lib/run-recording')
@@ -30,7 +31,7 @@ describe('ManualRunModal manual overrides', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     ;(dbUtils.getCurrentUser as any).mockResolvedValue({ id: 1 })
-    ;(recordRunWithSideEffects as any).mockResolvedValue({ runId: 1 })
+    ;(recordRunWithSideEffects as any).mockResolvedValue({ runId: 1, adaptation: { status: 'not_needed' } })
     ;(planAdjustmentService.afterRun as any).mockResolvedValue(undefined)
   })
 

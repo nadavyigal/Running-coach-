@@ -139,7 +139,11 @@ describe('RecordScreen GPS Distance Diagnostics', () => {
 
     ;(dbUtils.getNextWorkoutForPlan as any).mockResolvedValue(null)
 
-    ;(recordRunWithSideEffects as any).mockResolvedValue({ runId: 1, workoutId: 1 })
+    ;(recordRunWithSideEffects as any).mockResolvedValue({
+      runId: 1,
+      workoutId: 1,
+      adaptation: { status: 'not_needed' },
+    })
   })
 
   afterEach(() => {

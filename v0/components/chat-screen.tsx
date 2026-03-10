@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   Send,
   User,
@@ -94,6 +95,7 @@ export function ChatScreen() {
   const [selectedMessageForFeedback, setSelectedMessageForFeedback] = useState<ChatMessage | null>(null)
   const [showCoachingPreferences, setShowCoachingPreferences] = useState(false)
   const [showEnhancedCoach, setShowEnhancedCoach] = useState(false)
+  const [isSavingUserData, setIsSavingUserData] = useState(false)
   const [pendingUserDataUpdate, setPendingUserDataUpdate] = useState<{
     data: Partial<UserType>;
     message: string;
@@ -239,6 +241,7 @@ export function ChatScreen() {
     if (!activeUserId) return
 
     try {
+      setIsSavingUserData(true)
       const response = await fetch('/api/user-data', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -271,11 +274,15 @@ export function ChatScreen() {
         title: 'Error',
         description: 'Failed to save to profile',
       })
+    } finally {
+      setIsSavingUserData(false)
     }
   }
 
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || isLoading) return
+
+    const trimmedContent = content.trim()
 
     flushSync(() => {
       setIsLoading(true)
@@ -302,7 +309,7 @@ export function ChatScreen() {
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: content.trim(),
+      content: trimmedContent,
       timestamp: new Date(),
     }
 
@@ -313,10 +320,12 @@ export function ChatScreen() {
 
     // Track chat message sent
     await trackChatMessageSent({
-      message_length: content.trim().length,
+      message_length: trimmedContent.length,
       conversation_length: messages.length + 1,
       is_first_message: messages.length === 1
     })
+
+    let assistantMessageId: string | null = null
 
     try {
       // Prepare context from user profile and recent runs
@@ -342,7 +351,7 @@ export function ChatScreen() {
         body: JSON.stringify({
           messages: [
             ...messages.map(msg => ({ role: msg.role, content: msg.content })),
-            { role: 'user', content: content.trim() }
+            { role: 'user', content: trimmedContent }
           ],
           userId: activeUser?.id?.toString(),
           userContext: context,
@@ -409,6 +418,7 @@ export function ChatScreen() {
         ...(confidence !== undefined ? { confidence } : {}),
         requestFeedback: typeof confidence === 'number' && confidence > 0 && confidence < 0.8, // Request feedback for lower confidence responses
       }
+      assistantMessageId = assistantMessage.id
 
       setMessages(prev => [...prev, assistantMessage])
 
@@ -538,22 +548,26 @@ export function ChatScreen() {
 
     } catch (error) {
       console.error('Chat error:', error)
+      setInputValue(trimmedContent)
       toast({
         title: "Chat Error",
         description: "Failed to get response from AI coach. Please try again.",
         variant: "destructive",
       })
 
-      // Remove the failed user message and show error message
-      setMessages(prev => prev.slice(0, -1))
-
       const errorMessage: ChatMessage = {
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: "I'm sorry, I'm having trouble responding right now. Please try again in a moment.",
+        content: "I couldn't send that just now. Your message is still here, and I've put it back in the text box so you can retry.",
         timestamp: new Date(),
       }
-      setMessages(prev => [...prev, errorMessage])
+      setMessages(prev => {
+        const nextMessages = assistantMessageId
+          ? prev.filter((message) => !(message.id === assistantMessageId && !message.content.trim()))
+          : prev
+
+        return [...nextMessages, errorMessage]
+      })
     } finally {
       setIsLoading(false)
     }
@@ -720,6 +734,7 @@ export function ChatScreen() {
                   size="sm"
                   className="h-6 w-6 p-0 text-primary hover:text-primary/80"
                   onClick={() => handleFeedbackClick(message)}
+                  aria-label="Leave positive feedback for this response"
                   title="This was helpful"
                 >
                   <ThumbsUp className="h-3 w-3" />
@@ -729,6 +744,7 @@ export function ChatScreen() {
                   size="sm"
                   className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
                   onClick={() => handleFeedbackClick(message)}
+                  aria-label="Leave improvement feedback for this response"
                   title="This needs improvement"
                 >
                   <ThumbsDown className="h-3 w-3" />
@@ -785,6 +801,7 @@ export function ChatScreen() {
               variant={showEnhancedCoach ? "default" : "ghost"}
               size="sm"
               onClick={() => setShowEnhancedCoach(!showEnhancedCoach)}
+              aria-label={showEnhancedCoach ? "Hide enhanced AI coach" : "Show enhanced AI coach"}
               title="Enhanced AI Coach"
             >
               <Brain className="h-4 w-4" />
@@ -793,6 +810,7 @@ export function ChatScreen() {
               variant="ghost"
               size="sm"
               onClick={() => setShowCoachingPreferences(true)}
+              aria-label="Open coaching preferences"
               title="Coaching preferences"
             >
               <Settings className="h-4 w-4" />
@@ -875,15 +893,24 @@ export function ChatScreen() {
                 <Button
                   size="sm"
                   variant="ghost"
+                  disabled={isSavingUserData}
                   onClick={() => setPendingUserDataUpdate(null)}
                 >
                   Cancel
                 </Button>
                 <Button
                   size="sm"
+                  disabled={isSavingUserData}
                   onClick={handleSaveUserData}
                 >
-                  Save
+                  {isSavingUserData ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save"
+                  )}
                 </Button>
               </div>
             </CardContent>
@@ -939,7 +966,7 @@ export function ChatScreen() {
       )}
 
       {/* Coaching Preferences Settings Modal */}
-      {showCoachingPreferences && user && (
+      {false && showCoachingPreferences && user && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b flex items-center justify-between">
@@ -960,6 +987,23 @@ export function ChatScreen() {
             </div>
           </div>
         </div>
+      )}
+
+      {user && (
+        <Dialog open={showCoachingPreferences} onOpenChange={setShowCoachingPreferences}>
+          <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Coaching Preferences</DialogTitle>
+              <DialogDescription>
+                Update how your coach responds and what guidance should shape your training advice.
+              </DialogDescription>
+            </DialogHeader>
+            <CoachingPreferencesSettings
+              userId={user.id!}
+              onClose={() => setShowCoachingPreferences(false)}
+            />
+          </DialogContent>
+        </Dialog>
       )}
 
     </div>

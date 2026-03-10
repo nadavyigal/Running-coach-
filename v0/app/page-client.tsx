@@ -595,6 +595,11 @@ export default function RunSmartApp() {
       setCurrentScreen("plan")
     }
 
+    const handleNavigateToToday = () => {
+      logger.log('Navigating to today screen')
+      setCurrentScreen("today")
+    }
+
     const handleNavigateToRunReport = (event: Event) => {
       const detail = (event as CustomEvent).detail as any
       const nextRunId = parseRunId(String(detail?.runId ?? ''))
@@ -614,6 +619,7 @@ export default function RunSmartApp() {
     window.addEventListener("navigate-to-record", handleNavigateToRecord)
     window.addEventListener("navigate-to-chat", handleNavigateToChat)
     window.addEventListener("navigate-to-plan", handleNavigateToPlan)
+    window.addEventListener("navigate-to-today", handleNavigateToToday)
     window.addEventListener("navigate-to-run-report", handleNavigateToRunReport as EventListener)
     window.addEventListener("keydown", handleKeyDown)
 
@@ -622,6 +628,7 @@ export default function RunSmartApp() {
       window.removeEventListener("navigate-to-record", handleNavigateToRecord)
       window.removeEventListener("navigate-to-chat", handleNavigateToChat)
       window.removeEventListener("navigate-to-plan", handleNavigateToPlan)
+      window.removeEventListener("navigate-to-today", handleNavigateToToday)
       window.removeEventListener("navigate-to-run-report", handleNavigateToRunReport as EventListener)
       window.removeEventListener("keydown", handleKeyDown)
     }

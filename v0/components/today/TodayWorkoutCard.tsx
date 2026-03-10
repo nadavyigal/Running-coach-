@@ -1,7 +1,7 @@
 "use client"
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Award, ChevronDown, ChevronUp, HeartPulse, MapPin, Play, Zap } from "lucide-react"
+import { Award, CheckCircle, ChevronDown, ChevronUp, HeartPulse, MapPin, Play, Zap } from "lucide-react"
 import { todayCardVariants, todayStatusBadgeVariants } from "@/components/today/today-ui"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,8 +21,12 @@ interface TodayWorkoutCardProps {
   workoutCoachCue: string
   goalProgressPercent: number
   showBreakdown: boolean
+  isUpcoming?: boolean | undefined
+  upcomingDateLabel?: string | undefined
+  primaryActionLabel?: string | undefined
+  isCompleted?: boolean | undefined
   onToggleBreakdown: () => void
-  onStartRun: () => void
+  onPrimaryAction: () => void
   onSelectRoute: () => void
 }
 
@@ -35,8 +39,12 @@ export function TodayWorkoutCard({
   workoutCoachCue,
   goalProgressPercent,
   showBreakdown,
+  isUpcoming = false,
+  upcomingDateLabel,
+  primaryActionLabel = "Start Run",
+  isCompleted = false,
   onToggleBreakdown,
-  onStartRun,
+  onPrimaryAction,
   onSelectRoute,
 }: TodayWorkoutCardProps) {
   const prefersReducedMotion = useReducedMotion()
@@ -53,6 +61,28 @@ export function TodayWorkoutCard({
           <Skeleton className="h-24 w-full rounded-2xl" />
           <Skeleton className="h-16 w-full rounded-xl" />
           <Skeleton className="h-11 w-full" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (isCompleted && workout) {
+    const completedName =
+      structuredWorkout?.name ??
+      `${workout.type.charAt(0).toUpperCase()}${workout.type.slice(1)} Run`
+    return (
+      <Card className={todayCardVariants({ level: "primary" })}>
+        <CardContent className="space-y-3 p-5 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100/90">
+            <CheckCircle className="h-6 w-6 text-emerald-700" aria-hidden="true" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-foreground">Workout Complete</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {completedName}
+              {workoutDistanceLabel !== "--" ? ` · ${workoutDistanceLabel}` : ""}
+            </p>
+          </div>
         </CardContent>
       </Card>
     )
@@ -78,16 +108,10 @@ export function TodayWorkoutCard({
             </p>
             <p className="mt-1 text-emerald-800/90">Light mobility or a short walk helps absorb previous training load.</p>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Button onClick={onStartRun} className="h-11 gap-2 rounded-xl">
-              <Play className="h-4 w-4" />
-              Record Run
-            </Button>
-            <Button variant="outline" onClick={onSelectRoute} className="h-11 gap-2 rounded-xl">
-              <MapPin className="h-4 w-4" />
-              Route
-            </Button>
-          </div>
+          <Button variant="ghost" size="sm" onClick={onPrimaryAction} className="w-full gap-2 rounded-xl text-sm">
+            <Play className="h-3.5 w-3.5" />
+            Log Unplanned Run
+          </Button>
         </CardContent>
       </Card>
     )
@@ -103,13 +127,21 @@ export function TodayWorkoutCard({
         <CardHeader className="space-y-2 pb-1">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Today&apos;s workout</p>
+              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                {isUpcoming ? "Next workout" : "Today's workout"}
+              </p>
               <CardTitle id="today-workout-heading" className="mt-1 text-[1.45rem] leading-tight">
                 {workoutName}
               </CardTitle>
+              {isUpcoming && upcomingDateLabel ? (
+                <p className="mt-1 text-sm text-muted-foreground">{upcomingDateLabel}</p>
+              ) : null}
             </div>
-            <Badge variant="outline" className={todayStatusBadgeVariants({ tone: "positive" })}>
-              Planned
+            <Badge
+              variant="outline"
+              className={todayStatusBadgeVariants({ tone: isUpcoming ? "info" : "positive" })}
+            >
+              {isUpcoming ? "Upcoming" : "Planned"}
             </Badge>
           </div>
         </CardHeader>
@@ -133,7 +165,7 @@ export function TodayWorkoutCard({
             <p className="text-sm leading-relaxed text-foreground">{workoutCoachCue}</p>
           </div>
 
-          {selectedRoute ? (
+          {selectedRoute && !isUpcoming ? (
             <div className="flex items-center justify-between rounded-xl border border-border/70 bg-background px-3 py-2 text-sm">
               <span className="inline-flex items-center gap-2 font-medium text-foreground">
                 <MapPin className="h-4 w-4 text-primary" />
@@ -143,47 +175,53 @@ export function TodayWorkoutCard({
             </div>
           ) : null}
 
-          <div className="grid grid-cols-3 gap-2">
-            <Button onClick={onStartRun} className="col-span-2 h-11 gap-2 rounded-xl font-semibold">
+          <div className={isUpcoming ? "grid grid-cols-1 gap-2" : "grid grid-cols-3 gap-2"}>
+            <Button onClick={onPrimaryAction} className={isUpcoming ? "h-11 gap-2 rounded-xl font-semibold" : "col-span-2 h-11 gap-2 rounded-xl font-semibold"}>
               <Play className="h-4 w-4" />
-              Start Run
+              {primaryActionLabel}
             </Button>
-            <Button variant="outline" onClick={onSelectRoute} className="h-11 rounded-xl">
-              <MapPin className="h-4 w-4" />
-            </Button>
+            {!isUpcoming ? (
+              <Button variant="outline" onClick={onSelectRoute} className="h-11 rounded-xl">
+                <MapPin className="h-4 w-4" />
+              </Button>
+            ) : null}
           </div>
 
-          <Button
-            variant="ghost"
-            className="h-10 w-full justify-between rounded-xl border border-transparent text-sm hover:border-border/65 hover:bg-muted/30"
-            onClick={onToggleBreakdown}
-            aria-expanded={showBreakdown}
-            aria-controls="today-workout-breakdown"
-          >
-            Workout breakdown
-            {showBreakdown ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </Button>
-
-          <AnimatePresence initial={false}>
-            {showBreakdown ? (
-              <motion.div
-                id="today-workout-breakdown"
-                initial={prefersReducedMotion ? false : { opacity: 0, y: -6 }}
-                animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
-                exit={prefersReducedMotion ? undefined : { opacity: 0, y: -6 }}
-                transition={prefersReducedMotion ? undefined : { duration: 0.18 }}
-                className="rounded-xl border border-border/70 bg-background p-3"
+          {!isUpcoming ? (
+            <>
+              <Button
+                variant="ghost"
+                className="h-10 w-full justify-between rounded-xl border border-transparent text-sm hover:border-border/65 hover:bg-muted/30"
+                onClick={onToggleBreakdown}
+                aria-expanded={showBreakdown}
+                aria-controls="today-workout-breakdown"
               >
-                {structuredWorkout ? (
-                  <WorkoutPhasesDisplay workout={structuredWorkout} compact />
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Workout phases are loading. You can still start the run now.
-                  </p>
-                )}
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
+                Workout breakdown
+                {showBreakdown ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+
+              <AnimatePresence initial={false}>
+                {showBreakdown ? (
+                  <motion.div
+                    id="today-workout-breakdown"
+                    initial={prefersReducedMotion ? false : { opacity: 0, y: -6 }}
+                    animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+                    exit={prefersReducedMotion ? undefined : { opacity: 0, y: -6 }}
+                    transition={prefersReducedMotion ? undefined : { duration: 0.18 }}
+                    className="rounded-xl border border-border/70 bg-background p-3"
+                  >
+                    {structuredWorkout ? (
+                      <WorkoutPhasesDisplay workout={structuredWorkout} compact />
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Workout phases are loading. You can still start the run now.
+                      </p>
+                    )}
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </>
+          ) : null}
         </CardContent>
       </Card>
     </section>
