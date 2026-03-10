@@ -94,6 +94,35 @@ const GarminTelemetrySchema = z
   })
   .passthrough()
 
+const HistoricalRunSchema = z.object({
+  type: z.string().optional(),
+  distanceKm: z.coerce.number().min(0),
+  paceSecPerKm: z.coerce.number().min(0).optional(),
+  date: z.string().optional(),
+  effort: z.string().optional(),
+}).passthrough()
+
+const RunningDynamicsSchema = z.object({
+  avgCadence: z.coerce.number().min(0).optional(),
+  avgGroundContactTime: z.coerce.number().min(0).optional(),
+  avgVerticalOscillation: z.coerce.number().min(0).optional(),
+  avgStrideLength: z.coerce.number().min(0).optional(),
+  groundContactBalance: z.string().optional(),
+  verticalRatio: z.coerce.number().min(0).optional(),
+}).passthrough()
+
+const HistoricalContextSchema = z.object({
+  recentRuns: z.array(HistoricalRunSchema).optional(),
+  weeklyVolume7d: z.coerce.number().min(0).optional(),
+  weeklyVolume28d: z.coerce.number().min(0).optional(),
+  weeklyRunCount7d: z.coerce.number().min(0).optional(),
+  recoveryScore: z.coerce.number().min(0).max(100).optional(),
+  sleepScore: z.coerce.number().min(0).max(100).optional(),
+  readinessScore: z.coerce.number().min(0).max(100).optional(),
+  vdot: z.coerce.number().min(0).optional(),
+  runningDynamics: RunningDynamicsSchema.optional(),
+}).passthrough()
+
 const RunReportRequestSchema = z
   .object({
     run: z
@@ -139,6 +168,7 @@ const RunReportRequestSchema = z
         soreness: z.string().optional(),
       })
       .optional(),
+    historicalContext: HistoricalContextSchema.optional(),
   })
   .passthrough()
 
@@ -147,6 +177,67 @@ const SafetyFlagSchema = z.object({
   severity: z.enum(['low', 'medium', 'high']),
   message: z.string().min(1),
 })
+
+const CoachScoreSchema = z.object({
+  overall: z.coerce.number().min(0).max(100),
+  execution: z.coerce.number().min(0).max(100).optional(),
+  effort: z.coerce.number().min(0).max(100).optional(),
+  consistency: z.coerce.number().min(0).max(100).optional(),
+  form: z.coerce.number().min(0).max(100).optional(),
+}).optional()
+
+const BiomechanicsSchema = z.object({
+  cadenceAssessment: z.string().optional(),
+  groundContactAssessment: z.string().optional(),
+  verticalOscillationAssessment: z.string().optional(),
+  strideLengthAssessment: z.string().optional(),
+  overallFormRating: z.enum(['excellent', 'good', 'fair', 'needs-work']).optional(),
+  keyRecommendation: z.string().optional(),
+}).optional()
+
+const DetailedRecoverySchema = z.object({
+  immediate: z.string().min(1),
+  next2h: z.string().min(1),
+  next24h: z.string().min(1),
+  next48h: z.string().optional(),
+  readinessEstimate: z.string().optional(),
+}).optional()
+
+const StructuredWorkoutSchema = z.object({
+  sessionType: z.string().min(1),
+  warmup: z.string().min(1),
+  main: z.string().min(1),
+  cooldown: z.string().min(1),
+  totalDurationMin: z.coerce.number().min(0).optional(),
+  targetEffort: z.string().optional(),
+  coachingCue: z.string().optional(),
+}).optional()
+
+const TrainingContextSchema = z.object({
+  weeklyVolumeKm: z.coerce.number().min(0).optional(),
+  weeklyRunCount: z.coerce.number().min(0).optional(),
+  volumeVsLastWeek: z.string().optional(),
+  acwrZone: z.string().optional(),
+  planPhase: z.string().optional(),
+  planFitSummary: z.string().optional(),
+}).optional()
+
+const ComparisonSchema = z.object({
+  vsSimilarRuns: z.string().optional(),
+  paceImprovement: z.string().optional(),
+  cadenceTrend: z.string().optional(),
+  hrTrend: z.string().optional(),
+}).optional()
+
+const RaceReadinessSchema = z.object({
+  estimatedVdot: z.coerce.number().min(0).optional(),
+  predictions: z.array(z.object({
+    distance: z.string(),
+    time: z.string(),
+  })).optional(),
+  fitnessDirection: z.enum(['improving', 'maintaining', 'declining']).optional(),
+  note: z.string().optional(),
+}).optional()
 
 const InsightSchema = z.object({
   runId: z.number().int().nonnegative(),
@@ -166,6 +257,13 @@ const InsightSchema = z.object({
   }),
   nextSessionNudge: z.string().optional(),
   safetyFlags: z.array(SafetyFlagSchema).optional(),
+  coachScore: CoachScoreSchema,
+  biomechanics: BiomechanicsSchema,
+  detailedRecovery: DetailedRecoverySchema,
+  structuredNextWorkout: StructuredWorkoutSchema,
+  trainingContext: TrainingContextSchema,
+  comparison: ComparisonSchema,
+  raceReadiness: RaceReadinessSchema,
 })
 
 type RunInsight = z.infer<typeof InsightSchema>
@@ -202,6 +300,7 @@ type NormalizedRunReportInput = {
     rpe?: number
     soreness?: string
   }
+  historicalContext?: z.infer<typeof HistoricalContextSchema>
 }
 
 const RUN_REPORT_MODEL = process.env.RUN_REPORT_MODEL || 'gpt-4o-mini'
@@ -555,6 +654,7 @@ function normalizeInput(input: z.infer<typeof RunReportRequestSchema>): Normaliz
     ...(normalizedUserFeedback && Object.keys(normalizedUserFeedback).length > 0
       ? { userFeedback: normalizedUserFeedback }
       : {}),
+    ...(input.historicalContext ? { historicalContext: input.historicalContext } : {}),
   }
 }
 
@@ -711,6 +811,7 @@ function buildSkillInput(
           },
         }
       : {}),
+    ...(input.historicalContext ? { historicalContext: input.historicalContext } : {}),
   }
 }
 
@@ -758,6 +859,11 @@ function buildFallbackInsight(input: NormalizedRunReportInput): RunInsight {
   }
 
   const effort = selectEffort(input)
+
+  // Compute pace consistency for fallback scoring
+  const fallbackPaceData = normalizePaceData(input.paceData)
+  const fallbackPaceStats = fallbackPaceData.length > 0 ? calculatePaceStats(fallbackPaceData) : null
+  const paceConsistencyForFallback = fallbackPaceStats ? classifyPaceConsistency(fallbackPaceStats) : 'consistent'
 
   const safetyFlags: RunInsight['safetyFlags'] = []
   if (!input.heartRateBpm) {
@@ -812,6 +918,75 @@ function buildFallbackInsight(input: NormalizedRunReportInput): RunInsight {
     nextSessionNudge = 'Next session: easy run with short strides; focus on relaxed, quicker turnover.'
   }
 
+  // Heuristic coach score
+  let scoreBase = 70
+  if (paceConsistencyForFallback === 'consistent' || paceConsistencyForFallback === 'negative-split') scoreBase += 10
+  if (paceConsistencyForFallback === 'erratic') scoreBase -= 10
+  const effortMatch = (effort === 'easy' && input.runType === 'easy') ||
+    (effort === 'hard' && ['tempo', 'intervals', 'hill', 'time-trial'].includes(input.runType))
+  if (effortMatch) scoreBase += 10
+  if (injurySignal) scoreBase -= 15
+  const coachScore = {
+    overall: Math.max(0, Math.min(100, scoreBase)),
+    execution: Math.max(0, Math.min(100, scoreBase + 5)),
+    effort: Math.max(0, Math.min(100, effort === 'easy' ? 80 : effort === 'moderate' ? 70 : 65)),
+    consistency: Math.max(0, Math.min(100, paceConsistencyForFallback === 'consistent' ? 85 : paceConsistencyForFallback === 'erratic' ? 45 : 65)),
+  }
+
+  // Detailed recovery by effort
+  const detailedRecovery = effort === 'hard' ? {
+    immediate: 'Cool down with 5-10 min easy walking. Hydrate immediately with electrolytes.',
+    next2h: 'Refuel with carbs + protein (3:1 ratio). Light stretching or foam rolling.',
+    next24h: 'Easy day or complete rest. Prioritize 8+ hours of sleep.',
+    next48h: 'Gentle easy run or cross-training if feeling recovered.',
+    readinessEstimate: 'Full recovery expected in 48-72 hours.',
+  } : effort === 'moderate' ? {
+    immediate: 'Walk for 5 min to cool down. Drink water.',
+    next2h: 'Eat a balanced meal within 2 hours. Light stretching.',
+    next24h: 'Normal activity; easy run is fine tomorrow if legs feel fresh.',
+    readinessEstimate: 'Ready for moderate effort in 24-36 hours.',
+  } : {
+    immediate: 'Good to go! Hydrate well.',
+    next2h: 'Normal eating. Optional light stretching.',
+    next24h: 'Normal training schedule; body recovers quickly from easy efforts.',
+    readinessEstimate: 'Ready for next session tomorrow.',
+  }
+
+  // Structured next workout
+  const structuredNextWorkout = injurySignal ? {
+    sessionType: 'Rest / Cross-train',
+    warmup: '5 min gentle walking',
+    main: '20 min low-impact activity (swimming, cycling) if pain-free',
+    cooldown: '5 min stretching focus on affected area',
+    totalDurationMin: 30,
+    targetEffort: 'very easy',
+    coachingCue: 'Listen to your body — stop if any discomfort.',
+  } : effort === 'hard' ? {
+    sessionType: 'Easy Recovery Run',
+    warmup: '10 min walk/jog',
+    main: '20-30 min easy running (conversational pace)',
+    cooldown: '5 min walk + dynamic stretching',
+    totalDurationMin: 40,
+    targetEffort: 'easy',
+    coachingCue: 'Keep heart rate below 70% max. This run is about recovery, not fitness.',
+  } : stridesFallback?.detected ? {
+    sessionType: 'Easy Run',
+    warmup: '10 min easy jog',
+    main: '25-35 min easy running',
+    cooldown: '5 min walk + mobility drills',
+    totalDurationMin: 45,
+    targetEffort: 'easy',
+    coachingCue: 'Let neuromuscular adaptations from strides settle before next quality session.',
+  } : {
+    sessionType: 'Moderate Run',
+    warmup: '10 min easy jog',
+    main: '25-40 min at comfortable effort, include 4-6 strides in last 10 min',
+    cooldown: '5 min easy jog + stretching',
+    totalDurationMin: 45,
+    targetEffort: 'moderate',
+    coachingCue: 'Focus on smooth, relaxed form. Quick feet, light ground contact.',
+  }
+
   return {
     runId: input.runId,
     summary: summary.slice(0, 4),
@@ -823,6 +998,9 @@ function buildFallbackInsight(input: NormalizedRunReportInput): RunInsight {
     },
     nextSessionNudge,
     ...(safetyFlags.length ? { safetyFlags } : {}),
+    coachScore,
+    detailedRecovery,
+    structuredNextWorkout,
   }
 }
 
@@ -857,6 +1035,15 @@ function normalizeInsight(insight: RunInsight, fallback: RunInsight): RunInsight
       ? insight.safetyFlags
       : fallback.safetyFlags
 
+  // Use AI's enhanced fields when available, fallback otherwise
+  const coachScore = insight.coachScore ?? fallback.coachScore
+  const detailedRecovery = insight.detailedRecovery ?? fallback.detailedRecovery
+  const structuredNextWorkout = insight.structuredNextWorkout ?? fallback.structuredNextWorkout
+  const biomechanics = insight.biomechanics
+  const trainingContext = insight.trainingContext
+  const comparison = insight.comparison
+  const raceReadiness = insight.raceReadiness
+
   return {
     runId: Number.isFinite(insight.runId) ? insight.runId : fallback.runId,
     summary: summary.length ? summary : fallback.summary,
@@ -870,6 +1057,13 @@ function normalizeInsight(insight: RunInsight, fallback: RunInsight): RunInsight
     recovery,
     ...(nextSessionNudge ? { nextSessionNudge } : {}),
     ...(safetyFlags?.length ? { safetyFlags } : {}),
+    ...(coachScore ? { coachScore } : {}),
+    ...(biomechanics ? { biomechanics } : {}),
+    ...(detailedRecovery ? { detailedRecovery } : {}),
+    ...(structuredNextWorkout ? { structuredNextWorkout } : {}),
+    ...(trainingContext ? { trainingContext } : {}),
+    ...(comparison ? { comparison } : {}),
+    ...(raceReadiness ? { raceReadiness } : {}),
   }
 }
 
@@ -939,7 +1133,35 @@ const handler = async (req: ApiRequest) => {
         {
           role: 'system',
           content:
-            'You are Run-Smart, an evidence-based running coach. Be supportive, specific, and practical. No medical diagnosis. If pain or dizziness is noted, advise stopping and consulting a professional.\n\nFill all 4 summary slots with distinct coaching value:\n- summary[0]: Headline with key stats (distance, duration, avg pace)\n- summary[1]: What went well — celebrate a specific achievement from this run\n- summary[2]: Training adaptation this run builds (aerobic base, neuromuscular efficiency, endurance, etc.)\n- summary[3]: How this run connects to the training plan and prepares the next session\n\nIf strideDetection.detected=true in the input: pacingAnalysis must explicitly describe the strides — what they accomplish physiologically (neuromuscular activation, leg turnover, economy) and how the peak pace compares to average. If no stride data, assess pace consistency.\n\nnextSessionNudge: Give a specific, actionable next workout that accounts for today\'s effort and any strides. Name the session type (e.g. easy run, tempo, rest), target duration, and one coaching cue.\n\nrecovery: Concrete steps matched to today\'s effort level.',
+            `You are Run-Smart, an elite evidence-based running coach providing premium post-run analysis. Be supportive, specific, and practical. No medical diagnosis. If pain or dizziness is noted, advise stopping and consulting a professional.
+
+CORE FIELDS (always fill):
+- summary[0]: Headline with key stats (distance, duration, avg pace)
+- summary[1]: What went well — celebrate a specific achievement from this run
+- summary[2]: Training adaptation this run builds (aerobic base, neuromuscular efficiency, endurance, etc.)
+- summary[3]: How this run connects to the training plan and prepares the next session
+- effort: easy/moderate/hard based on RPE, pace, HR, and run type
+- recovery: priority (2-3 concrete steps) + optional extras
+- nextSessionNudge: Specific actionable next workout
+
+ENHANCED FIELDS (fill when context allows):
+- coachScore: Rate the run 0-100. Subcategories: execution (pacing vs target), effort (appropriateness for run type), consistency (pace variability), form (if biomechanics data provided). A well-executed easy run can score 90+.
+- detailedRecovery: Timed recovery phases — immediate (now), next2h, next24h, next48h (hard efforts only). Include readinessEstimate.
+- structuredNextWorkout: Replace generic nudge with phased workout: sessionType, warmup, main, cooldown, totalDurationMin, targetEffort, coachingCue.
+- biomechanics: When runningDynamics data provided, assess cadence (target 170-180spm), groundContactTime (<250ms optimal), verticalOscillation (<8cm optimal), strideLength trends. Give overallFormRating and keyRecommendation.
+- trainingContext: When historicalContext.recentRuns provided, assess weeklyVolume progression, ACWR zone (sweet spot 0.8-1.3), planPhase, volumeVsLastWeek.
+- comparison: When similar past runs available, note pace improvement, cadence trend, HR trend.
+- raceReadiness: When VDOT known, provide race predictions for 5K/10K/HM/M distances with fitnessDirection.
+
+PACING RULES:
+- If strideDetection.detected=true: pacingAnalysis must describe the strides physiologically (neuromuscular activation, economy) and note peak pace vs average.
+- Otherwise: assess pace consistency, fading, negative splits.
+
+SCORING GUIDE:
+- 90-100: Excellent execution, appropriate effort, consistent pacing
+- 75-89: Good run with minor areas for improvement
+- 60-74: Decent but notable issues (erratic pacing, wrong effort level)
+- Below 60: Significant concerns (injury signals, major pacing issues)`,
         },
         {
           role: 'user',

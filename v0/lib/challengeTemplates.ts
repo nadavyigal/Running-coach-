@@ -1,5 +1,7 @@
 import { type ChallengeTemplate } from './db';
 
+export type ChallengeTemplateSeed = Omit<ChallengeTemplate, 'id' | 'createdAt' | 'updatedAt'>;
+
 /**
  * Challenge Templates - Seed data for Challenge-Led Growth Engine
  * Three flagship challenges designed for maximum stickiness and retention
@@ -109,7 +111,7 @@ const CHALLENGE_TRANSLATIONS = {
       ],
     },
   },
-} as const;
+};
 
 /**
  * Get localized challenge template
@@ -117,14 +119,14 @@ const CHALLENGE_TRANSLATIONS = {
 export function getLocalizedChallenge(
   slug: string,
   locale: 'en' | 'he'
-): Partial<ChallengeTemplate> | undefined {
+): Partial<ChallengeTemplateSeed> | undefined {
   if (locale === 'he' && CHALLENGE_TRANSLATIONS[slug as keyof typeof CHALLENGE_TRANSLATIONS]?.he) {
     return CHALLENGE_TRANSLATIONS[slug as keyof typeof CHALLENGE_TRANSLATIONS].he;
   }
   return undefined;
 }
 
-export const CHALLENGE_TEMPLATES: Omit<ChallengeTemplate, 'id' | 'createdAt' | 'updatedAt'>[] = [
+export const CHALLENGE_TEMPLATES: ChallengeTemplateSeed[] = [
   {
     slug: 'start-running',
     name: '21-Day Start Running',
@@ -292,7 +294,11 @@ export function getChallengeTemplatesByDifficulty(difficulty: ChallengeTemplate[
 /**
  * Get recommended next challenge based on completed challenge
  */
-export function getNextChallengeRecommendation(completedSlug: string): (typeof CHALLENGE_TEMPLATES)[0] | null {
+export function getNextChallengeRecommendation(completedSlug?: string): ChallengeTemplateSeed | null {
+  if (!completedSlug) {
+    return getActiveChallengeTemplates()[0] ?? null;
+  }
+
   const progressionPaths: Record<string, string> = {
     'start-running': 'morning-ritual',      // Habit → Mindful
     'morning-ritual': 'plateau-breaker',    // Mindful → Performance

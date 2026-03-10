@@ -4,11 +4,25 @@ import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ChevronLeft, ChevronRight, RefreshCw, Lightbulb } from "lucide-react"
+import { ChevronLeft, ChevronRight, RefreshCw, Lightbulb, Check, X } from "lucide-react"
 import { AddRunModal } from "@/components/add-run-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
-import { type Workout } from "@/lib/db"
+import { type Workout, type Run } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
+
+type CalendarCellType = 'future-planned' | 'completed-run' | 'unplanned-run' | 'missed-workout'
+
+type CalendarCellData = {
+  cellType: CalendarCellType
+  type: string
+  distance: string
+  color: string
+  id: number | undefined        // workout id (if a workout exists)
+  runId: number | undefined     // run id (if an actual run exists)
+  notes: string | undefined
+  completed: boolean | undefined
+  actualDistanceKm: number | undefined
+}
 
 export function MonthlyCalendarView() {
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -17,8 +31,10 @@ export function MonthlyCalendarView() {
   const [selectedDateWorkout, setSelectedDateWorkout] = useState<any>(null)
   const [showDateWorkoutModal, setShowDateWorkoutModal] = useState(false)
   const [workouts, setWorkouts] = useState<Workout[]>([])
+  const [runs, setRuns] = useState<Run[]>([])
   const [, setIsLoading] = useState(true)
   const [draggedWorkout, setDraggedWorkout] = useState<any>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const monthNames = [
     "January",
@@ -46,50 +62,122 @@ export function MonthlyCalendarView() {
     hill: "bg-purple-500",
   }
 
-  // Load workouts for the current month
+  // Listen for plan-updated events (triggered by rescheduling, save-to-plan, etc.)
   useEffect(() => {
-    const loadWorkouts = async () => {
+    const handler = () => setRefreshKey(k => k + 1)
+    window.addEventListener('plan-updated', handler)
+    return () => window.removeEventListener('plan-updated', handler)
+  }, [])
+
+  // Load workouts and runs for the current month
+  useEffect(() => {
+    const loadData = async () => {
       try {
         setIsLoading(true)
         const user = await dbUtils.getCurrentUser()
         if (user && user.id) {
-          // Get start and end of current month (full-day range)
           const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
           startOfMonth.setHours(0, 0, 0, 0)
 
           const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
           endOfMonth.setHours(23, 59, 59, 999)
 
-          const monthWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfMonth, endOfMonth, { planScope: "active" })
+          const [monthWorkouts, monthRuns] = await Promise.all([
+            dbUtils.getWorkoutsForDateRange(user.id, startOfMonth, endOfMonth, { planScope: "active" }),
+            dbUtils.getRunsInTimeRange(user.id, startOfMonth, endOfMonth),
+          ])
           setWorkouts(monthWorkouts)
+          setRuns(monthRuns)
         }
       } catch (error) {
-        console.error('Failed to load workouts:', error)
+        console.error('Failed to load calendar data:', error)
       } finally {
         setIsLoading(false)
       }
     }
 
-    loadWorkouts()
-  }, [currentDate])
+    loadData()
+  }, [currentDate, refreshKey])
 
   const formatDateKey = (date: Date) => {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
   }
 
-  // Convert workouts to the format expected by the calendar
-  const workoutData = workouts.reduce((acc, workout) => {
-    const dateKey = formatDateKey(workout.scheduledDate)
-    acc[dateKey] = {
-      type: workout.type,
-      distance: `${workout.distance}km`,
-      completed: workout.completed,
-      color: workoutColorMap[workout.type] || "bg-gray-500",
-      id: workout.id,
-      notes: workout.notes,
+  // Build merged calendar data map
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  // Index runs by date (first run per date wins)
+  const runsByDate: Record<string, Run> = {}
+  for (const run of runs) {
+    const runDate = new Date(run.completedAt ?? run.createdAt)
+    const key = formatDateKey(runDate)
+    if (!runsByDate[key]) runsByDate[key] = run
+  }
+
+  // Index workouts by date
+  const workoutsByDate: Record<string, Workout> = {}
+  for (const workout of workouts) {
+    const key = formatDateKey(workout.scheduledDate)
+    workoutsByDate[key] = workout
+  }
+
+  // Merge into CalendarCellData
+  const calendarData: Record<string, CalendarCellData> = {}
+
+  const allDateKeys = new Set([...Object.keys(runsByDate), ...Object.keys(workoutsByDate)])
+  for (const key of allDateKeys) {
+    const run = runsByDate[key]
+    const workout = workoutsByDate[key]
+    const cellDate = new Date(key)
+    cellDate.setHours(0, 0, 0, 0)
+    const isPast = cellDate < today
+
+    if (isPast) {
+      if (run) {
+        // Determine if this run was linked to the planned workout
+        const isLinked = workout && run.workoutId === workout.id
+        calendarData[key] = {
+          cellType: isLinked ? 'completed-run' : 'unplanned-run',
+          type: run.type,
+          distance: `${run.distance}km`,
+          color: workoutColorMap[run.type] || "bg-gray-500",
+          id: workout?.id,
+          runId: run.id,
+          notes: run.notes,
+          completed: undefined,
+          actualDistanceKm: run.distance,
+        }
+      } else if (workout) {
+        calendarData[key] = {
+          cellType: 'missed-workout',
+          type: workout.type,
+          distance: `${workout.distance}km`,
+          color: workoutColorMap[workout.type] || "bg-gray-500",
+          id: workout.id,
+          runId: undefined,
+          notes: workout.notes,
+          completed: undefined,
+          actualDistanceKm: undefined,
+        }
+      }
+    } else {
+      // Today or future: show planned workout
+      if (workout) {
+        calendarData[key] = {
+          cellType: 'future-planned',
+          type: workout.type,
+          distance: `${workout.distance}km`,
+          color: workoutColorMap[workout.type] || "bg-gray-500",
+          id: workout.id,
+          runId: undefined,
+          notes: workout.notes,
+          completed: workout.completed,
+          actualDistanceKm: undefined,
+        }
+      }
     }
-    return acc
-  }, {} as Record<string, any>)
+  }
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
@@ -101,12 +189,10 @@ export function MonthlyCalendarView() {
 
     const days = []
 
-    // Add empty cells for days before the first day of the month
     for (let i = 0; i < startingDayOfWeek; i++) {
       days.push(null)
     }
 
-    // Add all days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       days.push(new Date(year, month, day))
     }
@@ -128,15 +214,15 @@ export function MonthlyCalendarView() {
 
   const handleDateClick = (date: Date) => {
     if (draggedWorkout) {
-      return // Don't handle click when dragging
+      return
     }
 
     const dateKey = formatDateKey(date)
-    const workout = workoutData[dateKey as keyof typeof workoutData]
+    const cell = calendarData[dateKey]
 
-    if (workout) {
+    if (cell) {
       setSelectedDateWorkout({
-        ...workout,
+        ...cell,
         date: date,
         dateString: date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
       })
@@ -147,9 +233,9 @@ export function MonthlyCalendarView() {
     }
   }
 
-  const handleDragStart = (e: React.DragEvent, workout: any, date: Date) => {
+  const handleDragStart = (e: React.DragEvent, cell: CalendarCellData, date: Date) => {
     e.stopPropagation()
-    setDraggedWorkout({ ...workout, originalDate: date })
+    setDraggedWorkout({ ...cell, originalDate: date })
     e.dataTransfer.effectAllowed = 'move'
   }
 
@@ -169,31 +255,21 @@ export function MonthlyCalendarView() {
     if (!draggedWorkout) return
 
     const targetDateKey = formatDateKey(targetDate)
-    const existingWorkout = workoutData[targetDateKey as keyof typeof workoutData]
+    const existingCell = calendarData[targetDateKey]
 
-    // Don't allow dropping on a date that already has a workout
-    if (existingWorkout) {
+    if (existingCell) {
       alert("This date already has a workout scheduled. Please choose a different date.")
       setDraggedWorkout(null)
       return
     }
 
     try {
-      // Update the workout in the database
       await dbUtils.updateWorkout(draggedWorkout.id, {
         scheduledDate: targetDate,
         day: (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const).at(targetDate.getDay()) ?? 'Sun',
       })
 
-      // Refresh the workouts
-      const user = await dbUtils.getCurrentUser()
-      if (user && user.id) {
-        const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
-        const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
-        const monthWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfMonth, endOfMonth, { planScope: "active" })
-        setWorkouts(monthWorkouts)
-      }
-
+      window.dispatchEvent(new CustomEvent('plan-updated'))
       alert(`Workout moved to ${targetDate.toLocaleDateString()}!`)
     } catch (error) {
       console.error('Failed to move workout:', error)
@@ -204,11 +280,20 @@ export function MonthlyCalendarView() {
   }
 
   const isToday = (date: Date) => {
-    const today = new Date()
-    return date.toDateString() === today.toDateString()
+    const now = new Date()
+    return date.toDateString() === now.toDateString()
   }
 
   const days = getDaysInMonth(currentDate)
+
+  // Stats: count completed runs and adherence
+  const completedCount = Object.values(calendarData).filter(
+    c => c.cellType === 'completed-run' || c.cellType === 'unplanned-run'
+  ).length
+  const missedCount = Object.values(calendarData).filter(c => c.cellType === 'missed-workout').length
+  const adherenceDenominator = completedCount + missedCount
+  const adherencePct = adherenceDenominator > 0 ? Math.round((completedCount / adherenceDenominator) * 100) : 0
+  const scheduledCount = workouts.length
 
   return (
     <div className="space-y-4 animate-in fade-in-50 duration-300">
@@ -229,19 +314,7 @@ export function MonthlyCalendarView() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={async () => {
-              try {
-                const user = await dbUtils.getCurrentUser()
-                if (user && user.id) {
-                  const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
-                  const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
-                  const monthWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfMonth, endOfMonth, { planScope: "active" })
-                  setWorkouts(monthWorkouts)
-                }
-              } catch (error) {
-                console.error('Failed to refresh workouts:', error)
-              }
-            }}
+            onClick={() => setRefreshKey(k => k + 1)}
             className="hover:scale-105 transition-transform"
           >
             <RefreshCw className="h-4 w-4" />
@@ -273,45 +346,67 @@ export function MonthlyCalendarView() {
           <div className="grid grid-cols-7 gap-1">
             {days.map((date, index) => {
               if (!date) {
-                return <div key={index} className="h-12" />
+                return <div key={index} className="h-16" />
               }
 
               const dateKey = formatDateKey(date)
-              const workout = workoutData[dateKey as keyof typeof workoutData]
-              const today = isToday(date)
+              const cell = calendarData[dateKey]
+              const todayCell = isToday(date)
+              const isFuturePlanned = cell?.cellType === 'future-planned'
 
               return (
                 <div
                   key={index}
-                  className={`h-16 border rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md ${today ? "bg-green-100 border-green-300 ring-2 ring-green-200" : "hover:bg-gray-50 border-gray-200"
+                  className={`h-16 border rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md ${todayCell ? "bg-green-100 border-green-300 ring-2 ring-green-200" : "hover:bg-gray-50 border-gray-200"
                     } ${draggedWorkout ? "hover:bg-blue-100 border-blue-300" : ""}`}
                   onClick={() => handleDateClick(date)}
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, date)}
                 >
-                  <span className={`text-sm ${today ? "font-bold text-green-800" : "text-gray-700"}`}>
+                  <span className={`text-sm ${todayCell ? "font-bold text-green-800" : "text-gray-700"}`}>
                     {date.getDate()}
                   </span>
-                  {workout && (
+                  {cell && (
                     <div
                       className="flex flex-col items-center justify-center mt-1 w-full px-1"
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, workout, date)}
-                      onDragEnd={handleDragEnd}
-                      title="Drag to move workout to another day"
+                      draggable={isFuturePlanned}
+                      onDragStart={isFuturePlanned ? (e) => handleDragStart(e, cell, date) : undefined}
+                      onDragEnd={isFuturePlanned ? handleDragEnd : undefined}
+                      title={isFuturePlanned ? "Drag to move workout to another day" : undefined}
                     >
                       <div className="relative w-full mb-1">
-                        <div className={`w-full h-1 rounded-full ${workout.color} ${workout.completed ? "" : "opacity-60"}`} />
-                        {workout.completed && (
-                          <span className="absolute -top-2 -right-1 text-[8px] text-green-600">✓</span>
+                        {cell.cellType === 'completed-run' && (
+                          <>
+                            <div className={`w-full h-1.5 rounded-full ${cell.color}`} />
+                            <span className="absolute -top-2 -right-1 text-[8px] text-green-600">✓</span>
+                          </>
+                        )}
+                        {cell.cellType === 'unplanned-run' && (
+                          <>
+                            <div className={`w-full h-1.5 rounded-full ${cell.color}`} />
+                            <span className="absolute -top-2 -right-1 text-[8px] text-blue-500">🏃</span>
+                          </>
+                        )}
+                        {cell.cellType === 'missed-workout' && (
+                          <>
+                            <div className={`w-full h-1 rounded-full ${cell.color} opacity-30`} />
+                            <span className="absolute -top-2 -right-1 text-[8px] text-red-500">✗</span>
+                          </>
+                        )}
+                        {cell.cellType === 'future-planned' && (
+                          <div className={`w-full h-1 rounded-full ${cell.color} opacity-60`} />
                         )}
                       </div>
-                      <span className={`text-xs font-medium ${workout.completed ? "text-gray-800" : "text-gray-600"}`}>
-                        {workout.type}
-                      </span>
+                      {cell.cellType === 'missed-workout' ? (
+                        <span className="text-xs font-medium text-gray-400 line-through">{cell.type}</span>
+                      ) : cell.cellType === 'completed-run' || cell.cellType === 'unplanned-run' ? (
+                        <span className="text-xs font-medium text-gray-800">{cell.actualDistanceKm?.toFixed(1)}k</span>
+                      ) : (
+                        <span className="text-xs font-medium text-gray-600">{cell.type}</span>
+                      )}
                     </div>
                   )}
-                  {draggedWorkout && !workout && (
+                  {draggedWorkout && !cell && (
                     <div className="text-xs text-blue-600 mt-1">Drop here</div>
                   )}
                 </div>
@@ -325,21 +420,19 @@ export function MonthlyCalendarView() {
       <div className="grid grid-cols-3 gap-4">
         <Card className="bg-green-50 border-green-200 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-green-700">{workouts.length}</div>
+            <div className="text-2xl font-bold text-green-700">{scheduledCount}</div>
             <div className="text-xs text-green-600 font-medium">Scheduled (Month)</div>
           </CardContent>
         </Card>
         <Card className="bg-blue-50 border-blue-200 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-blue-700">{workouts.filter(w => w.completed).length}</div>
+            <div className="text-2xl font-bold text-blue-700">{completedCount}</div>
             <div className="text-xs text-blue-600 font-medium">Completed (Month)</div>
           </CardContent>
         </Card>
         <Card className="bg-pink-50 border-pink-200 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-pink-700">
-              {workouts.length > 0 ? Math.round((workouts.filter(w => w.completed).length / workouts.length) * 100) : 0}%
-            </div>
+            <div className="text-2xl font-bold text-pink-700">{adherencePct}%</div>
             <div className="text-xs text-pink-600 font-medium">Plan Adherence</div>
           </CardContent>
         </Card>
@@ -350,17 +443,11 @@ export function MonthlyCalendarView() {
         <CardContent className="p-4">
           <h3 className="font-medium mb-3">Upcoming This Week</h3>
           <div className="space-y-2">
-            {Object.entries(workoutData)
-              .filter(([dateStr, workout]) => {
-                const workoutDate = new Date(dateStr)
-                const today = new Date()
-                today.setHours(0, 0, 0, 0)
-                workoutDate.setHours(0, 0, 0, 0)
-                return !workout.completed && workoutDate >= today
-              })
+            {Object.entries(calendarData)
+              .filter(([, cell]) => cell.cellType === 'future-planned')
               .sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime())
               .slice(0, 3)
-              .map(([date, workout]) => {
+              .map(([date, cell]) => {
                 const workoutDate = new Date(date)
                 const dayName = workoutDate.toLocaleDateString("en-US", { weekday: "short" })
                 const dayNum = workoutDate.getDate()
@@ -370,10 +457,10 @@ export function MonthlyCalendarView() {
                     className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${workout.color}`} />
+                      <div className={`w-3 h-3 rounded-full ${cell.color}`} />
                       <div>
-                        <span className="font-medium capitalize">{workout.type} Run</span>
-                        <span className="text-gray-600 ml-2">{workout.distance}</span>
+                        <span className="font-medium capitalize">{cell.type} Run</span>
+                        <span className="text-gray-600 ml-2">{cell.distance}</span>
                       </div>
                     </div>
                     <Badge variant="outline" className="text-xs">
@@ -395,6 +482,7 @@ export function MonthlyCalendarView() {
           }}
         />
       )}
+
       {/* Workout Types Legend */}
       <Card className="bg-gray-50 border-gray-200">
         <CardContent className="p-4">
@@ -429,10 +517,18 @@ export function MonthlyCalendarView() {
               <span className="text-xs text-gray-700">Race</span>
             </div>
           </div>
+          <div className="space-y-1 mb-3">
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <Check className="h-3 w-3 text-green-600" /> Completed run
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <X className="h-3 w-3 text-red-500" /> Missed workout (faded)
+            </div>
+          </div>
           <div className="flex items-start gap-2 p-2 bg-yellow-50 rounded-lg border border-yellow-200">
             <Lightbulb className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
             <span className="text-xs text-yellow-800">
-              Tip: Drag workouts to different dates to reschedule them
+              Tip: Drag future workouts to different dates to reschedule them
             </span>
           </div>
         </CardContent>

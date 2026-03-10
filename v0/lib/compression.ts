@@ -40,7 +40,7 @@ export function compressGPSPath(
   if (path.length === 1) return path
 
   // Step 1: Round coordinates to reduce precision
-  let compressed = path.map(point => ({
+  let compressed: GPSPoint[] = path.map(point => ({
     lat: Number(point.lat.toFixed(precision)),
     lng: Number(point.lng.toFixed(precision)),
     timestamp: point.timestamp,

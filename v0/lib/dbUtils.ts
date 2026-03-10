@@ -4717,7 +4717,7 @@ export async function hasMinimalDataForRecommendations(userId: number): Promise<
       db.goals.where('userId').equals(validatedUserId).toArray(),
     ]);
 
-    const hasActivePlan = plans.some(plan => plan.status === 'active');
+    const hasActivePlan = plans.some(plan => plan.isActive);
     const hasRecentRuns = runs.some(run => {
       const runDate = run.completedAt ?? run.createdAt;
       const thirtyDaysAgo = nowUTC();
@@ -4766,7 +4766,7 @@ export async function getUserOnboardingStatus(userId: number): Promise<{
     const thirtyDaysAgo = nowUTC();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const hasActivePlan = plans.some(plan => plan.status === 'active');
+    const hasActivePlan = plans.some(plan => plan.isActive);
     const hasRecentRuns = runs.some(run => {
       const runDate = run.completedAt ?? run.createdAt;
       return runDate >= thirtyDaysAgo;
@@ -5091,6 +5091,7 @@ export const dbUtils = {
   getUserGoals,
   getGoalsByUser,
   getPrimaryGoal,
+  mergeGoals,
   setPrimaryGoal,
   getGoal,
   getGoalWithMilestones,

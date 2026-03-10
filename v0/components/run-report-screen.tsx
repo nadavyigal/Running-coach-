@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
 import { trackAnalyticsEvent } from '@/lib/analytics'
-import type { Run } from '@/lib/db'
+import { db, type Run, type Workout } from '@/lib/db'
 import { dbUtils } from '@/lib/dbUtils'
 import { ENABLE_AUTO_PAUSE, ENABLE_PACE_CHART } from '@/lib/featureFlags'
 import type { LatLng } from '@/lib/mapConfig'
@@ -18,16 +18,20 @@ import {
 } from '@/lib/pace-calculations'
 import { parseGpsPath } from '@/lib/routeUtils'
 import { AdvancedDetails } from './run-report/AdvancedDetails'
+import { BiomechanicsCard, type Biomechanics, type RunningDynamicsData } from './run-report/BiomechanicsCard'
+import { CoachScoreRing, type CoachScore } from './run-report/CoachScoreRing'
 import { CoreSummaryCard } from './run-report/CoreSummaryCard'
 import { EffortAnalysis } from './run-report/EffortAnalysis'
 import { HRZoneWheel } from './run-report/HRZoneWheel'
 import { KeyInsights, type Insight } from './run-report/KeyInsights'
 import { NextStepCard } from './run-report/NextStepCard'
 import { PaceHRDualChart } from './run-report/PaceHRDualChart'
+import { RecoveryTimeline, type DetailedRecovery } from './run-report/RecoveryTimeline'
 import { RouteTimeline } from './run-report/RouteTimeline'
 import { RunReportHeader } from './run-report/RunReportHeader'
 import { ShareRunCTA } from './run-report/ShareRunCTA'
 import { SplitsTable } from './run-report/SplitsTable'
+import { StructuredWorkoutCard, type StructuredWorkout } from './run-report/StructuredWorkoutCard'
 
 type GPSQuality = {
   score: number
@@ -251,6 +255,63 @@ function extractPacingInsight(raw: string | undefined) {
   }
 }
 
+function extractCoachScore(raw: string | undefined): CoachScore | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (!parsed?.coachScore || typeof parsed.coachScore.overall !== 'number') return null
+    return parsed.coachScore as CoachScore
+  } catch {
+    return null
+  }
+}
+
+function extractDetailedRecovery(raw: string | undefined): DetailedRecovery | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (!parsed?.detailedRecovery || typeof parsed.detailedRecovery.immediate !== 'string') return null
+    return parsed.detailedRecovery as DetailedRecovery
+  } catch {
+    return null
+  }
+}
+
+function extractStructuredWorkout(raw: string | undefined): StructuredWorkout | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (!parsed?.structuredNextWorkout || typeof parsed.structuredNextWorkout.sessionType !== 'string') return null
+    return parsed.structuredNextWorkout as StructuredWorkout
+  } catch {
+    return null
+  }
+}
+
+function extractBiomechanics(raw: string | undefined): Biomechanics | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (!parsed?.biomechanics) return null
+    return parsed.biomechanics as Biomechanics
+  } catch {
+    return null
+  }
+}
+
+function extractRunningDynamics(raw: string | undefined): RunningDynamicsData | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    // Check for dynamics data in historicalContext or direct field
+    const dynamics = parsed?.historicalContext?.runningDynamics
+    if (!dynamics) return null
+    return dynamics as RunningDynamicsData
+  } catch {
+    return null
+  }
+}
+
 function parsePaceGpsPath(gpsPath: string | undefined): PaceGPSPoint[] {
   if (!gpsPath) return []
   try {
@@ -305,6 +366,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   const [isGarminInsightLoading, setIsGarminInsightLoading] = useState(false)
   const [garminTelemetry, setGarminTelemetry] = useState<GarminTelemetry | null>(null)
   const [garminTelemetryResolved, setGarminTelemetryResolved] = useState(false)
+  const [historicalContext, setHistoricalContext] = useState<Record<string, unknown> | null>(null)
   const autoRegeneratedRunRef = useRef<number | null>(null)
 
   const gpsQualityEnabled = ENABLE_AUTO_PAUSE
@@ -338,6 +400,17 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
     () => (paceChartEnabled ? extractPacingInsight(run?.runReport) : null),
     [paceChartEnabled, run?.runReport]
   )
+  const coachScore = useMemo(() => extractCoachScore(run?.runReport), [run?.runReport])
+  const detailedRecovery = useMemo(() => extractDetailedRecovery(run?.runReport), [run?.runReport])
+  const structuredWorkout = useMemo(() => extractStructuredWorkout(run?.runReport), [run?.runReport])
+  const biomechanicsData = useMemo(() => extractBiomechanics(run?.runReport), [run?.runReport])
+  const runningDynamics = useMemo<RunningDynamicsData | null>(() => {
+    // Prefer dynamics from historical context (gathered from Dexie)
+    const ctxDyn = historicalContext?.runningDynamics as RunningDynamicsData | undefined
+    if (ctxDyn?.avgCadence) return ctxDyn
+    // Fallback: try extracting from stored run report
+    return extractRunningDynamics(run?.runReport)
+  }, [historicalContext, run?.runReport])
   const telemetrySplits = useMemo(
     () => (Array.isArray(garminTelemetry?.splits) ? garminTelemetry.splits.slice(0, 8) : []),
     [garminTelemetry?.splits]
@@ -423,6 +496,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
           },
           ...(paceChartEnabled && paceDataPayload.length ? { paceData: paceDataPayload } : {}),
           ...(garminTelemetry ? { garminTelemetry } : {}),
+          ...(historicalContext ? { historicalContext } : {}),
         }),
       })
 
@@ -473,6 +547,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
     }
   }, [
     gpsQualityEnabled,
+    historicalContext,
     loadRun,
     paceChartEnabled,
     paceDataPayload,
@@ -486,6 +561,96 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   useEffect(() => {
     loadRun()
   }, [loadRun])
+
+  // Gather historical context from Dexie for richer AI analysis
+  useEffect(() => {
+    if (!run) {
+      setHistoricalContext(null)
+      return
+    }
+
+    const gatherContext = async () => {
+      try {
+        const userId = run.userId
+        const ctx: Record<string, unknown> = {}
+
+        // Recent runs (last 10, summarized)
+        const allRuns = await dbUtils.getRunsByUser(userId)
+        const sortedRuns = allRuns
+          .filter(r => r.id !== run.id)
+          .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
+          .slice(0, 10)
+
+        if (sortedRuns.length > 0) {
+          ctx.recentRuns = sortedRuns.map(r => ({
+            type: r.type,
+            distanceKm: r.distance,
+            paceSecPerKm: r.distance > 0 ? r.duration / r.distance : undefined,
+            date: new Date(r.completedAt).toISOString().slice(0, 10),
+            effort: r.rpe ? String(r.rpe) : undefined,
+          }))
+        }
+
+        // Weekly volumes
+        const now = Date.now()
+        const runs7d = allRuns.filter(r => now - new Date(r.completedAt).getTime() < 7 * 86400000)
+        const runs28d = allRuns.filter(r => now - new Date(r.completedAt).getTime() < 28 * 86400000)
+        ctx.weeklyVolume7d = runs7d.reduce((sum, r) => sum + r.distance, 0)
+        ctx.weeklyVolume28d = runs28d.reduce((sum, r) => sum + r.distance, 0)
+        ctx.weeklyRunCount7d = runs7d.length
+
+        // Latest recovery score
+        try {
+          const latestRecovery = await db.recoveryScores
+            .where('userId').equals(userId)
+            .toArray()
+          latestRecovery.sort((a: { scoreDate?: Date; date?: Date }, b: { scoreDate?: Date; date?: Date }) =>
+            new Date(b.scoreDate ?? b.date ?? 0).getTime() - new Date(a.scoreDate ?? a.date ?? 0).getTime()
+          )
+          const rec = latestRecovery[0]
+          if (rec) {
+            ctx.recoveryScore = rec.overallScore
+            ctx.sleepScore = rec.sleepScore
+            ctx.readinessScore = rec.readinessScore
+          }
+        } catch { /* table may not exist for all users */ }
+
+        // Running dynamics for this run
+        try {
+          const allDynamics = await db.runningDynamicsData
+            .where('userId').equals(userId)
+            .reverse()
+            .sortBy('timestamp')
+          const dynamics = allDynamics.find((d: { runId: number }) => d.runId === run.id) ?? allDynamics[0]
+          if (dynamics) {
+            ctx.runningDynamics = {
+              avgCadence: dynamics.averageCadence,
+              avgGroundContactTime: dynamics.averageGroundContactTime,
+              avgVerticalOscillation: dynamics.averageVerticalOscillation,
+              avgStrideLength: dynamics.averageStrideLength,
+              groundContactBalance: dynamics.groundContactBalance ? `${dynamics.groundContactBalance}%` : undefined,
+              verticalRatio: dynamics.verticalRatio,
+            }
+          }
+        } catch { /* table may not exist */ }
+
+        // User's VDOT
+        try {
+          const user = await dbUtils.getUserById(userId)
+          if (user?.calculatedVDOT) {
+            ctx.vdot = user.calculatedVDOT
+          }
+        } catch { /* ignore */ }
+
+        setHistoricalContext(ctx)
+      } catch (err) {
+        console.warn('[run-report] Failed to gather historical context:', err)
+        setHistoricalContext(null)
+      }
+    }
+
+    void gatherContext()
+  }, [run])
 
   useEffect(() => {
     if (!run || !hasGarminData) {
@@ -694,7 +859,94 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   if (typeof _el === 'number') sharedMetrics.elevationLossM = _el
 
   const onShare = () => toast({ title: 'Share', description: 'Sharing functionality coming soon.' })
-  const onSaveToPlan = () => toast({ title: 'Saved to plan', description: 'Workout added to your schedule.' })
+
+  const parseSuggestedWorkout = (suggestion: string): { type: Workout['type']; distance: number; notes: string } => {
+    const distanceMatch = suggestion.match(/(\d+\.?\d*)\s*(km|k|miles?)/i)
+    const distance = distanceMatch?.[1] ? parseFloat(distanceMatch[1]) : 5
+
+    let type: Workout['type'] = 'easy'
+    const lower = suggestion.toLowerCase()
+    if (lower.includes('tempo')) type = 'tempo'
+    else if (lower.includes('interval')) type = 'intervals'
+    else if (lower.includes('long')) type = 'long'
+    else if (lower.includes('hill')) type = 'hill'
+    else if (lower.includes('race')) type = 'time-trial'
+    else if (lower.includes('fartlek')) type = 'fartlek'
+    else if (lower.includes('recovery')) type = 'recovery'
+
+    return { type, distance, notes: suggestion }
+  }
+
+  const onSaveToPlan = async () => {
+    if (!coachNotes?.suggestedNextWorkout) return
+    try {
+      const user = await dbUtils.getCurrentUser()
+      if (!user?.id) {
+        toast({ title: 'Not signed in', description: 'Please sign in to save workouts.', variant: 'destructive' })
+        return
+      }
+      const plan = await dbUtils.getActivePlan(user.id)
+      if (!plan?.id) {
+        toast({ title: 'No active plan', description: 'Create a training plan first.', variant: 'destructive' })
+        return
+      }
+      const { type, distance, notes } = parseSuggestedWorkout(coachNotes.suggestedNextWorkout)
+
+      // Find the next open day (tomorrow first, then up to 7 days)
+      const startOfDay = new Date()
+      startOfDay.setHours(0, 0, 0, 0)
+      const startOfWeek = new Date(startOfDay)
+      startOfWeek.setDate(startOfDay.getDate() + 1)
+      const endOfSearch = new Date(startOfDay)
+      endOfSearch.setDate(startOfDay.getDate() + 7)
+      endOfSearch.setHours(23, 59, 59, 999)
+
+      const existingWorkouts = await dbUtils.getWorkoutsForDateRange(user.id, startOfWeek, endOfSearch, { planScope: 'active' })
+      const occupiedKeys = new Set(existingWorkouts.map(w => {
+        const d = w.scheduledDate
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      }))
+
+      let scheduledDate: Date | null = null
+      for (let i = 1; i <= 7; i++) {
+        const candidate = new Date(startOfDay)
+        candidate.setDate(startOfDay.getDate() + i)
+        const key = `${candidate.getFullYear()}-${String(candidate.getMonth() + 1).padStart(2, '0')}-${String(candidate.getDate()).padStart(2, '0')}`
+        if (!occupiedKeys.has(key)) {
+          scheduledDate = candidate
+          break
+        }
+      }
+
+      if (!scheduledDate) {
+        toast({ title: 'No open slot', description: 'All days this week are occupied.', variant: 'destructive' })
+        return
+      }
+
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
+      const day = dayNames[scheduledDate.getDay()] ?? 'Mon'
+
+      await dbUtils.createWorkout({
+        planId: plan.id,
+        week: 1,
+        day,
+        type,
+        distance,
+        notes,
+        completed: false,
+        scheduledDate,
+      })
+
+      window.dispatchEvent(new CustomEvent('plan-updated'))
+      toast({
+        title: 'Saved to plan',
+        description: `${type} run (${distance}km) added on ${scheduledDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}.`,
+      })
+    } catch (error) {
+      console.error('[run-report] Failed to save to plan:', error)
+      toast({ title: 'Error', description: 'Failed to save workout. Please try again.', variant: 'destructive' })
+    }
+  }
 
   // ─── FULL GARMIN DARK REPORT ────────────────────────────────────────────
   if (isGarminFullReport) {
@@ -721,6 +973,9 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         paceConsistency={pacingInsight?.paceConsistency as any}
         variant="garmin"
       />,
+      coachScore && (
+        <CoachScoreRing key="coach-score" score={coachScore} variant="garmin" />
+      ),
       <EffortAnalysis
         key="effort"
         avgHr={(garminTelemetry?.avgHr ?? run.heartRate) as any}
@@ -748,6 +1003,14 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
           maxHr={(garminTelemetry?.maxHr ?? run.maxHR) as any}
         />
       ),
+      biomechanicsData && runningDynamics && (
+        <BiomechanicsCard
+          key="biomechanics"
+          biomechanics={biomechanicsData}
+          dynamics={runningDynamics}
+          variant="garmin"
+        />
+      ),
       <AdvancedDetails
         key="advanced"
         runId={run.id!}
@@ -763,7 +1026,17 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
         onRegenerate={() => void generateNotes()}
         variant="garmin"
       />,
-      coachNotes?.suggestedNextWorkout && (
+      detailedRecovery && (
+        <RecoveryTimeline key="recovery" recovery={detailedRecovery} variant="garmin" />
+      ),
+      structuredWorkout ? (
+        <StructuredWorkoutCard
+          key="next-workout"
+          workout={structuredWorkout}
+          variant="garmin"
+          onSaveToPlan={onSaveToPlan}
+        />
+      ) : coachNotes?.suggestedNextWorkout ? (
         <div key="next" className="mx-4">
           <NextStepCard
             suggestedRun={coachNotes.suggestedNextWorkout}
@@ -771,7 +1044,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
             onSaveToPlan={onSaveToPlan}
           />
         </div>
-      ),
+      ) : null,
       <div key="share" className="mx-4">
         <ShareRunCTA onShare={onShare} />
       </div>,
@@ -833,6 +1106,9 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
       paceConsistency={pacingInsight?.paceConsistency as any}
       variant="light"
     />,
+    coachScore && (
+      <CoachScoreRing key="coach-score" score={coachScore} variant="light" />
+    ),
     (runEffort || pacingInsight?.paceConsistency || (garminTelemetry?.avgHr ?? run.heartRate)) && (
       <EffortAnalysis
         key="effort"
@@ -861,14 +1137,24 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
     telemetrySplits.length > 0 && (
       <SplitsTable key="splits" splits={telemetrySplits} type="km" variant="light" />
     ),
-    coachNotes?.suggestedNextWorkout && (
+    detailedRecovery && (
+      <RecoveryTimeline key="recovery" recovery={detailedRecovery} variant="light" />
+    ),
+    structuredWorkout ? (
+      <StructuredWorkoutCard
+        key="next-workout"
+        workout={structuredWorkout}
+        variant="light"
+        onSaveToPlan={onSaveToPlan}
+      />
+    ) : coachNotes?.suggestedNextWorkout ? (
       <NextStepCard
         key="next"
         suggestedRun={coachNotes.suggestedNextWorkout}
         rationale={coachNotes.recoveryNext24h || "Based on today's effort."}
         onSaveToPlan={onSaveToPlan}
       />
-    ),
+    ) : null,
     <ShareRunCTA key="share" onShare={onShare} />,
   ].filter(Boolean)
 

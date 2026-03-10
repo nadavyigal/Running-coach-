@@ -636,7 +636,7 @@ export function ChatScreen() {
 
       if (activePlan) {
         context += `
-      - Training Plan: ${activePlan.title}${activePlan.fitnessLevel ? ` (${activePlan.fitnessLevel} level)` : ''}`;
+      - Training Plan: ${activePlan.title} (${activePlan.fitnessLevel ?? activePlan.planType} level)`;
       }
 
       if (lastThreeRuns.length > 0) {

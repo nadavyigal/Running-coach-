@@ -284,13 +284,13 @@ export async function startChallenge(
 export async function updateChallengeOnWorkoutComplete(
   progressId: number,
   workoutDate: Date = new Date()
-): Promise<void> {
+): Promise<{ challengeCompleted: boolean; progress: ChallengeProgress } | null> {
   try {
     const progress = await db.challengeProgress.get(progressId);
-    if (!progress) return;
+    if (!progress) return null;
 
     const template = await db.challengeTemplates.get(progress.challengeTemplateId);
-    if (!template) return;
+    if (!template) return null;
 
     // Calculate current day
     const currentDay = calculateChallengeDay(progress.startDate, workoutDate);
@@ -299,22 +299,34 @@ export async function updateChallengeOnWorkoutComplete(
     const newStreakDays = progress.streakDays + 1;
     const newTotalDaysCompleted = progress.totalDaysCompleted + 1;
 
-    await db.challengeProgress.update(progressId, {
+    const updatedProgress: ChallengeProgress = {
+      ...progress,
       currentDay,
       streakDays: newStreakDays,
       totalDaysCompleted: newTotalDaysCompleted,
       lastPromptShownAt: workoutDate,
       updatedAt: new Date(),
+    };
+
+    await db.challengeProgress.update(progressId, {
+      currentDay,
+      streakDays: newStreakDays,
+      totalDaysCompleted: newTotalDaysCompleted,
+      lastPromptShownAt: workoutDate,
+      updatedAt: updatedProgress.updatedAt,
     });
 
     // Check if challenge is complete
-    if (currentDay >= template.durationDays) {
+    const challengeCompleted = currentDay >= template.durationDays;
+    if (challengeCompleted) {
       await completeChallenge(progressId);
     }
 
     emitChallengeUpdated(progress.userId);
+    return { challengeCompleted, progress: updatedProgress };
   } catch (error) {
     console.error('[challengeEngine] Error updating challenge progress:', error);
+    return null;
   }
 }
 
@@ -331,11 +343,14 @@ export async function completeChallenge(progressId: number): Promise<void> {
 
     // Get next challenge recommendation
     const nextChallenge = getNextChallengeRecommendation(template.slug);
+    const nextChallengeTemplate = nextChallenge
+      ? await db.challengeTemplates.where('slug').equals(nextChallenge.slug).first()
+      : null;
 
     await db.challengeProgress.update(progressId, {
       status: 'completed',
       completedAt: new Date(),
-      nextChallengeRecommended: nextChallenge?.id,
+      nextChallengeRecommended: nextChallengeTemplate?.id,
       updatedAt: new Date(),
     });
 

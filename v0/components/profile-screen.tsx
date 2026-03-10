@@ -714,8 +714,8 @@ export function ProfileScreen() {
       })()
     : null
 
-  const primaryGoalTarget = primaryGoal?.target?.type && primaryGoal?.target?.value != null
-    ? `${String(primaryGoal.target.type)} target: ${primaryGoal.target.value}`
+  const primaryGoalTarget = primaryGoal?.specificTarget?.metric && primaryGoal?.specificTarget?.value != null
+    ? `${String(primaryGoal.specificTarget.metric)} target: ${primaryGoal.specificTarget.value} ${primaryGoal.specificTarget.unit}`
     : undefined
 
   const primaryGoalProgress = getGoalProgress(primaryGoal?.id)

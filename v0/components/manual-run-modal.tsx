@@ -150,6 +150,7 @@ export function ManualRunModal({ isOpen, onClose, workoutId, onSaved }: ManualRu
 	          variant: "destructive",
 	          action: (
 	            <ToastAction
+	              altText="Retry adaptive plan update"
 	              onClick={() => {
 	                void retryPostRunAdaptation({
 	                  userId: user.id,

@@ -6,15 +6,26 @@ import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent } from "@/components/ui/card"
 import { Sun, CloudSun, Moon, CalendarIcon } from "lucide-react"
+import { dbUtils } from "@/lib/dbUtils"
+import { useToast } from "@/hooks/use-toast"
 
 interface RescheduleModalProps {
   isOpen: boolean
   onClose: () => void
+  workout?: {
+    id: number
+    type: string
+    distance: string
+    date: Date
+  }
+  onReschedule?: () => void
 }
 
-export function RescheduleModal({ isOpen, onClose }: RescheduleModalProps) {
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+export function RescheduleModal({ isOpen, onClose, workout, onReschedule }: RescheduleModalProps) {
+  const { toast } = useToast()
+  const [selectedDate, setSelectedDate] = useState<Date>(workout?.date ?? new Date())
   const [selectedTime, setSelectedTime] = useState<string>("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const timeSlots = [
     { id: "morning", icon: Sun, label: "Morning", time: "6-9 AM" },
@@ -22,15 +33,43 @@ export function RescheduleModal({ isOpen, onClose }: RescheduleModalProps) {
     { id: "evening", icon: Moon, label: "Evening", time: "6-9 PM" },
   ]
 
-  const handleReschedule = () => {
+  const handleReschedule = async () => {
     if (!selectedTime) {
-      alert("Please select a time slot")
+      toast({ title: "Select a time slot", description: "Please choose morning, afternoon, or evening.", variant: "destructive" })
       return
     }
 
-    const timeLabel = timeSlots.find((slot) => slot.id === selectedTime)?.label
-    alert(`Workout rescheduled to ${selectedDate.toDateString()} in the ${timeLabel}!`)
-    onClose()
+    if (!workout?.id) {
+      toast({ title: "No workout selected", variant: "destructive" })
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
+      const day = dayNames[selectedDate.getDay()] ?? 'Mon'
+
+      await dbUtils.updateWorkout(workout.id, {
+        scheduledDate: selectedDate,
+        day,
+      })
+
+      window.dispatchEvent(new CustomEvent('plan-updated'))
+
+      const timeLabel = timeSlots.find((slot) => slot.id === selectedTime)?.label ?? selectedTime
+      toast({
+        title: "Workout rescheduled",
+        description: `${workout.type} run moved to ${selectedDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} (${timeLabel}).`,
+      })
+
+      onReschedule?.()
+      onClose()
+    } catch (error) {
+      console.error("[reschedule-modal] Failed to reschedule workout:", error)
+      toast({ title: "Failed to reschedule", description: "Please try again.", variant: "destructive" })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -48,7 +87,13 @@ export function RescheduleModal({ isOpen, onClose }: RescheduleModalProps) {
           <Card className="bg-blue-50 border-blue-200">
             <CardContent className="p-4">
               <h3 className="font-medium text-blue-900 mb-1">Current Workout</h3>
-              <p className="text-sm text-blue-800">Easy Run • 3.2km • Today</p>
+              {workout ? (
+                <p className="text-sm text-blue-800 capitalize">
+                  {workout.type} Run • {workout.distance} • {workout.date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                </p>
+              ) : (
+                <p className="text-sm text-blue-800">No workout selected</p>
+              )}
             </CardContent>
           </Card>
 
@@ -88,11 +133,15 @@ export function RescheduleModal({ isOpen, onClose }: RescheduleModalProps) {
 
           {/* Action Buttons */}
           <div className="flex gap-3">
-            <Button variant="outline" onClick={onClose} className="flex-1 bg-transparent">
+            <Button variant="outline" onClick={onClose} className="flex-1 bg-transparent" disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button onClick={handleReschedule} className="flex-1 bg-green-500 hover:bg-green-600">
-              Reschedule
+            <Button
+              onClick={handleReschedule}
+              className="flex-1 bg-green-500 hover:bg-green-600"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Rescheduling…" : "Reschedule"}
             </Button>
           </div>
         </div>
