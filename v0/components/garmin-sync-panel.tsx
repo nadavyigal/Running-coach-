@@ -19,7 +19,6 @@ import { useToast } from "@/hooks/use-toast"
 import { db } from "@/lib/db"
 import {
   getGarminSyncCatalog,
-  syncGarminEnabledData,
   type GarminDatasetCapability,
   type GarminEnabledSyncResult,
   type GarminSyncCatalogResult,
@@ -91,12 +90,12 @@ function capabilityStatus(capability: GarminDatasetCapability): string {
 
 export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
   const [device, setDevice] = useState<DeviceInfo | null>(null)
-  const [isSyncing, setIsSyncing] = useState(false)
+  const [isSyncing, _setIsSyncing] = useState(false)
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false)
   const [isDiagnosing, setIsDiagnosing] = useState(false)
   const [catalog, setCatalog] = useState<GarminSyncCatalogResult | null>(null)
-  const [lastResult, setLastResult] = useState<GarminEnabledSyncResult | null>(null)
-  const [syncError, setSyncError] = useState<string | null>(null)
+  const [lastResult, _setLastResult] = useState<GarminEnabledSyncResult | null>(null)
+  const [syncError, _setSyncError] = useState<string | null>(null)
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const [diagnoseResult, setDiagnoseResult] = useState<unknown>(null)
   const [showDiagnose, setShowDiagnose] = useState(false)
