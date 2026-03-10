@@ -30,6 +30,8 @@ export interface RunMapProps {
   height?: string;
   /** Class name for container */
   className?: string;
+  /** Map tile theme */
+  theme?: 'light' | 'dark';
 }
 
 const RUN_PATH_SOURCE_ID = 'run-path';
@@ -58,6 +60,7 @@ export function RunMap({
   interactive = true,
   height = '400px',
   className = '',
+  theme = 'light',
 }: RunMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -117,7 +120,7 @@ export function RunMap({
 
     try {
       const useFallback = !hasMapTilerToken();
-      const tileUrl = getTileUrl('light', useFallback);
+      const tileUrl = getTileUrl(theme, useFallback);
 
       const map = new mapLibre.Map({
         container: mapContainerRef.current,
