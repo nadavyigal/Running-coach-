@@ -988,10 +988,6 @@ export function TodayScreen() {
     }
   }
 
-  const latestRun = [...(weeklyRuns ?? [])]
-    .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
-    .at(0)
-
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
