@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -86,6 +86,7 @@ export function TodayScreen() {
     weeklyRuns,
     weeklyWorkouts,
     weeklyStats,
+    recentRuns,
     refresh: refreshContext,
   } = useData()
   const { user: authUser, profileId, loading: authLoading, signOut } = useAuth()
@@ -101,6 +102,7 @@ export function TodayScreen() {
   const [recoveryTrend, setRecoveryTrend] = useState<{ delta: number; direction: 'up' | 'down' | 'flat' } | null>(null)
   const [coachConfidence, setCoachConfidence] = useState<CoachConfidenceResult | null>(null)
   const [isLoadingRecovery, setIsLoadingRecovery] = useState(false)
+  const [trainingLoad, setTrainingLoad] = useState<number | null>(null)
 
   const [showWorkoutBreakdown, setShowWorkoutBreakdown] = useState(false)
   const [todaysWorkout, setTodaysWorkout] = useState<Workout | null>(null)
@@ -599,6 +601,13 @@ export function TodayScreen() {
   }, [userId])
 
   useEffect(() => {
+    if (!userId) return
+    RecoveryEngine.calculateTrainingLoad(userId, new Date())
+      .then(load => setTrainingLoad(Math.round(load)))
+      .catch(() => {})
+  }, [userId, weeklyRuns.length])
+
+  useEffect(() => {
     if (!ENABLE_WEEKLY_RECAP || !userId) return;
     if (shouldShowWeeklyRecapNotification()) {
       setShowWeeklyRecapNotification(true);
@@ -983,6 +992,43 @@ export function TodayScreen() {
     .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
     .at(0)
 
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${String(secs).padStart(2, "0")}`
+  }
+
+  const formatPace = (secondsPerKm: number) => {
+    if (!Number.isFinite(secondsPerKm) || secondsPerKm <= 0) return "--:--"
+    const mins = Math.floor(secondsPerKm / 60)
+    const secs = Math.round(secondsPerKm % 60)
+    return `${mins}:${String(secs).padStart(2, "0")}`
+  }
+
+  const last14DaysRuns = useMemo(() => {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 14)
+    return [...(recentRuns ?? [])]
+      .filter(r => new Date(r.completedAt) >= cutoff)
+      .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
+  }, [recentRuns])
+
+  const prevWeekDistance = useMemo(() => {
+    const today = new Date()
+    const weekStart = new Date(today)
+    weekStart.setDate(today.getDate() - today.getDay())
+    weekStart.setHours(0, 0, 0, 0)
+    const prevStart = new Date(weekStart)
+    prevStart.setDate(weekStart.getDate() - 7)
+    return (recentRuns ?? [])
+      .filter(r => { const d = new Date(r.completedAt); return d >= prevStart && d < weekStart })
+      .reduce((sum, r) => sum + (r.distance || 0), 0)
+  }, [recentRuns])
+
+  const weeklyAvgPace = weeklyStats.totalDistanceKm > 0
+    ? weeklyStats.totalDurationSeconds / weeklyStats.totalDistanceKm
+    : null
+
   const progressPoints = calendarDays.map((day) => {
     const workoutForDay =
       visibleWorkouts.find((w) => new Date(w.scheduledDate).toDateString() === day.fullDate.toDateString()) ??
@@ -1048,27 +1094,41 @@ export function TodayScreen() {
     },
     {
       id: "weekly",
-      label: "Weekly Progress",
-      value: `${totalRuns}/${plannedRuns || 0}`,
-      animatedValue: totalRuns,
-      formatAnimatedValue: (value) => `${Math.round(value)}/${plannedRuns || 0}`,
-      helper: totalRuns >= plannedRuns && plannedRuns > 0 ? "Completed all planned sessions" : "Completed vs planned runs this week",
-      tone: totalRuns >= plannedRuns && plannedRuns > 0 ? "positive" : "default",
-      trend: totalRuns >= plannedRuns && plannedRuns > 0 ? "up" : "stable",
-      trendLabel: totalRuns >= plannedRuns && plannedRuns > 0 ? "On plan" : "In progress",
-      meterValue: plannedRuns > 0 ? Math.round((totalRuns / plannedRuns) * 100) : 0,
+      label: "This Week",
+      value: `${weeklyStats.totalDistanceKm.toFixed(1)}`,
+      unit: "km",
+      animatedValue: weeklyStats.totalDistanceKm,
+      animationDecimals: 1,
+      formatAnimatedValue: (v) => v.toFixed(1),
+      helper: [
+        `${totalRuns} run${totalRuns !== 1 ? "s" : ""}`,
+        weeklyAvgPace ? `avg ${formatPace(weeklyAvgPace)}/km` : null,
+        prevWeekDistance > 0
+          ? `${weeklyStats.totalDistanceKm >= prevWeekDistance ? "+" : ""}${Math.round(((weeklyStats.totalDistanceKm - prevWeekDistance) / prevWeekDistance) * 100)}% vs last week`
+          : null,
+      ].filter(Boolean).join(" • "),
+      tone: prevWeekDistance > 0 && weeklyStats.totalDistanceKm >= prevWeekDistance ? "positive" : "default",
+      trend: weeklyStats.totalDistanceKm > prevWeekDistance ? "up" : weeklyStats.totalDistanceKm < prevWeekDistance ? "down" : "stable",
+      trendLabel: prevWeekDistance > 0
+        ? `${weeklyStats.totalDistanceKm >= prevWeekDistance ? "+" : ""}${Math.round(((weeklyStats.totalDistanceKm - prevWeekDistance) / prevWeekDistance) * 100)}%`
+        : totalRuns > 0 ? "Active" : "No data",
+      meterValue: prevWeekDistance > 0
+        ? Math.min(100, Math.round((weeklyStats.totalDistanceKm / prevWeekDistance) * 100))
+        : totalRuns > 0 ? 50 : 0,
     },
     {
       id: "consistency",
-      label: "Consistency",
-      value: `${consistency}%`,
-      animatedValue: consistency,
-      formatAnimatedValue: (value) => `${Math.round(value)}%`,
-      helper: consistency >= 70 ? "You're on track this week" : "One extra session gets you back on track",
-      tone: consistency >= 70 ? "positive" : "caution",
-      trend: consistency >= 70 ? "up" : "down",
-      trendLabel: consistency >= 70 ? "On track" : "Needs lift",
-      meterValue: consistency,
+      label: "Training Load",
+      value: trainingLoad !== null ? `${trainingLoad}` : `${consistency}%`,
+      animatedValue: trainingLoad ?? consistency,
+      formatAnimatedValue: (v) => trainingLoad !== null ? `${Math.round(v)}` : `${Math.round(v)}%`,
+      helper: trainingLoad !== null
+        ? `7-day load score • ${plannedRuns > 0 ? `${consistency}% plan adherence` : `${totalRuns} session${totalRuns !== 1 ? "s" : ""} completed`}`
+        : plannedRuns > 0 ? "Completed vs planned sessions" : `${totalRuns} run${totalRuns !== 1 ? "s" : ""} this week`,
+      tone: consistency >= 70 ? "positive" : consistency > 0 ? "caution" : "default",
+      trend: consistency >= 70 ? "up" : consistency > 0 ? "down" : "stable",
+      trendLabel: consistency >= 70 ? "On track" : consistency > 0 ? "Needs lift" : "No plan",
+      meterValue: trainingLoad !== null ? Math.min(100, trainingLoad) : consistency,
     },
     {
       id: "confidence",
@@ -1324,26 +1384,54 @@ export function TodayScreen() {
 
           <Card className="rounded-[1.15rem] border-border/70 bg-card/95 shadow-[0_18px_36px_-30px_rgba(16,24,40,0.5)]">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">Recent activity</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">Recent Runs</CardTitle>
+                {last14DaysRuns.length > 0 && (
+                  <span className="text-xs text-muted-foreground">{last14DaysRuns.length} in 14 days</span>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
-              {latestRun ? (
-                <div className="grid grid-cols-3 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Distance</p>
-                    <p className="font-semibold text-foreground">{latestRun.distance.toFixed(1)} km</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Duration</p>
-                    <p className="font-semibold text-foreground">{Math.max(1, Math.round((latestRun.duration || 0) / 60))} min</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">RPE</p>
-                    <p className="font-semibold text-foreground">{typeof latestRun.rpe === "number" ? `${latestRun.rpe}/10` : "--"}</p>
-                  </div>
-                </div>
+              {last14DaysRuns.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No recent runs. Record your first workout to see trends.</p>
               ) : (
-                <p className="text-sm text-muted-foreground">No recent run data yet. Record your first run to see trends.</p>
+                <div className="space-y-2">
+                  {last14DaysRuns.slice(0, 5).map((run) => (
+                    <div key={run.id} className="rounded-lg border border-border/60 bg-background/60 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <span className="font-medium">{run.distance.toFixed(2)} km</span>
+                            <span className="text-xs text-muted-foreground">•</span>
+                            <span className="text-xs text-muted-foreground">{formatTime(run.duration)}</span>
+                            <span className="text-xs text-muted-foreground">•</span>
+                            <span className="text-xs text-muted-foreground">{formatPace(run.pace ?? run.duration / run.distance)}/km</span>
+                          </div>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {run.importSource === "garmin" ? "Garmin • " : ""}
+                            {new Date(run.completedAt).toLocaleDateString()} • {run.notes ?? run.type}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2.5 text-xs"
+                          onClick={() => {
+                            if (!run.id) return
+                            try {
+                              window.dispatchEvent(new CustomEvent("navigate-to-run-report", { detail: { runId: run.id } }))
+                            } catch { /* ignore */ }
+                          }}
+                        >
+                          View
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {last14DaysRuns.length > 5 && (
+                    <p className="text-center text-xs text-muted-foreground">+{last14DaysRuns.length - 5} more in profile</p>
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>
