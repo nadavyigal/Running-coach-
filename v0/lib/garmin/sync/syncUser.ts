@@ -169,6 +169,7 @@ export async function syncGarminUser(input: {
   const rateLimit = evaluateGarminRateLimit({
     userId,
     lastSyncAt,
+    enforceCooldown: false,
   })
 
   if (!rateLimit.allowed && input.trigger !== 'backfill') {

@@ -25,9 +25,12 @@ interface GarminSyncResponse {
   connected: boolean
   lastSyncAt: string | null
   errorState: Record<string, unknown> | null
+  error?: string | null
+  retryAfterSeconds?: number | null
   details?: {
     syncState?: string
     pendingJobs?: number
+    error?: string | null
   }
   freshnessLabel?: string
   confidenceLabel?: string
@@ -113,7 +116,11 @@ export function SyncStatus({ userId }: SyncStatusProps) {
       })
       const payload = (await response.json()) as GarminSyncResponse
       if (!response.ok || !payload.success) {
-        const errorMessage = asText(payload.errorState?.message) ?? "Garmin sync failed."
+        const errorMessage =
+          asText(payload.error) ??
+          asText(payload.details?.error) ??
+          asText(payload.errorState?.message) ??
+          "Garmin sync failed."
         throw new Error(errorMessage)
       }
 

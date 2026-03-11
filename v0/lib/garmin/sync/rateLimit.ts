@@ -9,6 +9,7 @@ export interface GarminSyncRateLimitInput {
   userId: number
   lastSyncAt: string | null | undefined
   now?: Date
+  enforceCooldown?: boolean
 }
 
 export function evaluateGarminRateLimit(input: GarminSyncRateLimitInput): GarminSyncRateLimitResult {

@@ -33,11 +33,12 @@ export function evaluateGarminSyncRateLimit(params: {
   userId: number
   lastSyncAt: string | null | undefined
   now?: Date
+  enforceCooldown?: boolean
 }): GarminSyncRateLimitResult {
   const nowMs = (params.now ?? new Date()).getTime()
   const lastSyncMs = parseIsoTime(params.lastSyncAt)
 
-  if (lastSyncMs != null) {
+  if (params.enforceCooldown !== false && lastSyncMs != null) {
     const msSinceLastSync = nowMs - lastSyncMs
     if (msSinceLastSync < TEN_MINUTES_MS) {
       return {

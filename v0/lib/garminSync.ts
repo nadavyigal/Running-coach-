@@ -98,6 +98,10 @@ interface GarminManualSyncApiResponse {
   activityFilesProcessed?: unknown
   warnings?: unknown
   error?: string
+  needsReauth?: boolean
+  reason?: string | null
+  retryAfterSeconds?: unknown
+  details?: unknown
 }
 
 interface GarminSyncRequestOptions {
@@ -246,6 +250,69 @@ async function markDeviceForReauth(device: WearableDevice): Promise<void> {
   })
 }
 
+async function upsertLocalGarminDeviceState(params: {
+  userId: number
+  existingDevice: WearableDevice | null
+  lastSyncAt: Date | null
+  connectionStatus: WearableDevice['connectionStatus']
+}): Promise<WearableDevice | null> {
+  const { userId, existingDevice, lastSyncAt, connectionStatus } = params
+
+  if (existingDevice?.id) {
+    await db.wearableDevices.update(existingDevice.id, {
+      lastSync: lastSyncAt,
+      connectionStatus,
+      updatedAt: new Date(),
+    })
+    return {
+      ...existingDevice,
+      lastSync: lastSyncAt,
+      connectionStatus,
+      updatedAt: new Date(),
+    }
+  }
+
+  const now = new Date()
+  const nextDevice: WearableDevice = {
+    userId,
+    type: 'garmin',
+    name: 'Garmin Connect',
+    model: 'Garmin',
+    deviceId: `garmin-${userId}`,
+    connectionStatus,
+    lastSync: lastSyncAt,
+    capabilities: [],
+    settings: {},
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  const id = await db.wearableDevices.add(nextDevice)
+  return {
+    ...nextDevice,
+    id,
+  }
+}
+
+function getManualSyncErrorMessage(payload: GarminManualSyncApiResponse): string {
+  const directError = getString(payload.error)
+  if (directError) return directError
+
+  const details = asRecord(payload.details)
+  const detailError = getString(details.error)
+  if (detailError) {
+    if (payload.reason === 'hourly_limit') {
+      const retryAfterSeconds = getNumber(payload.retryAfterSeconds)
+      if (retryAfterSeconds != null) {
+        return `${detailError} Try again in ${retryAfterSeconds} seconds.`
+      }
+    }
+    return detailError
+  }
+
+  return 'Garmin sync request failed'
+}
+
 async function runGarminSyncRequest(
   userId: number,
   method: 'GET' | 'POST',
@@ -257,9 +324,6 @@ async function runGarminSyncRequest(
   errors: string[]
 }> {
   const device = await getConnectedGarminDevice(userId)
-  if (!device) {
-    return { device: null, data: null, needsReauth: false, errors: ['No connected Garmin device found'] }
-  }
 
   try {
     const params = new URLSearchParams({
@@ -279,7 +343,9 @@ async function runGarminSyncRequest(
     const needsReauth = Boolean(data.needsReauth) || res.status === 401
 
     if (needsReauth) {
-      await markDeviceForReauth(device)
+      if (device) {
+        await markDeviceForReauth(device)
+      }
       return {
         device,
         data,
@@ -343,27 +409,6 @@ export async function syncGarminEnabledData(
 ): Promise<GarminEnabledSyncResult> {
   const device = await getConnectedGarminDevice(userId)
 
-  if (!device) {
-    return {
-      syncName: 'RunSmart Garmin Export Sync',
-      lastSyncAt: null,
-      permissions: [],
-      availableToEnable: [],
-      capabilities: [],
-      activitiesImported: 0,
-      activitiesSkipped: 0,
-      sleepImported: 0,
-      sleepSkipped: 0,
-      additionalSummaryImported: 0,
-      additionalSummarySkipped: 0,
-      fitFilesProcessed: 0,
-      datasetImports: {},
-      notices: [],
-      needsReauth: false,
-      errors: ['No connected Garmin device found'],
-    }
-  }
-
   try {
     const params = new URLSearchParams({ userId: String(userId) })
     if (options?.trigger === 'backfill') {
@@ -383,8 +428,11 @@ export async function syncGarminEnabledData(
     })
 
     const payload = (await response.json()) as GarminManualSyncApiResponse
-    if (response.status === 401 || payload.connected === false) {
-      await markDeviceForReauth(device)
+    const needsReauth = response.status === 401 || payload.connected === false || payload.needsReauth === true
+    if (needsReauth) {
+      if (device) {
+        await markDeviceForReauth(device)
+      }
       return {
         syncName: 'RunSmart Garmin Export Sync',
         lastSyncAt: null,
@@ -401,7 +449,7 @@ export async function syncGarminEnabledData(
         datasetImports: {},
         notices: [],
         needsReauth: true,
-        errors: ['Garmin authentication expired - please reconnect'],
+        errors: [payload.error || 'Garmin authentication expired - please reconnect'],
       }
     }
 
@@ -422,20 +470,20 @@ export async function syncGarminEnabledData(
         datasetImports: {},
         notices: parseNotices(payload.warnings),
         needsReauth: false,
-        errors: [payload.error || 'Garmin sync request failed'],
+        errors: [getManualSyncErrorMessage(payload)],
       }
     }
 
     await syncGarminRunsToClient(userId)
 
     const lastSyncAt = getString(payload.lastSyncAt)
-    if (device.id) {
-      await db.wearableDevices.update(device.id, {
-        lastSync: lastSyncAt ? new Date(lastSyncAt) : new Date(),
-        connectionStatus: 'connected',
-        updatedAt: new Date(),
-      })
-    }
+    const refreshedAt = lastSyncAt ? new Date(lastSyncAt) : new Date()
+    await upsertLocalGarminDeviceState({
+      userId,
+      existingDevice: device,
+      lastSyncAt: refreshedAt,
+      connectionStatus: 'connected',
+    })
 
     await deduplicateGarminRuns(userId)
 
@@ -447,7 +495,7 @@ export async function syncGarminEnabledData(
 
     return {
       syncName: catalog.syncName,
-      lastSyncAt: lastSyncAt ? new Date(lastSyncAt) : new Date(),
+      lastSyncAt: refreshedAt,
       permissions: catalog.permissions,
       availableToEnable: catalog.availableToEnable,
       capabilities: catalog.capabilities,

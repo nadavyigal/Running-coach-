@@ -35,6 +35,15 @@ function parseTrigger(value: unknown): GarminSyncTrigger {
   return value === 'backfill' ? 'backfill' : 'manual'
 }
 
+function getBodyError(body: Record<string, unknown>): string | null {
+  const error = body.error
+  return typeof error === 'string' && error.trim().length > 0 ? error.trim() : null
+}
+
+function getBodyNeedsReauth(body: Record<string, unknown>): boolean {
+  return body.needsReauth === true
+}
+
 async function readBodySafely(req: Request): Promise<Record<string, unknown>> {
   try {
     const parsed = (await req.json()) as unknown
@@ -75,6 +84,8 @@ export async function POST(req: Request) {
       connected: result.connected,
       lastSyncAt: result.lastSyncAt,
       errorState: result.errorState,
+      error: getBodyError(result.body),
+      needsReauth: getBodyNeedsReauth(result.body),
       noOp: result.noOp,
       activitiesUpserted: result.activitiesUpserted,
       dailyMetricsUpserted: result.dailyMetricsUpserted,

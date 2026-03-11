@@ -28,6 +28,19 @@ describe('garmin-rate-limiter', () => {
     expect(result.retryAfterSeconds).toBe(600)
   })
 
+  it('allows explicit manual sync within cooldown when cooldown enforcement is disabled', () => {
+    const nowIso = new Date().toISOString()
+    const result = evaluateGarminSyncRateLimit({
+      userId: 42,
+      lastSyncAt: nowIso,
+      enforceCooldown: false,
+    })
+
+    expect(result.allowed).toBe(true)
+    expect(result.reason).toBeUndefined()
+    expect(result.retryAfterSeconds).toBe(0)
+  })
+
   it('limits to at most 50 sync calls per hour per user', () => {
     for (let index = 0; index < 50; index += 1) {
       const result = evaluateGarminSyncRateLimit({
