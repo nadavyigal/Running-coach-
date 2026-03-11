@@ -331,7 +331,7 @@ test.describe("PR05 Garmin UX dashboards", () => {
   test("renders readiness, chart danger zone, and sync freshness with mocked IndexedDB data", async ({ page }) => {
     let syncCalls = 0
 
-    await page.route("**/api/devices/garmin/sync**", async (route) => {
+    await page.route("**/api/garmin/sync**", async (route) => {
       const request = route.request()
       if (request.method() === "POST") {
         syncCalls += 1
@@ -342,29 +342,14 @@ test.describe("PR05 Garmin UX dashboards", () => {
         contentType: "application/json",
         body: JSON.stringify({
           success: true,
-          syncName: "RunSmart Garmin Export Sync",
-          permissions: ["dailies", "hrv", "pulseox", "stressDetails"],
-          availableToEnable: [],
-          capabilities: [
-            {
-              key: "dailies",
-              label: "Daily summaries",
-              permissionGranted: true,
-              endpointReachable: true,
-              enabledForSync: true,
-              supportedByRunSmart: true,
-            },
-          ],
-          ingestion: {
-            lookbackDays: 28,
-            storeAvailable: true,
-            recordsInWindow: 28,
-            latestReceivedAt: new Date().toISOString(),
-          },
-          datasets: {},
-          activities: [],
-          sleep: [],
-          notices: [],
+          connected: true,
+          lastSyncAt: new Date().toISOString(),
+          noOp: false,
+          activitiesUpserted: 1,
+          dailyMetricsUpserted: 1,
+          duplicateActivitiesSkipped: 0,
+          activityFilesProcessed: 1,
+          warnings: [],
         }),
       })
     })

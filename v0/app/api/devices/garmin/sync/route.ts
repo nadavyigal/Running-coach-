@@ -1260,7 +1260,7 @@ function isActivityWithinLookback(activity: { startTimeGMT: string | null }, loo
   return parsed >= cutoffMs
 }
 
-function buildExecutionOptions(trigger: GarminSyncTrigger): GarminSyncExecutionOptions {
+export function buildExecutionOptions(trigger: GarminSyncTrigger): GarminSyncExecutionOptions {
   if (trigger === 'backfill') {
     return {
       trigger,

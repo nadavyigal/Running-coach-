@@ -10,6 +10,7 @@ import { GarminSyncStatusBar } from "@/components/garmin-sync-status-bar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { loadGarminDashboardData, type GarminDashboardData } from "@/lib/garminDashboardClient"
 import {
   buildReadinessWhyLine,
   getAverageValue,
@@ -17,13 +18,19 @@ import {
   getLatestValue,
   getReadinessTone,
   getRestingHrBaseline,
-  loadGarminDashboardData,
-  type GarminDashboardData,
 } from "@/lib/garminDashboardData"
 import { syncGarminEnabledData } from "@/lib/garminSync"
 
 interface GarminReadinessCardProps {
   userId: number
+}
+
+function mergeFreshness(nextData: GarminDashboardData, lastSyncAt: Date | null): GarminDashboardData {
+  if (!lastSyncAt) return nextData
+  if (!nextData.lastSyncAt || lastSyncAt.getTime() > nextData.lastSyncAt.getTime()) {
+    return { ...nextData, lastSyncAt }
+  }
+  return nextData
 }
 
 export function GarminReadinessCard({ userId }: GarminReadinessCardProps) {
@@ -32,11 +39,6 @@ export function GarminReadinessCard({ userId }: GarminReadinessCardProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
   const [weeklyInsightText, setWeeklyInsightText] = useState<string | null>(null)
-
-  const loadCard = useCallback(async () => {
-    const nextData = await loadGarminDashboardData(userId)
-    setData(nextData)
-  }, [userId])
 
   const loadWeeklyInsight = useCallback(async () => {
     try {
@@ -78,12 +80,16 @@ export function GarminReadinessCard({ userId }: GarminReadinessCardProps) {
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
     try {
-      await syncGarminEnabledData(userId)
-      await Promise.all([loadCard(), loadWeeklyInsight()])
+      const syncResult = await syncGarminEnabledData(userId)
+      const refreshedAt = syncResult.lastSyncAt ?? new Date()
+      setData((current) => (current ? { ...current, lastSyncAt: refreshedAt } : current))
+
+      const [nextData] = await Promise.all([loadGarminDashboardData(userId), loadWeeklyInsight()])
+      setData(mergeFreshness(nextData, refreshedAt))
     } finally {
       setIsRefreshing(false)
     }
-  }, [loadCard, loadWeeklyInsight, userId])
+  }, [loadWeeklyInsight, userId])
 
   const summary = useMemo(() => {
     if (!data) return null
@@ -133,7 +139,8 @@ export function GarminReadinessCard({ userId }: GarminReadinessCardProps) {
 
         <GarminSyncStatusBar
           lastSyncAt={data.lastSyncAt}
-          showRefreshButton={false}
+          onRefresh={handleRefresh}
+          isRefreshing={isRefreshing}
           testId="garmin-readiness-sync-status"
         />
       </CardHeader>

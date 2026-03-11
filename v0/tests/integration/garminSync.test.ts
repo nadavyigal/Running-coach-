@@ -11,6 +11,9 @@ const syncGarminUserMock = vi.hoisted(() => {
         noOp: false,
         activitiesUpserted: 2,
         dailyMetricsUpserted: 1,
+        duplicateActivitiesSkipped: 0,
+        activityFilesProcessed: 1,
+        warnings: [],
         body: { success: true },
       }
     }
@@ -23,6 +26,9 @@ const syncGarminUserMock = vi.hoisted(() => {
       noOp: true,
       activitiesUpserted: 0,
       dailyMetricsUpserted: 0,
+      duplicateActivitiesSkipped: 0,
+      activityFilesProcessed: 0,
+      warnings: [],
       body: { success: true },
     }
   })

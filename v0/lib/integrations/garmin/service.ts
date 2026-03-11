@@ -3,6 +3,8 @@ import 'server-only'
 import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
+import { runGarminDeriveForPayload } from '@/lib/server/garmin-derive-worker'
+import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GarminClient, buildGarminServiceError, isGarminServiceError, mapGarminPayloadToNormalizedActivity } from '@/lib/integrations/garmin/client'
 import { importGarminActivity } from '@/lib/integrations/garmin/importGarminActivity'
@@ -89,6 +91,19 @@ function extractActivityId(row: Record<string, unknown>): string | null {
   return activityId != null ? String(activityId) : null
 }
 
+function extractSummaryId(row: Record<string, unknown>): string | null {
+  const summaryId = row.summaryId ?? row.activitySummaryId ?? row.activityId ?? row.id
+  return summaryId != null ? String(summaryId) : null
+}
+
+function extractStartTimeSeconds(row: Record<string, unknown>): number | null {
+  return (
+    getNumber(row.startTimeInSeconds) ??
+    getNumber(row.summaryStartTimeInSeconds) ??
+    getNumber(row.startTimeSeconds)
+  )
+}
+
 function extractWebhookDatasetRows(payload: Record<string, unknown>): GarminWebhookDatasetRow[] {
   const rows: GarminWebhookDatasetRow[] = []
 
@@ -123,6 +138,37 @@ function isRetryableError(error: unknown): boolean {
 
 function backoffSeconds(attemptCount: number): number {
   return Math.min(300, 30 * 2 ** Math.max(0, attemptCount - 1))
+}
+
+function isOptionalDeriveQueueNotice(reason: string | null | undefined): boolean {
+  const normalized = (reason ?? '').toLowerCase()
+  if (!normalized) return false
+  return normalized.includes('redis not configured') || normalized.includes('derive queue unavailable')
+}
+
+async function triggerActivityFileProcessing(userIds: number[]): Promise<void> {
+  for (const userId of userIds) {
+    const payload = {
+      userId,
+      datasetKey: 'activityFiles',
+      source: 'webhook' as const,
+      requestedAt: new Date().toISOString(),
+    }
+
+    try {
+      const queued = await enqueueGarminDeriveJob(payload)
+      if (!queued.queued && isOptionalDeriveQueueNotice(queued.reason)) {
+        await runGarminDeriveForPayload(payload)
+      } else if (!queued.queued && queued.reason) {
+        logger.warn('[garmin] metric=activity_file_derive_not_queued', { user_id: userId, reason: queued.reason })
+      }
+    } catch (error) {
+      logger.warn('[garmin] metric=activity_file_derive_trigger_failed', {
+        user_id: userId,
+        error: serializeError(error),
+      })
+    }
+  }
 }
 
 export async function recordGarminWebhookDelivery(params: {
@@ -186,15 +232,53 @@ export async function recordGarminWebhookDelivery(params: {
 export async function enqueueGarminImportJobsForEvent(event: GarminWebhookEventRecord): Promise<{
   queuedJobs: number
   jobs: GarminImportJobRecord[]
+  activityFilesQueued: number
 }> {
   const supabase = createAdminClient()
   const datasetRows = extractWebhookDatasetRows(asRecord(event.raw_payload))
   const insertedJobs: GarminImportJobRecord[] = []
+  const activityFileUsers = new Set<number>()
+  let activityFilesQueued = 0
 
   for (const row of datasetRows) {
     let connection = row.providerUserId ? await getGarminConnectionByProviderUserId(row.providerUserId) : null
     if (!connection && event.provider_user_id) {
       connection = await getGarminConnectionByProviderUserId(event.provider_user_id)
+    }
+
+    if (row.datasetKey === 'activityFiles') {
+      const summaryId = extractSummaryId(row.payload)
+      if (connection?.userId == null || !summaryId || !row.activityId || !row.callbackUrl) {
+        continue
+      }
+
+      const { error: activityFileError } = await supabase
+        .from('garmin_activity_files')
+        .upsert(
+          {
+            user_id: connection.userId,
+            activity_id: row.activityId,
+            summary_id: summaryId,
+            file_type: 'FIT',
+            callback_url: row.callbackUrl,
+            status: 'pending',
+            start_time_seconds: extractStartTimeSeconds(row.payload),
+            manual: false,
+          },
+          { onConflict: 'summary_id' }
+        )
+
+      if (activityFileError) {
+        throw new Error(`Failed to upsert garmin_activity_files: ${activityFileError.message}`)
+      }
+
+      activityFileUsers.add(connection.userId)
+      activityFilesQueued += 1
+      await upsertGarminConnection({
+        userId: connection.userId,
+        lastWebhookReceivedAt: new Date().toISOString(),
+      })
+      continue
     }
 
     const dedupeQuery = supabase
@@ -260,12 +344,12 @@ export async function enqueueGarminImportJobsForEvent(event: GarminWebhookEventR
     }
   }
 
-  if (insertedJobs.length === 0) {
+  if (insertedJobs.length === 0 && activityFilesQueued === 0) {
     await supabase
       .from('garmin_webhook_events')
       .update({ status: 'failed', error_message: 'No supported Garmin activity rows found' })
       .eq('id', event.id)
-    return { queuedJobs: 0, jobs: [] }
+    return { queuedJobs: 0, jobs: [], activityFilesQueued: 0 }
   }
 
   await supabase
@@ -273,9 +357,14 @@ export async function enqueueGarminImportJobsForEvent(event: GarminWebhookEventR
     .update({ status: 'queued' })
     .eq('id', event.id)
 
+  if (activityFileUsers.size > 0) {
+    await triggerActivityFileProcessing(Array.from(activityFileUsers))
+  }
+
   return {
-    queuedJobs: insertedJobs.length,
+    queuedJobs: insertedJobs.length + activityFilesQueued,
     jobs: insertedJobs,
+    activityFilesQueued,
   }
 }
 

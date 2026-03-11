@@ -12,10 +12,12 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  formatShortDate,
   loadGarminDashboardData,
-  type DailyValuePoint,
   type GarminDashboardData,
+} from "@/lib/garminDashboardClient"
+import {
+  formatShortDate,
+  type DailyValuePoint,
   type GarminSleepStagePoint,
   type GarminStressPoint,
 } from "@/lib/garminDashboardData"
@@ -25,6 +27,14 @@ type RangeDays = 7 | 28 | 90
 
 interface GarminWellnessDashboardProps {
   userId: number
+}
+
+function mergeFreshness(nextData: GarminDashboardData, lastSyncAt: Date | null): GarminDashboardData {
+  if (!lastSyncAt) return nextData
+  if (!nextData.lastSyncAt || lastSyncAt.getTime() > nextData.lastSyncAt.getTime()) {
+    return { ...nextData, lastSyncAt }
+  }
+  return nextData
 }
 
 function shiftIsoDate(dateIso: string, deltaDays: number): string {
@@ -96,11 +106,6 @@ export function GarminWellnessDashboard({ userId }: GarminWellnessDashboardProps
   const [rangeDays, setRangeDays] = useState<RangeDays>(7)
   const [weeklyInsightText, setWeeklyInsightText] = useState<string | null>(null)
 
-  const loadDashboard = useCallback(async () => {
-    const nextData = await loadGarminDashboardData(userId)
-    setData(nextData)
-  }, [userId])
-
   const loadWeeklyInsight = useCallback(async () => {
     try {
       const response = await fetch(`/api/ai/garmin-insights?userId=${userId}&type=weekly`)
@@ -145,12 +150,16 @@ export function GarminWellnessDashboard({ userId }: GarminWellnessDashboardProps
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
     try {
-      await syncGarminEnabledData(userId)
-      await Promise.all([loadDashboard(), loadWeeklyInsight()])
+      const syncResult = await syncGarminEnabledData(userId)
+      const refreshedAt = syncResult.lastSyncAt ?? new Date()
+      setData((current) => (current ? { ...current, lastSyncAt: refreshedAt } : current))
+
+      const [nextData] = await Promise.all([loadGarminDashboardData(userId), loadWeeklyInsight()])
+      setData(mergeFreshness(nextData, refreshedAt))
     } finally {
       setIsRefreshing(false)
     }
-  }, [loadDashboard, loadWeeklyInsight, userId])
+  }, [loadWeeklyInsight, userId])
 
   const windowed = useMemo(() => {
     if (!data) return null

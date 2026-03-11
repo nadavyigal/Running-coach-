@@ -35,6 +35,7 @@ import { ChallengeSection } from "@/components/profile/ChallengeSection";
 import { CoachingProfilePanel } from "@/components/profile/CoachingProfilePanel";
 import { PerformanceAnalyticsSection } from "@/components/profile/PerformanceAnalyticsSection";
 import { AchievementsSection } from "@/components/profile/AchievementsSection";
+import { GarminReadinessCard } from "@/components/garmin-readiness-card";
 import { IntegrationsListCard, type IntegrationRow } from "@/components/profile/IntegrationsListCard";
 import { SettingsListCard, type SettingsRow } from "@/components/profile/SettingsListCard";
 import { DeveloperToolsAccordion } from "@/components/profile/DeveloperToolsAccordion";
@@ -116,6 +117,8 @@ export function ProfileScreen() {
   const [joiningChallengeSlug, setJoiningChallengeSlug] = useState<string | null>(null)
   const [garminConnected, setGarminConnected] = useState(false)
   const [garminSyncState, setGarminSyncState] = useState<string | null>(null)
+  const hasGarminRuns = recentRuns.some((run) => run.importSource === "garmin")
+  const showGarminInsights = garminConnected || hasGarminRuns
 
   const filterRunsToRecentWindow = useCallback((runs: Run[]): Run[] => {
     const cutoff = new Date()
@@ -1286,6 +1289,8 @@ export function ProfileScreen() {
           </Card>
 
           <AchievementsSection userId={userId} />
+
+          {showGarminInsights ? <GarminReadinessCard userId={userId} /> : null}
 
           <IntegrationsListCard
             garminConnected={garminConnected}

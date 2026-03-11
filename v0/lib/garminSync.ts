@@ -2,6 +2,7 @@
 
 import { db, type GarminSummaryRecord, type Run, type SleepData, type WearableDevice } from '@/lib/db'
 import { deduplicateGarminRuns } from '@/lib/dbUtils'
+import { syncGarminRunsToClient } from '@/lib/garmin/client-sync'
 
 export interface GarminEnablementItem {
   key: string
@@ -58,12 +59,14 @@ export interface GarminSyncCatalogResult {
 }
 
 export interface GarminEnabledSyncResult extends GarminSyncCatalogResult {
+  lastSyncAt: Date | null
   activitiesImported: number
   activitiesSkipped: number
   sleepImported: number
   sleepSkipped: number
   additionalSummaryImported: number
   additionalSummarySkipped: number
+  fitFilesProcessed: number
   datasetImports: Record<string, GarminDatasetImportStat>
   notices: string[]
 }
@@ -83,6 +86,18 @@ interface GarminSyncApiResponse {
   error?: string
   detail?: unknown
   needsReauth?: boolean
+}
+
+interface GarminManualSyncApiResponse {
+  success?: boolean
+  connected?: boolean
+  lastSyncAt?: string | null
+  activitiesUpserted?: unknown
+  dailyMetricsUpserted?: unknown
+  duplicateActivitiesSkipped?: unknown
+  activityFilesProcessed?: unknown
+  warnings?: unknown
+  error?: string
 }
 
 interface GarminSyncRequestOptions {
@@ -597,11 +612,12 @@ export async function syncGarminEnabledData(
   userId: number,
   options?: GarminSyncRequestOptions
 ): Promise<GarminEnabledSyncResult> {
-  const requestResult = await runGarminSyncRequest(userId, 'POST', options)
+  const device = await getConnectedGarminDevice(userId)
 
-  if (!requestResult.device || !requestResult.data || requestResult.errors.length > 0 || requestResult.needsReauth) {
+  if (!device) {
     return {
       syncName: 'RunSmart Garmin Export Sync',
+      lastSyncAt: null,
       permissions: [],
       availableToEnable: [],
       capabilities: [],
@@ -611,159 +627,135 @@ export async function syncGarminEnabledData(
       sleepSkipped: 0,
       additionalSummaryImported: 0,
       additionalSummarySkipped: 0,
+      fitFilesProcessed: 0,
       datasetImports: {},
       notices: [],
-      needsReauth: requestResult.needsReauth,
-      errors: requestResult.errors,
+      needsReauth: false,
+      errors: ['No connected Garmin device found'],
     }
   }
 
-  const device = requestResult.device
-  const data = requestResult.data
-
-  const activities = parseActivities(data.activities)
-  const sleepEntries = parseSleep(data.sleep)
-  const datasets = parseDatasetRows(data.datasets)
-
-  let activitiesImported = 0
-  let activitiesSkipped = 0
-  let sleepImported = 0
-  let sleepSkipped = 0
-
-  for (const activity of activities) {
-    if (!activity.activityId) {
-      activitiesSkipped += 1
-      continue
+  try {
+    const params = new URLSearchParams({ userId: String(userId) })
+    if (options?.trigger === 'backfill') {
+      params.set('trigger', 'backfill')
     }
 
-    const existingCount = await db.runs
-      .where('[userId+importRequestId]')
-      .equals([userId, activity.activityId])
-      .count()
-
-    if (existingCount > 0) {
-      activitiesSkipped += 1
-      continue
-    }
-
-    const completedAt = activity.startTimeGMT ? new Date(activity.startTimeGMT) : new Date()
-
-    // Skip activities with far-future dates (device clock or Garmin API issue)
-    const MAX_FUTURE_MS = 24 * 60 * 60 * 1000
-    if (completedAt.getTime() > Date.now() + MAX_FUTURE_MS) {
-      console.warn(`Skipping Garmin activity ${activity.activityId} with future date: ${completedAt.toISOString()}`)
-      activitiesSkipped += 1
-      continue
-    }
-
-    const run: Omit<Run, 'id'> = {
-      userId,
-      type: garminActivityTypeToRunType(activity.activityType),
-      distance: activity.distance,
-      duration: activity.duration,
-      ...(activity.averagePace != null ? { pace: activity.averagePace } : {}),
-      ...(activity.averageHR != null ? { heartRate: activity.averageHR } : {}),
-      ...(activity.maxHR != null ? { maxHR: activity.maxHR } : {}),
-      ...(activity.calories != null ? { calories: activity.calories } : {}),
-      ...(activity.elevationGain != null ? { elevationGain: activity.elevationGain } : {}),
-      notes: activity.activityName,
-      importSource: 'garmin',
-      importRequestId: activity.activityId,
-      completedAt,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }
-
-    const runId = (await db.runs.add(run as Run)) as number
-    await matchGarminRunToWorkout(userId, { ...run, id: runId })
-    activitiesImported += 1
-  }
-
-  for (const entry of sleepEntries) {
-    const sleepDate = new Date(`${entry.date}T00:00:00`)
-    if (Number.isNaN(sleepDate.getTime())) {
-      sleepSkipped += 1
-      continue
-    }
-
-    const existingCount = await db.sleepData
-      .where('[userId+sleepDate]')
-      .equals([userId, sleepDate])
-      .count()
-
-    if (existingCount > 0) {
-      sleepSkipped += 1
-      continue
-    }
-
-    const totalMinutes = entry.totalSleepSeconds != null ? Math.round(entry.totalSleepSeconds / 60) : 0
-    const deepMinutes = entry.deepSleepSeconds != null ? Math.round(entry.deepSleepSeconds / 60) : undefined
-    const lightMinutes = entry.lightSleepSeconds != null ? Math.round(entry.lightSleepSeconds / 60) : undefined
-    const remMinutes = entry.remSleepSeconds != null ? Math.round(entry.remSleepSeconds / 60) : undefined
-    const awakeMinutes = entry.awakeSleepSeconds != null ? Math.round(entry.awakeSleepSeconds / 60) : undefined
-
-    const sleepEfficiency =
-      totalMinutes > 0 && awakeMinutes != null
-        ? Math.max(0, Math.min(100, Math.round((totalMinutes / (totalMinutes + awakeMinutes)) * 100)))
-        : 85
-
-    const overallSleepScore = getNumber(asRecord(asRecord(entry.sleepScores).overall).value)
-
-    const record: Omit<SleepData, 'id'> = {
-      userId,
-      deviceId: device.deviceId,
-      sleepDate,
-      totalSleepTime: totalMinutes,
-      sleepEfficiency,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      ...(entry.sleepStartTimestampGMT != null ? { bedTime: new Date(entry.sleepStartTimestampGMT) } : {}),
-      ...(entry.sleepEndTimestampGMT != null ? { wakeTime: new Date(entry.sleepEndTimestampGMT) } : {}),
-      ...(deepMinutes != null ? { deepSleepTime: deepMinutes } : {}),
-      ...(lightMinutes != null ? { lightSleepTime: lightMinutes } : {}),
-      ...(remMinutes != null ? { remSleepTime: remMinutes } : {}),
-      ...(overallSleepScore != null ? { sleepScore: overallSleepScore } : {}),
-    }
-
-    await db.sleepData.add(record as SleepData)
-    sleepImported += 1
-  }
-
-  const datasetImports = await importGarminSummaryRows({ userId, datasets })
-
-  let additionalSummaryImported = 0
-  let additionalSummarySkipped = 0
-
-  for (const [datasetKey, stats] of Object.entries(datasetImports)) {
-    if (datasetKey === 'activities' || datasetKey === 'manuallyUpdatedActivities' || datasetKey === 'activityDetails' || datasetKey === 'sleeps') {
-      continue
-    }
-    additionalSummaryImported += stats.imported
-    additionalSummarySkipped += stats.skipped
-  }
-
-  if (device.id) {
-    await db.wearableDevices.update(device.id, {
-      lastSync: new Date(),
-      connectionStatus: 'connected',
-      updatedAt: new Date(),
+    const response = await fetch(`/api/garmin/sync?${params.toString()}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-user-id': String(userId),
+      },
+      body: JSON.stringify({
+        userId,
+        trigger: options?.trigger ?? 'manual',
+      }),
     })
-  }
 
-  // Clean up any duplicate runs that may have been created by concurrent syncs
-  await deduplicateGarminRuns(userId)
+    const payload = (await response.json()) as GarminManualSyncApiResponse
+    if (response.status === 401 || payload.connected === false) {
+      await markDeviceForReauth(device)
+      return {
+        syncName: 'RunSmart Garmin Export Sync',
+        lastSyncAt: null,
+        permissions: [],
+        availableToEnable: [],
+        capabilities: [],
+        activitiesImported: 0,
+        activitiesSkipped: 0,
+        sleepImported: 0,
+        sleepSkipped: 0,
+        additionalSummaryImported: 0,
+        additionalSummarySkipped: 0,
+        fitFilesProcessed: 0,
+        datasetImports: {},
+        notices: [],
+        needsReauth: true,
+        errors: ['Garmin authentication expired - please reconnect'],
+      }
+    }
 
-  return {
-    ...buildCatalogResult(data),
-    activitiesImported,
-    activitiesSkipped,
-    sleepImported,
-    sleepSkipped,
-    additionalSummaryImported,
-    additionalSummarySkipped,
-    datasetImports,
-    notices: parseNotices(data.notices),
-    needsReauth: false,
-    errors: [],
+    if (!response.ok || !payload.success) {
+      return {
+        syncName: 'RunSmart Garmin Export Sync',
+        lastSyncAt: null,
+        permissions: [],
+        availableToEnable: [],
+        capabilities: [],
+        activitiesImported: 0,
+        activitiesSkipped: 0,
+        sleepImported: 0,
+        sleepSkipped: 0,
+        additionalSummaryImported: 0,
+        additionalSummarySkipped: 0,
+        fitFilesProcessed: 0,
+        datasetImports: {},
+        notices: parseNotices(payload.warnings),
+        needsReauth: false,
+        errors: [payload.error || 'Garmin sync request failed'],
+      }
+    }
+
+    await syncGarminRunsToClient(userId)
+
+    const lastSyncAt = getString(payload.lastSyncAt)
+    if (device.id) {
+      await db.wearableDevices.update(device.id, {
+        lastSync: lastSyncAt ? new Date(lastSyncAt) : new Date(),
+        connectionStatus: 'connected',
+        updatedAt: new Date(),
+      })
+    }
+
+    await deduplicateGarminRuns(userId)
+
+    const catalog = await getGarminSyncCatalog(userId)
+    const activitiesImported = getNumber(payload.activitiesUpserted) ?? 0
+    const activitiesSkipped = getNumber(payload.duplicateActivitiesSkipped) ?? 0
+    const additionalSummaryImported = getNumber(payload.dailyMetricsUpserted) ?? 0
+    const fitFilesProcessed = getNumber(payload.activityFilesProcessed) ?? 0
+
+    return {
+      syncName: catalog.syncName,
+      lastSyncAt: lastSyncAt ? new Date(lastSyncAt) : new Date(),
+      permissions: catalog.permissions,
+      availableToEnable: catalog.availableToEnable,
+      capabilities: catalog.capabilities,
+      ...(catalog.ingestion ? { ingestion: catalog.ingestion } : {}),
+      activitiesImported,
+      activitiesSkipped,
+      sleepImported: 0,
+      sleepSkipped: 0,
+      additionalSummaryImported,
+      additionalSummarySkipped: 0,
+      fitFilesProcessed,
+      datasetImports: {
+        dailyMetrics: { imported: additionalSummaryImported, skipped: 0 },
+        activityFiles: { imported: fitFilesProcessed, skipped: 0 },
+      },
+      notices: parseNotices(payload.warnings),
+      needsReauth: false,
+      errors: [],
+    }
+  } catch (error) {
+    return {
+      syncName: 'RunSmart Garmin Export Sync',
+      lastSyncAt: null,
+      permissions: [],
+      availableToEnable: [],
+      capabilities: [],
+      activitiesImported: 0,
+      activitiesSkipped: 0,
+      sleepImported: 0,
+      sleepSkipped: 0,
+      additionalSummaryImported: 0,
+      additionalSummarySkipped: 0,
+      fitFilesProcessed: 0,
+      datasetImports: {},
+      notices: [],
+      needsReauth: false,
+      errors: [error instanceof Error ? error.message : 'Unknown Garmin sync error'],
+    }
   }
 }
