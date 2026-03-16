@@ -365,8 +365,9 @@ function summarizeUpstreamBody(body: string): string {
 
 function isAuthError(status: number, body: string): boolean {
   if (status === 401) return true
-  if (status !== 403) return false
-  return /Unable to read oAuth header|invalid[_ ]token|expired|unauthorized/i.test(body)
+  if (status === 403) return /Unable to read oAuth header|invalid[_ ]token|expired|unauthorized/i.test(body)
+  if (status === 400) return /did not match the expected pattern|invalid.{0,10}token|invalid.{0,10}grant/i.test(body)
+  return false
 }
 
 function parseJsonArray(text: string): Record<string, unknown>[] {

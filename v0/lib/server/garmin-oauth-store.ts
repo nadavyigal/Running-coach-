@@ -105,8 +105,12 @@ function shouldRefreshToken(expiresAtIso: string): boolean {
 }
 
 function buildTokenRefreshError(status: number, body: string): Error {
-  const message = body.trim().slice(0, 400)
-  return new Error(`Garmin token refresh failed (${status}): ${message || 'empty response'}`)
+  // Message must contain "refresh token" to match /refresh token/i in sync handlers,
+  // ensuring this is classified as an auth error that prompts the user to reconnect.
+  const detail = body.trim().slice(0, 200)
+  return new Error(
+    `Garmin refresh token is no longer valid (${status}). Please reconnect Garmin.${detail ? ` Detail: ${detail}` : ''}`
+  )
 }
 
 async function sleep(ms: number): Promise<void> {
