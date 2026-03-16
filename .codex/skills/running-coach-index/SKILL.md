@@ -6,9 +6,9 @@ metadata:
 ---
 
 ## Purpose
-Defines the shared conventions, contracts, safety posture, and telemetry used by all Run-Smart AI skills. This index allows Claude to discover available skills and the rules they follow.
+Defines the shared conventions, contracts, safety posture, and telemetry used by all Run-Smart AI skills. This index allows Codex to discover available skills and the rules they follow.
 
-## When Claude should use this skill
+## When Codex should use this skill
 - Before invoking any Run-Smart skill to understand shared schemas, safety guidance, and telemetry
 - When onboarding a new skill to ensure compliance with common contracts
 - When working with running coach features and need to understand data schemas or safety patterns
@@ -16,7 +16,7 @@ Defines the shared conventions, contracts, safety posture, and telemetry used by
 ## Invocation guidance
 1. Load shared references in `running-coach-index/references/` (contracts, telemetry, conventions, smoke-tests).
 2. Select the appropriate skill directory based on the user's need (plan generation, adjustment, insights, etc.).
-3. Validate request/response payloads against the schemas in `contracts.md` and skill-specific schemas.
+3. Validate request and response payloads against the schemas in `contracts.md` and skill-specific schemas.
 
 ## Shared components
 - **Contracts:** `running-coach-index/references/contracts.md`
@@ -24,8 +24,8 @@ Defines the shared conventions, contracts, safety posture, and telemetry used by
 - **Conventions:** `running-coach-index/references/conventions.md`
 - **Smoke tests:** `running-coach-index/references/smoke-tests.md`
 
-## Safety & guardrails
-- No medical diagnosis. If pain/dizziness/severe symptoms appear, advise stopping activity and consulting a qualified professional.
+## Safety and guardrails
+- No medical diagnosis. If pain, dizziness, or severe symptoms appear, advise stopping activity and consulting a qualified professional.
 - Prefer conservative adjustments under uncertainty.
 - Emit `SafetyFlag` objects when thresholds are crossed and log via `ai_safety_flag_raised`.
 

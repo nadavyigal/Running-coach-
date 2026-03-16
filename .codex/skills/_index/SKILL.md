@@ -14,8 +14,8 @@ Defines the shared conventions, contracts, safety posture, and telemetry used by
 
 ## Invocation guidance
 1. Load shared references in `_index/references/` (contracts, telemetry, conventions, smoke-tests).
-2. Select the appropriate skill directory based on the user’s need (plan generation, adjustment, insights, etc.).
-3. Validate request/response payloads against the schemas in `contracts.md` and skill-specific schemas.
+2. Select the appropriate skill directory based on the user's need (plan generation, adjustment, insights, etc.).
+3. Validate request and response payloads against the schemas in `contracts.md` and skill-specific schemas.
 
 ## Shared components
 - **Contracts:** `_index/references/contracts.md`
@@ -23,8 +23,8 @@ Defines the shared conventions, contracts, safety posture, and telemetry used by
 - **Conventions:** `_index/references/conventions.md`
 - **Smoke tests:** `_index/references/smoke-tests.md`
 
-## Safety & guardrails
-- No medical diagnosis. If pain/dizziness/severe symptoms appear, advise stopping activity and consulting a qualified professional.
+## Safety and guardrails
+- No medical diagnosis. If pain, dizziness, or severe symptoms appear, advise stopping activity and consulting a qualified professional.
 - Prefer conservative adjustments under uncertainty.
 - Emit `SafetyFlag` objects when thresholds are crossed and log via `ai_safety_flag_raised`.
 
