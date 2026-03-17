@@ -14,8 +14,8 @@ const cookieOptions = {
 // Create admin client for server-side auth operations
 // This REQUIRES the service role key to use admin functions
 function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? ''
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? ''
 
   if (!url) {
     throw new Error('NEXT_PUBLIC_SUPABASE_URL is not configured')
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
 
     // Set auth cookies manually for session persistence if sign-in succeeded
     if (signInData?.session) {
-      const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL?.match(/https:\/\/([^.]+)/)?.[1] || 'supabase'
+      const projectRef = (process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? '').match(/https:\/\/([^.]+)/)?.[1] || 'supabase'
 
       response.cookies.set(`sb-${projectRef}-auth-token`, JSON.stringify({
         access_token: signInData.session.access_token,

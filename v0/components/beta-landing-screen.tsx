@@ -223,8 +223,8 @@ export function BetaLandingScreen({
     setIsSubmitting(true);
 
     try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? '';
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? '';
 
       if (!supabaseUrl || !supabaseKey) {
         console.warn("Supabase not configured, proceeding without signup");

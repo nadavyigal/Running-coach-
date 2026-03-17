@@ -31,7 +31,7 @@ function parseSessionCookie(rawValue: string | undefined): SessionPayload | null
 }
 
 export async function GET(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? ''
   const projectRef = supabaseUrl?.match(/https:\/\/([^.]+)/)?.[1] ?? null
   const cookieName = projectRef ? `sb-${projectRef}-auth-token` : null
 

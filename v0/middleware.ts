@@ -11,8 +11,8 @@ export async function middleware(request: NextRequest) {
   })
 
   // Use placeholder values during build if env vars are not set
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key'
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || 'https://placeholder.supabase.co'
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || 'placeholder-anon-key'
 
   // Skip session refresh for static assets and API routes (except auth-related)
   const pathname = request.nextUrl.pathname

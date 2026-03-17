@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { usePathname } from 'next/navigation'
 
 import { useToast } from '@/hooks/use-toast'
 import { syncGarminRunsToClient } from '@/lib/garmin/client-sync'
@@ -13,14 +14,16 @@ function isLocalDevelopmentHost(hostname: string): boolean {
 export function useGarminRealtime(userId: number | null) {
   const { toast } = useToast()
   const syncInFlightRef = useRef(false)
+  const pathname = usePathname()
 
   useEffect(() => {
     if (!userId || typeof window === 'undefined') return
+    if (pathname.startsWith('/weekly/')) return
 
     const hostname = window.location.hostname
     const hasWebSocket = typeof window.WebSocket !== 'undefined'
     const secureEnough = window.isSecureContext || isLocalDevelopmentHost(hostname)
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+    const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim()
     const hasMixedContentRisk = window.location.protocol === 'https:' && /^http:\/\//i.test(supabaseUrl)
 
     if (!hasWebSocket || !secureEnough || hasMixedContentRisk) {
@@ -95,5 +98,5 @@ export function useGarminRealtime(userId: number | null) {
         void supabase.removeChannel(channel)
       }
     }
-  }, [toast, userId])
+  }, [pathname, toast, userId])
 }

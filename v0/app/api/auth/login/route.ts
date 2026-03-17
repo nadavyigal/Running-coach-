@@ -13,9 +13,9 @@ const cookieOptions = {
 
 // Create Supabase client for auth operations
 function getSupabaseClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? ''
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? ''
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? ''
 
   if (!url) {
     throw new Error('NEXT_PUBLIC_SUPABASE_URL is not configured')
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
 
     // Set auth cookies manually for session persistence
     // These cookies follow the Supabase naming convention
-    const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL?.match(/https:\/\/([^.]+)/)?.[1] || 'supabase'
+    const projectRef = (process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? '').match(/https:\/\/([^.]+)/)?.[1] || 'supabase'
 
     response.cookies.set(`sb-${projectRef}-auth-token`, JSON.stringify({
       access_token: data.session.access_token,
