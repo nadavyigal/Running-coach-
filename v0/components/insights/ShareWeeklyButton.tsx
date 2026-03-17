@@ -5,6 +5,7 @@ import { useMemo } from 'react'
 import { Share2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/hooks/use-toast'
 import { trackAnalyticsEvent } from '@/lib/analytics'
 
 interface ShareWeeklyButtonProps {
@@ -26,6 +27,7 @@ function getIsoWeekKey(input: Date = new Date()): string {
 }
 
 export function ShareWeeklyButton({ week, userId, className }: ShareWeeklyButtonProps) {
+  const { toast } = useToast()
   const weekKey = useMemo(() => week ?? getIsoWeekKey(), [week])
 
   const href = useMemo(() => {
@@ -35,14 +37,58 @@ export function ShareWeeklyButton({ week, userId, className }: ShareWeeklyButton
     return `${base}?${query.toString()}`
   }, [userId, weekKey])
 
+  const copyLink = async (url: string) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url)
+      } else {
+        const textArea = document.createElement('textarea')
+        textArea.value = url
+        document.body.appendChild(textArea)
+        textArea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textArea)
+      }
+
+      toast({
+        title: 'Weekly link copied',
+        description: 'Share your weekly recap anywhere.',
+      })
+    } catch {
+      toast({
+        title: 'Share failed',
+        description: 'Unable to copy your weekly share link.',
+        variant: 'destructive',
+      })
+    }
+  }
+
   const handleClick = async () => {
     void trackAnalyticsEvent('weekly_share_clicked', {
       week: weekKey,
       has_user_id: Boolean(userId),
     })
-    if (typeof window !== 'undefined') {
-      window.location.assign(href)
+    if (typeof window === 'undefined') return
+
+    const absoluteUrl = new URL(href, window.location.origin).toString()
+    const sharePayload = {
+      title: 'My RunSmart weekly recap',
+      text: 'See how my training week went in RunSmart.',
+      url: absoluteUrl,
     }
+
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share(sharePayload)
+        return
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return
+        }
+      }
+    }
+
+    await copyLink(absoluteUrl)
   }
 
   return (

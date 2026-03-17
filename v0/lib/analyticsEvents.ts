@@ -135,6 +135,8 @@ export enum RouteEvents {
 export enum SocialEvents {
   BADGE_SHARED = 'badge_shared',
   RUN_SHARED = 'run_shared',
+  WEEKLY_SHARE_CLICKED = 'weekly_share_clicked',
+  WEEKLY_SHARE_SIGNUP_CLICKED = 'weekly_share_signup_clicked',
   PROFILE_VIEWED = 'profile_viewed',
   COHORT_JOINED = 'cohort_joined',
   COHORT_LEFT = 'cohort_left',
