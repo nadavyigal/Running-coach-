@@ -1,0 +1,114 @@
+# Fastfile for RunSmart iOS App
+# Automates TestFlight and App Store deployments
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Run tests"
+  lane :test do
+    run_tests(
+      scheme: "RunSmart",
+      devices: ["iPhone 16"],
+      clean: true
+    )
+  end
+
+  desc "Build and upload to TestFlight"
+  lane :beta do
+    # Increment build number
+    increment_build_number(
+      xcodeproj: "RunSmart.xcodeproj"
+    )
+
+    # Build the app
+    build_app(
+      scheme: "RunSmart",
+      export_method: "app-store",
+      clean: true,
+      output_directory: "./build",
+      output_name: "RunSmart.ipa"
+    )
+
+    # Upload to TestFlight
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+      skip_submission: true,
+      distribute_external: false,
+      notify_external_testers: false,
+      changelog: "New build from CI/CD"
+    )
+
+    # Notify on success
+    notification(
+      title: "iOS Build Success",
+      message: "Successfully uploaded to TestFlight",
+      sound: "default"
+    )
+  end
+
+  desc "Build and upload to App Store"
+  lane :release do
+    # Increment version number
+    increment_version_number(
+      xcodeproj: "RunSmart.xcodeproj",
+      bump_type: "patch"
+    )
+
+    # Increment build number
+    increment_build_number(
+      xcodeproj: "RunSmart.xcodeproj"
+    )
+
+    # Build the app
+    build_app(
+      scheme: "RunSmart",
+      export_method: "app-store",
+      clean: true,
+      output_directory: "./build",
+      output_name: "RunSmart.ipa"
+    )
+
+    # Upload to App Store
+    upload_to_app_store(
+      skip_metadata: false,
+      skip_screenshots: false,
+      submit_for_review: false,
+      automatic_release: false,
+      force: true
+    )
+
+    # Notify on success
+    notification(
+      title: "iOS Release Success",
+      message: "Successfully uploaded to App Store",
+      sound: "default"
+    )
+  end
+
+  desc "Take screenshots for App Store"
+  lane :screenshots do
+    capture_screenshots(
+      scheme: "RunSmartUITests",
+      devices: [
+        "iPhone 16 Pro Max",
+        "iPhone 16 Pro",
+        "iPhone 16",
+        "iPad Pro (13-inch) (M4)"
+      ]
+    )
+  end
+
+  desc "Clean build artifacts"
+  lane :clean do
+    clean_build_artifacts
+    clear_derived_data
+  end
+
+  error do |lane, exception|
+    notification(
+      title: "iOS Build Failed",
+      message: exception.message,
+      sound: "failure"
+    )
+  end
+end

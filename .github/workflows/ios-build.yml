@@ -1,0 +1,92 @@
+name: iOS Build & Test
+
+on:
+  push:
+    branches: [iOS-application, main]
+    paths:
+      - 'apps/ios/**'
+      - 'packages/shared/**'
+      - '.github/workflows/ios-build.yml'
+  pull_request:
+    branches: [iOS-application, main]
+    paths:
+      - 'apps/ios/**'
+      - 'packages/shared/**'
+
+jobs:
+  build-and-test:
+    name: Build and Test iOS App
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: |
+          pnpm install --frozen-lockfile
+          cd packages/shared && pnpm install
+
+      - name: Generate Swift types
+        run: |
+          cd packages/shared
+          pnpm run generate:swift
+
+      - name: Cache SPM packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+            ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-spm-${{ hashFiles('apps/ios/**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Resolve SPM dependencies
+        run: |
+          cd apps/ios
+          xcodebuild -resolvePackageDependencies -project RunSmart.xcodeproj -scheme RunSmart
+
+      - name: Build iOS app
+        run: |
+          cd apps/ios
+          xcodebuild clean build \
+            -project RunSmart.xcodeproj \
+            -scheme RunSmart \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: Run tests
+        run: |
+          cd apps/ios
+          xcodebuild test \
+            -project RunSmart.xcodeproj \
+            -scheme RunSmart \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            apps/ios/build/reports/
+            apps/ios/build/logs/
