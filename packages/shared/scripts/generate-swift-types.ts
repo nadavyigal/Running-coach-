@@ -103,7 +103,7 @@ function parseInterface(interfaceName: string, content: string): string {
  */
 function generateSwiftTypes() {
   const modelsDir = path.join(__dirname, '../src/models');
-  const outputFile = path.join(__dirname, '../../../apps/ios/RunSmart/Generated/SharedModels.swift');
+  const outputFile = path.join(__dirname, '../../../apps/ios/App/App/Generated/SharedModels.swift');
 
   // Ensure output directory exists
   const outputDir = path.dirname(outputFile);

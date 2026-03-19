@@ -15,6 +15,8 @@ jobs:
   deploy-testflight:
     name: Deploy to TestFlight
     runs-on: macos-14
+    env:
+      FASTLANE_SKIP_UPDATE_CHECK: 1
 
     steps:
       - name: Checkout code
@@ -23,54 +25,46 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16.0'
+          xcode-version: 'latest-stable'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 8
+          cache: 'npm'
+          cache-dependency-path: 'v0/package-lock.json'
 
       - name: Install dependencies
         run: |
-          pnpm install --frozen-lockfile
-          cd packages/shared && pnpm install
+          cd v0
+          npm install
+          cd ../packages/shared
+          npm install
 
       - name: Generate Swift types
         run: |
           cd packages/shared
-          pnpm run generate:swift
+          npm run generate:swift
 
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
-          bundler-cache: true
-          working-directory: apps/ios
 
       - name: Install Fastlane
         run: |
           cd apps/ios
-          gem install fastlane
-
-      - name: Configure App Store Connect API Key
-        env:
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
-          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
-        run: |
-          echo "$APP_STORE_CONNECT_API_KEY" | base64 --decode > /tmp/AuthKey.p8
+          gem install fastlane --no-document
 
       - name: Build and upload to TestFlight
         env:
-          FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD: ${{ secrets.FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_STORE_CONNECT_TEAM_ID: ${{ secrets.APP_STORE_CONNECT_TEAM_ID }}
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
         run: |
           cd apps/ios
           fastlane beta

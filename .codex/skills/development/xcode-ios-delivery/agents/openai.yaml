@@ -1,0 +1,4 @@
+interface:
+  display_name: "Xcode iOS Delivery"
+  short_description: "Build, sign, test, and ship iOS apps."
+  default_prompt: "Use $xcode-ios-delivery to build, sign, test, and deploy an iOS app with Xcode best practices."

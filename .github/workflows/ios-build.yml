@@ -6,17 +6,32 @@ on:
     paths:
       - 'apps/ios/**'
       - 'packages/shared/**'
+      - 'v0/package.json'
+      - 'v0/package-lock.json'
+      - 'v0/capacitor.config.ts'
+      - 'v0/capacitor-fallback/**'
+      - 'v0/lib/capacitor-platform.ts'
+      - 'v0/lib/native/**'
       - '.github/workflows/ios-build.yml'
   pull_request:
     branches: [iOS-application, main]
     paths:
       - 'apps/ios/**'
       - 'packages/shared/**'
+      - 'v0/package.json'
+      - 'v0/package-lock.json'
+      - 'v0/capacitor.config.ts'
+      - 'v0/capacitor-fallback/**'
+      - 'v0/lib/capacitor-platform.ts'
+      - 'v0/lib/native/**'
 
 jobs:
   build-and-test:
     name: Build and Test iOS App
     runs-on: macos-14
+    env:
+      IOS_PROJECT: apps/ios/App/App.xcodeproj
+      IOS_SCHEME: App
 
     steps:
       - name: Checkout code
@@ -25,27 +40,26 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16.0'
+          xcode-version: 'latest-stable'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 8
+          cache: 'npm'
+          cache-dependency-path: 'v0/package-lock.json'
 
       - name: Install dependencies
         run: |
-          pnpm install --frozen-lockfile
-          cd packages/shared && pnpm install
+          cd v0
+          npm install
+          cd ../packages/shared
+          npm install
 
       - name: Generate Swift types
         run: |
           cd packages/shared
-          pnpm run generate:swift
+          npm run generate:swift
 
       - name: Cache SPM packages
         uses: actions/cache@v4
@@ -59,26 +73,23 @@ jobs:
 
       - name: Resolve SPM dependencies
         run: |
-          cd apps/ios
-          xcodebuild -resolvePackageDependencies -project RunSmart.xcodeproj -scheme RunSmart
+          xcodebuild -resolvePackageDependencies -project "$IOS_PROJECT" -scheme "$IOS_SCHEME"
 
       - name: Build iOS app
         run: |
-          cd apps/ios
           xcodebuild clean build \
-            -project RunSmart.xcodeproj \
-            -scheme RunSmart \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -project "$IOS_PROJECT" \
+            -scheme "$IOS_SCHEME" \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=26.3' \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO
 
       - name: Run tests
         run: |
-          cd apps/ios
           xcodebuild test \
-            -project RunSmart.xcodeproj \
-            -scheme RunSmart \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -project "$IOS_PROJECT" \
+            -scheme "$IOS_SCHEME" \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=26.3' \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO
 

@@ -32,6 +32,12 @@
     "ci:full": "npm run quality:check && npm run security:check && npm run build:production"
   },
   "dependencies": {
+    "@capacitor/app": "^7.0.1",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/ios": "^7.4.3",
+    "@capacitor/keyboard": "^7.0.1",
+    "@capacitor/share": "^7.0.1",
+    "@capacitor/status-bar": "^7.0.1",
     "@ai-sdk/openai": "^2.0.88",
     "@hookform/resolvers": "^3.9.1",
     "@radix-ui/react-accordion": "1.2.2",
@@ -101,6 +107,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
     "@playwright/test": "^1.54.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",

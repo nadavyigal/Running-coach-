@@ -4,6 +4,7 @@
 /.next/
 /out/
 /build/
+**/DerivedData/
 
 # nested node_modules anywhere
 **/node_modules/
@@ -15,6 +16,8 @@
 .mcp.json
 Running-coach-/
 v0/test-results/
+apps/ios/App/Pods/
+apps/ios/build/
 
 # accidental nested V0 directory
 V0/V0/

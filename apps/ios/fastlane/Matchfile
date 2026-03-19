@@ -1,20 +1,7 @@
-# Fastlane Matchfile for Code Signing
+git_url(ENV["MATCH_GIT_URL"]) if ENV["MATCH_GIT_URL"]
 
-# Git repository for storing certificates and profiles
-# TODO: Update with your private git repository URL
-git_url("[[YOUR_CERTIFICATES_REPO_URL]]")
+app_identifier(["com.runsmart.coach"])
+type(ENV["MATCH_TYPE"] || "appstore")
 
-# App bundle identifier
-app_identifier(["com.runsmart.ios"])
-
-# Development or App Store distribution
-type("appstore")
-
-# TODO: Update with your Apple Developer Team ID
-team_id("[[YOUR_TEAM_ID]]")
-
-# Storage mode (default is git)
+team_id(ENV["APPLE_TEAM_ID"]) if ENV["APPLE_TEAM_ID"]
 storage_mode("git")
-
-# For more information about Match, see:
-# https://docs.fastlane.tools/actions/match/

@@ -1,0 +1,4 @@
+interface:
+  display_name: "iOS Professional"
+  short_description: "Build and ship iOS apps professionally."
+  default_prompt: "Use $ios-professional to build, sign, test, automate, and release an iOS app with Xcode best practices."
