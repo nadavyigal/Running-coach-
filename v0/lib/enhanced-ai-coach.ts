@@ -62,6 +62,11 @@ interface GarminDailyRow {
   date: string
   sleep_duration_s: number | null
   training_readiness: number | null
+  spo2: number | null
+  respiration_rate: number | null
+  skin_temp_c: number | null
+  blood_pressure_systolic: number | null
+  blood_pressure_diastolic: number | null
 }
 
 interface GarminActivityRow {
@@ -166,7 +171,7 @@ export async function buildGarminContext(userId: number): Promise<GarminCoachCon
         .limit(28),
       supabase
         .from("garmin_daily_metrics")
-        .select("date,sleep_duration_s,training_readiness")
+        .select("date,sleep_duration_s,training_readiness,spo2,respiration_rate,skin_temp_c,blood_pressure_systolic,blood_pressure_diastolic")
         .eq("user_id", userId)
         .order("date", { ascending: false })
         .limit(14),
@@ -244,6 +249,30 @@ export async function buildGarminContext(userId: number): Promise<GarminCoachCon
     )
     if (sleepHoursAvg != null) {
       context.sleep7dAvg = round(sleepHoursAvg, 1)
+    }
+
+    // Aggregate health signals from recent daily metrics
+    const recentDailies = dailyRows.slice(0, 7)
+    const spo2Values = recentDailies.map((r) => r.spo2).filter((v): v is number => v != null)
+    const respValues = recentDailies.map((r) => r.respiration_rate).filter((v): v is number => v != null)
+    const latestSkinTemp = recentDailies.find((r) => r.skin_temp_c != null)?.skin_temp_c ?? null
+    const latestBpRow = recentDailies.find((r) => r.blood_pressure_systolic != null && r.blood_pressure_diastolic != null)
+    const latestTrainingReadiness = recentDailies.find((r) => r.training_readiness != null)?.training_readiness ?? null
+
+    const healthSignals: NonNullable<GarminCoachContext["healthSignals"]> = {}
+    if (spo2Values.length > 0) healthSignals.spo2Avg = Math.round(average(spo2Values) ?? 0)
+    if (respValues.length > 0) healthSignals.respirationRateAvg = round(average(respValues) ?? 0, 1)
+    if (latestSkinTemp != null) healthSignals.skinTempC = round(latestSkinTemp, 1)
+    if (latestBpRow) {
+      healthSignals.bloodPressure = {
+        systolic: latestBpRow.blood_pressure_systolic as number,
+        diastolic: latestBpRow.blood_pressure_diastolic as number,
+      }
+    }
+    if (latestTrainingReadiness != null) healthSignals.garminTrainingReadiness = Math.round(latestTrainingReadiness)
+
+    if (Object.keys(healthSignals).length > 0) {
+      context.healthSignals = healthSignals
     }
 
     const workouts = activityRows

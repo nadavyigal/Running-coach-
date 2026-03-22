@@ -32,6 +32,13 @@ export interface GarminCoachContext {
     trend: "building" | "stable" | "declining"
   }
   sleep7dAvg?: number
+  healthSignals?: {
+    spo2Avg?: number
+    respirationRateAvg?: number
+    skinTempC?: number
+    bloodPressure?: { systolic: number; diastolic: number }
+    garminTrainingReadiness?: number
+  }
   lastWorkouts?: GarminWorkoutSummary[]
 }
 
@@ -316,6 +323,17 @@ export function formatGarminContextForPrompt(
 
   if (context.sleep7dAvg != null) {
     lines.push(`- Sleep (7d avg): ${toFixed(context.sleep7dAvg, 1)} h`)
+  }
+
+  if (context.healthSignals) {
+    const hs = context.healthSignals
+    const parts: string[] = []
+    if (hs.spo2Avg != null) parts.push(`SpO2 ${hs.spo2Avg}%`)
+    if (hs.respirationRateAvg != null) parts.push(`resp ${toFixed(hs.respirationRateAvg, 1)} br/min`)
+    if (hs.skinTempC != null) parts.push(`skin temp ${toFixed(hs.skinTempC, 1)}°C`)
+    if (hs.bloodPressure) parts.push(`BP ${hs.bloodPressure.systolic}/${hs.bloodPressure.diastolic}`)
+    if (hs.garminTrainingReadiness != null) parts.push(`Garmin readiness ${hs.garminTrainingReadiness}`)
+    if (parts.length > 0) lines.push(`- Health signals: ${parts.join(", ")}`)
   }
 
   if (context.lastWorkouts && context.lastWorkouts.length > 0) {

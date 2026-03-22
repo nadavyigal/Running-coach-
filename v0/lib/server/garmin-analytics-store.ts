@@ -63,6 +63,11 @@ interface DailyMetricAccumulator {
   trainingReadiness: number | null
   vo2max: number | null
   weight: number | null
+  spo2: number | null
+  respirationRate: number | null
+  skinTempC: number | null
+  bloodPressureSystolic: number | null
+  bloodPressureDiastolic: number | null
   rawJson: Record<string, unknown>
 }
 
@@ -159,6 +164,11 @@ function getOrCreateDailyMetric(map: Map<string, DailyMetricAccumulator>, date: 
     trainingReadiness: null,
     vo2max: null,
     weight: null,
+    spo2: null,
+    respirationRate: null,
+    skinTempC: null,
+    bloodPressureSystolic: null,
+    bloodPressureDiastolic: null,
     rawJson: {},
   }
 
@@ -291,6 +301,89 @@ function buildDailyMetricsRows(input: {
     addRawDataset(metric, 'stressDetails', stressDetail)
   }
 
+  for (const pulseoxEntry of datasets.pulseox ?? []) {
+    const date =
+      getDateString(pulseoxEntry.calendarDate) ??
+      getDateString(pulseoxEntry.date) ??
+      getDateFromEpochSeconds(pulseoxEntry.startTimeInSeconds)
+    if (!date) continue
+
+    const metric = getOrCreateDailyMetric(byDate, date)
+    metric.spo2 =
+      pickNumber(pulseoxEntry, ['averageSpo2', 'spo2Value', 'spo2', 'latestSpo2', 'value']) ?? metric.spo2
+    addRawDataset(metric, 'pulseox', pulseoxEntry)
+  }
+
+  for (const respirationEntry of datasets.allDayRespiration ?? []) {
+    const date =
+      getDateString(respirationEntry.calendarDate) ??
+      getDateString(respirationEntry.date) ??
+      getDateFromEpochSeconds(respirationEntry.startTimeInSeconds)
+    if (!date) continue
+
+    const metric = getOrCreateDailyMetric(byDate, date)
+    metric.respirationRate =
+      pickNumber(respirationEntry, [
+        'avgWakingRespirationValue',
+        'avgSleepRespirationValue',
+        'avgRespirationValue',
+        'value',
+      ]) ?? metric.respirationRate
+    addRawDataset(metric, 'allDayRespiration', respirationEntry)
+  }
+
+  for (const skinTempEntry of datasets.skinTemp ?? []) {
+    const date =
+      getDateString(skinTempEntry.calendarDate) ??
+      getDateString(skinTempEntry.date) ??
+      getDateFromEpochSeconds(skinTempEntry.startTimeInSeconds)
+    if (!date) continue
+
+    const metric = getOrCreateDailyMetric(byDate, date)
+    metric.skinTempC =
+      pickNumber(skinTempEntry, ['averageSkinTemp', 'skinTemp', 'value', 'nightAvg']) ?? metric.skinTempC
+    addRawDataset(metric, 'skinTemp', skinTempEntry)
+  }
+
+  for (const bpEntry of datasets.bloodPressures ?? []) {
+    const date =
+      getDateString(bpEntry.calendarDate) ??
+      getDateString(bpEntry.measurementDate) ??
+      getDateString(bpEntry.date) ??
+      getDateFromEpochSeconds(bpEntry.startTimeInSeconds)
+    if (!date) continue
+
+    const metric = getOrCreateDailyMetric(byDate, date)
+    metric.bloodPressureSystolic =
+      pickNumber(bpEntry, ['systolic', 'systolicValue', 'systolicBloodPressure']) ?? metric.bloodPressureSystolic
+    metric.bloodPressureDiastolic =
+      pickNumber(bpEntry, ['diastolic', 'diastolicValue', 'diastolicBloodPressure']) ?? metric.bloodPressureDiastolic
+    addRawDataset(metric, 'bloodPressures', bpEntry)
+  }
+
+  // epochs and healthSnapshot — store in raw_json only (high-cardinality time-series)
+  for (const epochEntry of datasets.epochs ?? []) {
+    const date =
+      getDateString(epochEntry.calendarDate) ??
+      getDateString(epochEntry.date) ??
+      getDateFromEpochSeconds(epochEntry.startTimeInSeconds)
+    if (!date) continue
+
+    const metric = getOrCreateDailyMetric(byDate, date)
+    addRawDataset(metric, 'epochs', epochEntry)
+  }
+
+  for (const snapshotEntry of datasets.healthSnapshot ?? []) {
+    const date =
+      getDateString(snapshotEntry.calendarDate) ??
+      getDateString(snapshotEntry.date) ??
+      getDateFromEpochSeconds(snapshotEntry.startTimeInSeconds)
+    if (!date) continue
+
+    const metric = getOrCreateDailyMetric(byDate, date)
+    addRawDataset(metric, 'healthSnapshot', snapshotEntry)
+  }
+
   return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date))
 }
 
@@ -367,6 +460,11 @@ export async function persistGarminSyncSnapshot(input: PersistGarminSyncInput): 
       training_readiness: row.trainingReadiness,
       vo2max: row.vo2max,
       weight: row.weight,
+      spo2: row.spo2,
+      respiration_rate: row.respirationRate,
+      skin_temp_c: row.skinTempC,
+      blood_pressure_systolic: row.bloodPressureSystolic,
+      blood_pressure_diastolic: row.bloodPressureDiastolic,
       raw_json: row.rawJson,
       updated_at: nowIso,
     })),

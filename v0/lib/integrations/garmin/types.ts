@@ -22,7 +22,6 @@ export type GarminDatasetKey =
   | 'activities'
   | 'manuallyUpdatedActivities'
   | 'activityDetails'
-  | 'activityFiles'
   | 'dailies'
   | 'epochs'
   | 'sleeps'

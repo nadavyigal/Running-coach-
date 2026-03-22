@@ -10,8 +10,6 @@ import {
   processPendingGarminJobs,
 } from '@/lib/integrations/garmin/service'
 import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
-import { runGarminDeriveForPayload } from '@/lib/server/garmin-derive-worker'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { evaluateGarminRateLimit } from '@/lib/garmin/sync/rateLimit'
 
 type GarminSyncTrigger = 'manual' | 'backfill'
@@ -33,17 +31,10 @@ export interface GarminSyncUserResult {
   activitiesUpserted: number
   dailyMetricsUpserted: number
   duplicateActivitiesSkipped: number
-  activityFilesProcessed: number
   warnings: string[]
   retryAfterSeconds?: number
   reason?: string
   body: Record<string, unknown>
-}
-
-interface GarminActivityFileStats {
-  pendingBefore: number
-  processed: number
-  pendingAfter: number
 }
 
 function sumWorkerStats(
@@ -58,58 +49,6 @@ function sumWorkerStats(
     deadLettered: left.deadLettered + right.deadLettered,
     imported: left.imported + right.imported,
     duplicates: left.duplicates + right.duplicates,
-  }
-}
-
-async function countActivityFiles(params: {
-  userId: number
-  status?: 'pending' | 'downloading' | 'done' | 'error'
-  parsedAfter?: string
-}): Promise<number> {
-  const supabase = createAdminClient()
-  let query = supabase
-    .from('garmin_activity_files')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', params.userId)
-
-  if (params.status) {
-    query = query.eq('status', params.status)
-  }
-
-  if (params.parsedAfter) {
-    query = query.gte('parsed_at', params.parsedAfter)
-  }
-
-  const { count, error } = await query
-  if (error) {
-    throw new Error(`Failed to count Garmin activity files: ${error.message}`)
-  }
-
-  return count ?? 0
-}
-
-async function processPendingActivityFilesForUser(userId: number): Promise<GarminActivityFileStats> {
-  const startedAt = new Date().toISOString()
-  const pendingBefore = await countActivityFiles({ userId, status: 'pending' })
-
-  if (pendingBefore > 0) {
-    await runGarminDeriveForPayload({
-      userId,
-      datasetKey: 'activityFiles',
-      source: 'sync',
-      requestedAt: startedAt,
-    })
-  }
-
-  const [processed, pendingAfter] = await Promise.all([
-    countActivityFiles({ userId, status: 'done', parsedAfter: startedAt }),
-    countActivityFiles({ userId, status: 'pending' }),
-  ])
-
-  return {
-    pendingBefore,
-    processed,
-    pendingAfter,
   }
 }
 
@@ -154,7 +93,6 @@ export async function syncGarminUser(input: {
       activitiesUpserted: 0,
       dailyMetricsUpserted: 0,
       duplicateActivitiesSkipped: 0,
-      activityFilesProcessed: 0,
       warnings: [],
       reason: 'not_connected',
       body: {
@@ -182,7 +120,6 @@ export async function syncGarminUser(input: {
       activitiesUpserted: 0,
       dailyMetricsUpserted: 0,
       duplicateActivitiesSkipped: 0,
-      activityFilesProcessed: 0,
       warnings: [],
       ...(rateLimit.retryAfterSeconds !== undefined ? { retryAfterSeconds: rateLimit.retryAfterSeconds } : {}),
       ...(rateLimit.reason !== undefined ? { reason: rateLimit.reason } : {}),
@@ -247,7 +184,6 @@ export async function syncGarminUser(input: {
         activitiesUpserted: workerStats.imported,
         dailyMetricsUpserted: 0,
         duplicateActivitiesSkipped: workerStats.duplicates,
-        activityFilesProcessed: 0,
         warnings,
         body: analyticsExecution.body,
       }
@@ -271,21 +207,6 @@ export async function syncGarminUser(input: {
     warnings.push(error instanceof Error ? error.message : 'Garmin analytics refresh failed during manual sync.')
   }
 
-  let activityFileStats: GarminActivityFileStats = {
-    pendingBefore: 0,
-    processed: 0,
-    pendingAfter: 0,
-  }
-
-  try {
-    activityFileStats = await processPendingActivityFilesForUser(userId)
-    if (activityFileStats.pendingBefore > 0 && activityFileStats.processed === 0 && activityFileStats.pendingAfter > 0) {
-      warnings.push('Garmin activity files were detected but have not finished processing yet.')
-    }
-  } catch (error) {
-    warnings.push(error instanceof Error ? error.message : 'Garmin activity file processing failed.')
-  }
-
   const refreshedStatus = await getGarminSyncState(userId)
 
   return {
@@ -295,19 +216,16 @@ export async function syncGarminUser(input: {
     errorState: refreshedStatus.errorState,
     noOp:
       workerStats.imported === 0 &&
-      dailyMetricsUpserted === 0 &&
-      activityFileStats.processed === 0,
+      dailyMetricsUpserted === 0,
     activitiesUpserted: workerStats.imported,
     dailyMetricsUpserted,
     duplicateActivitiesSkipped: workerStats.duplicates,
-    activityFilesProcessed: activityFileStats.processed,
     warnings,
     body: {
       success: true,
       syncState: refreshedStatus.syncState,
       pendingJobs: refreshedStatus.pendingJobs,
       workerStats,
-      activityFiles: activityFileStats,
       dailyMetricsUpserted,
       warnings,
       ...(analyticsBody ? { analytics: analyticsBody } : {}),

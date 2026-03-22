@@ -9,7 +9,12 @@ import { getGarminWebhookSecret } from '@/lib/server/garmin-webhook-secret'
 
 export const dynamic = 'force-dynamic'
 
-const SUPPORTED_DATASETS = ['activities', 'manuallyUpdatedActivities', 'activityDetails', 'activityFiles']
+const SUPPORTED_DATASETS = [
+  'activities', 'manuallyUpdatedActivities', 'activityDetails',
+  'dailies', 'sleeps', 'epochs', 'stressDetails', 'hrv', 'pulseox',
+  'allDayRespiration', 'bodyComps', 'userMetrics', 'healthSnapshot',
+  'skinTemp', 'bloodPressures',
+]
 
 function getWebhookAuthResult(req: Request): { authorized: boolean; status: number; error?: string } {
   const { value: configuredSecret } = getGarminWebhookSecret()
@@ -99,6 +104,7 @@ export async function POST(req: Request) {
       ok: true,
       duplicate: false,
       queuedJobs: enqueueResult.queuedJobs,
+      healthMetricsUpserted: enqueueResult.healthMetricsUpserted,
       webhookEventId: event.id,
     })
   } catch (error) {

@@ -5,11 +5,13 @@ export type GarminRecoveryDatasetKey =
   | 'stressDetails'
   | 'epochs'
   | 'allDayRespiration'
+  | 'pulseox'
 
 export interface GarminRecoverySignals {
   restingHeartRate: number | null
   stressLevel: number | null
   respirationRate: number | null
+  spo2: number | null
   activeMinutes: number | null
   sourceCounts: Record<GarminRecoveryDatasetKey, number>
   hasSignals: boolean
@@ -20,6 +22,7 @@ const RECOVERY_DATASETS: GarminRecoveryDatasetKey[] = [
   'stressDetails',
   'epochs',
   'allDayRespiration',
+  'pulseox',
 ]
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -110,11 +113,13 @@ export function deriveGarminRecoverySignals(records: GarminSummaryRecord[]): Gar
     stressDetails: 0,
     epochs: 0,
     allDayRespiration: 0,
+    pulseox: 0,
   }
 
   const restingHrValues: number[] = []
   const stressValues: number[] = []
   const respirationValues: number[] = []
+  const spo2Values: number[] = []
   let activeMinutes = 0
 
   for (const record of records) {
@@ -208,11 +213,24 @@ export function deriveGarminRecoverySignals(records: GarminSummaryRecord[]): Gar
         if (normalized != null) respirationValues.push(normalized)
       }
     }
+
+    if (datasetKey === 'pulseox') {
+      const spo2 = pickFirstNumber(payload, [
+        'averageSpo2',
+        'avgSpo2',
+        'spo2',
+        'spo2Value',
+        'latestSpo2',
+        'value',
+      ])
+      if (spo2 != null && spo2 >= 50 && spo2 <= 100) spo2Values.push(spo2)
+    }
   }
 
   const restingHeartRate = average(restingHrValues)
   const stressLevel = average(stressValues)
   const respirationRate = average(respirationValues)
+  const spo2 = average(spo2Values)
   const normalizedActiveMinutes = Number.isFinite(activeMinutes) && activeMinutes > 0
     ? Math.round(activeMinutes)
     : null
@@ -221,12 +239,14 @@ export function deriveGarminRecoverySignals(records: GarminSummaryRecord[]): Gar
     restingHeartRate: restingHeartRate != null ? Math.round(restingHeartRate) : null,
     stressLevel: stressLevel != null ? Math.round(stressLevel) : null,
     respirationRate: respirationRate != null ? Number(respirationRate.toFixed(1)) : null,
+    spo2: spo2 != null ? Math.round(spo2) : null,
     activeMinutes: normalizedActiveMinutes,
     sourceCounts,
     hasSignals:
       restingHeartRate != null ||
       stressLevel != null ||
       respirationRate != null ||
+      spo2 != null ||
       normalizedActiveMinutes != null,
   }
 }

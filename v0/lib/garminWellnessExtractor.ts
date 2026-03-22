@@ -8,6 +8,11 @@ export interface GarminDailyMetricsRow {
   sleep_score?: number | null
   resting_hr?: number | null
   stress?: number | null
+  spo2?: number | null
+  respiration_rate?: number | null
+  skin_temp_c?: number | null
+  blood_pressure_systolic?: number | null
+  blood_pressure_diastolic?: number | null
   raw_json?: unknown
 }
 
@@ -19,6 +24,10 @@ export interface GarminWellnessDay {
   bodyBatteryCharged: number | null
   bodyBatteryDrained: number | null
   spo2: number | null
+  respirationRate: number | null
+  skinTempC: number | null
+  bloodPressureSystolic: number | null
+  bloodPressureDiastolic: number | null
   hrv: number | null
   sleepScore: number | null
   restingHr: number | null
@@ -108,14 +117,41 @@ export function extractGarminWellnessDays(rows: GarminDailyMetricsRow[]): Garmin
         toNumber(row.stress) ??
         firstNumberFromDatasetEntries(stressEntries, ['stressLevel', 'averageStressLevel', 'stressLevelValue']) ??
         firstNumberFromDatasetEntries(dailiesEntries, ['averageStressLevel', 'stressLevel', 'overallStressLevel'])
-      const spo2Raw = firstNumberFromDatasetEntries(pulseOxEntries, [
-        'averageSpo2',
-        'avgSpo2',
-        'spo2',
-        'spo2Value',
-        'latestSpo2',
-        'value',
-      ])
+      const spo2Raw =
+        toNumber(row.spo2) ??
+        firstNumberFromDatasetEntries(pulseOxEntries, [
+          'averageSpo2',
+          'avgSpo2',
+          'spo2',
+          'spo2Value',
+          'latestSpo2',
+          'value',
+        ])
+      const respirationEntries = asArray(raw.allDayRespiration)
+      const respirationRateRaw =
+        toNumber(row.respiration_rate) ??
+        firstNumberFromDatasetEntries(respirationEntries, [
+          'avgWakingRespirationValue',
+          'avgSleepRespirationValue',
+          'avgRespirationValue',
+          'value',
+        ])
+      const skinTempEntries = asArray(raw.skinTemp)
+      const skinTempRaw =
+        toNumber(row.skin_temp_c) ??
+        firstNumberFromDatasetEntries(skinTempEntries, [
+          'averageSkinTemp',
+          'skinTemp',
+          'nightAvg',
+          'value',
+        ])
+      const bpEntries = asArray(raw.bloodPressures)
+      const bpSystolicRaw =
+        toNumber(row.blood_pressure_systolic) ??
+        firstNumberFromDatasetEntries(bpEntries, ['systolic', 'systolicValue', 'systolicBP'])
+      const bpDiastolicRaw =
+        toNumber(row.blood_pressure_diastolic) ??
+        firstNumberFromDatasetEntries(bpEntries, ['diastolic', 'diastolicValue', 'diastolicBP'])
 
       return {
         date: row.date,
@@ -128,6 +164,10 @@ export function extractGarminWellnessDays(rows: GarminDailyMetricsRow[]): Garmin
         bodyBatteryDrained:
           bodyBatteryDrainedRaw != null ? Number(bodyBatteryDrainedRaw.toFixed(2)) : null,
         spo2: spo2Raw != null ? Math.max(50, Math.min(100, Math.round(spo2Raw))) : null,
+        respirationRate: respirationRateRaw != null ? Math.max(0, Number(respirationRateRaw.toFixed(1))) : null,
+        skinTempC: skinTempRaw != null ? Number(skinTempRaw.toFixed(1)) : null,
+        bloodPressureSystolic: bpSystolicRaw != null ? Math.round(bpSystolicRaw) : null,
+        bloodPressureDiastolic: bpDiastolicRaw != null ? Math.round(bpDiastolicRaw) : null,
         hrv: hrvRaw != null ? Math.max(0, Number(hrvRaw.toFixed(2))) : null,
         sleepScore: sleepScoreRaw != null ? Math.max(0, Math.min(100, Math.round(sleepScoreRaw))) : null,
         restingHr: restingHrRaw != null ? Math.max(20, Math.min(120, Math.round(restingHrRaw))) : null,

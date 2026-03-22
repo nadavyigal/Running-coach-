@@ -6,6 +6,8 @@ export interface GarminReadinessDay {
   sleepScore: number | null
   restingHr: number | null
   stress: number | null
+  spo2?: number | null
+  respirationRate?: number | null
 }
 
 export interface GarminReadinessComponents {
@@ -13,6 +15,8 @@ export interface GarminReadinessComponents {
   sleepScore: number
   rhrTrendScore: number
   stressScore: number
+  spo2Modifier: number
+  respirationModifier: number
 }
 
 export interface ComputeGarminReadinessInput {
@@ -144,6 +148,8 @@ export function computeGarminReadiness(input: ComputeGarminReadinessInput): Garm
       sleepScore: toNumber(entry.sleepScore),
       restingHr: toNumber(entry.restingHr),
       stress: normalizeStress(toNumber(entry.stress)),
+      spo2: toNumber(entry.spo2 ?? null),
+      respirationRate: toNumber(entry.respirationRate ?? null),
     })
   }
 
@@ -154,7 +160,7 @@ export function computeGarminReadiness(input: ComputeGarminReadinessInput): Garm
 
   const timeline = dates.map((dateIso) => {
     const day = byDate.get(dateIso)
-    return day ?? { date: dateIso, hrv: null, sleepScore: null, restingHr: null, stress: null }
+    return day ?? { date: dateIso, hrv: null, sleepScore: null, restingHr: null, stress: null, spo2: null, respirationRate: null }
   })
 
   const dayWithSignals = timeline.filter(
@@ -173,6 +179,8 @@ export function computeGarminReadiness(input: ComputeGarminReadinessInput): Garm
       sleepScore: null,
       restingHr: null,
       stress: null,
+      spo2: null,
+      respirationRate: null,
     }
 
   const hrvValues = timeline.map((day) => day.hrv).filter((value): value is number => value != null)
@@ -196,11 +204,24 @@ export function computeGarminReadiness(input: ComputeGarminReadinessInput): Garm
 
   const stressScore = clamp(round(100 - (today.stress ?? 50), 1), 0, 100)
 
+  // SpO2 modifier: penalize if significantly below normal (95-100 is normal)
+  const todaySpo2 = today.spo2 ?? null
+  const spo2Modifier = todaySpo2 != null ? clamp(round((todaySpo2 - 90) / 10 * 5, 1), -5, 3) : 0
+
+  // Respiration modifier: penalize deviation from baseline (12-20 breaths/min normal)
+  const respValues = timeline.map((day) => day.respirationRate).filter((v): v is number => v != null)
+  const respBaseline = respValues.length >= 3 ? mean(respValues) : 16
+  const todayResp = today.respirationRate ?? null
+  const respDelta = todayResp != null ? todayResp - respBaseline : 0
+  const respirationModifier = todayResp != null ? clamp(round(-Math.abs(respDelta) * 1.5, 1), -5, 0) : 0
+
   const weightedScore =
     hrvScore * 0.3 +
     sleepScore * 0.35 +
     rhrTrendScore * 0.2 +
-    stressScore * 0.15
+    stressScore * 0.15 +
+    spo2Modifier +
+    respirationModifier
   const score = clamp(Math.round(weightedScore), 0, 100)
   const label = buildReadinessLabel(score)
 
@@ -225,6 +246,8 @@ export function computeGarminReadiness(input: ComputeGarminReadinessInput): Garm
       sleepScore: round(sleepScore, 1),
       rhrTrendScore: round(rhrTrendScore, 1),
       stressScore: round(stressScore, 1),
+      spo2Modifier: round(spo2Modifier, 1),
+      respirationModifier: round(respirationModifier, 1),
     },
     userExplanation: evidence.userExplanation,
     insight: buildReadinessInsight(score),

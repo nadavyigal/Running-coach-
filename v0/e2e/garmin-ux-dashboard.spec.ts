@@ -348,7 +348,6 @@ test.describe("PR05 Garmin UX dashboards", () => {
           activitiesUpserted: 1,
           dailyMetricsUpserted: 1,
           duplicateActivitiesSkipped: 0,
-          activityFilesProcessed: 1,
           warnings: [],
         }),
       })

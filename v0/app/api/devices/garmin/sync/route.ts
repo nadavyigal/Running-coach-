@@ -22,11 +22,12 @@ import { captureServerEvent } from '@/lib/server/posthog'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 30
 
 const GARMIN_API_BASE = 'https://apis.garmin.com'
 const GARMIN_MAX_WINDOW_SECONDS = 86400
 const SYNC_NAME = 'RunSmart Garmin Export Sync'
-const DEFAULT_INCREMENTAL_DAYS = 7
+const DEFAULT_INCREMENTAL_DAYS = 3
 const DEFAULT_ACTIVITY_SYNC_DAYS = 7
 const BACKFILL_DAILY_DAYS = 56
 const BACKFILL_ACTIVITY_DAYS = 56
@@ -1400,44 +1401,157 @@ export async function runGarminSyncForUser(params: {
     const hasWebhookActivityRows = filteredActivities.length > 0
     let fallbackFailureNotice: string | null = null
 
-    if (activitiesForSync.length === 0 && !hasWebhookActivityRows && permissions.includes('ACTIVITY_EXPORT')) {
+    const missingDatasetsSet = new Set<string>(
+      capabilities
+        .filter((capability) => capability.supportedByRunSmart && capability.permissionGranted)
+        .filter((capability) => (datasetCounts[capability.key as GarminDatasetKey] ?? 0) === 0)
+        .map((capability) => capability.key)
+    )
+    const usedFallbackDatasets: string[] = []
+
+    let dailies = datasets.dailies
+    let sleep = datasets.sleeps
+      .map((entry) => toRunSmartSleepRecord(entry))
+      .filter((entry): entry is NonNullable<typeof entry> => entry != null)
+
+    // Run all three fallback API calls in parallel to stay within 30s timeout
+    const needsActivityFallback = activitiesForSync.length === 0 && !hasWebhookActivityRows && permissions.includes('ACTIVITY_EXPORT')
+    const needsDailiesFallback = dailies.length === 0 && permissions.includes('HEALTH_EXPORT')
+    const needsSleepFallback = sleep.length === 0 && permissions.includes('HEALTH_EXPORT')
+
+    if (needsActivityFallback || needsDailiesFallback || needsSleepFallback) {
+      let fallbackAccessToken: string | null = null
       try {
-        const fallbackAccessToken = await getValidGarminAccessToken(userId)
-        const fallbackResult = await fetchRecentGarminActivities(
-          fallbackAccessToken,
-          permissions,
-          options.activityLookbackDays
-        )
-        if (fallbackResult.activities.length > 0) {
-          activitiesForSync = fallbackResult.activities
-          notices.push(
-            `Activity webhook feeds were empty, so RunSmart pulled ${fallbackResult.activities.length} activities directly from Garmin ${fallbackResult.source}.`
-          )
-        } else if (!hasWebhookActivityRows) {
-          notices.push(`No activities found from Garmin in the last ${options.activityLookbackDays} days.`)
-        }
-      } catch (fallbackError) {
-        if (fallbackError instanceof GarminActivitiesFallbackError) {
-          if (
-            fallbackError.source === 'wellness-backfill' &&
-            isActivityBackfillNotProvisioned(fallbackError.body)
-          ) {
-            fallbackFailureNotice =
-              'Activity webhook feeds were empty and Garmin activity backfill is not provisioned for this app.'
-          } else {
-            fallbackFailureNotice =
-              `Activity webhook feeds were empty and direct Garmin pull failed (${fallbackError.status} ${fallbackError.source}).`
+        fallbackAccessToken = await getValidGarminAccessToken(userId)
+      } catch (tokenError) {
+        logger.warn('Failed to get Garmin access token for fallback fetches:', tokenError)
+      }
+
+      if (fallbackAccessToken) {
+        const token = fallbackAccessToken
+        const [activityResult, dailiesResult, sleepResult] = await Promise.allSettled([
+          needsActivityFallback
+            ? fetchRecentGarminActivities(token, permissions, options.activityLookbackDays)
+            : Promise.resolve(null),
+          needsDailiesFallback
+            ? fetchRecentGarminDailies(token, permissions, syncWindow.lookbackDays)
+            : Promise.resolve(null),
+          needsSleepFallback
+            ? fetchRecentGarminSleep(token, permissions, syncWindow.lookbackDays)
+            : Promise.resolve(null),
+        ])
+
+        // Process activity fallback result
+        if (activityResult.status === 'fulfilled' && activityResult.value) {
+          const fallbackResult = activityResult.value
+          if (fallbackResult.activities.length > 0) {
+            activitiesForSync = fallbackResult.activities
+            notices.push(
+              `Activity webhook feeds were empty, so RunSmart pulled ${fallbackResult.activities.length} activities directly from Garmin ${fallbackResult.source}.`
+            )
+          } else if (!hasWebhookActivityRows) {
+            notices.push(`No activities found from Garmin in the last ${options.activityLookbackDays} days.`)
           }
-          logger.warn(
-            `Garmin activity fallback error (${fallbackError.status} ${fallbackError.source}): ${summarizeUpstreamBody(fallbackError.body)}`
-          )
-        } else {
-          fallbackFailureNotice = 'Activity webhook feeds were empty and direct Garmin pull failed.'
-          logger.warn('Garmin activity fallback error:', fallbackError)
+        } else if (activityResult.status === 'rejected' && needsActivityFallback) {
+          const fallbackError = activityResult.reason
+          if (fallbackError instanceof GarminActivitiesFallbackError) {
+            if (
+              fallbackError.source === 'wellness-backfill' &&
+              isActivityBackfillNotProvisioned(fallbackError.body)
+            ) {
+              fallbackFailureNotice =
+                'Activity webhook feeds were empty and Garmin activity backfill is not provisioned for this app.'
+            } else {
+              fallbackFailureNotice =
+                `Activity webhook feeds were empty and direct Garmin pull failed (${fallbackError.status} ${fallbackError.source}).`
+            }
+            logger.warn(
+              `Garmin activity fallback error (${fallbackError.status} ${fallbackError.source}): ${summarizeUpstreamBody(fallbackError.body)}`
+            )
+          } else {
+            fallbackFailureNotice = 'Activity webhook feeds were empty and direct Garmin pull failed.'
+            logger.warn('Garmin activity fallback error:', fallbackError)
+          }
+        }
+
+        // Process dailies fallback result
+        if (dailiesResult.status === 'fulfilled' && dailiesResult.value) {
+          const fallbackDailies = dailiesResult.value
+          if (fallbackDailies.dailies.length > 0) {
+            dailies = fallbackDailies.dailies
+            usedFallbackDatasets.push('dailies')
+            missingDatasetsSet.delete('dailies')
+            notices.push(
+              `Daily wellness webhook feeds were empty, so RunSmart pulled ${fallbackDailies.dailies.length} daily summaries directly from Garmin ${fallbackDailies.source}.`
+            )
+          } else {
+            missingDatasetsSet.add('dailies')
+          }
+        } else if (dailiesResult.status === 'rejected' && needsDailiesFallback) {
+          missingDatasetsSet.add('dailies')
+          const fallbackDailiesError = dailiesResult.reason
+          if (fallbackDailiesError instanceof GarminDailiesFallbackError) {
+            if (
+              fallbackDailiesError.source === 'dailies-backfill' &&
+              isDailiesBackfillNotProvisioned(fallbackDailiesError.body)
+            ) {
+              notices.push('Daily wellness webhook feeds were empty and Garmin dailies backfill is not provisioned for this app.')
+            } else {
+              notices.push(
+                `Daily wellness webhook feeds were empty and direct Garmin dailies pull failed (${fallbackDailiesError.status} ${fallbackDailiesError.source}).`
+              )
+            }
+            logger.warn(
+              `Garmin dailies fallback error (${fallbackDailiesError.status} ${fallbackDailiesError.source}): ${summarizeUpstreamBody(fallbackDailiesError.body)}`
+            )
+          } else {
+            notices.push('Daily wellness webhook feeds were empty and direct Garmin dailies pull failed.')
+            logger.warn('Garmin dailies fallback error:', fallbackDailiesError)
+          }
+        }
+
+        // Process sleep fallback result
+        if (sleepResult.status === 'fulfilled' && sleepResult.value) {
+          const fallbackSleep = sleepResult.value
+          if (fallbackSleep.sleep.length > 0) {
+            sleep = fallbackSleep.sleep
+            usedFallbackDatasets.push('sleeps')
+            missingDatasetsSet.delete('sleeps')
+            notices.push(
+              `Sleep webhook feeds were empty, so RunSmart pulled ${fallbackSleep.sleep.length} sleep summaries directly from Garmin ${fallbackSleep.source}.`
+            )
+          } else {
+            missingDatasetsSet.add('sleeps')
+          }
+        } else if (sleepResult.status === 'rejected' && needsSleepFallback) {
+          missingDatasetsSet.add('sleeps')
+          const fallbackSleepError = sleepResult.reason
+          if (fallbackSleepError instanceof GarminSleepFallbackError) {
+            if (
+              fallbackSleepError.source === 'sleep-backfill' &&
+              isSleepBackfillNotProvisioned(fallbackSleepError.body)
+            ) {
+              notices.push('Sleep webhook feeds were empty and Garmin sleep backfill is not provisioned for this app.')
+            } else {
+              notices.push(
+                `Sleep webhook feeds were empty and direct Garmin sleep pull failed (${fallbackSleepError.status} ${fallbackSleepError.source}).`
+              )
+            }
+            logger.warn(
+              `Garmin sleep fallback error (${fallbackSleepError.status} ${fallbackSleepError.source}): ${summarizeUpstreamBody(fallbackSleepError.body)}`
+            )
+          } else {
+            notices.push('Sleep webhook feeds were empty and direct Garmin sleep pull failed.')
+            logger.warn('Garmin sleep fallback error:', fallbackSleepError)
+          }
         }
       }
+    } else {
+      if (dailies.length > 0) missingDatasetsSet.delete('dailies')
+      if (sleep.length > 0) missingDatasetsSet.delete('sleeps')
     }
 
+    // Activity cache fallback (if still empty after API fallback)
     if (activitiesForSync.length === 0) {
       try {
         const cachedLookbackDays = Math.max(options.activityLookbackDays, 30)
@@ -1458,108 +1572,9 @@ export async function runGarminSyncForUser(params: {
       notices.push(fallbackFailureNotice)
     }
 
-    const missingDatasetsSet = new Set<string>(
-      capabilities
-        .filter((capability) => capability.supportedByRunSmart && capability.permissionGranted)
-        .filter((capability) => (datasetCounts[capability.key as GarminDatasetKey] ?? 0) === 0)
-        .map((capability) => capability.key)
-    )
-    const usedFallbackDatasets: string[] = []
-
-    let dailies = datasets.dailies
-    if (dailies.length > 0) {
-      missingDatasetsSet.delete('dailies')
-    } else if (permissions.includes('HEALTH_EXPORT')) {
-      try {
-        const fallbackAccessToken = await getValidGarminAccessToken(userId)
-        const fallbackDailies = await fetchRecentGarminDailies(
-          fallbackAccessToken,
-          permissions,
-          syncWindow.lookbackDays
-        )
-        if (fallbackDailies.dailies.length > 0) {
-          dailies = fallbackDailies.dailies
-          usedFallbackDatasets.push('dailies')
-          missingDatasetsSet.delete('dailies')
-          notices.push(
-            `Daily wellness webhook feeds were empty, so RunSmart pulled ${fallbackDailies.dailies.length} daily summaries directly from Garmin ${fallbackDailies.source}.`
-          )
-        } else {
-          missingDatasetsSet.add('dailies')
-        }
-      } catch (fallbackDailiesError) {
-        missingDatasetsSet.add('dailies')
-        if (fallbackDailiesError instanceof GarminDailiesFallbackError) {
-          if (
-            fallbackDailiesError.source === 'dailies-backfill' &&
-            isDailiesBackfillNotProvisioned(fallbackDailiesError.body)
-          ) {
-            notices.push('Daily wellness webhook feeds were empty and Garmin dailies backfill is not provisioned for this app.')
-          } else {
-            notices.push(
-              `Daily wellness webhook feeds were empty and direct Garmin dailies pull failed (${fallbackDailiesError.status} ${fallbackDailiesError.source}).`
-            )
-          }
-          logger.warn(
-            `Garmin dailies fallback error (${fallbackDailiesError.status} ${fallbackDailiesError.source}): ${summarizeUpstreamBody(fallbackDailiesError.body)}`
-          )
-        } else {
-          notices.push('Daily wellness webhook feeds were empty and direct Garmin dailies pull failed.')
-          logger.warn('Garmin dailies fallback error:', fallbackDailiesError)
-        }
-      }
-    }
-
     const datasetsForSync: Record<GarminDatasetKey, Record<string, unknown>[]> = {
       ...datasets,
       dailies,
-    }
-
-    let sleep = datasetsForSync.sleeps
-      .map((entry) => toRunSmartSleepRecord(entry))
-      .filter((entry): entry is NonNullable<typeof entry> => entry != null)
-
-    if (sleep.length > 0) {
-      missingDatasetsSet.delete('sleeps')
-    } else if (permissions.includes('HEALTH_EXPORT')) {
-      try {
-        const fallbackAccessToken = await getValidGarminAccessToken(userId)
-        const fallbackSleep = await fetchRecentGarminSleep(
-          fallbackAccessToken,
-          permissions,
-          syncWindow.lookbackDays
-        )
-        if (fallbackSleep.sleep.length > 0) {
-          sleep = fallbackSleep.sleep
-          usedFallbackDatasets.push('sleeps')
-          missingDatasetsSet.delete('sleeps')
-          notices.push(
-            `Sleep webhook feeds were empty, so RunSmart pulled ${fallbackSleep.sleep.length} sleep summaries directly from Garmin ${fallbackSleep.source}.`
-          )
-        } else {
-          missingDatasetsSet.add('sleeps')
-        }
-      } catch (fallbackSleepError) {
-        missingDatasetsSet.add('sleeps')
-        if (fallbackSleepError instanceof GarminSleepFallbackError) {
-          if (
-            fallbackSleepError.source === 'sleep-backfill' &&
-            isSleepBackfillNotProvisioned(fallbackSleepError.body)
-          ) {
-            notices.push('Sleep webhook feeds were empty and Garmin sleep backfill is not provisioned for this app.')
-          } else {
-            notices.push(
-              `Sleep webhook feeds were empty and direct Garmin sleep pull failed (${fallbackSleepError.status} ${fallbackSleepError.source}).`
-            )
-          }
-          logger.warn(
-            `Garmin sleep fallback error (${fallbackSleepError.status} ${fallbackSleepError.source}): ${summarizeUpstreamBody(fallbackSleepError.body)}`
-          )
-        } else {
-          notices.push('Sleep webhook feeds were empty and direct Garmin sleep pull failed.')
-          logger.warn('Garmin sleep fallback error:', fallbackSleepError)
-        }
-      }
     }
 
     let persistence: {
@@ -1675,10 +1690,10 @@ export async function runGarminSyncForUser(params: {
         availableToEnable: AVAILABLE_TO_ENABLE,
         capabilities,
         ingestion,
-        datasets: datasetsForSync,
         datasetCounts,
-        activities: activitiesForSync,
-        sleep,
+        activitiesCount: activitiesForSync.length,
+        activities: activitiesForSync.slice(0, 50).map(({ telemetry: _telemetry, ...rest }) => rest),
+        sleepCount: sleep.length,
         persistence,
         deriveQueue,
         datasetCompleteness: {
