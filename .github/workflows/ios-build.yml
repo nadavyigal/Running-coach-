@@ -75,12 +75,19 @@ jobs:
         run: |
           xcodebuild -resolvePackageDependencies -project "$IOS_PROJECT" -scheme "$IOS_SCHEME"
 
+      - name: Select iOS simulator
+        id: select-simulator
+        run: |
+          IOS_SIMULATOR_NAME="$(ruby apps/ios/scripts/select-simulator.rb iphone)"
+          echo "Using simulator: $IOS_SIMULATOR_NAME"
+          echo "ios_simulator_name=$IOS_SIMULATOR_NAME" >> "$GITHUB_OUTPUT"
+
       - name: Build iOS app
         run: |
           xcodebuild clean build \
             -project "$IOS_PROJECT" \
             -scheme "$IOS_SCHEME" \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=26.3' \
+            -destination 'platform=iOS Simulator,name=${{ steps.select-simulator.outputs.ios_simulator_name }}' \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO
 
@@ -89,7 +96,7 @@ jobs:
           xcodebuild test \
             -project "$IOS_PROJECT" \
             -scheme "$IOS_SCHEME" \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=26.3' \
+            -destination 'platform=iOS Simulator,name=${{ steps.select-simulator.outputs.ios_simulator_name }}' \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO
 

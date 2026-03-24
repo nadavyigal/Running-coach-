@@ -1,9 +1,12 @@
+require "shellwords"
+
 default_platform(:ios)
 
 PROJECT = "App/App.xcodeproj"
 SCHEME = "App"
 UI_TESTS_SCHEME = ENV["IOS_UI_TESTS_SCHEME"] || SCHEME
 APP_IDENTIFIER = "com.runsmart.coach"
+SIMULATOR_SELECTOR = File.expand_path("scripts/select-simulator.rb", __dir__)
 
 def app_store_connect_api_key_if_configured
   return nil unless ENV["APP_STORE_CONNECT_API_KEY_ID"] && ENV["APP_STORE_CONNECT_API_ISSUER_ID"] && ENV["APP_STORE_CONNECT_API_KEY"]
@@ -16,13 +19,20 @@ def app_store_connect_api_key_if_configured
   )
 end
 
+def selected_simulator(kind, env_key)
+  override = ENV[env_key].to_s.strip
+  return override unless override.empty?
+
+  sh("ruby #{Shellwords.escape(SIMULATOR_SELECTOR)} #{kind}").strip
+end
+
 platform :ios do
   desc "Run tests"
   lane :test do
     run_tests(
       project: PROJECT,
       scheme: SCHEME,
-      devices: ["iPhone 16"],
+      devices: [selected_simulator("iphone", "IOS_SIMULATOR_NAME")],
       clean: true
     )
   end
@@ -83,10 +93,8 @@ platform :ios do
       project: PROJECT,
       scheme: UI_TESTS_SCHEME,
       devices: [
-        "iPhone 16 Pro Max",
-        "iPhone 16 Pro",
-        "iPhone 16",
-        "iPad Pro (13-inch) (M4)"
+        selected_simulator("iphone", "IOS_SCREENSHOT_IPHONE"),
+        selected_simulator("ipad", "IOS_SCREENSHOT_IPAD")
       ]
     )
   end
