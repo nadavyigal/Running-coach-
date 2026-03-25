@@ -1,5 +1,13 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import {
+  isGarminAuthError,
+  isInvalidPullToken,
+  isMissingTimeRange,
+  isFallbackWorthyWellnessStatus,
+  isSleepEndpointNotProvisioned,
+  summarizeUpstreamBody,
+} from '@/lib/server/garmin-error-utils';
 import { getValidGarminAccessToken, markGarminAuthError } from '@/lib/server/garmin-oauth-store';
 
 export const dynamic = 'force-dynamic';
@@ -32,59 +40,10 @@ function parseDaysParam(rawDays: string | null): number {
   return Math.min(parsed, MAX_DAYS);
 }
 
-function summarizeUpstreamBody(body: string): string {
-  const trimmed = body.trim();
-  if (!trimmed) return '';
-
-  try {
-    const parsed = JSON.parse(trimmed) as {
-      errorMessage?: unknown;
-      message?: unknown;
-      error?: unknown;
-    };
-    const message = [parsed.errorMessage, parsed.message, parsed.error].find(
-      (value): value is string => typeof value === 'string' && value.trim().length > 0
-    );
-    if (message) return message.slice(0, 500);
-  } catch {
-    // Ignore JSON parse errors and fall through to text heuristics.
-  }
-
-  if (/<!doctype html|<html/i.test(trimmed)) {
-    return 'Garmin returned an HTML error page';
-  }
-
-  return trimmed.length > 500 ? `${trimmed.slice(0, 500)}...` : trimmed;
-}
-
 function parseJsonArray(text: string): any[] {
   if (!text) return [];
   const parsed = JSON.parse(text) as unknown;
   return Array.isArray(parsed) ? parsed : [];
-}
-
-function isInvalidPullToken(body: string): boolean {
-  return /InvalidPullTokenException|invalid pull token/i.test(body);
-}
-
-function isMissingTimeRange(body: string): boolean {
-  return /Missing time range parameters/i.test(body);
-}
-
-function isAuthError(status: number, body: string): boolean {
-  if (status === 401) return true;
-  if (status !== 403) return false;
-  return /Unable to read oAuth header|invalid[_ ]token|expired|unauthorized/i.test(body);
-}
-
-function isFallbackWorthyWellnessStatus(status: number): boolean {
-  return status === 400 || status === 404;
-}
-
-function isSleepEndpointNotProvisioned(status: number, body: string): boolean {
-  if (/Endpoint not enabled for summary type:\s*CONNECT_SLEEP/i.test(body)) return true;
-  if (status === 404 && /\/wellness-api\/rest\/(backfill\/)?sleeps/i.test(body)) return true;
-  return false;
 }
 
 async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
@@ -324,7 +283,7 @@ export async function GET(req: Request) {
 
     if (error instanceof GarminSleepUpstreamError) {
       const detail = summarizeUpstreamBody(error.body);
-      const needsReauth = isAuthError(error.status, error.body);
+      const needsReauth = isGarminAuthError(error.status, error.body, 'wellness');
 
       if (needsReauth) {
         const { searchParams } = new URL(req.url);
