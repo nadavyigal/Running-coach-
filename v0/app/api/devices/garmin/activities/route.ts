@@ -1,5 +1,13 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import {
+  isGarminAuthError,
+  isInvalidPullToken,
+  isMissingTimeRange,
+  isFallbackWorthyWellnessStatus,
+  isActivityBackfillNotProvisioned,
+  summarizeUpstreamBody,
+} from '@/lib/server/garmin-error-utils';
 import { getValidGarminAccessToken, markGarminAuthError } from '@/lib/server/garmin-oauth-store';
 
 export const dynamic = 'force-dynamic';
@@ -38,31 +46,6 @@ function parseJsonArray(text: string): any[] {
   return Array.isArray(parsed) ? parsed : [];
 }
 
-function summarizeUpstreamBody(body: string): string {
-  const trimmed = body.trim();
-  if (!trimmed) return '';
-
-  try {
-    const parsed = JSON.parse(trimmed) as {
-      errorMessage?: unknown;
-      message?: unknown;
-      error?: unknown;
-    };
-    const message = [parsed.errorMessage, parsed.message, parsed.error].find(
-      (value): value is string => typeof value === 'string' && value.trim().length > 0
-    );
-    if (message) return message.slice(0, 500);
-  } catch {
-    // Ignore JSON parse errors and fall through to text heuristics.
-  }
-
-  if (/<!doctype html|<html/i.test(trimmed)) {
-    return 'Garmin returned an HTML error page';
-  }
-
-  return trimmed.length > 500 ? `${trimmed.slice(0, 500)}...` : trimmed;
-}
-
 function getActivityStartSeconds(activity: any): number | null {
   if (typeof activity?.startTimeInSeconds === 'number') {
     return activity.startTimeInSeconds;
@@ -73,28 +56,6 @@ function getActivityStartSeconds(activity: any): number | null {
   const parsed = Date.parse(dateValue);
   if (!Number.isFinite(parsed)) return null;
   return Math.floor(parsed / 1000);
-}
-
-function isInvalidPullToken(body: string): boolean {
-  return /InvalidPullTokenException|invalid pull token/i.test(body);
-}
-
-function isMissingTimeRange(body: string): boolean {
-  return /Missing time range parameters/i.test(body);
-}
-
-function isAuthError(status: number, body: string): boolean {
-  if (status === 401) return true;
-  if (status !== 403) return false;
-  return /Unable to read oAuth header|invalid[_ ]token|expired|unauthorized/i.test(body);
-}
-
-function isFallbackWorthyWellnessStatus(status: number): boolean {
-  return status === 400 || status === 404;
-}
-
-function isActivityBackfillNotProvisioned(body: string): boolean {
-  return /Endpoint not enabled for summary type:\s*CONNECT_ACTIVITY/i.test(body);
 }
 
 function dedupeActivities(rawActivities: any[]): any[] {
@@ -350,7 +311,7 @@ export async function GET(req: Request) {
 
     if (error instanceof GarminUpstreamError) {
       const detail = summarizeUpstreamBody(error.body);
-      const needsReauth = isAuthError(error.status, error.body);
+      const needsReauth = isGarminAuthError(error.status, error.body, 'wellness');
 
       if (needsReauth) {
         const { searchParams } = new URL(req.url);

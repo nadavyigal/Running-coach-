@@ -1,5 +1,15 @@
 import { NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
+import {
+  isGarminAuthError,
+  isInvalidPullToken,
+  isMissingTimeRange,
+  isFallbackWorthyWellnessStatus,
+  isActivityBackfillNotProvisioned,
+  isSleepBackfillNotProvisioned,
+  isDailiesBackfillNotProvisioned,
+  summarizeUpstreamBody,
+} from '@/lib/server/garmin-error-utils'
 import { persistGarminSyncSnapshot } from '@/lib/server/garmin-analytics-store'
 import { runGarminDeriveForPayload } from '@/lib/server/garmin-derive-worker'
 import {
@@ -338,38 +348,7 @@ function pickNumberWithPaths(record: Record<string, unknown>, candidatePaths: st
   return null
 }
 
-function summarizeUpstreamBody(body: string): string {
-  const trimmed = body.trim()
-  if (!trimmed) return ''
-
-  try {
-    const parsed = JSON.parse(trimmed) as {
-      errorMessage?: unknown
-      message?: unknown
-      error?: unknown
-      path?: unknown
-    }
-    const message = [parsed.errorMessage, parsed.message, parsed.error, parsed.path].find(
-      (value): value is string => typeof value === 'string' && value.trim().length > 0
-    )
-    if (message) return message.slice(0, 500)
-  } catch {
-    // keep text body
-  }
-
-  if (/<!doctype html|<html/i.test(trimmed)) {
-    return 'Garmin returned an HTML error page'
-  }
-
-  return trimmed.length > 500 ? `${trimmed.slice(0, 500)}...` : trimmed
-}
-
-function isAuthError(status: number, body: string): boolean {
-  if (status === 401) return true
-  if (status === 403) return /Unable to read oAuth header|invalid[_ ]token|expired|unauthorized/i.test(body)
-  if (status === 400) return /did not match the expected pattern|invalid.{0,10}token|invalid.{0,10}grant/i.test(body)
-  return false
-}
+// summarizeUpstreamBody and isGarminAuthError are imported from @/lib/server/garmin-error-utils
 
 function parseJsonArray(text: string): Record<string, unknown>[] {
   if (!text) return []
@@ -381,29 +360,9 @@ function parseJsonArray(text: string): Record<string, unknown>[] {
     : []
 }
 
-function isInvalidPullToken(body: string): boolean {
-  return /InvalidPullTokenException|invalid pull token/i.test(body)
-}
-
-function isMissingTimeRange(body: string): boolean {
-  return /Missing time range parameters/i.test(body)
-}
-
-function isFallbackWorthyWellnessStatus(status: number): boolean {
-  return status === 400 || status === 404
-}
-
-function isActivityBackfillNotProvisioned(body: string): boolean {
-  return /Endpoint not enabled for summary type:\s*CONNECT_ACTIVITY/i.test(body)
-}
-
-function isSleepBackfillNotProvisioned(body: string): boolean {
-  return /Endpoint not enabled for summary type:\s*CONNECT_SLEEP/i.test(body)
-}
-
-function isDailiesBackfillNotProvisioned(body: string): boolean {
-  return /Endpoint not enabled for summary type:\s*CONNECT_DAIL/i.test(body)
-}
+// isInvalidPullToken, isMissingTimeRange, isFallbackWorthyWellnessStatus,
+// isActivityBackfillNotProvisioned, isSleepBackfillNotProvisioned,
+// isDailiesBackfillNotProvisioned are imported from @/lib/server/garmin-error-utils
 
 function dedupeActivities(rawActivities: Record<string, unknown>[]): Record<string, unknown>[] {
   const seen = new Set<string>()
@@ -482,6 +441,10 @@ async function fetchWellnessActivities(
 
     const responseText = await response.text()
     if (!response.ok) {
+      logger.warn(`Garmin ${source} error ${response.status} for URL: ${url.toString()}`, {
+        status: response.status,
+        body: responseText.slice(0, 500),
+      })
       throw new GarminActivitiesFallbackError(source, response.status, responseText)
     }
 
@@ -524,6 +487,10 @@ async function fetchWellnessSleep(
 
     const responseText = await response.text()
     if (!response.ok) {
+      logger.warn(`Garmin ${source} error ${response.status} for URL: ${url.toString()}`, {
+        status: response.status,
+        body: responseText.slice(0, 500),
+      })
       throw new GarminSleepFallbackError(source, response.status, responseText)
     }
 
@@ -566,6 +533,10 @@ async function fetchWellnessDailies(
 
     const responseText = await response.text()
     if (!response.ok) {
+      logger.warn(`Garmin ${source} error ${response.status} for URL: ${url.toString()}`, {
+        status: response.status,
+        body: responseText.slice(0, 500),
+      })
       throw new GarminDailiesFallbackError(source, response.status, responseText)
     }
 
@@ -576,6 +547,21 @@ async function fetchWellnessDailies(
   return dedupeDailiesRows(rawChunks)
 }
 
+function validateTimestampRange(
+  lookbackDays: number,
+  caller: string
+): { startTime: number; endTime: number } {
+  if (!Number.isFinite(lookbackDays) || lookbackDays <= 0) {
+    throw new Error(`${caller}: lookbackDays must be a positive finite number, got ${lookbackDays}`)
+  }
+  const endTime = Math.floor(Date.now() / 1000)
+  const startTime = endTime - Math.floor(lookbackDays) * 86400 + 1
+  if (startTime <= 0 || startTime > endTime) {
+    throw new Error(`${caller}: computed invalid timestamp range [${startTime}, ${endTime}] for lookbackDays=${lookbackDays}`)
+  }
+  return { startTime, endTime }
+}
+
 async function fetchRecentGarminActivities(
   accessToken: string,
   permissions: string[],
@@ -584,8 +570,7 @@ async function fetchRecentGarminActivities(
   activities: ReturnType<typeof toRunSmartActivity>[]
   source: 'wellness-upload' | 'wellness-backfill'
 }> {
-  const endTime = Math.floor(Date.now() / 1000)
-  const startTime = Math.max(0, endTime - lookbackDays * 86400 + 1)
+  const { startTime, endTime } = validateTimestampRange(lookbackDays, 'fetchRecentGarminActivities')
 
   let source: 'wellness-upload' | 'wellness-backfill' = 'wellness-upload'
   let rawActivities: Record<string, unknown>[]
@@ -623,8 +608,7 @@ async function fetchRecentGarminSleep(
   sleep: RunSmartSleepRecord[]
   source: 'sleep-upload' | 'sleep-backfill'
 }> {
-  const endTime = Math.floor(Date.now() / 1000)
-  const startTime = Math.max(0, endTime - lookbackDays * 86400 + 1)
+  const { startTime, endTime } = validateTimestampRange(lookbackDays, 'fetchRecentGarminSleep')
 
   let source: 'sleep-upload' | 'sleep-backfill' = 'sleep-upload'
   let rawSleep: Record<string, unknown>[]
@@ -664,8 +648,7 @@ async function fetchRecentGarminDailies(
   dailies: Record<string, unknown>[]
   source: 'dailies-upload' | 'dailies-backfill'
 }> {
-  const endTime = Math.floor(Date.now() / 1000)
-  const startTime = Math.max(0, endTime - lookbackDays * 86400 + 1)
+  const { startTime, endTime } = validateTimestampRange(lookbackDays, 'fetchRecentGarminDailies')
 
   let source: 'dailies-upload' | 'dailies-backfill' = 'dailies-upload'
   let rawDailies: Record<string, unknown>[]
@@ -1019,6 +1002,10 @@ async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
 
   const responseText = await response.text()
   if (!response.ok) {
+    logger.warn(`Garmin permissions error ${response.status}`, {
+      status: response.status,
+      body: responseText.slice(0, 500),
+    })
     throw new GarminUpstreamError('permissions', response.status, responseText)
   }
 
@@ -1049,6 +1036,10 @@ async function fetchGarminUserId(accessToken: string): Promise<string> {
 
   const responseText = await response.text()
   if (!response.ok) {
+    logger.warn(`Garmin profile error ${response.status}`, {
+      status: response.status,
+      body: responseText.slice(0, 500),
+    })
     throw new GarminUpstreamError('profile', response.status, responseText)
   }
 
@@ -1183,7 +1174,7 @@ async function computeCatalogWithAutoRefresh(params: {
   try {
     return await computeCatalog({ accessToken, sinceIso, lookbackDays })
   } catch (error) {
-    if (error instanceof GarminUpstreamError && isAuthError(error.status, error.body)) {
+    if (error instanceof GarminUpstreamError && isGarminAuthError(error.status, error.body, error.source)) {
       const refreshed = await refreshGarminAccessToken(userId)
       return computeCatalog({ accessToken: refreshed.accessToken, sinceIso, lookbackDays })
     }
@@ -1706,7 +1697,7 @@ export async function runGarminSyncForUser(params: {
       },
     }
   } catch (error) {
-    if (error instanceof GarminUpstreamError && isAuthError(error.status, error.body)) {
+    if (error instanceof GarminUpstreamError && isGarminAuthError(error.status, error.body, error.source)) {
       await safeMarkAuthError(userId, summarizeUpstreamBody(error.body))
       return {
         status: 401,
@@ -1714,7 +1705,7 @@ export async function runGarminSyncForUser(params: {
           success: false,
           error: 'Garmin authentication expired or invalid, please reconnect Garmin',
           needsReauth: true,
-          detail: summarizeUpstreamBody(error.body),
+          detail: 'Your Garmin access token could not be validated. Please disconnect and reconnect Garmin.',
         },
       }
     }
@@ -1772,14 +1763,14 @@ export async function GET(req: Request) {
       ingestion,
     })
   } catch (error) {
-    if (error instanceof GarminUpstreamError && isAuthError(error.status, error.body)) {
+    if (error instanceof GarminUpstreamError && isGarminAuthError(error.status, error.body, error.source)) {
       await safeMarkAuthError(userId, summarizeUpstreamBody(error.body))
       return NextResponse.json(
         {
           success: false,
           error: 'Garmin authentication expired or invalid, please reconnect Garmin',
           needsReauth: true,
-          detail: summarizeUpstreamBody(error.body),
+          detail: 'Your Garmin access token could not be validated. Please disconnect and reconnect Garmin.',
         },
         { status: 401 }
       )
