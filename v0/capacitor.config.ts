@@ -11,6 +11,8 @@ const config: CapacitorConfig = {
       '*.runsmart-ai.com',
       '*.vercel.app',
       '*.supabase.co',
+      'connect.garmin.com',
+      '*.garmin.com',
     ],
   },
   ios: {

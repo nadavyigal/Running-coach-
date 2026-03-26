@@ -993,6 +993,14 @@ function toRunSmartSleepRecord(entry: Record<string, unknown>): RunSmartSleepRec
 }
 
 async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
+  const tokenPreview = accessToken.length > 8
+    ? `${accessToken.slice(0, 4)}...${accessToken.slice(-4)}`
+    : '***'
+  logger.info('Garmin permissions request', {
+    tokenLength: accessToken.length,
+    tokenPreview,
+  })
+
   const response = await fetch(`${GARMIN_API_BASE}/wellness-api/rest/user/permissions`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -1005,6 +1013,8 @@ async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
     logger.warn(`Garmin permissions error ${response.status}`, {
       status: response.status,
       body: responseText.slice(0, 500),
+      tokenLength: accessToken.length,
+      tokenPreview,
     })
     throw new GarminUpstreamError('permissions', response.status, responseText)
   }
@@ -1027,6 +1037,10 @@ async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
 }
 
 async function fetchGarminUserId(accessToken: string): Promise<string> {
+  const tokenPreview = accessToken.length > 8
+    ? `${accessToken.slice(0, 4)}...${accessToken.slice(-4)}`
+    : '***'
+
   const response = await fetch(`${GARMIN_API_BASE}/wellness-api/rest/user/id`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -1039,6 +1053,8 @@ async function fetchGarminUserId(accessToken: string): Promise<string> {
     logger.warn(`Garmin profile error ${response.status}`, {
       status: response.status,
       body: responseText.slice(0, 500),
+      tokenLength: accessToken.length,
+      tokenPreview,
     })
     throw new GarminUpstreamError('profile', response.status, responseText)
   }
@@ -1175,8 +1191,21 @@ async function computeCatalogWithAutoRefresh(params: {
     return await computeCatalog({ accessToken, sinceIso, lookbackDays })
   } catch (error) {
     if (error instanceof GarminUpstreamError && isGarminAuthError(error.status, error.body, error.source)) {
-      const refreshed = await refreshGarminAccessToken(userId)
-      return computeCatalog({ accessToken: refreshed.accessToken, sinceIso, lookbackDays })
+      logger.warn(`Garmin auth error for user ${userId}, attempting token refresh`, {
+        status: error.status,
+        source: error.source,
+        body: error.body.slice(0, 200),
+      })
+      try {
+        const refreshed = await refreshGarminAccessToken(userId)
+        return computeCatalog({ accessToken: refreshed.accessToken, sinceIso, lookbackDays })
+      } catch (refreshError) {
+        logger.error(`Garmin token refresh failed for user ${userId} during auto-refresh`, {
+          error: refreshError instanceof Error ? refreshError.message : 'unknown',
+        })
+        // Re-throw — outer catch handles /refresh token|reconnect garmin/i pattern
+        throw refreshError
+      }
     }
 
     throw error
@@ -1710,13 +1739,27 @@ export async function runGarminSyncForUser(params: {
       }
     }
 
-    if (error instanceof Error && /reconnect garmin|refresh token|no garmin connection/i.test(error.message)) {
+    if (error instanceof Error && /reconnect garmin|refresh token|no garmin connection|corrupted|re-authentication|not active/i.test(error.message)) {
       await safeMarkAuthError(userId, error.message)
       return {
         status: 401,
         body: {
           success: false,
           error: 'Garmin authentication expired or invalid, please reconnect Garmin',
+          needsReauth: true,
+          detail: error.message,
+        },
+      }
+    }
+
+    if (error instanceof Error && /decrypt|Invalid token format/i.test(error.message)) {
+      logger.error(`Garmin token decryption error for user ${userId}:`, error)
+      await safeMarkAuthError(userId, error.message)
+      return {
+        status: 401,
+        body: {
+          success: false,
+          error: 'Garmin token is corrupted, please reconnect Garmin',
           needsReauth: true,
           detail: error.message,
         },
@@ -1776,12 +1819,26 @@ export async function GET(req: Request) {
       )
     }
 
-    if (error instanceof Error && /reconnect garmin|refresh token|no garmin connection/i.test(error.message)) {
+    if (error instanceof Error && /reconnect garmin|refresh token|no garmin connection|corrupted|re-authentication|not active/i.test(error.message)) {
       await safeMarkAuthError(userId, error.message)
       return NextResponse.json(
         {
           success: false,
           error: 'Garmin authentication expired or invalid, please reconnect Garmin',
+          needsReauth: true,
+          detail: error.message,
+        },
+        { status: 401 }
+      )
+    }
+
+    if (error instanceof Error && /decrypt|Invalid token format/i.test(error.message)) {
+      logger.error(`Garmin token decryption error for user ${userId}:`, error)
+      await safeMarkAuthError(userId, error.message)
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Garmin token is corrupted, please reconnect Garmin',
           needsReauth: true,
           detail: error.message,
         },

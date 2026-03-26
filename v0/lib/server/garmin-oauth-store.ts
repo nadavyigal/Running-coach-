@@ -310,10 +310,23 @@ export async function getGarminOAuthState(userId: number): Promise<GarminOAuthSt
     accessToken = decryptToken(token.access_token_encrypted)
     refreshToken = token.refresh_token_encrypted ? decryptToken(token.refresh_token_encrypted) : null
   } catch (error) {
+    logger.error(`Garmin token decryption failed for user ${userId}`, {
+      hasAccessToken: Boolean(token.access_token_encrypted),
+      accessTokenLen: token.access_token_encrypted?.length ?? 0,
+      hasRefreshToken: Boolean(token.refresh_token_encrypted),
+      error: error instanceof Error ? error.message : 'unknown',
+    })
     throw new Error(
-      `Failed to decrypt Garmin token for user ${userId}: ${
-        error instanceof Error ? error.message : 'unknown error'
-      }`
+      `Garmin token is corrupted for user ${userId}. Please reconnect Garmin.`
+    )
+  }
+
+  if (!accessToken || accessToken.trim().length < 10) {
+    logger.error(`Garmin access token is empty or too short for user ${userId}`, {
+      tokenLength: accessToken?.length ?? 0,
+    })
+    throw new Error(
+      `Garmin access token is corrupted for user ${userId}. Please reconnect Garmin.`
     )
   }
 
@@ -345,10 +358,33 @@ export async function refreshGarminAccessToken(userId: number): Promise<{
 }> {
   const state = await getGarminOAuthState(userId)
   if (!state?.refreshToken) {
+    logger.error(`Garmin refresh token unavailable for user ${userId}`)
+    await markGarminAuthError(userId, 'Garmin refresh token is unavailable')
     throw new Error('Garmin refresh token is unavailable. Reconnect Garmin.')
   }
 
-  const refreshed = await executeTokenRefresh({ refreshToken: state.refreshToken })
+  let refreshed: GarminRefreshResponse
+  try {
+    refreshed = await executeTokenRefresh({ refreshToken: state.refreshToken })
+  } catch (error) {
+    logger.error(`Garmin token refresh failed for user ${userId}`, {
+      error: error instanceof Error ? error.message : 'unknown',
+    })
+    await markGarminAuthError(
+      userId,
+      error instanceof Error ? error.message : 'Garmin token refresh failed'
+    )
+    throw error
+  }
+
+  if (!refreshed.access_token || refreshed.access_token.trim().length < 10) {
+    logger.error(`Garmin refresh returned invalid access token for user ${userId}`, {
+      tokenLength: refreshed.access_token?.length ?? 0,
+    })
+    await markGarminAuthError(userId, 'Garmin refresh returned an invalid access token')
+    throw new Error('Garmin refresh token returned an invalid access token. Please reconnect Garmin.')
+  }
+
   const nextRefreshToken = refreshed.refresh_token ?? state.refreshToken
   const expiresAt = toIsoFromExpiresIn(refreshed.expires_in)
   const rotatedAt = new Date().toISOString()
@@ -370,6 +406,11 @@ export async function refreshGarminAccessToken(userId: number): Promise<{
     errorState: null,
   })
 
+  logger.info(`Garmin token refreshed successfully for user ${userId}`, {
+    newTokenLength: refreshed.access_token.length,
+    expiresAt,
+  })
+
   return {
     accessToken: refreshed.access_token,
     refreshToken: nextRefreshToken ?? null,
@@ -387,10 +428,18 @@ export async function getValidGarminAccessToken(userId: number): Promise<string>
     throw new Error('Garmin connection is not active. Reconnect Garmin.')
   }
 
+  if (state.status === 'reauth_required') {
+    throw new Error('Garmin connection requires re-authentication. Please reconnect Garmin.')
+  }
+
   if (!shouldRefreshToken(state.expiresAt)) {
     return state.accessToken
   }
 
+  logger.info(`Garmin token expired for user ${userId}, refreshing`, {
+    expiresAt: state.expiresAt,
+    hasRefreshToken: Boolean(state.refreshToken),
+  })
   const refreshed = await refreshGarminAccessToken(userId)
   return refreshed.accessToken
 }
