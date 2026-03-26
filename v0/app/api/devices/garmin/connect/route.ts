@@ -30,6 +30,14 @@ async function handleGarminConnect(req: ApiRequest) {
     const fallbackRedirectUri = origin ? `${origin}/garmin/callback` : '';
     const resolvedRedirectUri = envRedirectUri || requestRedirectUri || fallbackRedirectUri;
 
+    logger.info('Garmin connect: redirect URI resolution', {
+      envRedirectUri: envRedirectUri ?? '(not set)',
+      requestRedirectUri: requestRedirectUri || '(not set)',
+      origin: origin ?? '(not set)',
+      fallbackRedirectUri: fallbackRedirectUri || '(not set)',
+      resolvedRedirectUri: resolvedRedirectUri || '(none)',
+    });
+
     if (!resolvedRedirectUri) {
       logger.error('Garmin redirect URI not configured');
       return NextResponse.json({
