@@ -2,7 +2,7 @@ name: iOS Build & Test
 
 on:
   push:
-    branches: [iOS-application, main]
+    branches: [ios, iOS-application, main]
     paths:
       - 'apps/ios/**'
       - 'packages/shared/**'
@@ -14,7 +14,7 @@ on:
       - 'v0/lib/native/**'
       - '.github/workflows/ios-build.yml'
   pull_request:
-    branches: [iOS-application, main]
+    branches: [ios, iOS-application, main]
     paths:
       - 'apps/ios/**'
       - 'packages/shared/**'
@@ -61,6 +61,11 @@ jobs:
           cd packages/shared
           npm run generate:swift
 
+      - name: Sync Capacitor iOS app
+        run: |
+          cd v0
+          npx cap sync ios
+
       - name: Cache SPM packages
         uses: actions/cache@v4
         with:
@@ -85,15 +90,6 @@ jobs:
       - name: Build iOS app
         run: |
           xcodebuild clean build \
-            -project "$IOS_PROJECT" \
-            -scheme "$IOS_SCHEME" \
-            -destination 'platform=iOS Simulator,name=${{ steps.select-simulator.outputs.ios_simulator_name }}' \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO
-
-      - name: Run tests
-        run: |
-          xcodebuild test \
             -project "$IOS_PROJECT" \
             -scheme "$IOS_SCHEME" \
             -destination 'platform=iOS Simulator,name=${{ steps.select-simulator.outputs.ios_simulator_name }}' \

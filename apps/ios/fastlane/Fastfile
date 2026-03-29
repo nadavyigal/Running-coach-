@@ -6,7 +6,7 @@ PROJECT = "App/App.xcodeproj"
 SCHEME = "App"
 UI_TESTS_SCHEME = ENV["IOS_UI_TESTS_SCHEME"] || SCHEME
 APP_IDENTIFIER = "com.runsmart.coach"
-SIMULATOR_SELECTOR = File.expand_path("scripts/select-simulator.rb", __dir__)
+SIMULATOR_SELECTOR = File.expand_path("../scripts/select-simulator.rb", __dir__)
 
 def app_store_connect_api_key_if_configured
   return nil unless ENV["APP_STORE_CONNECT_API_KEY_ID"] && ENV["APP_STORE_CONNECT_API_ISSUER_ID"] && ENV["APP_STORE_CONNECT_API_KEY"]
