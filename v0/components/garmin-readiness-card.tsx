@@ -70,10 +70,18 @@ export function GarminReadinessCard({ userId }: GarminReadinessCardProps) {
       }
     }
 
+    const handleGarminRefresh = () => {
+      void run()
+    }
+
     void run()
+    window.addEventListener("garmin-dashboard-refresh", handleGarminRefresh)
+    window.addEventListener("garmin-readiness-refresh", handleGarminRefresh)
 
     return () => {
       cancelled = true
+      window.removeEventListener("garmin-dashboard-refresh", handleGarminRefresh)
+      window.removeEventListener("garmin-readiness-refresh", handleGarminRefresh)
     }
   }, [loadWeeklyInsight, userId])
 

@@ -18,12 +18,12 @@ export const dynamic = 'force-dynamic'
 type Params = { token: string }
 
 function injectSecretAsQueryParam(req: Request, token: string): Request {
-  const url = new URL(req.url)
-  url.searchParams.set('secret', token)
+  const headers = new Headers(req.headers)
+  headers.set('x-garmin-webhook-secret', token)
 
-  return new Request(url.toString(), {
+  return new Request(req.url, {
     method: req.method,
-    headers: req.headers,
+    headers,
     body: req.body,
     // @ts-expect-error duplex is required for streaming request bodies
     duplex: 'half',

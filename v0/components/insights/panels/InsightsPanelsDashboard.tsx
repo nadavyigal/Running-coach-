@@ -61,10 +61,18 @@ export function InsightsPanelsDashboard({
       }
     }
 
+    const handleGarminRefresh = () => {
+      void load()
+    }
+
     void load()
+    window.addEventListener('garmin-readiness-refresh', handleGarminRefresh)
+    window.addEventListener('garmin-dashboard-refresh', handleGarminRefresh)
 
     return () => {
       cancelled = true
+      window.removeEventListener('garmin-readiness-refresh', handleGarminRefresh)
+      window.removeEventListener('garmin-dashboard-refresh', handleGarminRefresh)
     }
   }, [userId])
 
@@ -78,10 +86,16 @@ export function InsightsPanelsDashboard({
       }
     }
 
+    const handleGarminSync = () => {
+      void loadRecentRun()
+    }
+
     void loadRecentRun()
+    window.addEventListener('garmin-run-synced', handleGarminSync)
 
     return () => {
       cancelled = true
+      window.removeEventListener('garmin-run-synced', handleGarminSync)
     }
   }, [userId])
 

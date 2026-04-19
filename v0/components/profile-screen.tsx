@@ -149,7 +149,7 @@ export function ProfileScreen() {
   useEffect(() => {
     if (!userId) return
     let mounted = true
-    void fetch(`/api/garmin/status?userId=${encodeURIComponent(String(userId))}`, {
+    void fetch(`/api/devices/garmin/status?userId=${encodeURIComponent(String(userId))}`, {
       headers: { 'x-user-id': String(userId) },
     })
       .then((response) => response.json())

@@ -119,7 +119,12 @@ export async function triggerRunReportsForNewGarminRuns(userId: number): Promise
 
 export async function syncGarminRunsToClient(userId: number): Promise<{ imported: number }> {
   const imported = await mirrorRecentGarminRunsToDexie(userId)
+  window.dispatchEvent(new CustomEvent('garmin-sync-complete', { detail: { userId, imported } }))
   window.dispatchEvent(new Event('garmin-run-synced'))
+  window.dispatchEvent(new Event('garmin-dashboard-refresh'))
+  window.dispatchEvent(new Event('garmin-readiness-refresh'))
+  window.dispatchEvent(new Event('today-refresh'))
+  window.dispatchEvent(new Event('recovery-refresh'))
   window.dispatchEvent(new Event('plan-updated'))
   void triggerRunReportsForNewGarminRuns(userId)
   return { imported }

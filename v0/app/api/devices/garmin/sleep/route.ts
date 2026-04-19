@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { getValidGarminAccessToken, markGarminAuthError } from '@/lib/server/garmin-oauth-store';
+import { GARMIN_HEALTH_API_BASE_URL } from '@/lib/server/garmin-endpoints';
 
 export const dynamic = 'force-dynamic';
 
-const GARMIN_API_BASE = 'https://apis.garmin.com';
 const GARMIN_MAX_WINDOW_SECONDS = 86400;
 const MAX_DAYS = 30;
 const DEFAULT_DAYS = 30;
@@ -88,7 +88,7 @@ function isSleepEndpointNotProvisioned(status: number, body: string): boolean {
 }
 
 async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
-  const response = await fetch(`${GARMIN_API_BASE}/wellness-api/rest/user/permissions`, {
+  const response = await fetch(`${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/permissions`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -128,7 +128,7 @@ async function fetchSleepData(
   while (windowStart <= endTime) {
     const windowEnd = Math.min(windowStart + GARMIN_MAX_WINDOW_SECONDS - 1, endTime);
     const path = mode === 'upload' ? '/wellness-api/rest/sleeps' : '/wellness-api/rest/backfill/sleeps';
-    const url = new URL(`${GARMIN_API_BASE}${path}`);
+    const url = new URL(`${GARMIN_HEALTH_API_BASE_URL}${path}`);
 
     if (mode === 'upload') {
       url.searchParams.set('uploadStartTimeInSeconds', String(windowStart));

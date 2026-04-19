@@ -2,10 +2,8 @@ import 'server-only'
 
 import { decryptToken, encryptToken } from '@/app/api/devices/garmin/token-crypto'
 import { logger } from '@/lib/logger'
+import { GARMIN_OAUTH_REVOKE_URL, GARMIN_OAUTH_TOKEN_URL } from '@/lib/server/garmin-endpoints'
 import { createAdminClient } from '@/lib/supabase/admin'
-
-const GARMIN_TOKEN_URL = 'https://diauth.garmin.com/di-oauth2-service/oauth/token'
-const GARMIN_REVOKE_URL = 'https://diauth.garmin.com/di-oauth2-service/oauth/revoke'
 const TOKEN_REFRESH_SKEW_SECONDS = 5 * 60
 const MAX_REFRESH_RETRIES = 3
 
@@ -131,7 +129,7 @@ async function executeTokenRefresh(params: {
 
   for (let attempt = 1; attempt <= MAX_REFRESH_RETRIES; attempt += 1) {
     try {
-      const response = await fetch(GARMIN_TOKEN_URL, {
+      const response = await fetch(GARMIN_OAUTH_TOKEN_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -510,7 +508,7 @@ async function revokeTokenUpstream(token: string): Promise<void> {
   const clientSecret = process.env.GARMIN_CLIENT_SECRET
   if (!clientId || !clientSecret) return
 
-  const response = await fetch(GARMIN_REVOKE_URL, {
+  const response = await fetch(GARMIN_OAUTH_REVOKE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({

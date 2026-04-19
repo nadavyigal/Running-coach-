@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
 import { persistGarminSyncSnapshot } from '@/lib/server/garmin-analytics-store'
+import { GARMIN_HEALTH_API_BASE_URL } from '@/lib/server/garmin-endpoints'
 import { runGarminDeriveForPayload } from '@/lib/server/garmin-derive-worker'
 import {
   GARMIN_HISTORY_DAYS,
@@ -8,6 +9,7 @@ import {
   groupRowsByDataset,
   lookbackStartIso,
   readGarminExportRows,
+  storeGarminExportRows,
 } from '@/lib/server/garmin-export-store'
 import {
   getGarminOAuthState,
@@ -23,7 +25,6 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
-const GARMIN_API_BASE = 'https://apis.garmin.com'
 const GARMIN_MAX_WINDOW_SECONDS = 86400
 const SYNC_NAME = 'RunSmart Garmin Export Sync'
 const DEFAULT_INCREMENTAL_DAYS = 7
@@ -462,7 +463,7 @@ async function fetchWellnessActivities(
   while (windowStart <= endTime) {
     const windowEnd = Math.min(windowStart + GARMIN_MAX_WINDOW_SECONDS - 1, endTime)
     const path = mode === 'upload' ? '/wellness-api/rest/activities' : '/wellness-api/rest/backfill/activities'
-    const url = new URL(`${GARMIN_API_BASE}${path}`)
+    const url = new URL(`${GARMIN_HEALTH_API_BASE_URL}${path}`)
 
     if (mode === 'upload') {
       url.searchParams.set('uploadStartTimeInSeconds', String(windowStart))
@@ -504,7 +505,7 @@ async function fetchWellnessSleep(
   while (windowStart <= endTime) {
     const windowEnd = Math.min(windowStart + GARMIN_MAX_WINDOW_SECONDS - 1, endTime)
     const path = mode === 'upload' ? '/wellness-api/rest/sleeps' : '/wellness-api/rest/backfill/sleeps'
-    const url = new URL(`${GARMIN_API_BASE}${path}`)
+    const url = new URL(`${GARMIN_HEALTH_API_BASE_URL}${path}`)
 
     if (mode === 'upload') {
       url.searchParams.set('uploadStartTimeInSeconds', String(windowStart))
@@ -546,7 +547,7 @@ async function fetchWellnessDailies(
   while (windowStart <= endTime) {
     const windowEnd = Math.min(windowStart + GARMIN_MAX_WINDOW_SECONDS - 1, endTime)
     const path = mode === 'upload' ? '/wellness-api/rest/dailies' : '/wellness-api/rest/backfill/dailies'
-    const url = new URL(`${GARMIN_API_BASE}${path}`)
+    const url = new URL(`${GARMIN_HEALTH_API_BASE_URL}${path}`)
 
     if (mode === 'upload') {
       url.searchParams.set('uploadStartTimeInSeconds', String(windowStart))
@@ -581,6 +582,7 @@ async function fetchRecentGarminActivities(
   lookbackDays: number
 ): Promise<{
   activities: ReturnType<typeof toRunSmartActivity>[]
+  rawRows: Record<string, unknown>[]
   source: 'wellness-upload' | 'wellness-backfill'
 }> {
   const endTime = Math.floor(Date.now() / 1000)
@@ -611,7 +613,7 @@ async function fetchRecentGarminActivities(
   }
 
   const mapped = rawActivities.map((activity) => toRunSmartActivity(activity))
-  return { activities: mapped, source }
+  return { activities: mapped, rawRows: rawActivities, source }
 }
 
 async function fetchRecentGarminSleep(
@@ -620,6 +622,7 @@ async function fetchRecentGarminSleep(
   lookbackDays: number
 ): Promise<{
   sleep: RunSmartSleepRecord[]
+  rawRows: Record<string, unknown>[]
   source: 'sleep-upload' | 'sleep-backfill'
 }> {
   const endTime = Math.floor(Date.now() / 1000)
@@ -652,7 +655,7 @@ async function fetchRecentGarminSleep(
   const mapped = rawSleep
     .map((entry) => toRunSmartSleepRecord(entry))
     .filter((entry): entry is RunSmartSleepRecord => entry != null)
-  return { sleep: mapped, source }
+  return { sleep: mapped, rawRows: rawSleep, source }
 }
 
 async function fetchRecentGarminDailies(
@@ -661,6 +664,7 @@ async function fetchRecentGarminDailies(
   lookbackDays: number
 ): Promise<{
   dailies: Record<string, unknown>[]
+  rawRows: Record<string, unknown>[]
   source: 'dailies-upload' | 'dailies-backfill'
 }> {
   const endTime = Math.floor(Date.now() / 1000)
@@ -690,7 +694,7 @@ async function fetchRecentGarminDailies(
     }
   }
 
-  return { dailies: rawDailies, source }
+  return { dailies: rawDailies, rawRows: rawDailies, source }
 }
 
 function getActivityStartSeconds(activity: Record<string, unknown>): number | null {
@@ -1009,7 +1013,7 @@ function toRunSmartSleepRecord(entry: Record<string, unknown>): RunSmartSleepRec
 }
 
 async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
-  const response = await fetch(`${GARMIN_API_BASE}/wellness-api/rest/user/permissions`, {
+  const response = await fetch(`${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/permissions`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -1039,7 +1043,7 @@ async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
 }
 
 async function fetchGarminUserId(accessToken: string): Promise<string> {
-  const response = await fetch(`${GARMIN_API_BASE}/wellness-api/rest/user/id`, {
+  const response = await fetch(`${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/id`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -1154,6 +1158,50 @@ async function computeCatalog(params: {
       latestReceivedAt,
     },
   }
+}
+
+async function persistPulledDatasetRows(params: {
+  datasetKey: GarminDatasetKey
+  rows: Record<string, unknown>[]
+  garminUserId: string | null
+}): Promise<void> {
+  if (params.rows.length === 0) return
+
+  const result = await storeGarminExportRows({
+    datasetKey: params.datasetKey,
+    rows: params.rows,
+    source: 'ping_pull',
+    fallbackGarminUserId: params.garminUserId ?? null,
+  })
+
+  if (!result.ok) {
+    throw new Error(result.storeError ?? `Failed to persist Garmin ${params.datasetKey} export rows`)
+  }
+}
+
+function appendDatasetRows(params: {
+  datasets: Record<GarminDatasetKey, Record<string, unknown>[]>
+  datasetCounts: Record<GarminDatasetKey, number>
+  ingestion: {
+    lookbackDays: number
+    storeAvailable: boolean
+    storeError?: string
+    recordsInWindow: number
+    latestReceivedAt: string | null
+  }
+  datasetKey: GarminDatasetKey
+  rows: Record<string, unknown>[]
+  receivedAt: string
+}) {
+  if (params.rows.length === 0) return
+
+  const mergedRows = [...params.datasets[params.datasetKey], ...params.rows]
+  params.datasets[params.datasetKey] = mergedRows
+  params.datasetCounts[params.datasetKey] = mergedRows.length
+  params.ingestion.recordsInWindow += params.rows.length
+  params.ingestion.latestReceivedAt = params.receivedAt
+  params.ingestion.storeAvailable = true
+  delete params.ingestion.storeError
 }
 
 function parseUserId(req: Request): number | null {
@@ -1342,11 +1390,16 @@ export async function runGarminSyncForUser(params: {
           })
     const syncStartedAtIso = new Date().toISOString()
 
-    const { permissions, capabilities, datasets, datasetCounts, ingestion } = await computeCatalogWithAutoRefresh({
+    const catalog = await computeCatalogWithAutoRefresh({
       userId,
       sinceIso: syncWindow.sinceIso,
       lookbackDays: syncWindow.lookbackDays,
     })
+    const permissions = catalog.permissions
+    let capabilities = catalog.capabilities
+    const datasets = catalog.datasets
+    const datasetCounts = { ...catalog.datasetCounts }
+    const ingestion = { ...catalog.ingestion }
 
     const nowIso = new Date().toISOString()
     const nextSyncCursorIso =
@@ -1409,6 +1462,19 @@ export async function runGarminSyncForUser(params: {
           options.activityLookbackDays
         )
         if (fallbackResult.activities.length > 0) {
+          await persistPulledDatasetRows({
+            datasetKey: 'activities',
+            rows: fallbackResult.rawRows,
+            garminUserId: oauthState.garminUserId,
+          })
+          appendDatasetRows({
+            datasets,
+            datasetCounts,
+            ingestion,
+            datasetKey: 'activities',
+            rows: fallbackResult.rawRows,
+            receivedAt: nowIso,
+          })
           activitiesForSync = fallbackResult.activities
           notices.push(
             `Activity webhook feeds were empty, so RunSmart pulled ${fallbackResult.activities.length} activities directly from Garmin ${fallbackResult.source}.`
@@ -1447,7 +1513,6 @@ export async function runGarminSyncForUser(params: {
           notices.push(
             `Webhook feeds were empty, so RunSmart imported ${cachedActivities.length} cached Garmin activities from analytics storage (${cachedLookbackDays}-day window).`
           )
-          fallbackFailureNotice = null
         }
       } catch (cachedReadError) {
         logger.warn('Garmin stored activity cache fallback warning:', cachedReadError)
@@ -1457,6 +1522,14 @@ export async function runGarminSyncForUser(params: {
     if (fallbackFailureNotice) {
       notices.push(fallbackFailureNotice)
     }
+
+    capabilities = buildCapabilities({
+      permissions,
+      datasetCounts,
+      storeAvailable: ingestion.storeAvailable,
+      ...(ingestion.storeError ? { storeError: ingestion.storeError } : {}),
+      lookbackDays: ingestion.lookbackDays,
+    })
 
     const missingDatasetsSet = new Set<string>(
       capabilities
@@ -1478,6 +1551,19 @@ export async function runGarminSyncForUser(params: {
           syncWindow.lookbackDays
         )
         if (fallbackDailies.dailies.length > 0) {
+          await persistPulledDatasetRows({
+            datasetKey: 'dailies',
+            rows: fallbackDailies.rawRows,
+            garminUserId: oauthState.garminUserId,
+          })
+          appendDatasetRows({
+            datasets,
+            datasetCounts,
+            ingestion,
+            datasetKey: 'dailies',
+            rows: fallbackDailies.rawRows,
+            receivedAt: nowIso,
+          })
           dailies = fallbackDailies.dailies
           usedFallbackDatasets.push('dailies')
           missingDatasetsSet.delete('dailies')
@@ -1510,12 +1596,7 @@ export async function runGarminSyncForUser(params: {
       }
     }
 
-    const datasetsForSync: Record<GarminDatasetKey, Record<string, unknown>[]> = {
-      ...datasets,
-      dailies,
-    }
-
-    let sleep = datasetsForSync.sleeps
+    let sleep = datasets.sleeps
       .map((entry) => toRunSmartSleepRecord(entry))
       .filter((entry): entry is NonNullable<typeof entry> => entry != null)
 
@@ -1530,6 +1611,19 @@ export async function runGarminSyncForUser(params: {
           syncWindow.lookbackDays
         )
         if (fallbackSleep.sleep.length > 0) {
+          await persistPulledDatasetRows({
+            datasetKey: 'sleeps',
+            rows: fallbackSleep.rawRows,
+            garminUserId: oauthState.garminUserId,
+          })
+          appendDatasetRows({
+            datasets,
+            datasetCounts,
+            ingestion,
+            datasetKey: 'sleeps',
+            rows: fallbackSleep.rawRows,
+            receivedAt: nowIso,
+          })
           sleep = fallbackSleep.sleep
           usedFallbackDatasets.push('sleeps')
           missingDatasetsSet.delete('sleeps')
@@ -1560,6 +1654,19 @@ export async function runGarminSyncForUser(params: {
           logger.warn('Garmin sleep fallback error:', fallbackSleepError)
         }
       }
+    }
+
+    capabilities = buildCapabilities({
+      permissions,
+      datasetCounts,
+      storeAvailable: ingestion.storeAvailable,
+      ...(ingestion.storeError ? { storeError: ingestion.storeError } : {}),
+      lookbackDays: ingestion.lookbackDays,
+    })
+
+    const datasetsForSync: Record<GarminDatasetKey, Record<string, unknown>[]> = {
+      ...datasets,
+      dailies,
     }
 
     let persistence: {
@@ -1652,9 +1759,11 @@ export async function runGarminSyncForUser(params: {
       logger.warn('Garmin derive enqueue warning:', queueError)
     }
 
+    const finalTotalRows = Object.values(datasetCounts).reduce((sum, value) => sum + value, 0)
+
     await captureServerEvent('garmin_sync_completed', {
       userId,
-      datasetsCount: totalRows,
+      datasetsCount: finalTotalRows,
       activitiesCount: activitiesForSync.length,
       trigger: options.trigger,
     })
@@ -1686,6 +1795,7 @@ export async function runGarminSyncForUser(params: {
           usedFallbackDatasets,
         },
         notices,
+        lastDataReceivedAt: ingestion.latestReceivedAt,
         lastSyncCursor: nextSyncCursorIso,
         lastSyncAt: nowIso,
       },

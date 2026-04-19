@@ -2,16 +2,17 @@ import { NextResponse } from 'next/server'
 import { withApiSecurity, ApiRequest } from '@/lib/security.middleware'
 import { verifyAndParseState } from '../oauth-state'
 import { logger } from '@/lib/logger'
+import {
+  GARMIN_OAUTH_TOKEN_URL,
+  GARMIN_PERMISSIONS_URL,
+  GARMIN_PROFILE_URL,
+} from '@/lib/server/garmin-endpoints'
 import { getCurrentProfile, getCurrentUser } from '@/lib/supabase/server'
 import { enqueueGarminBackfillJob } from '@/lib/integrations/garmin/service'
 import {
   upsertGarminConnection,
   upsertGarminTokens,
 } from '@/lib/server/garmin-oauth-store'
-
-const GARMIN_TOKEN_URL = 'https://diauth.garmin.com/di-oauth2-service/oauth/token'
-const GARMIN_PROFILE_URL = 'https://apis.garmin.com/wellness-api/rest/user/id'
-const GARMIN_PERMISSIONS_URL = 'https://apis.garmin.com/wellness-api/rest/user/permissions'
 
 async function resolveAuthUserId(): Promise<string | null> {
   try {

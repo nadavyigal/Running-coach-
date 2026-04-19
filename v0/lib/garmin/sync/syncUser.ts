@@ -9,6 +9,11 @@ import {
   getGarminSyncState,
   processPendingGarminJobs,
 } from '@/lib/integrations/garmin/service'
+import type {
+  GarminDatasetCompletenessSummary,
+  GarminPersistenceSummary,
+} from '@/lib/server/garmin-api-response'
+import type { GarminDatasetKey } from '@/lib/server/garmin-export-store'
 import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
 import { runGarminDeriveForPayload } from '@/lib/server/garmin-derive-worker'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -27,7 +32,16 @@ export interface GarminConnectionStatus {
 export interface GarminSyncUserResult {
   status: number
   connected: boolean
+  connectionStatus: string
+  syncState: string
+  needsReauth: boolean
   lastSyncAt: string | null
+  lastSuccessfulSyncAt: string | null
+  lastDataReceivedAt: string | null
+  pendingJobs: number
+  datasetCounts: Record<string, number>
+  datasetCompleteness: GarminDatasetCompletenessSummary
+  persistence: GarminPersistenceSummary
   errorState: Record<string, unknown> | null
   noOp: boolean
   activitiesUpserted: number
@@ -35,6 +49,7 @@ export interface GarminSyncUserResult {
   duplicateActivitiesSkipped: number
   activityFilesProcessed: number
   warnings: string[]
+  error?: string | null
   retryAfterSeconds?: number
   reason?: string
   body: Record<string, unknown>
@@ -143,12 +158,33 @@ export async function syncGarminUser(input: {
     throw new Error('Valid userId is required for Garmin sync')
   }
 
+  const emptyDatasetCounts: Record<string, number> = {}
+  const emptyDatasetCompleteness: GarminDatasetCompletenessSummary = {
+    missingDatasets: [],
+    usedFallbackDatasets: [],
+  }
+  const emptyPersistence: GarminPersistenceSummary = {
+    activitiesUpserted: 0,
+    dailyMetricsUpserted: 0,
+    duplicateActivitiesSkipped: 0,
+    activityFilesProcessed: 0,
+  }
+
   const connection = await getGarminOAuthState(userId)
   if (!connection || connection.status !== 'connected') {
     return {
       status: 401,
       connected: false,
+      connectionStatus: connection?.status ?? 'disconnected',
+      syncState: connection?.status === 'reauth_required' ? 'reauth_required' : 'disconnected',
+      needsReauth: true,
       lastSyncAt: connection?.lastSuccessfulSyncAt ?? connection?.lastSyncAt ?? null,
+      lastSuccessfulSyncAt: connection?.lastSuccessfulSyncAt ?? null,
+      lastDataReceivedAt: connection?.lastWebhookReceivedAt ?? null,
+      pendingJobs: 0,
+      datasetCounts: emptyDatasetCounts,
+      datasetCompleteness: emptyDatasetCompleteness,
+      persistence: emptyPersistence,
       errorState: connection?.errorState ?? null,
       noOp: true,
       activitiesUpserted: 0,
@@ -156,6 +192,7 @@ export async function syncGarminUser(input: {
       duplicateActivitiesSkipped: 0,
       activityFilesProcessed: 0,
       warnings: [],
+      error: 'No Garmin connection found. Connect Garmin first.',
       reason: 'not_connected',
       body: {
         success: false,
@@ -176,7 +213,16 @@ export async function syncGarminUser(input: {
     return {
       status: 429,
       connected: true,
+      connectionStatus: connection.status,
+      syncState: 'connected',
+      needsReauth: false,
       lastSyncAt,
+      lastSuccessfulSyncAt: connection.lastSuccessfulSyncAt,
+      lastDataReceivedAt: connection.lastWebhookReceivedAt,
+      pendingJobs: 0,
+      datasetCounts: emptyDatasetCounts,
+      datasetCompleteness: emptyDatasetCompleteness,
+      persistence: emptyPersistence,
       errorState: connection.errorState,
       noOp: true,
       activitiesUpserted: 0,
@@ -184,6 +230,7 @@ export async function syncGarminUser(input: {
       duplicateActivitiesSkipped: 0,
       activityFilesProcessed: 0,
       warnings: [],
+      error: 'Garmin sync rate limit reached. Try again later.',
       ...(rateLimit.retryAfterSeconds !== undefined ? { retryAfterSeconds: rateLimit.retryAfterSeconds } : {}),
       ...(rateLimit.reason !== undefined ? { reason: rateLimit.reason } : {}),
       body: {
@@ -225,6 +272,9 @@ export async function syncGarminUser(input: {
 
   let dailyMetricsUpserted = 0
   let analyticsBody: Record<string, unknown> | null = null
+  let lastDataReceivedAt: string | null = connection.lastWebhookReceivedAt
+  let datasetCounts: Record<string, number> = emptyDatasetCounts
+  let datasetCompleteness = emptyDatasetCompleteness
 
   try {
     const analyticsExecution = await runGarminSyncForUser({
@@ -241,7 +291,16 @@ export async function syncGarminUser(input: {
       return {
         status: analyticsExecution.status,
         connected: false,
+        connectionStatus: 'reauth_required',
+        syncState: 'reauth_required',
+        needsReauth: true,
         lastSyncAt: connection.lastSuccessfulSyncAt ?? connection.lastSyncAt,
+        lastSuccessfulSyncAt: connection.lastSuccessfulSyncAt ?? null,
+        lastDataReceivedAt: connection.lastWebhookReceivedAt,
+        pendingJobs: 0,
+        datasetCounts: emptyDatasetCounts,
+        datasetCompleteness: emptyDatasetCompleteness,
+        persistence: emptyPersistence,
         errorState: connection.errorState,
         noOp: true,
         activitiesUpserted: workerStats.imported,
@@ -249,6 +308,10 @@ export async function syncGarminUser(input: {
         duplicateActivitiesSkipped: workerStats.duplicates,
         activityFilesProcessed: 0,
         warnings,
+        error:
+          typeof analyticsExecution.body.error === 'string'
+            ? analyticsExecution.body.error
+            : 'Garmin authentication expired or invalid, please reconnect Garmin',
         body: analyticsExecution.body,
       }
     }
@@ -258,6 +321,40 @@ export async function syncGarminUser(input: {
       const upserted = (persistence as { dailyMetricsUpserted?: unknown }).dailyMetricsUpserted
       if (typeof upserted === 'number' && Number.isFinite(upserted)) {
         dailyMetricsUpserted = upserted
+      }
+    }
+
+    const executionDatasetCounts = analyticsExecution.body.datasetCounts
+    if (executionDatasetCounts && typeof executionDatasetCounts === 'object') {
+      datasetCounts = Object.fromEntries(
+        Object.entries(executionDatasetCounts as Record<string, unknown>).map(([key, value]) => [
+          key,
+          typeof value === 'number' && Number.isFinite(value) ? value : 0,
+        ])
+      )
+    }
+
+    const executionCompleteness = analyticsExecution.body.datasetCompleteness
+    if (executionCompleteness && typeof executionCompleteness === 'object') {
+      datasetCompleteness = {
+        missingDatasets: Array.isArray((executionCompleteness as { missingDatasets?: unknown }).missingDatasets)
+          ? ((executionCompleteness as { missingDatasets?: unknown }).missingDatasets as unknown[])
+              .filter((item): item is GarminDatasetKey => typeof item === 'string')
+          : [],
+        usedFallbackDatasets: Array.isArray(
+          (executionCompleteness as { usedFallbackDatasets?: unknown }).usedFallbackDatasets
+        )
+          ? ((executionCompleteness as { usedFallbackDatasets?: unknown }).usedFallbackDatasets as unknown[])
+              .filter((item): item is GarminDatasetKey => typeof item === 'string')
+          : [],
+      }
+    }
+
+    const ingestion = analyticsExecution.body.ingestion
+    if (ingestion && typeof ingestion === 'object') {
+      const latestReceivedAt = (ingestion as { latestReceivedAt?: unknown }).latestReceivedAt
+      if (typeof latestReceivedAt === 'string' && latestReceivedAt.trim().length > 0) {
+        lastDataReceivedAt = latestReceivedAt
       }
     }
 
@@ -291,7 +388,21 @@ export async function syncGarminUser(input: {
   return {
     status: 200,
     connected: refreshedStatus.connected,
+    connectionStatus: refreshedStatus.connectionStatus,
+    syncState: refreshedStatus.syncState,
+    needsReauth: refreshedStatus.syncState === 'reauth_required',
     lastSyncAt: refreshedStatus.lastSuccessfulSyncAt ?? refreshedStatus.lastSyncAt,
+    lastSuccessfulSyncAt: refreshedStatus.lastSuccessfulSyncAt,
+    lastDataReceivedAt,
+    pendingJobs: refreshedStatus.pendingJobs,
+    datasetCounts,
+    datasetCompleteness,
+    persistence: {
+      activitiesUpserted: workerStats.imported,
+      dailyMetricsUpserted,
+      duplicateActivitiesSkipped: workerStats.duplicates,
+      activityFilesProcessed: activityFileStats.processed,
+    },
     errorState: refreshedStatus.errorState,
     noOp:
       workerStats.imported === 0 &&
@@ -302,6 +413,7 @@ export async function syncGarminUser(input: {
     duplicateActivitiesSkipped: workerStats.duplicates,
     activityFilesProcessed: activityFileStats.processed,
     warnings,
+    error: refreshedStatus.lastSyncError,
     body: {
       success: true,
       syncState: refreshedStatus.syncState,

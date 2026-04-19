@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { GARMIN_EXPORT_DATASET_KEYS } from '@/lib/garmin/datasets'
 
 const TABLE_NAME = 'user_memory_snapshots'
 const DEVICE_PREFIX = 'garmin_export'
@@ -51,6 +52,26 @@ export interface GarminStoreReadResult {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+}
+
+function asRecordArray(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => asRecord(entry))
+      .filter((entry) => Object.keys(entry).length > 0)
+  }
+
+  if (value && typeof value === 'object') {
+    for (const nested of Object.values(value as Record<string, unknown>)) {
+      if (Array.isArray(nested)) {
+        return nested
+          .map((entry) => asRecord(entry))
+          .filter((entry) => Object.keys(entry).length > 0)
+      }
+    }
+  }
+
+  return []
 }
 
 function getString(value: unknown): string | null {
@@ -241,6 +262,52 @@ export async function storeGarminExportRows(params: {
     storeAvailable: true,
     storedRows: dedupedPayload.size,
     droppedRows,
+  }
+}
+
+export async function storeGarminWebhookPayload(params: {
+  payload: Record<string, unknown>
+  fallbackGarminUserId?: string | null
+}): Promise<{
+  ok: boolean
+  storeAvailable: boolean
+  storeError?: string
+  storedRowsByDataset: Partial<Record<GarminDatasetKey, number>>
+  droppedRowsByDataset: Partial<Record<GarminDatasetKey, number>>
+}> {
+  const storedRowsByDataset: Partial<Record<GarminDatasetKey, number>> = {}
+  const droppedRowsByDataset: Partial<Record<GarminDatasetKey, number>> = {}
+
+  for (const datasetKey of GARMIN_EXPORT_DATASET_KEYS) {
+    const rows = asRecordArray(params.payload[datasetKey])
+    if (rows.length === 0) continue
+
+    const result = await storeGarminExportRows({
+      datasetKey,
+      rows,
+      source: 'push',
+      fallbackGarminUserId: params.fallbackGarminUserId ?? null,
+    })
+
+    storedRowsByDataset[datasetKey] = result.storedRows
+    droppedRowsByDataset[datasetKey] = result.droppedRows
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        storeAvailable: result.storeAvailable,
+        ...(result.storeError ? { storeError: result.storeError } : {}),
+        storedRowsByDataset,
+        droppedRowsByDataset,
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    storeAvailable: true,
+    storedRowsByDataset,
+    droppedRowsByDataset,
   }
 }
 

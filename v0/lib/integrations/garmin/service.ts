@@ -4,7 +4,9 @@ import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
 import { runGarminDeriveForPayload } from '@/lib/server/garmin-derive-worker'
+import { GARMIN_EXPORT_DATASET_KEYS, GARMIN_WEBHOOK_DATASET_KEYS } from '@/lib/garmin/datasets'
 import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
+import { storeGarminWebhookPayload } from '@/lib/server/garmin-export-store'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GarminClient, buildGarminServiceError, isGarminServiceError, mapGarminPayloadToNormalizedActivity } from '@/lib/integrations/garmin/client'
 import { importGarminActivity } from '@/lib/integrations/garmin/importGarminActivity'
@@ -23,12 +25,7 @@ import {
   upsertGarminConnection,
 } from '@/lib/server/garmin-oauth-store'
 
-const SUPPORTED_WEBHOOK_DATASETS: GarminDatasetKey[] = [
-  'activities',
-  'manuallyUpdatedActivities',
-  'activityDetails',
-  'activityFiles',
-]
+const SUPPORTED_WEBHOOK_DATASETS: GarminDatasetKey[] = [...GARMIN_WEBHOOK_DATASET_KEYS]
 
 const DELAYED_SYNC_THRESHOLD_MS = 30 * 60 * 1000
 const HEALTHY_SYNC_THRESHOLD_MS = 12 * 60 * 60 * 1000
@@ -181,6 +178,16 @@ export async function recordGarminWebhookDelivery(params: {
   const providerUserId = extractProviderUserId(params.payload)
   const eventType = params.eventType ?? 'garmin_delivery'
 
+  const exportPersistence = await storeGarminWebhookPayload({
+    payload: params.payload,
+    fallbackGarminUserId: providerUserId,
+  })
+  if (!exportPersistence.ok) {
+    throw new Error(
+      exportPersistence.storeError ?? 'Failed to persist Garmin webhook payload to export store'
+    )
+  }
+
   const { data: existing, error: existingError } = await supabase
     .from('garmin_webhook_events')
     .select('*')
@@ -221,6 +228,9 @@ export async function recordGarminWebhookDelivery(params: {
   logger.info('[garmin] metric=webhook_received', {
     webhook_event_id: data.id,
     provider_user_id: providerUserId,
+    export_datasets_persisted: GARMIN_EXPORT_DATASET_KEYS.filter(
+      (key) => (exportPersistence.storedRowsByDataset[key] ?? 0) > 0
+    ),
   })
 
   return {

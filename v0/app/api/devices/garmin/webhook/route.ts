@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { GARMIN_WEBHOOK_DATASET_KEYS } from '@/lib/garmin/datasets'
 import { logger } from '@/lib/logger'
 import {
   enqueueGarminImportJobsForEvent,
@@ -9,7 +10,7 @@ import { getGarminWebhookSecret } from '@/lib/server/garmin-webhook-secret'
 
 export const dynamic = 'force-dynamic'
 
-const SUPPORTED_DATASETS = ['activities', 'manuallyUpdatedActivities', 'activityDetails', 'activityFiles']
+const SUPPORTED_DATASETS = [...GARMIN_WEBHOOK_DATASET_KEYS]
 
 function getWebhookAuthResult(req: Request): { authorized: boolean; status: number; error?: string } {
   const { value: configuredSecret } = getGarminWebhookSecret()
