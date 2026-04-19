@@ -2,6 +2,7 @@
 const GARMIN_OAUTH_ORIGINS = [
   'https://connect.garmin.com',
   'https://diauth.garmin.com',
+  'https://connectapi.garmin.com',
 ]
 
 /**

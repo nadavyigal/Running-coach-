@@ -1,6 +1,14 @@
 ﻿import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const readRowsMock = vi.hoisted(() => vi.fn())
+const storeGarminExportRowsMock = vi.hoisted(() =>
+  vi.fn(async () => ({
+    ok: true,
+    storeAvailable: true,
+    storedRows: 1,
+    droppedRows: 0,
+  }))
+)
 const lookbackStartIsoMock = vi.hoisted(() => vi.fn(() => '2026-01-20T00:00:00.000Z'))
 const getGarminOAuthStateMock = vi.hoisted(() =>
   vi.fn(async () => ({
@@ -45,6 +53,7 @@ vi.mock('@/lib/server/garmin-export-store', () => ({
   GARMIN_HISTORY_DAYS: 30,
   lookbackStartIso: lookbackStartIsoMock,
   readGarminExportRows: readRowsMock,
+  storeGarminExportRows: storeGarminExportRowsMock,
   groupRowsByDataset: (rows: Array<{ datasetKey: string; payload: Record<string, unknown> }>) => {
     const grouped = {
       activities: [],
@@ -107,6 +116,7 @@ describe('/api/devices/garmin/sync', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-02-19T12:00:00.000Z'))
     readRowsMock.mockReset()
+    storeGarminExportRowsMock.mockClear()
     lookbackStartIsoMock.mockClear()
     getGarminOAuthStateMock.mockClear()
     getValidGarminAccessTokenMock.mockClear()
@@ -500,6 +510,20 @@ describe('/api/devices/garmin/sync', () => {
     expect(body.success).toBe(true)
     expect(body.activities).toHaveLength(1)
     expect(body.activities[0].activityId).toBe('fallback-run-1')
+    expect(storeGarminExportRowsMock).toHaveBeenCalledWith({
+      datasetKey: 'activities',
+      rows: [
+        {
+          activityId: 'fallback-run-1',
+          activityType: 'running',
+          startTimeInSeconds: 1771400000,
+          durationInSeconds: 1900,
+          distanceInMeters: 5100,
+        },
+      ],
+      source: 'ping_pull',
+      fallbackGarminUserId: 'garmin-user-1',
+    })
     expect(
       body.notices.some((notice: string) =>
         notice.includes('RunSmart pulled 1 activities directly from Garmin wellness-backfill')
@@ -558,6 +582,19 @@ describe('/api/devices/garmin/sync', () => {
     expect(body.sleepCount).toBe(1)
     expect(body.datasetCompleteness.usedFallbackDatasets).toContain('sleeps')
     expect(body.datasetCompleteness.missingDatasets).not.toContain('sleeps')
+    expect(storeGarminExportRowsMock).toHaveBeenCalledWith({
+      datasetKey: 'sleeps',
+      rows: [
+        {
+          sleepSummaryId: 'sleep-fallback-1',
+          calendarDate: '2026-02-18',
+          startTimeInSeconds: 1771372800,
+          durationInSeconds: 25200,
+        },
+      ],
+      source: 'ping_pull',
+      fallbackGarminUserId: 'garmin-user-1',
+    })
     expect(
       body.notices.some((notice: string) =>
         notice.includes('RunSmart pulled 1 sleep summaries directly from Garmin sleep-upload')
@@ -619,6 +656,19 @@ describe('/api/devices/garmin/sync', () => {
     expect(body.datasetCounts.dailies).toBeGreaterThanOrEqual(0)
     expect(body.datasetCompleteness.usedFallbackDatasets).toContain('dailies')
     expect(body.datasetCompleteness.missingDatasets).not.toContain('dailies')
+    expect(storeGarminExportRowsMock).toHaveBeenCalledWith({
+      datasetKey: 'dailies',
+      rows: [
+        {
+          summaryId: 'daily-fallback-1',
+          calendarDate: '2026-02-18',
+          bodyBatteryChargedValue: 62,
+          bodyBatteryDrainedValue: 47,
+        },
+      ],
+      source: 'ping_pull',
+      fallbackGarminUserId: 'garmin-user-1',
+    })
     expect(
       body.notices.some((notice: string) =>
         notice.includes('RunSmart pulled 1 daily summaries directly from Garmin dailies-upload')
@@ -704,6 +754,11 @@ describe('/api/devices/garmin/sync', () => {
     expect(body.activities).toHaveLength(1)
     expect(body.activities[0].activityId).toBe('cached-run-1')
     expect(body.activities[0].distance).toBe(6.2)
+    expect(
+      body.notices.some((notice: string) =>
+        notice.includes('Garmin activity backfill is not provisioned for this app')
+      )
+    ).toBe(true)
     expect(
       body.notices.some((notice: string) =>
         notice.includes('Webhook feeds were empty, so RunSmart imported 1 cached Garmin activities')

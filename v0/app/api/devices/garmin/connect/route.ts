@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { withApiSecurity, ApiRequest } from '@/lib/security.middleware';
+import { GARMIN_OAUTH_AUTHORIZE_URL } from '@/lib/server/garmin-endpoints';
 import { generateSignedState, generateCodeVerifier, generateCodeChallenge } from '../oauth-state';
 
 // POST - Initiate Garmin OAuth 2.0 PKCE flow (SECURED)
@@ -81,7 +82,7 @@ async function handleGarminConnect(req: ApiRequest) {
 
     // Garmin Connect OAuth 2.0 PKCE authorization URL
     // Ref: https://developerportal.garmin.com/sites/default/files/OAuth2PKCE_1.pdf
-    const authUrl = new URL('https://connect.garmin.com/oauth2Confirm');
+    const authUrl = new URL(GARMIN_OAUTH_AUTHORIZE_URL);
     authUrl.searchParams.append('client_id', clientId);
     authUrl.searchParams.append('response_type', 'code');
     authUrl.searchParams.append('redirect_uri', parsedRedirectUri.toString());

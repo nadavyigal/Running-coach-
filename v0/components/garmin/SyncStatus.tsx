@@ -12,6 +12,7 @@ interface GarminStatusResponse {
   syncState?: string
   lastSyncAt: string | null
   lastSuccessfulSyncAt?: string | null
+  lastDataReceivedAt?: string | null
   lastWebhookReceivedAt?: string | null
   pendingJobs?: number
   lastSyncError?: string | null
@@ -23,11 +24,16 @@ interface GarminStatusResponse {
 interface GarminSyncResponse {
   success: boolean
   connected: boolean
+  connectionStatus?: string
   lastSyncAt: string | null
+  lastSuccessfulSyncAt?: string | null
+  lastDataReceivedAt?: string | null
   errorState: Record<string, unknown> | null
   error?: string | null
   retryAfterSeconds?: number | null
-  details?: {
+  syncState?: string
+  pendingJobs?: number
+  detail?: {
     syncState?: string
     pendingJobs?: number
     error?: string | null
@@ -88,7 +94,7 @@ export function SyncStatus({ userId }: SyncStatusProps) {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await fetch(`/api/garmin/status?userId=${encodeURIComponent(String(userId))}`, {
+      const response = await fetch(`/api/devices/garmin/status?userId=${encodeURIComponent(String(userId))}`, {
         method: "GET",
         headers: { "x-user-id": String(userId) },
       })
@@ -106,19 +112,19 @@ export function SyncStatus({ userId }: SyncStatusProps) {
     setIsRefreshing(true)
     setError(null)
     try {
-      const response = await fetch(`/api/garmin/sync?userId=${encodeURIComponent(String(userId))}`, {
+      const response = await fetch(`/api/devices/garmin/sync/manual?userId=${encodeURIComponent(String(userId))}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-user-id": String(userId),
         },
-        body: JSON.stringify({ trigger: "manual" }),
+        body: JSON.stringify({ userId }),
       })
       const payload = (await response.json()) as GarminSyncResponse
       if (!response.ok || !payload.success) {
         const errorMessage =
           asText(payload.error) ??
-          asText(payload.details?.error) ??
+          asText(payload.detail?.error) ??
           asText(payload.errorState?.message) ??
           "Garmin sync failed."
         throw new Error(errorMessage)
@@ -126,11 +132,13 @@ export function SyncStatus({ userId }: SyncStatusProps) {
 
       setStatus((current) => ({
         connected: payload.connected,
-        connectionStatus: current?.connectionStatus ?? "connected",
-        syncState: payload.details?.syncState ?? current?.syncState,
+        connectionStatus: payload.connectionStatus ?? current?.connectionStatus ?? "connected",
+        syncState: payload.syncState ?? payload.detail?.syncState ?? current?.syncState,
         lastSyncAt: payload.lastSyncAt,
+        lastSuccessfulSyncAt: payload.lastSuccessfulSyncAt ?? current?.lastSuccessfulSyncAt,
+        lastDataReceivedAt: payload.lastDataReceivedAt ?? current?.lastDataReceivedAt,
         errorState: payload.errorState,
-        pendingJobs: payload.details?.pendingJobs ?? current?.pendingJobs,
+        pendingJobs: payload.pendingJobs ?? payload.detail?.pendingJobs ?? current?.pendingJobs,
         freshnessLabel: payload.freshnessLabel ?? current?.freshnessLabel,
         confidenceLabel: payload.confidenceLabel ?? current?.confidenceLabel,
       }))

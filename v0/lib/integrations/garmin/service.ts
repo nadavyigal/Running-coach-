@@ -3,9 +3,10 @@ import 'server-only'
 import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
-import { persistGarminSyncSnapshot } from '@/lib/server/garmin-analytics-store'
 import { runGarminDeriveForPayload } from '@/lib/server/garmin-derive-worker'
+import { GARMIN_EXPORT_DATASET_KEYS, GARMIN_WEBHOOK_DATASET_KEYS } from '@/lib/garmin/datasets'
 import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
+import { storeGarminWebhookPayload } from '@/lib/server/garmin-export-store'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GarminClient, buildGarminServiceError, isGarminServiceError, mapGarminPayloadToNormalizedActivity } from '@/lib/integrations/garmin/client'
 import { importGarminActivity } from '@/lib/integrations/garmin/importGarminActivity'
@@ -24,31 +25,7 @@ import {
   upsertGarminConnection,
 } from '@/lib/server/garmin-oauth-store'
 
-const ACTIVITY_WEBHOOK_DATASETS: GarminDatasetKey[] = [
-  'activities',
-  'manuallyUpdatedActivities',
-  'activityDetails',
-]
-
-const HEALTH_WEBHOOK_DATASETS: GarminDatasetKey[] = [
-  'dailies',
-  'sleeps',
-  'epochs',
-  'stressDetails',
-  'hrv',
-  'pulseox',
-  'allDayRespiration',
-  'bodyComps',
-  'userMetrics',
-  'healthSnapshot',
-  'skinTemp',
-  'bloodPressures',
-]
-
-const SUPPORTED_WEBHOOK_DATASETS: GarminDatasetKey[] = [
-  ...ACTIVITY_WEBHOOK_DATASETS,
-  ...HEALTH_WEBHOOK_DATASETS,
-]
+const SUPPORTED_WEBHOOK_DATASETS: GarminDatasetKey[] = [...GARMIN_WEBHOOK_DATASET_KEYS]
 
 const DELAYED_SYNC_THRESHOLD_MS = 30 * 60 * 1000
 const HEALTHY_SYNC_THRESHOLD_MS = 12 * 60 * 60 * 1000
@@ -111,6 +88,19 @@ function extractActivityId(row: Record<string, unknown>): string | null {
   return activityId != null ? String(activityId) : null
 }
 
+function extractSummaryId(row: Record<string, unknown>): string | null {
+  const summaryId = row.summaryId ?? row.activitySummaryId ?? row.activityId ?? row.id
+  return summaryId != null ? String(summaryId) : null
+}
+
+function extractStartTimeSeconds(row: Record<string, unknown>): number | null {
+  return (
+    getNumber(row.startTimeInSeconds) ??
+    getNumber(row.summaryStartTimeInSeconds) ??
+    getNumber(row.startTimeSeconds)
+  )
+}
+
 function extractWebhookDatasetRows(payload: Record<string, unknown>): GarminWebhookDatasetRow[] {
   const rows: GarminWebhookDatasetRow[] = []
 
@@ -153,6 +143,31 @@ function isOptionalDeriveQueueNotice(reason: string | null | undefined): boolean
   return normalized.includes('redis not configured') || normalized.includes('derive queue unavailable')
 }
 
+async function triggerActivityFileProcessing(userIds: number[]): Promise<void> {
+  for (const userId of userIds) {
+    const payload = {
+      userId,
+      datasetKey: 'activityFiles',
+      source: 'webhook' as const,
+      requestedAt: new Date().toISOString(),
+    }
+
+    try {
+      const queued = await enqueueGarminDeriveJob(payload)
+      if (!queued.queued && isOptionalDeriveQueueNotice(queued.reason)) {
+        await runGarminDeriveForPayload(payload)
+      } else if (!queued.queued && queued.reason) {
+        logger.warn('[garmin] metric=activity_file_derive_not_queued', { user_id: userId, reason: queued.reason })
+      }
+    } catch (error) {
+      logger.warn('[garmin] metric=activity_file_derive_trigger_failed', {
+        user_id: userId,
+        error: serializeError(error),
+      })
+    }
+  }
+}
+
 export async function recordGarminWebhookDelivery(params: {
   rawBody: string
   payload: Record<string, unknown>
@@ -162,6 +177,16 @@ export async function recordGarminWebhookDelivery(params: {
   const deliveryKey = computeDeliveryKey(params.rawBody)
   const providerUserId = extractProviderUserId(params.payload)
   const eventType = params.eventType ?? 'garmin_delivery'
+
+  const exportPersistence = await storeGarminWebhookPayload({
+    payload: params.payload,
+    fallbackGarminUserId: providerUserId,
+  })
+  if (!exportPersistence.ok) {
+    throw new Error(
+      exportPersistence.storeError ?? 'Failed to persist Garmin webhook payload to export store'
+    )
+  }
 
   const { data: existing, error: existingError } = await supabase
     .from('garmin_webhook_events')
@@ -203,6 +228,9 @@ export async function recordGarminWebhookDelivery(params: {
   logger.info('[garmin] metric=webhook_received', {
     webhook_event_id: data.id,
     provider_user_id: providerUserId,
+    export_datasets_persisted: GARMIN_EXPORT_DATASET_KEYS.filter(
+      (key) => (exportPersistence.storedRowsByDataset[key] ?? 0) > 0
+    ),
   })
 
   return {
@@ -211,94 +239,56 @@ export async function recordGarminWebhookDelivery(params: {
   }
 }
 
-async function processHealthWebhookData(params: {
-  payload: Record<string, unknown>
-  userId: number
-}): Promise<{ dailyMetricsUpserted: number }> {
-  const { payload, userId } = params
-  const datasets: Record<GarminDatasetKey, Record<string, unknown>[]> = {} as Record<GarminDatasetKey, Record<string, unknown>[]>
-
-  for (const datasetKey of HEALTH_WEBHOOK_DATASETS) {
-    const rows = parseRows(payload[datasetKey])
-    if (rows.length > 0) {
-      datasets[datasetKey] = rows
-    }
-  }
-
-  // Also initialize empty arrays for datasets not present to satisfy the type
-  for (const key of SUPPORTED_WEBHOOK_DATASETS) {
-    if (!datasets[key]) {
-      datasets[key] = []
-    }
-  }
-
-  const hasData = HEALTH_WEBHOOK_DATASETS.some((key) => (datasets[key]?.length ?? 0) > 0)
-  if (!hasData) {
-    return { dailyMetricsUpserted: 0 }
-  }
-
-  const result = await persistGarminSyncSnapshot({
-    userId,
-    activities: [],
-    sleep: [],
-    datasets,
-  })
-
-  return { dailyMetricsUpserted: result.dailyMetricsUpserted }
-}
-
 export async function enqueueGarminImportJobsForEvent(event: GarminWebhookEventRecord): Promise<{
   queuedJobs: number
   jobs: GarminImportJobRecord[]
-  healthMetricsUpserted: number
+  activityFilesQueued: number
 }> {
   const supabase = createAdminClient()
   const datasetRows = extractWebhookDatasetRows(asRecord(event.raw_payload))
   const insertedJobs: GarminImportJobRecord[] = []
-  let healthMetricsUpserted = 0
+  const activityFileUsers = new Set<number>()
+  let activityFilesQueued = 0
 
-  // Process health datasets directly (persist to garmin_daily_metrics)
-  const providerUserId = extractProviderUserId(asRecord(event.raw_payload))
-  if (providerUserId || event.provider_user_id) {
-    const connection = await getGarminConnectionByProviderUserId(providerUserId ?? event.provider_user_id ?? '')
-    if (connection?.userId != null) {
-      try {
-        const healthResult = await processHealthWebhookData({
-          payload: asRecord(event.raw_payload),
-          userId: connection.userId,
-        })
-        healthMetricsUpserted = healthResult.dailyMetricsUpserted
-
-        if (healthMetricsUpserted > 0) {
-          // Trigger derive worker for readiness/ACWR recalculation
-          const derivePayload = {
-            userId: connection.userId,
-            datasetKey: 'dailies' as const,
-            source: 'webhook' as const,
-            requestedAt: new Date().toISOString(),
-          }
-          const queued = await enqueueGarminDeriveJob(derivePayload)
-          if (!queued.queued && isOptionalDeriveQueueNotice(queued.reason)) {
-            await runGarminDeriveForPayload(derivePayload)
-          }
-        }
-      } catch (error) {
-        logger.warn('[garmin] metric=health_webhook_process_failed', {
-          provider_user_id: providerUserId,
-          error: serializeError(error),
-        })
-      }
-    }
-  }
-
-  // Process activity datasets via import jobs
   for (const row of datasetRows) {
-    // Skip health datasets — already processed above
-    if (HEALTH_WEBHOOK_DATASETS.includes(row.datasetKey)) continue
-
     let connection = row.providerUserId ? await getGarminConnectionByProviderUserId(row.providerUserId) : null
     if (!connection && event.provider_user_id) {
       connection = await getGarminConnectionByProviderUserId(event.provider_user_id)
+    }
+
+    if (row.datasetKey === 'activityFiles') {
+      const summaryId = extractSummaryId(row.payload)
+      if (connection?.userId == null || !summaryId || !row.activityId || !row.callbackUrl) {
+        continue
+      }
+
+      const { error: activityFileError } = await supabase
+        .from('garmin_activity_files')
+        .upsert(
+          {
+            user_id: connection.userId,
+            activity_id: row.activityId,
+            summary_id: summaryId,
+            file_type: 'FIT',
+            callback_url: row.callbackUrl,
+            status: 'pending',
+            start_time_seconds: extractStartTimeSeconds(row.payload),
+            manual: false,
+          },
+          { onConflict: 'summary_id' }
+        )
+
+      if (activityFileError) {
+        throw new Error(`Failed to upsert garmin_activity_files: ${activityFileError.message}`)
+      }
+
+      activityFileUsers.add(connection.userId)
+      activityFilesQueued += 1
+      await upsertGarminConnection({
+        userId: connection.userId,
+        lastWebhookReceivedAt: new Date().toISOString(),
+      })
+      continue
     }
 
     const dedupeQuery = supabase
@@ -364,23 +354,27 @@ export async function enqueueGarminImportJobsForEvent(event: GarminWebhookEventR
     }
   }
 
-  if (insertedJobs.length === 0 && healthMetricsUpserted === 0) {
+  if (insertedJobs.length === 0 && activityFilesQueued === 0) {
     await supabase
       .from('garmin_webhook_events')
-      .update({ status: 'failed', error_message: 'No supported Garmin data rows found' })
+      .update({ status: 'failed', error_message: 'No supported Garmin activity rows found' })
       .eq('id', event.id)
-    return { queuedJobs: 0, jobs: [], healthMetricsUpserted: 0 }
+    return { queuedJobs: 0, jobs: [], activityFilesQueued: 0 }
   }
 
   await supabase
     .from('garmin_webhook_events')
-    .update({ status: insertedJobs.length > 0 ? 'queued' : 'processed' })
+    .update({ status: 'queued' })
     .eq('id', event.id)
 
+  if (activityFileUsers.size > 0) {
+    await triggerActivityFileProcessing(Array.from(activityFileUsers))
+  }
+
   return {
-    queuedJobs: insertedJobs.length,
+    queuedJobs: insertedJobs.length + activityFilesQueued,
     jobs: insertedJobs,
-    healthMetricsUpserted,
+    activityFilesQueued,
   }
 }
 

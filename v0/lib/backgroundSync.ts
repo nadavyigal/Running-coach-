@@ -1,3 +1,4 @@
+import { syncGarminRunsToClient } from '@/lib/garmin/client-sync'
 import { db } from './db';
 
 export interface SyncJob {
@@ -285,31 +286,42 @@ export class BackgroundSyncManager {
   }
 
   private async syncGarminActivities(job: SyncJob, device: any) {
-    const response = await fetch(`/api/devices/garmin/sync?userId=${encodeURIComponent(String(job.userId))}`, {
+    const response = await fetch(`/api/devices/garmin/sync/incremental?userId=${encodeURIComponent(String(job.userId))}`, {
       method: 'POST',
       headers: {
         'x-user-id': String(job.userId),
       },
     })
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch Garmin activities: ${response.status}`)
-    }
-
     const data = await response.json()
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to fetch activities')
+    if (!response.ok) {
+      throw new Error(
+        typeof data?.error === 'string' ? data.error : `Failed to run Garmin sync: ${response.status}`
+      )
     }
 
-    // Process and store activities
-    const activities = Array.isArray(data.activities) ? data.activities : []
-    for (const activity of activities) {
-      await this.processGarminActivity(activity, device.userId)
+    if (!data.success) {
+      throw new Error(typeof data.error === 'string' ? data.error : 'Failed to run Garmin sync')
     }
+
+    const mirrorResult = await syncGarminRunsToClient(job.userId)
+    const persistence =
+      data.persistence && typeof data.persistence === 'object'
+        ? (data.persistence as Record<string, unknown>)
+        : {}
 
     await db.syncJobs.update(job.id!, {
       progress: 33,
-      metadata: { activitiesProcessed: activities.length },
+      metadata: {
+        activitiesProcessed:
+          typeof persistence.activitiesUpserted === 'number'
+            ? persistence.activitiesUpserted
+            : mirrorResult.imported,
+        mirroredRuns: mirrorResult.imported,
+        syncState: typeof data.syncState === 'string' ? data.syncState : 'connected',
+        lastDataReceivedAt:
+          typeof data.lastDataReceivedAt === 'string' ? data.lastDataReceivedAt : null,
+      },
       updatedAt: new Date()
     })
   }
@@ -324,54 +336,6 @@ export class BackgroundSyncManager {
       metadata: { activitiesProcessed: 0 },
       updatedAt: new Date()
     });
-  }
-
-  private async processGarminActivity(activity: any, userId: number) {
-    try {
-      if (!activity.activityId) return
-
-      // Check if activity already exists using the indexed compound key
-      const existingCount = await db.runs
-        .where('[userId+importRequestId]')
-        .equals([userId, String(activity.activityId)])
-        .count();
-
-      if (existingCount > 0) {
-        return; // Already processed
-      }
-
-      const completedAt = activity.startTimeGMT ? new Date(activity.startTimeGMT) : new Date()
-
-      // Skip activities with far-future dates (device clock or Garmin API issue)
-      const MAX_FUTURE_MS = 24 * 60 * 60 * 1000
-      if (completedAt.getTime() > Date.now() + MAX_FUTURE_MS) {
-        console.warn(`Skipping Garmin activity ${activity.activityId} with future date: ${completedAt.toISOString()}`)
-        return
-      }
-
-      // Create new run record using correct Run interface field names
-      const runId = await db.runs.add({
-        userId,
-        type: 'other',
-        distance: activity.distance ?? 0,
-        duration: activity.duration ?? 0,
-        ...(activity.averagePace != null ? { pace: activity.averagePace } : {}),
-        ...(activity.calories != null ? { calories: activity.calories } : {}),
-        ...(activity.elevationGain != null ? { elevationGain: activity.elevationGain } : {}),
-        ...(activity.averageHR != null ? { heartRate: activity.averageHR } : {}),
-        ...(activity.maxHR != null ? { maxHR: activity.maxHR } : {}),
-        notes: `Imported from Garmin: ${activity.activityName}`,
-        importSource: 'garmin',
-        importRequestId: String(activity.activityId),
-        completedAt,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      console.log(`Created run ${runId} from Garmin activity ${activity.activityId}`);
-    } catch (error) {
-      console.error('Error processing Garmin activity:', error);
-    }
   }
 
   private async syncHeartRateData(job: SyncJob, _device: any) {

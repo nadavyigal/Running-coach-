@@ -1,16 +1,7 @@
 import { NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
-import {
-  isGarminAuthError,
-  isInvalidPullToken,
-  isMissingTimeRange,
-  isFallbackWorthyWellnessStatus,
-  isActivityBackfillNotProvisioned,
-  isSleepBackfillNotProvisioned,
-  isDailiesBackfillNotProvisioned,
-  summarizeUpstreamBody,
-} from '@/lib/server/garmin-error-utils'
 import { persistGarminSyncSnapshot } from '@/lib/server/garmin-analytics-store'
+import { GARMIN_HEALTH_API_BASE_URL } from '@/lib/server/garmin-endpoints'
 import { runGarminDeriveForPayload } from '@/lib/server/garmin-derive-worker'
 import {
   GARMIN_HISTORY_DAYS,
@@ -18,6 +9,7 @@ import {
   groupRowsByDataset,
   lookbackStartIso,
   readGarminExportRows,
+  storeGarminExportRows,
 } from '@/lib/server/garmin-export-store'
 import {
   getGarminOAuthState,
@@ -32,12 +24,10 @@ import { captureServerEvent } from '@/lib/server/posthog'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
 
-const GARMIN_API_BASE = 'https://apis.garmin.com'
 const GARMIN_MAX_WINDOW_SECONDS = 86400
 const SYNC_NAME = 'RunSmart Garmin Export Sync'
-const DEFAULT_INCREMENTAL_DAYS = 3
+const DEFAULT_INCREMENTAL_DAYS = 7
 const DEFAULT_ACTIVITY_SYNC_DAYS = 7
 const BACKFILL_DAILY_DAYS = 56
 const BACKFILL_ACTIVITY_DAYS = 56
@@ -348,7 +338,38 @@ function pickNumberWithPaths(record: Record<string, unknown>, candidatePaths: st
   return null
 }
 
-// summarizeUpstreamBody and isGarminAuthError are imported from @/lib/server/garmin-error-utils
+function summarizeUpstreamBody(body: string): string {
+  const trimmed = body.trim()
+  if (!trimmed) return ''
+
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      errorMessage?: unknown
+      message?: unknown
+      error?: unknown
+      path?: unknown
+    }
+    const message = [parsed.errorMessage, parsed.message, parsed.error, parsed.path].find(
+      (value): value is string => typeof value === 'string' && value.trim().length > 0
+    )
+    if (message) return message.slice(0, 500)
+  } catch {
+    // keep text body
+  }
+
+  if (/<!doctype html|<html/i.test(trimmed)) {
+    return 'Garmin returned an HTML error page'
+  }
+
+  return trimmed.length > 500 ? `${trimmed.slice(0, 500)}...` : trimmed
+}
+
+function isAuthError(status: number, body: string): boolean {
+  if (status === 401) return true
+  if (status === 403) return /Unable to read oAuth header|invalid[_ ]token|expired|unauthorized/i.test(body)
+  if (status === 400) return /did not match the expected pattern|invalid.{0,10}token|invalid.{0,10}grant/i.test(body)
+  return false
+}
 
 function parseJsonArray(text: string): Record<string, unknown>[] {
   if (!text) return []
@@ -360,9 +381,29 @@ function parseJsonArray(text: string): Record<string, unknown>[] {
     : []
 }
 
-// isInvalidPullToken, isMissingTimeRange, isFallbackWorthyWellnessStatus,
-// isActivityBackfillNotProvisioned, isSleepBackfillNotProvisioned,
-// isDailiesBackfillNotProvisioned are imported from @/lib/server/garmin-error-utils
+function isInvalidPullToken(body: string): boolean {
+  return /InvalidPullTokenException|invalid pull token/i.test(body)
+}
+
+function isMissingTimeRange(body: string): boolean {
+  return /Missing time range parameters/i.test(body)
+}
+
+function isFallbackWorthyWellnessStatus(status: number): boolean {
+  return status === 400 || status === 404
+}
+
+function isActivityBackfillNotProvisioned(body: string): boolean {
+  return /Endpoint not enabled for summary type:\s*CONNECT_ACTIVITY/i.test(body)
+}
+
+function isSleepBackfillNotProvisioned(body: string): boolean {
+  return /Endpoint not enabled for summary type:\s*CONNECT_SLEEP/i.test(body)
+}
+
+function isDailiesBackfillNotProvisioned(body: string): boolean {
+  return /Endpoint not enabled for summary type:\s*CONNECT_DAIL/i.test(body)
+}
 
 function dedupeActivities(rawActivities: Record<string, unknown>[]): Record<string, unknown>[] {
   const seen = new Set<string>()
@@ -422,7 +463,7 @@ async function fetchWellnessActivities(
   while (windowStart <= endTime) {
     const windowEnd = Math.min(windowStart + GARMIN_MAX_WINDOW_SECONDS - 1, endTime)
     const path = mode === 'upload' ? '/wellness-api/rest/activities' : '/wellness-api/rest/backfill/activities'
-    const url = new URL(`${GARMIN_API_BASE}${path}`)
+    const url = new URL(`${GARMIN_HEALTH_API_BASE_URL}${path}`)
 
     if (mode === 'upload') {
       url.searchParams.set('uploadStartTimeInSeconds', String(windowStart))
@@ -441,10 +482,6 @@ async function fetchWellnessActivities(
 
     const responseText = await response.text()
     if (!response.ok) {
-      logger.warn(`Garmin ${source} error ${response.status} for URL: ${url.toString()}`, {
-        status: response.status,
-        body: responseText.slice(0, 500),
-      })
       throw new GarminActivitiesFallbackError(source, response.status, responseText)
     }
 
@@ -468,7 +505,7 @@ async function fetchWellnessSleep(
   while (windowStart <= endTime) {
     const windowEnd = Math.min(windowStart + GARMIN_MAX_WINDOW_SECONDS - 1, endTime)
     const path = mode === 'upload' ? '/wellness-api/rest/sleeps' : '/wellness-api/rest/backfill/sleeps'
-    const url = new URL(`${GARMIN_API_BASE}${path}`)
+    const url = new URL(`${GARMIN_HEALTH_API_BASE_URL}${path}`)
 
     if (mode === 'upload') {
       url.searchParams.set('uploadStartTimeInSeconds', String(windowStart))
@@ -487,10 +524,6 @@ async function fetchWellnessSleep(
 
     const responseText = await response.text()
     if (!response.ok) {
-      logger.warn(`Garmin ${source} error ${response.status} for URL: ${url.toString()}`, {
-        status: response.status,
-        body: responseText.slice(0, 500),
-      })
       throw new GarminSleepFallbackError(source, response.status, responseText)
     }
 
@@ -514,7 +547,7 @@ async function fetchWellnessDailies(
   while (windowStart <= endTime) {
     const windowEnd = Math.min(windowStart + GARMIN_MAX_WINDOW_SECONDS - 1, endTime)
     const path = mode === 'upload' ? '/wellness-api/rest/dailies' : '/wellness-api/rest/backfill/dailies'
-    const url = new URL(`${GARMIN_API_BASE}${path}`)
+    const url = new URL(`${GARMIN_HEALTH_API_BASE_URL}${path}`)
 
     if (mode === 'upload') {
       url.searchParams.set('uploadStartTimeInSeconds', String(windowStart))
@@ -533,10 +566,6 @@ async function fetchWellnessDailies(
 
     const responseText = await response.text()
     if (!response.ok) {
-      logger.warn(`Garmin ${source} error ${response.status} for URL: ${url.toString()}`, {
-        status: response.status,
-        body: responseText.slice(0, 500),
-      })
       throw new GarminDailiesFallbackError(source, response.status, responseText)
     }
 
@@ -547,30 +576,17 @@ async function fetchWellnessDailies(
   return dedupeDailiesRows(rawChunks)
 }
 
-function validateTimestampRange(
-  lookbackDays: number,
-  caller: string
-): { startTime: number; endTime: number } {
-  if (!Number.isFinite(lookbackDays) || lookbackDays <= 0) {
-    throw new Error(`${caller}: lookbackDays must be a positive finite number, got ${lookbackDays}`)
-  }
-  const endTime = Math.floor(Date.now() / 1000)
-  const startTime = endTime - Math.floor(lookbackDays) * 86400 + 1
-  if (startTime <= 0 || startTime > endTime) {
-    throw new Error(`${caller}: computed invalid timestamp range [${startTime}, ${endTime}] for lookbackDays=${lookbackDays}`)
-  }
-  return { startTime, endTime }
-}
-
 async function fetchRecentGarminActivities(
   accessToken: string,
   permissions: string[],
   lookbackDays: number
 ): Promise<{
   activities: ReturnType<typeof toRunSmartActivity>[]
+  rawRows: Record<string, unknown>[]
   source: 'wellness-upload' | 'wellness-backfill'
 }> {
-  const { startTime, endTime } = validateTimestampRange(lookbackDays, 'fetchRecentGarminActivities')
+  const endTime = Math.floor(Date.now() / 1000)
+  const startTime = Math.max(0, endTime - lookbackDays * 86400 + 1)
 
   let source: 'wellness-upload' | 'wellness-backfill' = 'wellness-upload'
   let rawActivities: Record<string, unknown>[]
@@ -597,7 +613,7 @@ async function fetchRecentGarminActivities(
   }
 
   const mapped = rawActivities.map((activity) => toRunSmartActivity(activity))
-  return { activities: mapped, source }
+  return { activities: mapped, rawRows: rawActivities, source }
 }
 
 async function fetchRecentGarminSleep(
@@ -606,9 +622,11 @@ async function fetchRecentGarminSleep(
   lookbackDays: number
 ): Promise<{
   sleep: RunSmartSleepRecord[]
+  rawRows: Record<string, unknown>[]
   source: 'sleep-upload' | 'sleep-backfill'
 }> {
-  const { startTime, endTime } = validateTimestampRange(lookbackDays, 'fetchRecentGarminSleep')
+  const endTime = Math.floor(Date.now() / 1000)
+  const startTime = Math.max(0, endTime - lookbackDays * 86400 + 1)
 
   let source: 'sleep-upload' | 'sleep-backfill' = 'sleep-upload'
   let rawSleep: Record<string, unknown>[]
@@ -637,7 +655,7 @@ async function fetchRecentGarminSleep(
   const mapped = rawSleep
     .map((entry) => toRunSmartSleepRecord(entry))
     .filter((entry): entry is RunSmartSleepRecord => entry != null)
-  return { sleep: mapped, source }
+  return { sleep: mapped, rawRows: rawSleep, source }
 }
 
 async function fetchRecentGarminDailies(
@@ -646,9 +664,11 @@ async function fetchRecentGarminDailies(
   lookbackDays: number
 ): Promise<{
   dailies: Record<string, unknown>[]
+  rawRows: Record<string, unknown>[]
   source: 'dailies-upload' | 'dailies-backfill'
 }> {
-  const { startTime, endTime } = validateTimestampRange(lookbackDays, 'fetchRecentGarminDailies')
+  const endTime = Math.floor(Date.now() / 1000)
+  const startTime = Math.max(0, endTime - lookbackDays * 86400 + 1)
 
   let source: 'dailies-upload' | 'dailies-backfill' = 'dailies-upload'
   let rawDailies: Record<string, unknown>[]
@@ -674,7 +694,7 @@ async function fetchRecentGarminDailies(
     }
   }
 
-  return { dailies: rawDailies, source }
+  return { dailies: rawDailies, rawRows: rawDailies, source }
 }
 
 function getActivityStartSeconds(activity: Record<string, unknown>): number | null {
@@ -993,15 +1013,7 @@ function toRunSmartSleepRecord(entry: Record<string, unknown>): RunSmartSleepRec
 }
 
 async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
-  const tokenPreview = accessToken.length > 8
-    ? `${accessToken.slice(0, 4)}...${accessToken.slice(-4)}`
-    : '***'
-  logger.info('Garmin permissions request', {
-    tokenLength: accessToken.length,
-    tokenPreview,
-  })
-
-  const response = await fetch(`${GARMIN_API_BASE}/wellness-api/rest/user/permissions`, {
+  const response = await fetch(`${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/permissions`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -1010,12 +1022,6 @@ async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
 
   const responseText = await response.text()
   if (!response.ok) {
-    logger.warn(`Garmin permissions error ${response.status}`, {
-      status: response.status,
-      body: responseText.slice(0, 500),
-      tokenLength: accessToken.length,
-      tokenPreview,
-    })
     throw new GarminUpstreamError('permissions', response.status, responseText)
   }
 
@@ -1037,11 +1043,7 @@ async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
 }
 
 async function fetchGarminUserId(accessToken: string): Promise<string> {
-  const tokenPreview = accessToken.length > 8
-    ? `${accessToken.slice(0, 4)}...${accessToken.slice(-4)}`
-    : '***'
-
-  const response = await fetch(`${GARMIN_API_BASE}/wellness-api/rest/user/id`, {
+  const response = await fetch(`${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/id`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -1050,12 +1052,6 @@ async function fetchGarminUserId(accessToken: string): Promise<string> {
 
   const responseText = await response.text()
   if (!response.ok) {
-    logger.warn(`Garmin profile error ${response.status}`, {
-      status: response.status,
-      body: responseText.slice(0, 500),
-      tokenLength: accessToken.length,
-      tokenPreview,
-    })
     throw new GarminUpstreamError('profile', response.status, responseText)
   }
 
@@ -1164,6 +1160,50 @@ async function computeCatalog(params: {
   }
 }
 
+async function persistPulledDatasetRows(params: {
+  datasetKey: GarminDatasetKey
+  rows: Record<string, unknown>[]
+  garminUserId: string | null
+}): Promise<void> {
+  if (params.rows.length === 0) return
+
+  const result = await storeGarminExportRows({
+    datasetKey: params.datasetKey,
+    rows: params.rows,
+    source: 'ping_pull',
+    fallbackGarminUserId: params.garminUserId ?? null,
+  })
+
+  if (!result.ok) {
+    throw new Error(result.storeError ?? `Failed to persist Garmin ${params.datasetKey} export rows`)
+  }
+}
+
+function appendDatasetRows(params: {
+  datasets: Record<GarminDatasetKey, Record<string, unknown>[]>
+  datasetCounts: Record<GarminDatasetKey, number>
+  ingestion: {
+    lookbackDays: number
+    storeAvailable: boolean
+    storeError?: string
+    recordsInWindow: number
+    latestReceivedAt: string | null
+  }
+  datasetKey: GarminDatasetKey
+  rows: Record<string, unknown>[]
+  receivedAt: string
+}) {
+  if (params.rows.length === 0) return
+
+  const mergedRows = [...params.datasets[params.datasetKey], ...params.rows]
+  params.datasets[params.datasetKey] = mergedRows
+  params.datasetCounts[params.datasetKey] = mergedRows.length
+  params.ingestion.recordsInWindow += params.rows.length
+  params.ingestion.latestReceivedAt = params.receivedAt
+  params.ingestion.storeAvailable = true
+  delete params.ingestion.storeError
+}
+
 function parseUserId(req: Request): number | null {
   const headerValue = req.headers.get('x-user-id')?.trim() ?? ''
   if (headerValue) {
@@ -1190,22 +1230,9 @@ async function computeCatalogWithAutoRefresh(params: {
   try {
     return await computeCatalog({ accessToken, sinceIso, lookbackDays })
   } catch (error) {
-    if (error instanceof GarminUpstreamError && isGarminAuthError(error.status, error.body, error.source)) {
-      logger.warn(`Garmin auth error for user ${userId}, attempting token refresh`, {
-        status: error.status,
-        source: error.source,
-        body: error.body.slice(0, 200),
-      })
-      try {
-        const refreshed = await refreshGarminAccessToken(userId)
-        return computeCatalog({ accessToken: refreshed.accessToken, sinceIso, lookbackDays })
-      } catch (refreshError) {
-        logger.error(`Garmin token refresh failed for user ${userId} during auto-refresh`, {
-          error: refreshError instanceof Error ? refreshError.message : 'unknown',
-        })
-        // Re-throw — outer catch handles /refresh token|reconnect garmin/i pattern
-        throw refreshError
-      }
+    if (error instanceof GarminUpstreamError && isAuthError(error.status, error.body)) {
+      const refreshed = await refreshGarminAccessToken(userId)
+      return computeCatalog({ accessToken: refreshed.accessToken, sinceIso, lookbackDays })
     }
 
     throw error
@@ -1363,11 +1390,16 @@ export async function runGarminSyncForUser(params: {
           })
     const syncStartedAtIso = new Date().toISOString()
 
-    const { permissions, capabilities, datasets, datasetCounts, ingestion } = await computeCatalogWithAutoRefresh({
+    const catalog = await computeCatalogWithAutoRefresh({
       userId,
       sinceIso: syncWindow.sinceIso,
       lookbackDays: syncWindow.lookbackDays,
     })
+    const permissions = catalog.permissions
+    let capabilities = catalog.capabilities
+    const datasets = catalog.datasets
+    const datasetCounts = { ...catalog.datasetCounts }
+    const ingestion = { ...catalog.ingestion }
 
     const nowIso = new Date().toISOString()
     const nextSyncCursorIso =
@@ -1421,157 +1453,57 @@ export async function runGarminSyncForUser(params: {
     const hasWebhookActivityRows = filteredActivities.length > 0
     let fallbackFailureNotice: string | null = null
 
-    const missingDatasetsSet = new Set<string>(
-      capabilities
-        .filter((capability) => capability.supportedByRunSmart && capability.permissionGranted)
-        .filter((capability) => (datasetCounts[capability.key as GarminDatasetKey] ?? 0) === 0)
-        .map((capability) => capability.key)
-    )
-    const usedFallbackDatasets: string[] = []
-
-    let dailies = datasets.dailies
-    let sleep = datasets.sleeps
-      .map((entry) => toRunSmartSleepRecord(entry))
-      .filter((entry): entry is NonNullable<typeof entry> => entry != null)
-
-    // Run all three fallback API calls in parallel to stay within 30s timeout
-    const needsActivityFallback = activitiesForSync.length === 0 && !hasWebhookActivityRows && permissions.includes('ACTIVITY_EXPORT')
-    const needsDailiesFallback = dailies.length === 0 && permissions.includes('HEALTH_EXPORT')
-    const needsSleepFallback = sleep.length === 0 && permissions.includes('HEALTH_EXPORT')
-
-    if (needsActivityFallback || needsDailiesFallback || needsSleepFallback) {
-      let fallbackAccessToken: string | null = null
+    if (activitiesForSync.length === 0 && !hasWebhookActivityRows && permissions.includes('ACTIVITY_EXPORT')) {
       try {
-        fallbackAccessToken = await getValidGarminAccessToken(userId)
-      } catch (tokenError) {
-        logger.warn('Failed to get Garmin access token for fallback fetches:', tokenError)
-      }
-
-      if (fallbackAccessToken) {
-        const token = fallbackAccessToken
-        const [activityResult, dailiesResult, sleepResult] = await Promise.allSettled([
-          needsActivityFallback
-            ? fetchRecentGarminActivities(token, permissions, options.activityLookbackDays)
-            : Promise.resolve(null),
-          needsDailiesFallback
-            ? fetchRecentGarminDailies(token, permissions, syncWindow.lookbackDays)
-            : Promise.resolve(null),
-          needsSleepFallback
-            ? fetchRecentGarminSleep(token, permissions, syncWindow.lookbackDays)
-            : Promise.resolve(null),
-        ])
-
-        // Process activity fallback result
-        if (activityResult.status === 'fulfilled' && activityResult.value) {
-          const fallbackResult = activityResult.value
-          if (fallbackResult.activities.length > 0) {
-            activitiesForSync = fallbackResult.activities
-            notices.push(
-              `Activity webhook feeds were empty, so RunSmart pulled ${fallbackResult.activities.length} activities directly from Garmin ${fallbackResult.source}.`
-            )
-          } else if (!hasWebhookActivityRows) {
-            notices.push(`No activities found from Garmin in the last ${options.activityLookbackDays} days.`)
-          }
-        } else if (activityResult.status === 'rejected' && needsActivityFallback) {
-          const fallbackError = activityResult.reason
-          if (fallbackError instanceof GarminActivitiesFallbackError) {
-            if (
-              fallbackError.source === 'wellness-backfill' &&
-              isActivityBackfillNotProvisioned(fallbackError.body)
-            ) {
-              fallbackFailureNotice =
-                'Activity webhook feeds were empty and Garmin activity backfill is not provisioned for this app.'
-            } else {
-              fallbackFailureNotice =
-                `Activity webhook feeds were empty and direct Garmin pull failed (${fallbackError.status} ${fallbackError.source}).`
-            }
-            logger.warn(
-              `Garmin activity fallback error (${fallbackError.status} ${fallbackError.source}): ${summarizeUpstreamBody(fallbackError.body)}`
-            )
-          } else {
-            fallbackFailureNotice = 'Activity webhook feeds were empty and direct Garmin pull failed.'
-            logger.warn('Garmin activity fallback error:', fallbackError)
-          }
+        const fallbackAccessToken = await getValidGarminAccessToken(userId)
+        const fallbackResult = await fetchRecentGarminActivities(
+          fallbackAccessToken,
+          permissions,
+          options.activityLookbackDays
+        )
+        if (fallbackResult.activities.length > 0) {
+          await persistPulledDatasetRows({
+            datasetKey: 'activities',
+            rows: fallbackResult.rawRows,
+            garminUserId: oauthState.garminUserId,
+          })
+          appendDatasetRows({
+            datasets,
+            datasetCounts,
+            ingestion,
+            datasetKey: 'activities',
+            rows: fallbackResult.rawRows,
+            receivedAt: nowIso,
+          })
+          activitiesForSync = fallbackResult.activities
+          notices.push(
+            `Activity webhook feeds were empty, so RunSmart pulled ${fallbackResult.activities.length} activities directly from Garmin ${fallbackResult.source}.`
+          )
+        } else if (!hasWebhookActivityRows) {
+          notices.push(`No activities found from Garmin in the last ${options.activityLookbackDays} days.`)
         }
-
-        // Process dailies fallback result
-        if (dailiesResult.status === 'fulfilled' && dailiesResult.value) {
-          const fallbackDailies = dailiesResult.value
-          if (fallbackDailies.dailies.length > 0) {
-            dailies = fallbackDailies.dailies
-            usedFallbackDatasets.push('dailies')
-            missingDatasetsSet.delete('dailies')
-            notices.push(
-              `Daily wellness webhook feeds were empty, so RunSmart pulled ${fallbackDailies.dailies.length} daily summaries directly from Garmin ${fallbackDailies.source}.`
-            )
+      } catch (fallbackError) {
+        if (fallbackError instanceof GarminActivitiesFallbackError) {
+          if (
+            fallbackError.source === 'wellness-backfill' &&
+            isActivityBackfillNotProvisioned(fallbackError.body)
+          ) {
+            fallbackFailureNotice =
+              'Activity webhook feeds were empty and Garmin activity backfill is not provisioned for this app.'
           } else {
-            missingDatasetsSet.add('dailies')
+            fallbackFailureNotice =
+              `Activity webhook feeds were empty and direct Garmin pull failed (${fallbackError.status} ${fallbackError.source}).`
           }
-        } else if (dailiesResult.status === 'rejected' && needsDailiesFallback) {
-          missingDatasetsSet.add('dailies')
-          const fallbackDailiesError = dailiesResult.reason
-          if (fallbackDailiesError instanceof GarminDailiesFallbackError) {
-            if (
-              fallbackDailiesError.source === 'dailies-backfill' &&
-              isDailiesBackfillNotProvisioned(fallbackDailiesError.body)
-            ) {
-              notices.push('Daily wellness webhook feeds were empty and Garmin dailies backfill is not provisioned for this app.')
-            } else {
-              notices.push(
-                `Daily wellness webhook feeds were empty and direct Garmin dailies pull failed (${fallbackDailiesError.status} ${fallbackDailiesError.source}).`
-              )
-            }
-            logger.warn(
-              `Garmin dailies fallback error (${fallbackDailiesError.status} ${fallbackDailiesError.source}): ${summarizeUpstreamBody(fallbackDailiesError.body)}`
-            )
-          } else {
-            notices.push('Daily wellness webhook feeds were empty and direct Garmin dailies pull failed.')
-            logger.warn('Garmin dailies fallback error:', fallbackDailiesError)
-          }
-        }
-
-        // Process sleep fallback result
-        if (sleepResult.status === 'fulfilled' && sleepResult.value) {
-          const fallbackSleep = sleepResult.value
-          if (fallbackSleep.sleep.length > 0) {
-            sleep = fallbackSleep.sleep
-            usedFallbackDatasets.push('sleeps')
-            missingDatasetsSet.delete('sleeps')
-            notices.push(
-              `Sleep webhook feeds were empty, so RunSmart pulled ${fallbackSleep.sleep.length} sleep summaries directly from Garmin ${fallbackSleep.source}.`
-            )
-          } else {
-            missingDatasetsSet.add('sleeps')
-          }
-        } else if (sleepResult.status === 'rejected' && needsSleepFallback) {
-          missingDatasetsSet.add('sleeps')
-          const fallbackSleepError = sleepResult.reason
-          if (fallbackSleepError instanceof GarminSleepFallbackError) {
-            if (
-              fallbackSleepError.source === 'sleep-backfill' &&
-              isSleepBackfillNotProvisioned(fallbackSleepError.body)
-            ) {
-              notices.push('Sleep webhook feeds were empty and Garmin sleep backfill is not provisioned for this app.')
-            } else {
-              notices.push(
-                `Sleep webhook feeds were empty and direct Garmin sleep pull failed (${fallbackSleepError.status} ${fallbackSleepError.source}).`
-              )
-            }
-            logger.warn(
-              `Garmin sleep fallback error (${fallbackSleepError.status} ${fallbackSleepError.source}): ${summarizeUpstreamBody(fallbackSleepError.body)}`
-            )
-          } else {
-            notices.push('Sleep webhook feeds were empty and direct Garmin sleep pull failed.')
-            logger.warn('Garmin sleep fallback error:', fallbackSleepError)
-          }
+          logger.warn(
+            `Garmin activity fallback error (${fallbackError.status} ${fallbackError.source}): ${summarizeUpstreamBody(fallbackError.body)}`
+          )
+        } else {
+          fallbackFailureNotice = 'Activity webhook feeds were empty and direct Garmin pull failed.'
+          logger.warn('Garmin activity fallback error:', fallbackError)
         }
       }
-    } else {
-      if (dailies.length > 0) missingDatasetsSet.delete('dailies')
-      if (sleep.length > 0) missingDatasetsSet.delete('sleeps')
     }
 
-    // Activity cache fallback (if still empty after API fallback)
     if (activitiesForSync.length === 0) {
       try {
         const cachedLookbackDays = Math.max(options.activityLookbackDays, 30)
@@ -1581,7 +1513,6 @@ export async function runGarminSyncForUser(params: {
           notices.push(
             `Webhook feeds were empty, so RunSmart imported ${cachedActivities.length} cached Garmin activities from analytics storage (${cachedLookbackDays}-day window).`
           )
-          fallbackFailureNotice = null
         }
       } catch (cachedReadError) {
         logger.warn('Garmin stored activity cache fallback warning:', cachedReadError)
@@ -1591,6 +1522,147 @@ export async function runGarminSyncForUser(params: {
     if (fallbackFailureNotice) {
       notices.push(fallbackFailureNotice)
     }
+
+    capabilities = buildCapabilities({
+      permissions,
+      datasetCounts,
+      storeAvailable: ingestion.storeAvailable,
+      ...(ingestion.storeError ? { storeError: ingestion.storeError } : {}),
+      lookbackDays: ingestion.lookbackDays,
+    })
+
+    const missingDatasetsSet = new Set<string>(
+      capabilities
+        .filter((capability) => capability.supportedByRunSmart && capability.permissionGranted)
+        .filter((capability) => (datasetCounts[capability.key as GarminDatasetKey] ?? 0) === 0)
+        .map((capability) => capability.key)
+    )
+    const usedFallbackDatasets: string[] = []
+
+    let dailies = datasets.dailies
+    if (dailies.length > 0) {
+      missingDatasetsSet.delete('dailies')
+    } else if (permissions.includes('HEALTH_EXPORT')) {
+      try {
+        const fallbackAccessToken = await getValidGarminAccessToken(userId)
+        const fallbackDailies = await fetchRecentGarminDailies(
+          fallbackAccessToken,
+          permissions,
+          syncWindow.lookbackDays
+        )
+        if (fallbackDailies.dailies.length > 0) {
+          await persistPulledDatasetRows({
+            datasetKey: 'dailies',
+            rows: fallbackDailies.rawRows,
+            garminUserId: oauthState.garminUserId,
+          })
+          appendDatasetRows({
+            datasets,
+            datasetCounts,
+            ingestion,
+            datasetKey: 'dailies',
+            rows: fallbackDailies.rawRows,
+            receivedAt: nowIso,
+          })
+          dailies = fallbackDailies.dailies
+          usedFallbackDatasets.push('dailies')
+          missingDatasetsSet.delete('dailies')
+          notices.push(
+            `Daily wellness webhook feeds were empty, so RunSmart pulled ${fallbackDailies.dailies.length} daily summaries directly from Garmin ${fallbackDailies.source}.`
+          )
+        } else {
+          missingDatasetsSet.add('dailies')
+        }
+      } catch (fallbackDailiesError) {
+        missingDatasetsSet.add('dailies')
+        if (fallbackDailiesError instanceof GarminDailiesFallbackError) {
+          if (
+            fallbackDailiesError.source === 'dailies-backfill' &&
+            isDailiesBackfillNotProvisioned(fallbackDailiesError.body)
+          ) {
+            notices.push('Daily wellness webhook feeds were empty and Garmin dailies backfill is not provisioned for this app.')
+          } else {
+            notices.push(
+              `Daily wellness webhook feeds were empty and direct Garmin dailies pull failed (${fallbackDailiesError.status} ${fallbackDailiesError.source}).`
+            )
+          }
+          logger.warn(
+            `Garmin dailies fallback error (${fallbackDailiesError.status} ${fallbackDailiesError.source}): ${summarizeUpstreamBody(fallbackDailiesError.body)}`
+          )
+        } else {
+          notices.push('Daily wellness webhook feeds were empty and direct Garmin dailies pull failed.')
+          logger.warn('Garmin dailies fallback error:', fallbackDailiesError)
+        }
+      }
+    }
+
+    let sleep = datasets.sleeps
+      .map((entry) => toRunSmartSleepRecord(entry))
+      .filter((entry): entry is NonNullable<typeof entry> => entry != null)
+
+    if (sleep.length > 0) {
+      missingDatasetsSet.delete('sleeps')
+    } else if (permissions.includes('HEALTH_EXPORT')) {
+      try {
+        const fallbackAccessToken = await getValidGarminAccessToken(userId)
+        const fallbackSleep = await fetchRecentGarminSleep(
+          fallbackAccessToken,
+          permissions,
+          syncWindow.lookbackDays
+        )
+        if (fallbackSleep.sleep.length > 0) {
+          await persistPulledDatasetRows({
+            datasetKey: 'sleeps',
+            rows: fallbackSleep.rawRows,
+            garminUserId: oauthState.garminUserId,
+          })
+          appendDatasetRows({
+            datasets,
+            datasetCounts,
+            ingestion,
+            datasetKey: 'sleeps',
+            rows: fallbackSleep.rawRows,
+            receivedAt: nowIso,
+          })
+          sleep = fallbackSleep.sleep
+          usedFallbackDatasets.push('sleeps')
+          missingDatasetsSet.delete('sleeps')
+          notices.push(
+            `Sleep webhook feeds were empty, so RunSmart pulled ${fallbackSleep.sleep.length} sleep summaries directly from Garmin ${fallbackSleep.source}.`
+          )
+        } else {
+          missingDatasetsSet.add('sleeps')
+        }
+      } catch (fallbackSleepError) {
+        missingDatasetsSet.add('sleeps')
+        if (fallbackSleepError instanceof GarminSleepFallbackError) {
+          if (
+            fallbackSleepError.source === 'sleep-backfill' &&
+            isSleepBackfillNotProvisioned(fallbackSleepError.body)
+          ) {
+            notices.push('Sleep webhook feeds were empty and Garmin sleep backfill is not provisioned for this app.')
+          } else {
+            notices.push(
+              `Sleep webhook feeds were empty and direct Garmin sleep pull failed (${fallbackSleepError.status} ${fallbackSleepError.source}).`
+            )
+          }
+          logger.warn(
+            `Garmin sleep fallback error (${fallbackSleepError.status} ${fallbackSleepError.source}): ${summarizeUpstreamBody(fallbackSleepError.body)}`
+          )
+        } else {
+          notices.push('Sleep webhook feeds were empty and direct Garmin sleep pull failed.')
+          logger.warn('Garmin sleep fallback error:', fallbackSleepError)
+        }
+      }
+    }
+
+    capabilities = buildCapabilities({
+      permissions,
+      datasetCounts,
+      storeAvailable: ingestion.storeAvailable,
+      ...(ingestion.storeError ? { storeError: ingestion.storeError } : {}),
+      lookbackDays: ingestion.lookbackDays,
+    })
 
     const datasetsForSync: Record<GarminDatasetKey, Record<string, unknown>[]> = {
       ...datasets,
@@ -1687,9 +1759,11 @@ export async function runGarminSyncForUser(params: {
       logger.warn('Garmin derive enqueue warning:', queueError)
     }
 
+    const finalTotalRows = Object.values(datasetCounts).reduce((sum, value) => sum + value, 0)
+
     await captureServerEvent('garmin_sync_completed', {
       userId,
-      datasetsCount: totalRows,
+      datasetsCount: finalTotalRows,
       activitiesCount: activitiesForSync.length,
       trigger: options.trigger,
     })
@@ -1710,10 +1784,10 @@ export async function runGarminSyncForUser(params: {
         availableToEnable: AVAILABLE_TO_ENABLE,
         capabilities,
         ingestion,
+        datasets: datasetsForSync,
         datasetCounts,
-        activitiesCount: activitiesForSync.length,
-        activities: activitiesForSync.slice(0, 50).map(({ telemetry: _telemetry, ...rest }) => rest),
-        sleepCount: sleep.length,
+        activities: activitiesForSync,
+        sleep,
         persistence,
         deriveQueue,
         datasetCompleteness: {
@@ -1721,12 +1795,13 @@ export async function runGarminSyncForUser(params: {
           usedFallbackDatasets,
         },
         notices,
+        lastDataReceivedAt: ingestion.latestReceivedAt,
         lastSyncCursor: nextSyncCursorIso,
         lastSyncAt: nowIso,
       },
     }
   } catch (error) {
-    if (error instanceof GarminUpstreamError && isGarminAuthError(error.status, error.body, error.source)) {
+    if (error instanceof GarminUpstreamError && isAuthError(error.status, error.body)) {
       await safeMarkAuthError(userId, summarizeUpstreamBody(error.body))
       return {
         status: 401,
@@ -1734,32 +1809,18 @@ export async function runGarminSyncForUser(params: {
           success: false,
           error: 'Garmin authentication expired or invalid, please reconnect Garmin',
           needsReauth: true,
-          detail: 'Your Garmin access token could not be validated. Please disconnect and reconnect Garmin.',
+          detail: summarizeUpstreamBody(error.body),
         },
       }
     }
 
-    if (error instanceof Error && /reconnect garmin|refresh token|no garmin connection|corrupted|re-authentication|not active/i.test(error.message)) {
+    if (error instanceof Error && /reconnect garmin|refresh token|no garmin connection/i.test(error.message)) {
       await safeMarkAuthError(userId, error.message)
       return {
         status: 401,
         body: {
           success: false,
           error: 'Garmin authentication expired or invalid, please reconnect Garmin',
-          needsReauth: true,
-          detail: error.message,
-        },
-      }
-    }
-
-    if (error instanceof Error && /decrypt|Invalid token format/i.test(error.message)) {
-      logger.error(`Garmin token decryption error for user ${userId}:`, error)
-      await safeMarkAuthError(userId, error.message)
-      return {
-        status: 401,
-        body: {
-          success: false,
-          error: 'Garmin token is corrupted, please reconnect Garmin',
           needsReauth: true,
           detail: error.message,
         },
@@ -1806,39 +1867,25 @@ export async function GET(req: Request) {
       ingestion,
     })
   } catch (error) {
-    if (error instanceof GarminUpstreamError && isGarminAuthError(error.status, error.body, error.source)) {
+    if (error instanceof GarminUpstreamError && isAuthError(error.status, error.body)) {
       await safeMarkAuthError(userId, summarizeUpstreamBody(error.body))
       return NextResponse.json(
         {
           success: false,
           error: 'Garmin authentication expired or invalid, please reconnect Garmin',
           needsReauth: true,
-          detail: 'Your Garmin access token could not be validated. Please disconnect and reconnect Garmin.',
+          detail: summarizeUpstreamBody(error.body),
         },
         { status: 401 }
       )
     }
 
-    if (error instanceof Error && /reconnect garmin|refresh token|no garmin connection|corrupted|re-authentication|not active/i.test(error.message)) {
+    if (error instanceof Error && /reconnect garmin|refresh token|no garmin connection/i.test(error.message)) {
       await safeMarkAuthError(userId, error.message)
       return NextResponse.json(
         {
           success: false,
           error: 'Garmin authentication expired or invalid, please reconnect Garmin',
-          needsReauth: true,
-          detail: error.message,
-        },
-        { status: 401 }
-      )
-    }
-
-    if (error instanceof Error && /decrypt|Invalid token format/i.test(error.message)) {
-      logger.error(`Garmin token decryption error for user ${userId}:`, error)
-      await safeMarkAuthError(userId, error.message)
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Garmin token is corrupted, please reconnect Garmin',
           needsReauth: true,
           detail: error.message,
         },

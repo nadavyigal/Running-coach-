@@ -1,0 +1,129 @@
+{
+  "status": {
+    "request": {
+      "method": "GET",
+      "path": "/api/devices/garmin/status",
+      "headers": {
+        "x-user-id": "42"
+      },
+      "query": {
+        "userId": "42"
+      }
+    },
+    "response": {
+      "connected": true,
+      "connectionStatus": "connected",
+      "syncState": "connected",
+      "needsReauth": false,
+      "lastSyncAt": "2026-02-19T12:00:00.000Z",
+      "lastSuccessfulSyncAt": "2026-02-19T12:00:00.000Z",
+      "lastDataReceivedAt": "2026-02-19T11:58:00.000Z",
+      "pendingJobs": 0,
+      "datasetCounts": {
+        "activities": 2,
+        "manuallyUpdatedActivities": 0,
+        "activityDetails": 1,
+        "dailies": 3,
+        "epochs": 0,
+        "sleeps": 2,
+        "bodyComps": 0,
+        "stressDetails": 0,
+        "userMetrics": 0,
+        "pulseox": 0,
+        "allDayRespiration": 0,
+        "healthSnapshot": 0,
+        "hrv": 2,
+        "bloodPressures": 0,
+        "skinTemp": 0
+      },
+      "datasetCompleteness": {
+        "missingDatasets": [],
+        "usedFallbackDatasets": []
+      },
+      "persistence": null,
+      "notices": [],
+      "error": null,
+      "detail": null
+    }
+  },
+  "manualSync": {
+    "request": {
+      "method": "POST",
+      "path": "/api/devices/garmin/sync/manual",
+      "headers": {
+        "content-type": "application/json",
+        "x-user-id": "42"
+      },
+      "body": {
+        "userId": 42,
+        "trigger": "manual"
+      }
+    },
+    "response": {
+      "connected": true,
+      "connectionStatus": "connected",
+      "syncState": "connected",
+      "needsReauth": false,
+      "lastSyncAt": "2026-02-19T12:00:00.000Z",
+      "lastSuccessfulSyncAt": "2026-02-19T12:00:00.000Z",
+      "lastDataReceivedAt": "2026-02-19T11:58:00.000Z",
+      "pendingJobs": 1,
+      "datasetCounts": {
+        "activities": 2,
+        "dailies": 3,
+        "sleeps": 2
+      },
+      "datasetCompleteness": {
+        "missingDatasets": [],
+        "usedFallbackDatasets": [
+          "dailies"
+        ]
+      },
+      "persistence": {
+        "activitiesUpserted": 2,
+        "dailyMetricsUpserted": 3,
+        "duplicateActivitiesSkipped": 0,
+        "activityFilesProcessed": 0
+      },
+      "notices": [
+        "Daily wellness webhook feeds were empty, so RunSmart pulled 3 daily summaries directly from Garmin dailies-upload."
+      ],
+      "error": null,
+      "detail": {
+        "success": true,
+        "syncState": "connected"
+      }
+    }
+  },
+  "diagnose": {
+    "request": {
+      "method": "GET",
+      "path": "/api/devices/garmin/diagnose",
+      "headers": {
+        "x-user-id": "42"
+      },
+      "query": {
+        "userId": "42"
+      }
+    },
+    "response": {
+      "syncHealth": {
+        "connectionStatus": "connected",
+        "syncState": "connected",
+        "queueLaggingBehindIngestion": false
+      },
+      "rawExportStoreWriter": {
+        "storeAvailable": true,
+        "storeError": null
+      },
+      "results": {
+        "ingestion": {
+          "latestReceivedAt": "2026-02-19T11:58:00.000Z",
+          "datasetsRelyingOnFallbackPull": [
+            "dailies"
+          ]
+        }
+      }
+    }
+  }
+}

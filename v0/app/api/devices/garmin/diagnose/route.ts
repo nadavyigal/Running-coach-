@@ -11,12 +11,13 @@ import {
   markGarminAuthError,
   refreshGarminAccessToken,
 } from '@/lib/server/garmin-oauth-store'
+import { GARMIN_HEALTH_API_BASE_URL } from '@/lib/server/garmin-endpoints'
 import { getGarminWebhookSecret } from '@/lib/server/garmin-webhook-secret'
+import { GARMIN_EXPORT_DATASET_KEYS } from '@/lib/garmin/datasets'
+import { getGarminSyncState } from '@/lib/integrations/garmin/service'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
-
-const GARMIN_API_BASE = 'https://apis.garmin.com'
 
 interface EndpointResult {
   url: string
@@ -115,8 +116,8 @@ function parseUserId(req: Request): number | null {
 
 async function runDiagnosticProbe(accessToken: string) {
   const [profile, permissionsResult] = await Promise.all([
-    testEndpoint(accessToken, `${GARMIN_API_BASE}/wellness-api/rest/user/id`),
-    testEndpoint(accessToken, `${GARMIN_API_BASE}/wellness-api/rest/user/permissions`),
+    testEndpoint(accessToken, `${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/id`),
+    testEndpoint(accessToken, `${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/permissions`),
   ])
   return { profile, permissionsResult }
 }
@@ -259,6 +260,7 @@ export async function GET(req: Request) {
   const profileBody = asRecord(profile.body)
   const garminUserId = getString(profileBody.userId) ?? getString(profileBody.id)
   const backendReadiness = await runBackendReadinessProbe()
+  const syncState = await getGarminSyncState(userId)
 
   const exportRowsResult = garminUserId
     ? await readGarminExportRows({
@@ -270,6 +272,38 @@ export async function GET(req: Request) {
   const groupedRows = groupRowsByDataset(exportRowsResult.rows)
   const datasetCounts = Object.fromEntries(
     Object.entries(groupedRows).map(([key, rows]) => [key, rows.length])
+  )
+  const datasetTimestamps = Object.fromEntries(
+    GARMIN_EXPORT_DATASET_KEYS.map((datasetKey) => {
+      const rows = groupedRows[datasetKey] ?? []
+      const latestDatasetReceivedAt = rows.reduce<string | null>((latest, row) => {
+        const receivedAt = exportRowsResult.rows.find(
+          (candidate) => candidate.datasetKey === datasetKey && candidate.payload === row
+        )?.receivedAt
+        if (!receivedAt) return latest
+        if (!latest) return receivedAt
+        return Date.parse(receivedAt) > Date.parse(latest) ? receivedAt : latest
+      }, null)
+      const pingPullCount = exportRowsResult.rows.filter(
+        (row) => row.datasetKey === datasetKey && row.source === 'ping_pull'
+      ).length
+      const pushCount = exportRowsResult.rows.filter(
+        (row) => row.datasetKey === datasetKey && row.source === 'push'
+      ).length
+
+      return [
+        datasetKey,
+        {
+          count: rows.length,
+          latestReceivedAt: latestDatasetReceivedAt,
+          sources: {
+            pingPull: pingPullCount,
+            push: pushCount,
+          },
+          relyingOnFallbackPull: pingPullCount > 0 && pushCount === 0,
+        },
+      ]
+    })
   )
 
   const now = new Date()
@@ -317,6 +351,12 @@ export async function GET(req: Request) {
     }
   }
 
+  const queueLaggingBehindIngestion =
+    syncState.pendingJobs > 0 &&
+    latestReceivedAt != null &&
+    syncState.lastSuccessfulSyncAt != null &&
+    Date.parse(latestReceivedAt) > Date.parse(syncState.lastSuccessfulSyncAt)
+
   return NextResponse.json({
     timestamp: now.toISOString(),
     timeRange: {
@@ -336,6 +376,21 @@ export async function GET(req: Request) {
       mode: 'Garmin ping/pull + push',
       secretSource: configuredSecretSource,
     },
+    syncHealth: {
+      connectionStatus: syncState.connectionStatus,
+      syncState: syncState.syncState,
+      lastSyncAt: syncState.lastSyncAt,
+      lastSuccessfulSyncAt: syncState.lastSuccessfulSyncAt,
+      lastWebhookReceivedAt: syncState.lastWebhookReceivedAt,
+      pendingJobs: syncState.pendingJobs,
+      queueLaggingBehindIngestion,
+      lastSyncError: syncState.lastSyncError,
+    },
+    rawExportStoreWriter: {
+      writableTableAvailable: backendReadiness.tables.user_memory_snapshots?.ok ?? false,
+      storeAvailable: exportRowsResult.storeAvailable,
+      storeError: exportRowsResult.storeError ?? null,
+    },
     backendReadiness,
     blockers,
     warnings,
@@ -348,6 +403,10 @@ export async function GET(req: Request) {
         recordCount: exportRowsResult.rows.length,
         latestReceivedAt,
         datasetCounts,
+        datasetTimestamps,
+        datasetsRelyingOnFallbackPull: Object.entries(datasetTimestamps)
+          .filter(([, value]) => (value as { relyingOnFallbackPull: boolean }).relyingOnFallbackPull)
+          .map(([datasetKey]) => datasetKey),
       },
     },
   })
