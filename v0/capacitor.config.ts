@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'RunSmart',
   webDir: 'capacitor-fallback',
   server: {
-    url: 'https://runsmart-ai.com',
+    url: 'https://www.runsmart-ai.com',
     allowNavigation: [
       'runsmart-ai.com',
       '*.runsmart-ai.com',
