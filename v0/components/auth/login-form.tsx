@@ -144,22 +144,29 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
     setLoading(true)
     setError(null)
 
-    // For password reset, we still use the client-side Supabase call
-    // because it doesn't require the same CORS handling
-    const supabase = createClient()
-
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
+      // Call the server-side route so the redirectTo URL is always the canonical
+      // NEXT_PUBLIC_SITE_URL — pre-whitelisted in Supabase Auth settings — and
+      // never varies by the user's device or browser origin (fixes iOS PWA).
+      const response = await fetch('/api/auth/reset-password-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        credentials: 'include',
       })
 
-      if (error) throw error
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error ?? 'Failed to send reset email')
+      }
 
       setResetSent(true)
       logger.info('[Login] Password reset email sent to:', email)
     } catch (err) {
       logger.error('[Login] Password reset error:', err)
-      setError('Failed to send reset email. Please try again.')
+      const message = err instanceof Error ? err.message : 'Failed to send reset email.'
+      setError(message)
     } finally {
       setLoading(false)
     }
