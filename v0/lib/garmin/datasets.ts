@@ -28,5 +28,4 @@ export const GARMIN_EXPORT_DATASET_KEYS = [
 
 export const GARMIN_WEBHOOK_DATASET_KEYS = [
   ...GARMIN_EXPORT_DATASET_KEYS,
-  'activityFiles',
 ] as const satisfies readonly GarminDatasetKey[]

@@ -322,7 +322,7 @@ export async function syncGarminUser(input: {
       activitiesUpserted: workerStats.imported,
       dailyMetricsUpserted,
       duplicateActivitiesSkipped: workerStats.duplicates,
-      activityFilesProcessed: activityFileStats.processed,
+      activityFilesProcessed: 0,
     },
     errorState: refreshedStatus.errorState,
     noOp:
