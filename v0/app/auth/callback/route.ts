@@ -21,6 +21,12 @@ export async function GET(request: Request) {
     }
   }
 
-  // Redirect to home page after confirmation
+  // Password recovery flow — redirect to the reset password page so the
+  // user can actually set a new password using the established recovery session.
+  if (type === 'recovery') {
+    return NextResponse.redirect(new URL('/auth/reset-password', requestUrl.origin))
+  }
+
+  // Default: redirect to home after email confirmation or magic link login.
   return NextResponse.redirect(new URL('/', requestUrl.origin))
 }

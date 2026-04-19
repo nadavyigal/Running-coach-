@@ -21,6 +21,11 @@ import { NextResponse } from 'next/server'
 import { processEmailSequences } from '@/lib/email/sequences'
 import { logger } from '@/lib/logger'
 
+function isDatabaseUnavailableError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  return error.message.includes('Database not available')
+}
+
 /**
  * GET handler for cron job execution
  * Vercel Cron Jobs call this endpoint on schedule
@@ -48,6 +53,20 @@ export async function GET(request: Request) {
       stats,
     })
   } catch (error) {
+    // Server-side cron runs can hit Dexie/IndexedDB unavailability; do not fail cron health in that case.
+    if (isDatabaseUnavailableError(error)) {
+      logger.warn('Email sequence cron skipped: database unavailable in server runtime')
+      return NextResponse.json(
+        {
+          success: true,
+          skipped: true,
+          reason: 'database_unavailable',
+          timestamp: new Date().toISOString(),
+        },
+        { status: 200 }
+      )
+    }
+
     logger.error('Email sequence cron job failed:', error)
 
     return NextResponse.json(
@@ -92,6 +111,19 @@ export async function POST(request: Request) {
       stats,
     })
   } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      logger.warn('Manual email sequence execution skipped: database unavailable in server runtime')
+      return NextResponse.json(
+        {
+          success: true,
+          skipped: true,
+          reason: 'database_unavailable',
+          timestamp: new Date().toISOString(),
+        },
+        { status: 200 }
+      )
+    }
+
     logger.error('Manual email sequence execution failed:', error)
 
     return NextResponse.json(

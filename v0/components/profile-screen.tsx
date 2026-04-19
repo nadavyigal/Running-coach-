@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
@@ -22,6 +22,10 @@ import {
   Target,
   GitMerge,
   Star,
+  LogIn,
+  UserPlus,
+  LogOut,
+  Mail,
 } from "lucide-react"
 import { AddShoesModal } from "@/components/add-shoes-modal"
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
@@ -71,6 +75,8 @@ import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db";
 import { dbUtils } from "@/lib/dbUtils";
 import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine";
 import { isSafeRedirect } from "@/lib/validateRedirect"
+import { useAuth } from "@/lib/auth-context"
+import { AuthModal } from "@/components/auth/auth-modal"
 
 type ChallengeTemplateSeed = ReturnType<typeof getActiveChallengeTemplates>[number]
 
@@ -117,6 +123,9 @@ export function ProfileScreen() {
   const [joiningChallengeSlug, setJoiningChallengeSlug] = useState<string | null>(null)
   const [garminConnected, setGarminConnected] = useState(false)
   const [garminSyncState, setGarminSyncState] = useState<string | null>(null)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [authModalTab, setAuthModalTab] = useState<'signup' | 'login'>('signup')
+  const { user: authUser, signOut: authSignOut, loading: authLoading } = useAuth()
   const hasGarminRuns = recentRuns.some((run) => run.importSource === "garmin")
   const showGarminInsights = garminConnected || hasGarminRuns
 
@@ -827,6 +836,32 @@ export function ProfileScreen() {
       description: 'Get troubleshooting and support.',
       onClick: () => notifyComingSoon('Help center'),
     },
+    ...(authUser
+      ? [
+          {
+            icon: LogOut,
+            name: 'Sign Out',
+            description: `Signed in as ${authUser.email ?? 'your account'}.`,
+            onClick: async () => {
+              try {
+                await authSignOut()
+              } catch {
+                toast({ title: 'Error', description: 'Failed to sign out. Please try again.', variant: 'destructive' })
+              }
+            },
+          },
+        ]
+      : [
+          {
+            icon: LogIn,
+            name: 'Sign In',
+            description: 'Log in to sync your data across devices.',
+            onClick: () => {
+              setAuthModalTab('login')
+              setShowAuthModal(true)
+            },
+          },
+        ]),
   ]
 
   const secondaryGoals = goals.filter((goal) => !primaryGoal || goal.id !== primaryGoal.id)
@@ -899,6 +934,67 @@ export function ProfileScreen() {
 
       {!isLoading && !error ? (
         <>
+          {/* ── Account / Auth card ── */}
+          {!authLoading && (
+            <Card className={authUser ? "border-green-200 bg-green-50/50" : "border-primary/30 bg-primary/5"}>
+              <CardContent className="p-4">
+                {authUser ? (
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-green-100">
+                      <Mail className="h-5 w-5 text-green-600" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-green-800">Signed in</p>
+                      <p className="truncate text-xs text-green-700">{authUser.email}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 text-xs"
+                      onClick={async () => {
+                        try { await authSignOut() } catch { /* ignore */ }
+                      }}
+                    >
+                      <LogOut className="mr-1 h-3 w-3" />
+                      Sign Out
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold">Create an Account or Sign In</p>
+                      <p className="text-xs text-muted-foreground">Save your progress and access RunSmart from any device.</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          setAuthModalTab('signup')
+                          setShowAuthModal(true)
+                        }}
+                      >
+                        <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                        Create Account
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                          setAuthModalTab('login')
+                          setShowAuthModal(true)
+                        }}
+                      >
+                        <LogIn className="mr-1.5 h-3.5 w-3.5" />
+                        Sign In
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
           <div className="sticky top-2 z-20 -mx-1 overflow-x-auto rounded-xl border bg-background/95 p-2 shadow-sm backdrop-blur">
             <div className="flex min-w-max gap-2">
               <Button
@@ -1336,6 +1432,12 @@ export function ProfileScreen() {
           }}
         />
       ) : null}
+
+      <AuthModal
+        open={showAuthModal}
+        onOpenChange={setShowAuthModal}
+        defaultTab={authModalTab}
+      />
 
       {userId ? (
         <PlanTemplateFlow
