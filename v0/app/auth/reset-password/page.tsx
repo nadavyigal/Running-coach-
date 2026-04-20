@@ -24,33 +24,36 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     const supabase = createClient()
 
-    // Primary mechanism: listen for the PASSWORD_RECOVERY auth state event.
-    // Supabase fires this after verifyOtp / exchangeCodeForSession complete
-    // (done in the callback route) and the session is available client-side.
+    // Fast path: check for an existing cookie-based session immediately.
+    // The server-side callback route calls verifyOtp / exchangeCodeForSession
+    // and sets the session in a cookie before redirecting here, so getSession()
+    // will return a session on first call most of the time.
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        sessionReadyRef.current = true
+        setSessionReady(true)
+      }
+    })
+
+    // Also listen for the PASSWORD_RECOVERY event, which Supabase fires when
+    // the user arrives via a hash-based implicit-flow link
+    // (e.g. /auth/reset-password#access_token=xxx&type=recovery).
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY' && session) {
+      if ((event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') && session) {
         sessionReadyRef.current = true
         setSessionReady(true)
         setError(null)
       }
     })
 
-    // Fallback: check if a recovery session is already in place from the cookie
-    // (set by the server-side callback route). Give the client a moment to
-    // hydrate the session from the cookie before declaring it missing.
-    const timer = setTimeout(async () => {
-      if (sessionReadyRef.current) return
-      const { data } = await supabase.auth.getSession()
-      if (data.session) {
-        sessionReadyRef.current = true
-        setSessionReady(true)
-        setError(null)
-      } else {
+    // Safety net: if neither path detected a session within 3 seconds, show error.
+    const timer = setTimeout(() => {
+      if (!sessionReadyRef.current) {
         setError(
           'Your password reset link has expired or is invalid. Please request a new one.'
         )
       }
-    }, 1500)
+    }, 3000)
 
     return () => {
       subscription.unsubscribe()
