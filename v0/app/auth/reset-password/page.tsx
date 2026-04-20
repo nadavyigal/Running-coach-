@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, FormEvent, useEffect } from 'react'
+import { useState, FormEvent, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -19,18 +19,43 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [sessionReady, setSessionReady] = useState(false)
+  const sessionReadyRef = useRef(false)
 
-  // The recovery session is set by the auth callback before redirecting here.
-  // We verify it exists so we don't show the form to users who navigate here directly.
   useEffect(() => {
     const supabase = createClient()
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
+
+    // Primary mechanism: listen for the PASSWORD_RECOVERY auth state event.
+    // Supabase fires this after verifyOtp / exchangeCodeForSession complete
+    // (done in the callback route) and the session is available client-side.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' && session) {
+        sessionReadyRef.current = true
         setSessionReady(true)
-      } else {
-        setError('Your password reset link has expired or is invalid. Please request a new one.')
+        setError(null)
       }
     })
+
+    // Fallback: check if a recovery session is already in place from the cookie
+    // (set by the server-side callback route). Give the client a moment to
+    // hydrate the session from the cookie before declaring it missing.
+    const timer = setTimeout(async () => {
+      if (sessionReadyRef.current) return
+      const { data } = await supabase.auth.getSession()
+      if (data.session) {
+        sessionReadyRef.current = true
+        setSessionReady(true)
+        setError(null)
+      } else {
+        setError(
+          'Your password reset link has expired or is invalid. Please request a new one.'
+        )
+      }
+    }, 1500)
+
+    return () => {
+      subscription.unsubscribe()
+      clearTimeout(timer)
+    }
   }, [])
 
   const handleSubmit = async (e: FormEvent) => {
@@ -63,7 +88,9 @@ export default function ResetPasswordPage() {
       }, 2500)
     } catch (err) {
       logger.error('[ResetPassword] Error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to update password. Please try again.')
+      setError(
+        err instanceof Error ? err.message : 'Failed to update password. Please try again.'
+      )
     } finally {
       setLoading(false)
     }
@@ -169,7 +196,10 @@ export default function ResetPasswordPage() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="text-center">
+          <div className="space-y-3 text-center">
+            <p className="text-sm text-muted-foreground">
+              Return to RunSmart and use &ldquo;Forgot password?&rdquo; to request a fresh link.
+            </p>
             <Button onClick={() => router.push('/')}>Go to RunSmart</Button>
           </div>
         )}
