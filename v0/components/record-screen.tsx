@@ -395,6 +395,7 @@ export function RecordScreen() {
   const gpsWarmupTimerRef = useRef<NodeJS.Timeout | null>(null)
   const gpsWarmupPointsRef = useRef<GPSCoordinate[]>([])
   const gpsWarmupQualityRef = useRef(gpsWarmupQuality)
+  const isGpsWarmingUpRef = useRef(false)
   const currentGPSAccuracyRef = useRef<GPSAccuracyData | null>(null)
   const lastGpsQualityRef = useRef<GPSAccuracyData['locationQuality'] | null>(null)
   const GPS_WARMUP_DURATION_SECONDS = 10
@@ -490,6 +491,10 @@ export function RecordScreen() {
     isRunningRef.current = isRunning
     isPausedRef.current = isPaused
   }, [isRunning, isPaused])
+
+  useEffect(() => {
+    isGpsWarmingUpRef.current = isGpsWarmingUp
+  }, [isGpsWarmingUp])
 
   useEffect(() => {
     if (!ENABLE_VIBRATION_COACH && !ENABLE_AUDIO_COACH) {
@@ -1204,6 +1209,16 @@ export function RecordScreen() {
   }
 
   const checkGpsSupport = async () => {
+    // On iOS native, GPS is handled by the native Capacitor plugin (CLLocationManager).
+    // navigator.permissions reflects WKWebView web-level permission — a completely
+    // separate permission from native iOS location. Checking it here would incorrectly
+    // disable the Start Run button even when native location permission is granted.
+    // The native plugin manages permissions itself via requestPermissions: true in addWatcher.
+    if (isIOSNativeApp()) {
+      setGpsPermission('prompt')
+      return
+    }
+
     // Check if running on HTTPS (required for GPS in production)
     const isSecure = IS_TEST_ENV || (typeof window !== 'undefined' &&
       (window.location.protocol === 'https:' || window.location.hostname === 'localhost'));
@@ -1669,8 +1684,11 @@ export function RecordScreen() {
       speed: typeof point.speed === 'number' ? point.speed : null,
     })
 
-    // If we're in GPS warmup mode, collect points and update quality assessment
-    if (isGpsWarmingUp) {
+    // If we're in GPS warmup mode, collect points and update quality assessment.
+    // Use a ref here (not state) to avoid stale closure: the GPS watch callback is
+    // registered before React re-renders with isGpsWarmingUp=true, so reading state
+    // directly would always yield false.
+    if (isGpsWarmingUpRef.current) {
       gpsWarmupPointsRef.current.push(point)
 
       const currentAccuracy = point.accuracy ?? 999
