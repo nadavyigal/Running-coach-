@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>RunSmart</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>armv7</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
+	
+	<!-- =============================================== -->
+	<!-- LOCATION PERMISSIONS - REQUIRED FOR GPS TRACKING -->
+	<!-- =============================================== -->
+	
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>RunSmart needs access to your location to accurately track your running distance, pace, and route while you use the app.</string>
+	
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>RunSmart needs continuous location access to track your runs even when the app is in the background, ensuring accurate route and distance tracking throughout your entire workout.</string>
+	
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>RunSmart needs continuous location access to track your runs in the background for accurate route and distance tracking.</string>
+	
+	<!-- =============================================== -->
+	<!-- MOTION PERMISSIONS - FOR STEP TRACKING -->
+	<!-- =============================================== -->
+	
+	<key>NSMotionUsageDescription</key>
+	<string>RunSmart uses motion sensors to track your steps, cadence, and running form for more accurate fitness insights.</string>
+	
+	<!-- =============================================== -->
+	<!-- BACKGROUND MODES -->
+	<!-- =============================================== -->
+	
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
+	
+	<!-- =============================================== -->
+	<!-- CAPACITOR CONFIGURATION -->
+	<!-- =============================================== -->
+	
+	<key>WKAppBoundDomains</key>
+	<array>
+		<string>localhost</string>
+	</array>
+	
+	<!-- =============================================== -->
+	<!-- APP TRANSPORT SECURITY -->
+	<!-- Allow localhost for development -->
+	<!-- =============================================== -->
+	
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	
+	<!-- =============================================== -->
+	<!-- CAMERA & PHOTO LIBRARY (if needed) -->
+	<!-- Uncomment if your app uses camera/photos -->
+	<!-- =============================================== -->
+	
+	<!--
+	<key>NSCameraUsageDescription</key>
+	<string>RunSmart would like to access your camera to take photos during your runs.</string>
+	
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>RunSmart would like to access your photo library to save and share your running achievements.</string>
+	
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>RunSmart would like to save photos to your photo library.</string>
+	-->
+	
+	<!-- =============================================== -->
+	<!-- HEALTH KIT (if needed) -->
+	<!-- Uncomment if your app integrates with Health app -->
+	<!-- =============================================== -->
+	
+	<!--
+	<key>NSHealthShareUsageDescription</key>
+	<string>RunSmart would like to read your health data to provide personalized running insights.</string>
+	
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>RunSmart would like to save your running workouts to the Health app.</string>
+	-->
+	
+</dict>
+</plist>

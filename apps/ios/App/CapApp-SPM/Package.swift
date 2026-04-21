@@ -14,6 +14,7 @@ let package = Package(
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "7.6.0"),
         .package(name: "CapacitorCommunityBackgroundGeolocation", path: "../../../../v0/node_modules/@capacitor-community/background-geolocation"),
         .package(name: "CapacitorApp", path: "../../../../v0/node_modules/@capacitor/app"),
+        .package(name: "CapacitorGeolocation", path: "../../../../v0/node_modules/@capacitor/geolocation"),
         .package(name: "CapacitorKeyboard", path: "../../../../v0/node_modules/@capacitor/keyboard"),
         .package(name: "CapacitorShare", path: "../../../../v0/node_modules/@capacitor/share"),
         .package(name: "CapacitorStatusBar", path: "../../../../v0/node_modules/@capacitor/status-bar")
@@ -26,6 +27,7 @@ let package = Package(
                 .product(name: "Cordova", package: "capacitor-swift-pm"),
                 .product(name: "CapacitorCommunityBackgroundGeolocation", package: "CapacitorCommunityBackgroundGeolocation"),
                 .product(name: "CapacitorApp", package: "CapacitorApp"),
+                .product(name: "CapacitorGeolocation", package: "CapacitorGeolocation"),
                 .product(name: "CapacitorKeyboard", package: "CapacitorKeyboard"),
                 .product(name: "CapacitorShare", package: "CapacitorShare"),
                 .product(name: "CapacitorStatusBar", package: "CapacitorStatusBar")

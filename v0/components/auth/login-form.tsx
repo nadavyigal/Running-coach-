@@ -144,22 +144,45 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
     setLoading(true)
     setError(null)
 
-    // For password reset, we still use the client-side Supabase call
-    // because it doesn't require the same CORS handling
+    // Use NEXT_PUBLIC_SITE_URL so the redirect URL is consistent regardless of
+    // whether the app is loaded from www.runsmart-ai.com (iOS Capacitor) or
+    // runsmart-ai.com (web). window.location.origin would produce the www variant
+    // on iOS, which is not in Supabase's allowed redirect URLs list.
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin
     const supabase = createClient()
 
     try {
+      logger.info('[Login] Sending password reset to:', email.trim(), 'redirectTo:', `${siteUrl}/auth/callback?type=recovery`)
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
+        redirectTo: `${siteUrl}/auth/callback?type=recovery`,
       })
 
-      if (error) throw error
+      if (error) {
+        logger.error('[Login] Supabase reset error:', error.message, 'status:', error.status)
+        throw error
+      }
 
       setResetSent(true)
       logger.info('[Login] Password reset email sent to:', email)
     } catch (err) {
       logger.error('[Login] Password reset error:', err)
-      setError('Failed to send reset email. Please try again.')
+      if (err instanceof Error) {
+        const msg = err.message.toLowerCase()
+        if (msg.includes('rate limit') || msg.includes('too many')) {
+          setError('Too many reset attempts. Please wait a few minutes and try again.')
+        } else if (msg.includes('not found') || msg.includes('user not found')) {
+          // Don't reveal whether email exists — show same success message
+          setResetSent(true)
+          return
+        } else if (msg.includes('invalid') && msg.includes('redirect')) {
+          setError('Configuration error: redirect URL not allowed. Please contact support.')
+          logger.error('[Login] Supabase redirect URL not in allowlist:', siteUrl)
+        } else {
+          setError(`Failed to send reset email: ${err.message}`)
+        }
+      } else {
+        setError('Failed to send reset email. Please try again.')
+      }
     } finally {
       setLoading(false)
     }

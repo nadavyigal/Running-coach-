@@ -11,6 +11,7 @@
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
+		33F1D5982F970000006C1A3C /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33F1D5992F970000006C1A3C /* SceneDelegate.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
@@ -19,10 +20,21 @@
 
 /* Begin PBXFileReference section */
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
+		33F1D58E2F9608C6006C1A3C /* release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = release.xcconfig; sourceTree = "<group>"; };
+		33F1D58F2F96091F006C1A3C /* TESTFLIGHT_CHECKLIST.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = TESTFLIGHT_CHECKLIST.md; sourceTree = "<group>"; };
+		33F1D5902F96093D006C1A3C /* Info.plist.sample */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = Info.plist.sample; sourceTree = "<group>"; };
+		33F1D5912F9615CE006C1A3C /* XCODE_FINAL_STEPS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = XCODE_FINAL_STEPS.md; sourceTree = "<group>"; };
+		33F1D5922F961625006C1A3C /* CURRENT_STATUS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CURRENT_STATUS.md; sourceTree = "<group>"; };
+		33F1D5932F966315006C1A3C /* FIX_GPS_NOW.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = FIX_GPS_NOW.md; sourceTree = "<group>"; };
+		33F1D5942F96632E006C1A3C /* START_HERE_GPS_FIX.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = START_HERE_GPS_FIX.md; sourceTree = "<group>"; };
+		33F1D5952F966357006C1A3C /* XCODE_VS_VSCODE_GUIDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = XCODE_VS_VSCODE_GUIDE.md; sourceTree = "<group>"; };
+		33F1D5962F966387006C1A3C /* MASTER_GPS_AND_TESTFLIGHT_GUIDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = MASTER_GPS_AND_TESTFLIGHT_GUIDE.md; sourceTree = "<group>"; };
+		33F1D5972F96638F006C1A3C /* COMMANDS_QUICK_REFERENCE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = COMMANDS_QUICK_REFERENCE.md; sourceTree = "<group>"; };
 		33F6D71B2F75358000FF057B /* QA_SESSION_LOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = QA_SESSION_LOG.md; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		33F1D5992F970000006C1A3C /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		504EC30E1FED79650016851F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -58,6 +70,16 @@
 				330D15462F70215100288DA4 /* Frameworks */,
 				504EC3051FED79650016851F /* Products */,
 				33F6D71B2F75358000FF057B /* QA_SESSION_LOG.md */,
+				33F1D58E2F9608C6006C1A3C /* release.xcconfig */,
+				33F1D58F2F96091F006C1A3C /* TESTFLIGHT_CHECKLIST.md */,
+				33F1D5902F96093D006C1A3C /* Info.plist.sample */,
+				33F1D5912F9615CE006C1A3C /* XCODE_FINAL_STEPS.md */,
+				33F1D5922F961625006C1A3C /* CURRENT_STATUS.md */,
+				33F1D5932F966315006C1A3C /* FIX_GPS_NOW.md */,
+				33F1D5942F96632E006C1A3C /* START_HERE_GPS_FIX.md */,
+				33F1D5952F966357006C1A3C /* XCODE_VS_VSCODE_GUIDE.md */,
+				33F1D5962F966387006C1A3C /* MASTER_GPS_AND_TESTFLIGHT_GUIDE.md */,
+				33F1D5972F96638F006C1A3C /* COMMANDS_QUICK_REFERENCE.md */,
 			);
 			sourceTree = "<group>";
 		};
@@ -74,6 +96,7 @@
 			children = (
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
+				33F1D5992F970000006C1A3C /* SceneDelegate.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -166,6 +189,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
+				33F1D5982F970000006C1A3C /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -322,12 +346,13 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8VC4R5M425;
 				INFOPLIST_FILE = App/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RunSmart;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = com.runsmart.coach;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -347,12 +372,13 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8VC4R5M425;
 				INFOPLIST_FILE = App/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RunSmart;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.runsmart.coach;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
