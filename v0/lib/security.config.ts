@@ -72,7 +72,7 @@ export const securityConfig = {
     // CORS settings
     cors: {
       origin: process.env.NODE_ENV === 'production'
-        ? [process.env.NEXT_PUBLIC_APP_URL ?? '']
+        ? [process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'https://runsmart-ai.com']
         : ['http://localhost:3000'],
       methods: ['GET', 'POST', 'PUT', 'DELETE'],
       allowedHeaders: ['Content-Type', 'Authorization'],
