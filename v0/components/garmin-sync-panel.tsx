@@ -27,6 +27,7 @@ import {
 interface GarminSyncPanelProps {
   userId: number
   onReconnect?: () => void
+  onDisconnect?: () => void
 }
 
 interface DeviceInfo {
@@ -88,7 +89,7 @@ function capabilityStatus(capability: GarminDatasetCapability): string {
   return "Permission missing"
 }
 
-export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
+export function GarminSyncPanel({ userId, onReconnect, onDisconnect }: GarminSyncPanelProps) {
   const [device, setDevice] = useState<DeviceInfo | null>(null)
   const [isSyncing, _setIsSyncing] = useState(false)
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false)
@@ -444,6 +445,16 @@ export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
                 </div>
               )}
             </div>
+
+            {onDisconnect && (
+              <Button
+                variant="outline"
+                className="w-full border-red-200 text-red-700 hover:bg-red-50"
+                onClick={onDisconnect}
+              >
+                Disconnect Garmin
+              </Button>
+            )}
 
             <div className="space-y-2 border-t pt-2">
               <Button

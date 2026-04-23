@@ -15,6 +15,36 @@ export default function GarminDetailsPage() {
   const { userId } = useData()
   const { toast } = useToast()
 
+  const handleDisconnect = async () => {
+    if (!userId) return
+    try {
+      const response = await fetch('/api/devices/garmin/disconnect', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': String(userId),
+        },
+        body: JSON.stringify({ userId }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to disconnect Garmin')
+      }
+      toast({
+        title: 'Garmin disconnected',
+        description: 'Your Garmin account has been disconnected. Reconnect anytime.',
+      })
+      router.back()
+    } catch (err) {
+      console.error('Garmin disconnect failed:', err)
+      toast({
+        title: 'Disconnect failed',
+        description: 'Could not disconnect Garmin. Please try again.',
+        variant: 'destructive',
+      })
+    }
+  }
+
   const handleReconnect = async () => {
     if (!userId) return
     try {
@@ -63,6 +93,7 @@ export default function GarminDetailsPage() {
             <GarminSyncPanel
               userId={userId}
               onReconnect={() => void handleReconnect()}
+              onDisconnect={() => void handleDisconnect()}
             />
           </>
         ) : (
