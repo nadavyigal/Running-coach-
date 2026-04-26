@@ -73,6 +73,7 @@ import { DATABASE } from "@/lib/constants";
 import { type Goal, type Run, db } from "@/lib/db";
 import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db";
 import { dbUtils } from "@/lib/dbUtils";
+import { syncGarminEnabledData } from "@/lib/garminSync";
 import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine";
 import { isSafeRedirect } from "@/lib/validateRedirect"
 import { useAuth } from "@/lib/auth-context"
@@ -123,6 +124,7 @@ export function ProfileScreen() {
   const [joiningChallengeSlug, setJoiningChallengeSlug] = useState<string | null>(null)
   const [garminConnected, setGarminConnected] = useState(false)
   const [garminSyncState, setGarminSyncState] = useState<string | null>(null)
+  const [garminAction, setGarminAction] = useState<"connect" | "sync" | "disconnect" | null>(null)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'signup' | 'login'>('signup')
   const { user: authUser, signOut: authSignOut, loading: authLoading } = useAuth()
@@ -154,34 +156,38 @@ export function ProfileScreen() {
     setRecentRuns(filterRunsToRecentWindow(contextRecentRuns))
   }, [contextUserId, contextPrimaryGoal, activeGoals, contextRecentRuns, filterRunsToRecentWindow])
 
+  const refreshGarminStatus = useCallback(async () => {
+    if (!userId) return
+    try {
+      const response = await fetch(`/api/devices/garmin/status?userId=${encodeURIComponent(String(userId))}`, {
+        headers: { 'x-user-id': String(userId) },
+      })
+      const status = (await response.json()) as { connected?: boolean; syncState?: string }
+      setGarminConnected(Boolean(status.connected))
+      setGarminSyncState(status.syncState ?? null)
+    } catch {
+      try {
+        const device = await db.wearableDevices
+          .where('[userId+type]' as any)
+          .equals([userId, 'garmin'])
+          .first()
+        setGarminConnected(!!device && device.connectionStatus !== 'disconnected')
+        setGarminSyncState(device?.connectionStatus ?? null)
+      } catch {
+        // Keep the last known UI state when both server and local status checks fail.
+      }
+    }
+  }, [userId])
+
   // Load Garmin connection status
   useEffect(() => {
     if (!userId) return
     let mounted = true
-    void fetch(`/api/devices/garmin/status?userId=${encodeURIComponent(String(userId))}`, {
-      headers: { 'x-user-id': String(userId) },
+    void refreshGarminStatus().finally(() => {
+      if (!mounted) return
     })
-      .then((response) => response.json())
-      .then((status: { connected?: boolean; syncState?: string }) => {
-        if (!mounted) return
-        setGarminConnected(Boolean(status.connected))
-        setGarminSyncState(status.syncState ?? null)
-      })
-      .catch(() => {
-        void db.wearableDevices
-          .where('[userId+type]' as any)
-          .equals([userId, 'garmin'])
-          .first()
-          .then((device) => {
-            if (mounted) {
-              setGarminConnected(!!device && device.connectionStatus !== 'disconnected')
-              setGarminSyncState(device?.connectionStatus ?? null)
-            }
-          })
-          .catch(() => { /* ignore */ })
-      })
     return () => { mounted = false }
-  }, [userId])
+  }, [refreshGarminStatus, userId])
 
   // Load goal progress using GoalProgressEngine for consistency with GoalProgressDashboard
   useEffect(() => {
@@ -260,6 +266,7 @@ export function ProfileScreen() {
 
   const handleGarminConnect = async () => {
     if (!userId) return
+    setGarminAction("connect")
     try {
       const response = await fetch('/api/devices/garmin/connect', {
         method: 'POST',
@@ -277,6 +284,99 @@ export function ProfileScreen() {
     } catch (err) {
       console.error('Garmin connect failed:', err)
       toast({ title: 'Connection failed', description: 'Could not start Garmin connection. Please try again.', variant: 'destructive' })
+      setGarminAction(null)
+    }
+  }
+
+  const handleGarminSync = async () => {
+    if (!userId) return
+    setGarminAction("sync")
+    try {
+      const result = await syncGarminEnabledData(userId)
+      await refreshGarminStatus()
+
+      if (result.needsReauth) {
+        setGarminSyncState('reauth_required')
+        toast({
+          title: 'Reconnect Garmin',
+          description: 'Garmin needs you to reconnect before data can sync.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      if (result.errors.length > 0) {
+        toast({
+          title: 'Garmin sync failed',
+          description: result.errors[0] ?? 'Please try syncing again.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      await refreshContext()
+      toast({
+        title: 'Garmin synced',
+        description: 'Your latest Garmin data is now available.',
+      })
+    } catch (err) {
+      console.error('Garmin sync failed:', err)
+      toast({
+        title: 'Garmin sync failed',
+        description: 'Please try syncing again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setGarminAction(null)
+    }
+  }
+
+  const handleGarminDisconnect = async () => {
+    if (!userId) return
+    setGarminAction("disconnect")
+    try {
+      const response = await fetch('/api/devices/garmin/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': String(userId) },
+        body: JSON.stringify({ userId }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.error || 'Failed to disconnect Garmin')
+      }
+
+      try {
+        const device = await db.wearableDevices
+          .where('[userId+type]' as any)
+          .equals([userId, 'garmin'])
+          .first()
+        if (device?.id) {
+          await db.wearableDevices.update(device.id, {
+            connectionStatus: 'disconnected',
+            authTokens: null,
+            lastSync: null,
+            updatedAt: new Date(),
+          })
+        }
+      } catch {
+        // Server disconnect is the source of truth; local cleanup is best effort.
+      }
+
+      setGarminConnected(false)
+      setGarminSyncState('disconnected')
+      toast({
+        title: 'Garmin disconnected',
+        description: 'You can reconnect Garmin from this profile card anytime.',
+      })
+    } catch (err) {
+      console.error('Garmin disconnect failed:', err)
+      toast({
+        title: 'Disconnect failed',
+        description: 'Could not disconnect Garmin. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setGarminAction(null)
     }
   }
 
@@ -1391,7 +1491,11 @@ export function ProfileScreen() {
           <IntegrationsListCard
             garminConnected={garminConnected}
             garminStatusLabel={
-              garminConnected
+              garminSyncState === 'reauth_required'
+                ? 'Reconnect Garmin to resume data sync'
+                : garminSyncState === 'disconnected'
+                  ? 'Disconnected - reconnect Garmin to sync data'
+                  : garminConnected
                 ? garminSyncState === 'waiting_for_first_activity'
                   ? 'Waiting for first Garmin activity'
                   : garminSyncState === 'syncing'
@@ -1400,11 +1504,14 @@ export function ProfileScreen() {
                       ? 'Delayed sync from Garmin Connect'
                       : garminSyncState === 'reauth_required'
                         ? 'Reconnect Garmin'
-                        : 'Connected to Garmin Connect'
-                : 'Not connected'
+                    : 'Connected to Garmin Connect'
+                  : 'Not connected'
             }
-            garminStatusTone={garminSyncState === 'delayed' || garminSyncState === 'reauth_required' ? 'warning' : 'connected'}
+            garminStatusTone={garminSyncState === 'delayed' || garminSyncState === 'reauth_required' ? 'warning' : garminConnected ? 'connected' : 'available'}
+            garminAction={garminAction}
             onGarminConnect={() => void handleGarminConnect()}
+            onGarminSync={() => void handleGarminSync()}
+            onGarminDisconnect={() => void handleGarminDisconnect()}
             onGarminDetails={() => router.push('/garmin/details')}
             rows={integrationRows}
           />
@@ -1549,4 +1656,3 @@ export function ProfileScreen() {
     </div>
   )
 }
-

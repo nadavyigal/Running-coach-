@@ -16,7 +16,10 @@ interface IntegrationsListCardProps {
   garminConnected: boolean
   garminStatusLabel?: string
   garminStatusTone?: "connected" | "available" | "warning"
+  garminAction?: "connect" | "sync" | "disconnect" | null
   onGarminConnect: () => void
+  onGarminSync: () => void
+  onGarminDisconnect: () => void
   onGarminDetails: () => void
   rows: IntegrationRow[]
 }
@@ -25,10 +28,15 @@ export function IntegrationsListCard({
   garminConnected,
   garminStatusLabel,
   garminStatusTone = "connected",
+  garminAction = null,
   onGarminConnect,
+  onGarminSync,
+  onGarminDisconnect,
   onGarminDetails,
   rows,
 }: IntegrationsListCardProps) {
+  const showGarminAttention = garminStatusTone === "warning"
+
   return (
     <section aria-labelledby="integrations-heading" className="space-y-3">
       <div>
@@ -52,19 +60,48 @@ export function IntegrationsListCard({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {garminConnected ? (
-              <span className={statusChipVariants({ tone: garminStatusTone === "warning" ? "warning" : "connected" })}>
-                {garminStatusTone === "warning" ? "Attention" : "Connected"}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {garminConnected || showGarminAttention ? (
+              <span className={statusChipVariants({ tone: showGarminAttention ? "warning" : "connected" })}>
+                {showGarminAttention ? "Attention" : "Connected"}
               </span>
             ) : null}
             {garminConnected ? (
-              <Button variant="ghost" size="sm" className="h-8" onClick={onGarminDetails}>
-                Details
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={onGarminSync}
+                  disabled={garminAction != null}
+                >
+                  {garminAction === "sync" ? "Syncing..." : "Sync"}
+                </Button>
+                <Button
+                  variant={showGarminAttention ? "default" : "outline"}
+                  size="sm"
+                  className="h-8"
+                  onClick={onGarminConnect}
+                  disabled={garminAction != null}
+                >
+                  {garminAction === "connect" ? "Opening..." : "Reconnect"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8"
+                  onClick={onGarminDisconnect}
+                  disabled={garminAction != null}
+                >
+                  {garminAction === "disconnect" ? "Disconnecting..." : "Disconnect"}
+                </Button>
+                <Button variant="ghost" size="sm" className="h-8" onClick={onGarminDetails}>
+                  Details
+                </Button>
+              </>
             ) : (
-              <Button size="sm" className="h-8" onClick={onGarminConnect}>
-                Connect
+              <Button size="sm" className="h-8" onClick={onGarminConnect} disabled={garminAction != null}>
+                {garminAction === "connect" ? "Opening..." : showGarminAttention ? "Reconnect" : "Connect"}
               </Button>
             )}
           </div>
