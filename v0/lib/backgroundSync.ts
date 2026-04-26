@@ -285,7 +285,7 @@ export class BackgroundSyncManager {
     }
   }
 
-  private async syncGarminActivities(job: SyncJob, device: any) {
+  private async syncGarminActivities(job: SyncJob, _device: any) {
     const response = await fetch(`/api/devices/garmin/sync/incremental?userId=${encodeURIComponent(String(job.userId))}`, {
       method: 'POST',
       headers: {
