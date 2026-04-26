@@ -33,6 +33,9 @@ vi.mock('@/components/add-run-modal', () => ({
 vi.mock('@/components/add-activity-modal', () => ({
   AddActivityModal: ({ open }: { open: boolean }) => (open ? <div data-testid="add-activity-modal" /> : null),
 }))
+vi.mock('@/components/morning-checkin-modal', () => ({
+  MorningCheckInModal: ({ open }: { open: boolean }) => (open ? <div data-testid="morning-checkin-modal" /> : null),
+}))
 vi.mock('@/components/route-selector-modal', () => ({
   RouteSelectorModal: () => null,
 }))
@@ -91,6 +94,21 @@ const baseWorkout = {
 describe('TodayScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/devices/garmin/status')) {
+        return new Response(JSON.stringify({
+          success: true,
+          connected: false,
+          connectionStatus: 'disconnected',
+          syncState: 'disconnected',
+          needsReauth: false,
+          error: null,
+          detail: null,
+        }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ success: true }), { status: 200 })
+    }))
     mockUseData.mockReturnValue({
       userId: 1,
       plan: { id: 10, title: 'Base Plan' },
@@ -179,6 +197,33 @@ describe('TodayScreen', () => {
     expect(screen.queryByRole('button', { name: /^start run$/i })).not.toBeInTheDocument()
     // Hero card shows "Done for today" status
     expect(screen.getByText('Done for today')).toBeInTheDocument()
+  })
+
+  it('uses Garmin sync instead of manual recovery check-in when Garmin is connected', async () => {
+    ;(global.fetch as any).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/devices/garmin/status')) {
+        return new Response(JSON.stringify({
+          success: true,
+          connected: true,
+          connectionStatus: 'connected',
+          syncState: 'connected',
+          needsReauth: false,
+          error: null,
+          detail: null,
+        }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ success: true }), { status: 200 })
+    })
+    ;(dbUtils.getTodaysWorkout as any).mockResolvedValueOnce({ ...baseWorkout, completed: true })
+
+    render(<TodayScreen />)
+
+    expect(await screen.findByText('Workout Complete')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /^sync garmin$/i }).length).toBeGreaterThan(0)
+    })
+    expect(screen.queryByRole('button', { name: /^log recovery$/i })).not.toBeInTheDocument()
   })
 
   it('does not render Start Run as primary CTA on a rest day workout', async () => {

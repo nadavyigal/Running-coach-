@@ -53,10 +53,36 @@ export async function GET(req: Request) {
     )
   }
 
-  const [connection, syncState] = await Promise.all([
-    getGarminOAuthState(userId),
-    getGarminSyncState(userId),
-  ])
+  const syncState = await getGarminSyncState(userId)
+  let connection: Awaited<ReturnType<typeof getGarminOAuthState>> = null
+
+  try {
+    connection = await getGarminOAuthState(userId)
+  } catch (error) {
+    const lastSyncAt = syncState.lastSuccessfulSyncAt ?? syncState.lastSyncAt
+    const message = error instanceof Error ? error.message : 'Unable to read Garmin connection. Please reconnect Garmin.'
+    const response = createEmptyGarminCanonicalStatusResponse()
+    response.success = true
+    response.connected = false
+    response.connectionStatus = 'reauth_required'
+    response.syncState = 'reauth_required'
+    response.needsReauth = true
+    response.lastSyncAt = syncState.lastSyncAt
+    response.lastSuccessfulSyncAt = syncState.lastSuccessfulSyncAt
+    response.lastDataReceivedAt = syncState.lastWebhookReceivedAt
+    response.pendingJobs = syncState.pendingJobs
+    response.error = message
+    response.detail = { message }
+
+    return NextResponse.json({
+      ...response,
+      lastWebhookReceivedAt: syncState.lastWebhookReceivedAt,
+      lastSyncError: message,
+      errorState: { message },
+      freshnessLabel: getGarminFreshnessLabel(lastSyncAt),
+      confidenceLabel: getGarminConfidenceLabel(lastSyncAt),
+    })
+  }
 
   if (!connection?.garminUserId) {
     const lastSyncAt = syncState.lastSuccessfulSyncAt ?? syncState.lastSyncAt

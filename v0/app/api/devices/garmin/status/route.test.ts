@@ -156,4 +156,21 @@ describe('/api/devices/garmin/status', () => {
     expect(body.detail).toEqual({ message: 'Reconnect Garmin' })
     expect(readGarminExportRowsMock).not.toHaveBeenCalled()
   })
+
+  it('returns a reauth status instead of throwing when stored Garmin tokens cannot be read', async () => {
+    getGarminOAuthStateMock.mockRejectedValueOnce(new Error('Garmin token is corrupted. Please reconnect Garmin.'))
+
+    const req = new Request('http://localhost/api/devices/garmin/status?userId=42')
+
+    const { GET } = await loadRoute()
+    const res = await GET(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.connected).toBe(false)
+    expect(body.needsReauth).toBe(true)
+    expect(body.connectionStatus).toBe('reauth_required')
+    expect(body.error).toContain('Garmin token is corrupted')
+    expect(readGarminExportRowsMock).not.toHaveBeenCalled()
+  })
 })

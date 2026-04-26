@@ -21,7 +21,7 @@ import { RouteSelectorModal } from "@/components/route-selector-modal"
 import { RescheduleModal } from "@/components/reschedule-modal"
 import { DateWorkoutModal } from "@/components/date-workout-modal"
 import ModalErrorBoundary from "@/components/modal-error-boundary"
-import { type Workout, type Route, type Goal, type RecoveryScore, resetDatabaseInstance, db } from "@/lib/db"
+import { type Workout, type Route, type Goal, type RecoveryScore, type WearableDevice, resetDatabaseInstance, db } from "@/lib/db"
 import { dbUtils, getUserPaceZones } from "@/lib/dbUtils"
 import { useData, useGoalProgress } from "@/contexts/DataContext"
 import { generateStructuredWorkout, type StructuredWorkout } from "@/lib/workout-steps"
@@ -74,6 +74,26 @@ import { formatRelativeTime } from "@/lib/garminDashboardData"
 
 function isActionableWorkout(workout: Workout | null): workout is Workout {
   return Boolean(workout && workout.type !== "rest" && !workout.completed)
+}
+
+interface GarminStatusResponse {
+  success?: boolean
+  connected?: boolean
+  connectionStatus?: string
+  syncState?: string
+  needsReauth?: boolean
+  error?: string | null
+  detail?: unknown
+}
+
+function getGarminStatusMessage(status: GarminStatusResponse): string | null {
+  if (typeof status.error === 'string' && status.error.trim()) return status.error
+  const detail = status.detail
+  if (detail && typeof detail === 'object' && 'message' in detail) {
+    const message = (detail as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+  }
+  return null
 }
 
 export function TodayScreen() {
@@ -132,6 +152,7 @@ export function TodayScreen() {
   const [isGarminFitSyncing, setIsGarminFitSyncing] = useState(false)
   const [garminSyncError, setGarminSyncError] = useState<string | null>(null)
   const [isGarminConnected, setIsGarminConnected] = useState(false)
+  const [garminConnectionChecked, setGarminConnectionChecked] = useState(false)
   const [authStorageKey, setAuthStorageKey] = useState<string | null>(null)
   const [storedAuthEmail, setStoredAuthEmail] = useState<string | null>(null)
   const [storedAuthUserId, setStoredAuthUserId] = useState<string | null>(null)
@@ -208,18 +229,59 @@ export function TodayScreen() {
     }
   }, [authUser, authLoading])
 
-  // Check Garmin connection status
+  // Check Garmin connection status from both local Dexie and canonical server state.
   useEffect(() => {
-    if (!userId) return
+    if (!userId) {
+      setIsGarminConnected(false)
+      setGarminConnectionChecked(true)
+      return
+    }
     let mounted = true
-    void db.wearableDevices
-      .where('[userId+type]' as any)
-      .equals([userId, 'garmin'])
-      .first()
-      .then((device) => {
-        if (mounted) setIsGarminConnected(!!device && device.connectionStatus !== 'disconnected')
-      })
-      .catch(() => { /* ignore */ })
+    setGarminConnectionChecked(false)
+
+    const run = async () => {
+      let localDevice: WearableDevice | undefined
+      let serverStatus: GarminStatusResponse | null = null
+
+      try {
+        localDevice = await db.wearableDevices
+          .where('[userId+type]' as any)
+          .equals([userId, 'garmin'])
+          .first()
+      } catch {
+        localDevice = undefined
+      }
+
+      try {
+        const response = await fetch(`/api/devices/garmin/status?userId=${encodeURIComponent(String(userId))}`, {
+          headers: { 'x-user-id': String(userId) },
+        })
+        serverStatus = (await response.json()) as GarminStatusResponse
+      } catch {
+        serverStatus = null
+      }
+
+      if (!mounted) return
+
+      const localConnected = Boolean(localDevice && localDevice.connectionStatus !== 'disconnected')
+      const serverConnected = Boolean(serverStatus?.connected && !serverStatus?.needsReauth)
+      setIsGarminConnected(localConnected || serverConnected)
+      setGarminConnectionChecked(true)
+
+      if (serverStatus?.needsReauth) {
+        setGarminSyncError(getGarminStatusMessage(serverStatus) ?? 'Garmin needs to be reconnected.')
+        if (localDevice?.id) {
+          await db.wearableDevices.update(localDevice.id, {
+            connectionStatus: 'error',
+            updatedAt: new Date(),
+          })
+        }
+      } else if (serverConnected) {
+        setGarminSyncError(null)
+      }
+    }
+
+    void run()
     return () => { mounted = false }
   }, [userId])
 
@@ -329,6 +391,14 @@ export function TodayScreen() {
     }
   }
 
+  const openRecoveryDataAction = () => {
+    if (isGarminConnected) {
+      void handleGarminFitSync()
+      return
+    }
+    setShowMorningCheckInModal(true)
+  }
+
   const _getRecoveryLabel = (score: number) => {
     if (score >= 80) return 'Excellent'
     if (score >= 65) return 'Good'
@@ -422,7 +492,7 @@ export function TodayScreen() {
   }
 
   useEffect(() => {
-    if (!userId || isGarminConnected) return
+    if (!userId || !garminConnectionChecked || isGarminConnected) return
     if (typeof window === 'undefined') return
 
     let cancelled = false
@@ -460,7 +530,7 @@ export function TodayScreen() {
     return () => {
       cancelled = true
     }
-  }, [userId, isGarminConnected])
+  }, [userId, garminConnectionChecked, isGarminConnected])
 
   // Initialize local data (todaysWorkout and visibleWorkouts are screen-specific)
   useEffect(() => {
@@ -1047,8 +1117,8 @@ export function TodayScreen() {
   const isRunDay = todayState === "run"
   const primaryActionLabel =
     todayState === "run" ? "Start Run" :
-    todayState === "completed" ? "Log Recovery" :
-    "Recovery Action"
+    todayState === "completed" ? (isGarminConnected ? "Sync Garmin" : "Log Recovery") :
+    isGarminConnected ? "Sync Garmin" : "Recovery Action"
   const dailyStatusLabel =
     todayState === "run" ? "Workout day" :
     todayState === "completed" ? "Done for today" :
@@ -1194,14 +1264,25 @@ export function TodayScreen() {
         action: () => void handleGarminFitSync(),
       }
     }
+    if (!garminConnectionChecked) {
+      return {
+        tone: "info" as const,
+        title: "Checking device connection",
+        description: "RunSmart is checking whether Garmin should supply today's readiness data.",
+        actionLabel: "Checking...",
+        actionDisabled: true,
+      }
+    }
     if (recoveryConfidenceValue < 50) {
       return {
         tone: "warning" as const,
         title: "Partial data today",
-        description: "Add sleep or wellness inputs to improve recommendation quality.",
+        description: isGarminConnected
+          ? "Sync Garmin to update today's readiness from your wearable data."
+          : "Add sleep or wellness inputs to improve recommendation quality.",
         actionLabel: isGarminConnected ? "Sync Garmin" : "Morning check-in",
         actionDisabled: false,
-        action: isGarminConnected ? () => void handleGarminFitSync() : () => setShowMorningCheckInModal(true),
+        action: openRecoveryDataAction,
       }
     }
     if (isGarminConnected) {
@@ -1275,9 +1356,9 @@ export function TodayScreen() {
               todayState === "run"
                 ? startRecordFlow
                 : todayState === "completed"
-                  ? () => setShowMorningCheckInModal(true)
+                  ? openRecoveryDataAction
                   : isGarminConnected
-                    ? () => setShowAddActivityModal(true)
+                    ? openRecoveryDataAction
                     : () => setShowMorningCheckInModal(true),
             disabled: isLoadingWorkout,
             icon: <Play className="h-4 w-4" />,
@@ -1776,4 +1857,3 @@ export function TodayScreen() {
     </div>
   )
 }
-

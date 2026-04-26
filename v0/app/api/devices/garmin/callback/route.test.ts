@@ -113,4 +113,43 @@ describe('/api/devices/garmin/callback', () => {
       })
     )
   })
+
+  it('keeps the Garmin connection successful when the optional backfill queue is unavailable', async () => {
+    enqueueGarminBackfillJobMock.mockRejectedValueOnce(new Error('Redis not configured'))
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: 'garmin-access-token',
+            refresh_token: 'garmin-refresh-token',
+            expires_in: 3600,
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HEALTH_EXPORT']), { status: 200 })
+      )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { POST } = await loadRoute()
+    const req = new Request('http://localhost/api/devices/garmin/callback', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: 'auth-code-123', state: 'state-123' }),
+    })
+
+    const res = await POST(req as never)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.success).toBe(true)
+    expect(body.warnings).toContain('Garmin connected. Initial sync queue was unavailable; use Sync Garmin to import data now.')
+    expect(upsertGarminConnectionMock).toHaveBeenCalledTimes(1)
+    expect(upsertGarminTokensMock).toHaveBeenCalledTimes(1)
+  })
 })

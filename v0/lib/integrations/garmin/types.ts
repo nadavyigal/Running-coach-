@@ -34,6 +34,7 @@ export type GarminDatasetKey =
   | 'hrv'
   | 'bloodPressures'
   | 'skinTemp'
+  | 'activityFiles'
 
 export interface GarminOAuthConnection {
   userId: number

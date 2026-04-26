@@ -110,7 +110,7 @@ async function handleGarminCallback(req: ApiRequest) {
       codeVerifierLength: codeVerifier.length,
     })
 
-    const tokenResponse = await fetch(GARMIN_TOKEN_URL, {
+    const tokenResponse = await fetch(GARMIN_OAUTH_TOKEN_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -246,11 +246,21 @@ async function handleGarminCallback(req: ApiRequest) {
       rotatedAt: nowIso,
     })
 
-    await enqueueGarminBackfillJob({
-      userId,
-      profileId: profileIdFromSession,
-      providerUserId: profileUserId != null ? String(profileUserId) : null,
-    })
+    try {
+      await enqueueGarminBackfillJob({
+        userId,
+        profileId: profileIdFromSession,
+        providerUserId: profileUserId != null ? String(profileUserId) : null,
+      })
+    } catch (error) {
+      logger.warn('Garmin backfill queue failed after successful callback; connection will remain active', {
+        userId,
+        profileId: profileIdFromSession,
+        providerUserId: profileUserId != null ? String(profileUserId) : null,
+        error: error instanceof Error ? error.message : 'unknown',
+      })
+      warnings.push('Garmin connected. Initial sync queue was unavailable; use Sync Garmin to import data now.')
+    }
 
     const deviceData = {
       userId,
