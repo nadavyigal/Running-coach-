@@ -144,29 +144,45 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
     setLoading(true)
     setError(null)
 
+    // Use NEXT_PUBLIC_SITE_URL so the redirect URL is consistent regardless of
+    // whether the app is loaded from www.runsmart-ai.com (iOS Capacitor) or
+    // runsmart-ai.com (web). window.location.origin would produce the www variant
+    // on iOS, which is not in Supabase's allowed redirect URLs list.
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin
+    const supabase = createClient()
+
     try {
-      // Call the server-side route so the redirectTo URL is always the canonical
-      // NEXT_PUBLIC_SITE_URL — pre-whitelisted in Supabase Auth settings — and
-      // never varies by the user's device or browser origin (fixes iOS PWA).
-      const response = await fetch('/api/auth/reset-password-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
-        credentials: 'include',
+      logger.info('[Login] Sending password reset to:', email.trim(), 'redirectTo:', `${siteUrl}/auth/callback?type=recovery`)
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${siteUrl}/auth/callback?type=recovery`,
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error ?? 'Failed to send reset email')
+      if (error) {
+        logger.error('[Login] Supabase reset error:', error.message, 'status:', error.status)
+        throw error
       }
 
       setResetSent(true)
       logger.info('[Login] Password reset email sent to:', email)
     } catch (err) {
       logger.error('[Login] Password reset error:', err)
-      const message = err instanceof Error ? err.message : 'Failed to send reset email.'
-      setError(message)
+      if (err instanceof Error) {
+        const msg = err.message.toLowerCase()
+        if (msg.includes('rate limit') || msg.includes('too many')) {
+          setError('Too many reset attempts. Please wait a few minutes and try again.')
+        } else if (msg.includes('not found') || msg.includes('user not found')) {
+          // Don't reveal whether email exists — show same success message
+          setResetSent(true)
+          return
+        } else if (msg.includes('invalid') && msg.includes('redirect')) {
+          setError('Configuration error: redirect URL not allowed. Please contact support.')
+          logger.error('[Login] Supabase redirect URL not in allowlist:', siteUrl)
+        } else {
+          setError(`Failed to send reset email: ${err.message}`)
+        }
+      } else {
+        setError('Failed to send reset email. Please try again.')
+      }
     } finally {
       setLoading(false)
     }

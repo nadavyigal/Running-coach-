@@ -386,20 +386,51 @@ export async function enqueueGarminBackfillJob(params: {
 }): Promise<GarminImportJobRecord | null> {
   const supabase = createAdminClient()
   const dedupeSourceActivityId = `backfill:${params.userId}`
+
+  // Check for any existing job regardless of status — the unique index covers all statuses.
   const { data: existingJob, error: existingJobError } = await supabase
     .from('garmin_import_jobs')
     .select('*')
     .eq('user_id', params.userId)
     .eq('job_type', 'backfill')
     .eq('source_activity_id', dedupeSourceActivityId)
-    .in('status', ['pending', 'retry', 'running'])
+    .is('webhook_event_id', null)
     .maybeSingle()
 
   if (existingJobError) {
     throw new Error(`Failed to query existing Garmin backfill job: ${existingJobError.message}`)
   }
+
   if (existingJob) {
-    return existingJob as GarminImportJobRecord
+    const activeStatuses = ['pending', 'retry', 'running']
+    if (activeStatuses.includes((existingJob as GarminImportJobRecord).status)) {
+      // Already queued — nothing to do.
+      return existingJob as GarminImportJobRecord
+    }
+
+    // Job is completed/failed from a previous connection. Reset it so the reconnect
+    // triggers a fresh backfill without violating the unique index.
+    const { data: resetJob, error: resetError } = await supabase
+      .from('garmin_import_jobs')
+      .update({
+        status: 'pending',
+        run_after: params.runAfter ?? new Date().toISOString(),
+        attempt_count: 0,
+        locked_at: null,
+        locked_by: null,
+        last_error: null,
+        updated_at: new Date().toISOString(),
+        payload: { lookbackDays: BACKFILL_LOOKBACK_DAYS },
+      })
+      .eq('id', (existingJob as GarminImportJobRecord).id)
+      .select('*')
+      .single()
+
+    if (resetError) {
+      throw new Error(`Failed to reset Garmin backfill job: ${resetError.message}`)
+    }
+
+    return resetJob as GarminImportJobRecord
   }
 
   const { data, error } = await supabase

@@ -1,6 +1,15 @@
 /**
- * Location service for getting user's current location
+ * Location service for getting user's current location.
+ *
+ * On iOS/Android native (Capacitor) we use @capacitor/geolocation, which
+ * bridges to the native CLLocationManager and triggers the system permission
+ * prompt backed by the Info.plist usage descriptions.
+ *
+ * On web we fall back to the standard navigator.geolocation API.
  */
+
+import { Capacitor } from '@capacitor/core';
+import { Geolocation } from '@capacitor/geolocation';
 
 export interface LocationCoordinates {
   latitude: number;
@@ -28,18 +37,43 @@ export interface LocationResult {
 }
 
 /**
- * Get the user's current location using the browser's geolocation API.
+ * Get the user's current location.
  * Returns a status and optional coordinates/error (never rejects).
  */
 export async function getLocation(options: LocationOptions = {}): Promise<LocationResult> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const position = await Geolocation.getCurrentPosition({
+        enableHighAccuracy: options.enableHighAccuracy ?? true,
+        timeout: options.timeoutMs ?? 10000,
+        maximumAge: options.maximumAgeMs ?? 0,
+      });
+      return {
+        status: 'granted',
+        coords: {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        },
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      const isDenied = message.toLowerCase().includes('denied') ||
+        message.toLowerCase().includes('not authorized') ||
+        message.toLowerCase().includes('permission');
+      return {
+        status: isDenied ? 'denied' : 'unavailable',
+        error: { code: isDenied ? 1 : 2, message },
+      };
+    }
+  }
+
+  // Web fallback
   return new Promise((resolve) => {
-    if (!navigator.geolocation) {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
       resolve({
         status: 'unavailable',
-        error: {
-          code: 0,
-          message: 'Geolocation is not supported by this browser',
-        },
+        error: { code: 0, message: 'Geolocation is not supported by this browser' },
       });
       return;
     }
@@ -58,10 +92,7 @@ export async function getLocation(options: LocationOptions = {}): Promise<Locati
       (error) => {
         resolve({
           status: error.code === 1 ? 'denied' : 'unavailable',
-          error: {
-            code: error.code,
-            message: error.message,
-          },
+          error: { code: error.code, message: error.message },
         });
       },
       {
@@ -83,18 +114,46 @@ export async function getLocationCoordinates(options: LocationOptions = {}): Pro
 }
 
 /**
- * Watch the user's location for continuous updates
+ * Watch the user's location for continuous updates.
+ * Returns a watch ID — pass it to clearWatch() to stop.
+ *
+ * On native the ID is a string (Capacitor); on web it is a number.
  */
-export function watchLocation(
+export async function watchLocation(
   onSuccess: (coords: LocationCoordinates) => void,
   onError: (error: LocationError) => void,
   options: LocationOptions = {}
-): number {
-  if (!navigator.geolocation) {
-    onError({
-      code: 0,
-      message: 'Geolocation is not supported by this browser',
-    });
+): Promise<string | number> {
+  if (Capacitor.isNativePlatform()) {
+    const watchId = await Geolocation.watchPosition(
+      {
+        enableHighAccuracy: options.enableHighAccuracy ?? true,
+        timeout: options.timeoutMs ?? 10000,
+        maximumAge: options.maximumAgeMs ?? 0,
+      },
+      (position, err) => {
+        if (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const isDenied = message.toLowerCase().includes('denied') ||
+            message.toLowerCase().includes('not authorized') ||
+            message.toLowerCase().includes('permission');
+          onError({ code: isDenied ? 1 : 2, message });
+          return;
+        }
+        if (!position) return;
+        onSuccess({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        });
+      }
+    );
+    return watchId;
+  }
+
+  // Web fallback
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    onError({ code: 0, message: 'Geolocation is not supported by this browser' });
     return -1;
   }
 
@@ -107,10 +166,7 @@ export function watchLocation(
       });
     },
     (error) => {
-      onError({
-        code: error.code,
-        message: error.message,
-      });
+      onError({ code: error.code, message: error.message });
     },
     {
       enableHighAccuracy: options.enableHighAccuracy ?? true,
@@ -121,11 +177,15 @@ export function watchLocation(
 }
 
 /**
- * Stop watching the user's location
+ * Stop watching the user's location.
+ * Accepts either a Capacitor string ID (native) or a browser number ID (web).
  */
-export function clearWatch(watchId: number): void {
-  if (navigator.geolocation && watchId >= 0) {
+export async function clearWatch(watchId: string | number): Promise<void> {
+  if (Capacitor.isNativePlatform() && typeof watchId === 'string') {
+    await Geolocation.clearWatch({ id: watchId });
+    return;
+  }
+  if (typeof navigator !== 'undefined' && navigator.geolocation && typeof watchId === 'number' && watchId >= 0) {
     navigator.geolocation.clearWatch(watchId);
   }
 }
-

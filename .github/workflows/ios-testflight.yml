@@ -46,6 +46,11 @@ jobs:
           cd packages/shared
           npm run generate:swift
 
+      - name: Sync Capacitor iOS app
+        run: |
+          cd v0
+          npx cap sync ios
+
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:

@@ -27,20 +27,6 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
 }
 
-function getReadableCallbackError(value: unknown): string {
-  const fallback = "Garmin connection failed. Please return to profile and try reconnecting."
-  const message = value instanceof Error ? value.message : typeof value === "string" ? value : null
-  if (!message?.trim()) return fallback
-
-  if (/OAuth state not found or expired|missing OAuth parameters|state/i.test(message)) {
-    return "The Garmin sign-in session expired. Please return to profile and reconnect Garmin."
-  }
-  if (/Token exchange failed/i.test(message)) {
-    return "Garmin approved the request, but RunSmart could not finish the token exchange. Please reconnect Garmin."
-  }
-  return message
-}
-
 function asConnectionStatus(value: unknown): WearableDevice["connectionStatus"] {
   return value === "connected" || value === "disconnected" || value === "syncing" || value === "error"
     ? value
@@ -128,7 +114,12 @@ function GarminCallbackContent() {
         }, 1200)
       } catch (error) {
         setStatus("error")
-        setMessage(getReadableCallbackError(error))
+        setMessage(error instanceof Error ? error.message : "Garmin connection failed")
+        // Auto-return to profile so the user is never stranded; the status endpoint
+        // will reflect the real connection state once the home page loads.
+        setTimeout(() => {
+          router.replace("/?screen=profile")
+        }, 4000)
       }
     }
 

@@ -1,8 +1,9 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Loader2, RefreshCw, Unplug } from 'lucide-react'
 import { GarminSyncPanel } from '@/components/garmin-sync-panel'
 import { GarminReadinessCard } from '@/components/garmin-readiness-card'
 import { PerformanceManagementChart } from '@/components/performance-management-chart'
@@ -14,9 +15,45 @@ export default function GarminDetailsPage() {
   const router = useRouter()
   const { userId } = useData()
   const { toast } = useToast()
+  const [isDisconnecting, setIsDisconnecting] = useState(false)
+  const [isReconnecting, setIsReconnecting] = useState(false)
+
+  const handleDisconnect = async () => {
+    if (!userId) return
+    setIsDisconnecting(true)
+    try {
+      const response = await fetch('/api/devices/garmin/disconnect', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': String(userId),
+        },
+        body: JSON.stringify({ userId }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to disconnect Garmin')
+      }
+      toast({
+        title: 'Garmin disconnected',
+        description: 'Your Garmin account has been disconnected. Reconnect anytime.',
+      })
+      router.back()
+    } catch (err) {
+      console.error('Garmin disconnect failed:', err)
+      toast({
+        title: 'Disconnect failed',
+        description: 'Could not disconnect Garmin. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsDisconnecting(false)
+    }
+  }
 
   const handleReconnect = async () => {
     if (!userId) return
+    setIsReconnecting(true)
     try {
       const response = await fetch('/api/devices/garmin/connect', {
         method: 'POST',
@@ -44,6 +81,8 @@ export default function GarminDetailsPage() {
         description: 'Could not start Garmin reconnect. Please try again.',
         variant: 'destructive',
       })
+    } finally {
+      setIsReconnecting(false)
     }
   }
 
@@ -63,7 +102,36 @@ export default function GarminDetailsPage() {
             <GarminSyncPanel
               userId={userId}
               onReconnect={() => void handleReconnect()}
+              onDisconnect={() => void handleDisconnect()}
             />
+            <div className="flex flex-col gap-2 pt-2">
+              <Button
+                variant="outline"
+                className="w-full border-red-200 text-red-700 hover:bg-red-50"
+                onClick={() => void handleDisconnect()}
+                disabled={isDisconnecting}
+              >
+                {isDisconnecting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Unplug className="mr-2 h-4 w-4" />
+                )}
+                {isDisconnecting ? 'Disconnecting...' : 'Disconnect Garmin'}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => void handleReconnect()}
+                disabled={isReconnecting}
+              >
+                {isReconnecting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                {isReconnecting ? 'Connecting...' : 'Reconnect Garmin'}
+              </Button>
+            </div>
           </>
         ) : (
           <div className="text-center text-muted-foreground py-12">

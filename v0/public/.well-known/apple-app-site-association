@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "8VC4R5M425.com.runsmart.coach",
+        "paths": [
+          "/auth/callback",
+          "/auth/callback/*",
+          "/auth/update-password",
+          "/"
+        ]
+      }
+    ]
+  }
+}

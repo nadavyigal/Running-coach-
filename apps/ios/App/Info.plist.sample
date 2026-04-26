@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  INFO.PLIST PRIVACY DESCRIPTIONS FOR RUNSMART
+  
+  Copy these entries into your Info.plist file.
+  Customize the text to match your app's specific use case.
+  
+  IMPORTANT: These descriptions will be shown to users when requesting permissions.
+  Make them clear, user-friendly, and explain the benefit to the user.
+-->
+<plist version="1.0">
+<dict>
+    <!-- ========================== -->
+    <!-- LOCATION SERVICES (REQUIRED) -->
+    <!-- ========================== -->
+    
+    <!-- When In Use Location Permission -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>RunSmart needs access to your location to accurately track your running distance, pace, and route while you use the app.</string>
+    
+    <!-- Always/Background Location Permission -->
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>RunSmart needs continuous location access to track your runs even when the app is in the background, ensuring accurate route and distance tracking throughout your entire workout.</string>
+    
+    <!-- Temporary Full Accuracy Location (iOS 14+) -->
+    <key>NSLocationTemporaryUsageDescriptionDictionary</key>
+    <dict>
+        <key>RunTracking</key>
+        <string>Full location accuracy is needed to precisely track your running route, distance, and pace.</string>
+    </dict>
+    
+    <!-- ========================== -->
+    <!-- MOTION & FITNESS (LIKELY NEEDED) -->
+    <!-- ========================== -->
+    
+    <!-- Motion & Fitness Sensors -->
+    <key>NSMotionUsageDescription</key>
+    <string>RunSmart uses motion sensors to track your steps, cadence, and running form for more accurate fitness insights.</string>
+    
+    <!-- ========================== -->
+    <!-- HEALTH KIT (IF USING) -->
+    <!-- ========================== -->
+    
+    <!-- Reading Health Data -->
+    <key>NSHealthShareUsageDescription</key>
+    <string>RunSmart reads your health data to provide personalized training insights and track your fitness progress over time.</string>
+    
+    <!-- Writing Health Data -->
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>RunSmart saves your workout data to Apple Health so you can see all your fitness activities in one place and track your long-term progress.</string>
+    
+    <!-- ========================== -->
+    <!-- CAMERA & PHOTOS (IF USING) -->
+    <!-- ========================== -->
+    
+    <!-- Camera Access -->
+    <key>NSCameraUsageDescription</key>
+    <string>RunSmart uses your camera to let you capture and share your running achievements and progress photos.</string>
+    
+    <!-- Photo Library Access -->
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>RunSmart needs access to your photos to let you share run achievements and progress pictures with your training community.</string>
+    
+    <!-- Photo Library Add Only (iOS 14+) -->
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>RunSmart saves your running achievement images to your photo library.</string>
+    
+    <!-- ========================== -->
+    <!-- NOTIFICATIONS (IF USING) -->
+    <!-- ========================== -->
+    
+    <!-- Note: Push notifications don't require Info.plist entry -->
+    <!-- But you should request authorization in code -->
+    
+    <!-- ========================== -->
+    <!-- CONTACTS (IF USING) -->
+    <!-- ========================== -->
+    
+    <key>NSContactsUsageDescription</key>
+    <string>RunSmart accesses your contacts to help you find and connect with running partners and training buddies.</string>
+    
+    <!-- ========================== -->
+    <!-- CALENDAR (IF USING) -->
+    <!-- ========================== -->
+    
+    <key>NSCalendarsUsageDescription</key>
+    <string>RunSmart integrates with your calendar to schedule and remind you of your planned training runs.</string>
+    
+    <!-- ========================== -->
+    <!-- MICROPHONE (IF USING) -->
+    <!-- ========================== -->
+    
+    <key>NSMicrophoneUsageDescription</key>
+    <string>RunSmart uses your microphone for voice-controlled workout tracking.</string>
+    
+    <!-- ========================== -->
+    <!-- BLUETOOTH (IF USING) -->
+    <!-- ========================== -->
+    
+    <!-- Bluetooth Always Usage (iOS 13+) -->
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>RunSmart connects to your Bluetooth heart rate monitors and running sensors to provide accurate fitness metrics.</string>
+    
+    <!-- ========================== -->
+    <!-- MUSIC LIBRARY (IF USING) -->
+    <!-- ========================== -->
+    
+    <key>NSAppleMusicUsageDescription</key>
+    <string>RunSmart accesses your Apple Music library to play motivating music during your runs.</string>
+    
+    <!-- ========================== -->
+    <!-- SIRI (IF USING) -->
+    <!-- ========================== -->
+    
+    <key>NSSiriUsageDescription</key>
+    <string>RunSmart works with Siri to let you start runs, check your stats, and control your workouts with voice commands.</string>
+    
+    <!-- ========================== -->
+    <!-- REQUIRED BACKGROUND MODES -->
+    <!-- ========================== -->
+    
+    <!-- Configure these in Xcode under Signing & Capabilities, not in Info.plist directly -->
+    <!-- But they will appear in Info.plist as: -->
+    <!--
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>location</string>
+        <string>fetch</string>
+        <string>remote-notification</string>
+    </array>
+    -->
+    
+    <!-- ========================== -->
+    <!-- APP TRANSPORT SECURITY -->
+    <!-- ========================== -->
+    
+    <!-- Only use if you need to connect to non-HTTPS servers -->
+    <!-- NOT RECOMMENDED - use HTTPS for all connections -->
+    <!--
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <false/>
+    </dict>
+    -->
+    
+    <!-- ========================== -->
+    <!-- ADDITIONAL HELPFUL SETTINGS -->
+    <!-- ========================== -->
+    
+    <!-- Status Bar Style -->
+    <key>UIStatusBarStyle</key>
+    <string>UIStatusBarStyleDefault</string>
+    
+    <!-- Prevent status bar from hiding -->
+    <key>UIViewControllerBasedStatusBarAppearance</key>
+    <true/>
+    
+    <!-- Launch Storyboard -->
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
+    
+    <!-- Supported Interface Orientations -->
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <!-- Add landscape if you support it -->
+        <!-- <string>UIInterfaceOrientationLandscapeLeft</string> -->
+        <!-- <string>UIInterfaceOrientationLandscapeRight</string> -->
+    </array>
+    
+    <!-- Requires Full Screen -->
+    <key>UIRequiresFullScreen</key>
+    <true/>
+    
+</dict>
+</plist>

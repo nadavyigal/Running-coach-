@@ -1,0 +1,35 @@
+// Release Configuration for RunSmart
+// This configuration is used for TestFlight and App Store builds
+
+// Disable Capacitor debug mode for production builds
+CAPACITOR_DEBUG = false
+
+// Code signing configuration
+// Xcode will automatically select the appropriate provisioning profile
+CODE_SIGN_STYLE = Automatic
+
+// Optimization settings for release builds
+SWIFT_OPTIMIZATION_LEVEL = -O
+SWIFT_COMPILATION_MODE = wholemodule
+
+// Strip debug symbols to reduce app size
+COPY_PHASE_STRIP = YES
+STRIP_INSTALLED_PRODUCT = YES
+
+// Enable bitcode (if required by your dependencies)
+ENABLE_BITCODE = NO
+
+// Deployment target (adjust based on your minimum iOS version)
+// IPHONEOS_DEPLOYMENT_TARGET = 14.0
+
+// Build active architecture only (set to NO for release to build for all architectures)
+ONLY_ACTIVE_ARCH = NO
+
+// Validate product
+VALIDATE_PRODUCT = YES
+
+// Dead code stripping
+DEAD_CODE_STRIPPING = YES
+
+// Asset catalog compiler optimization
+ASSETCATALOG_COMPILER_OPTIMIZATION = space
