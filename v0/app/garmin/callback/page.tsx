@@ -115,6 +115,11 @@ function GarminCallbackContent() {
       } catch (error) {
         setStatus("error")
         setMessage(error instanceof Error ? error.message : "Garmin connection failed")
+        // Auto-return to profile so the user is never stranded; the status endpoint
+        // will reflect the real connection state once the home page loads.
+        setTimeout(() => {
+          router.replace("/?screen=profile")
+        }, 4000)
       }
     }
 

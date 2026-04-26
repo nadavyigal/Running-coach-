@@ -245,11 +245,19 @@ async function handleGarminCallback(req: ApiRequest) {
       rotatedAt: nowIso,
     })
 
-    await enqueueGarminBackfillJob({
-      userId,
-      profileId: profileIdFromSession,
-      providerUserId: profileUserId != null ? String(profileUserId) : null,
-    })
+    try {
+      await enqueueGarminBackfillJob({
+        userId,
+        profileId: profileIdFromSession,
+        providerUserId: profileUserId != null ? String(profileUserId) : null,
+      })
+    } catch (backfillError) {
+      // Non-fatal: the OAuth connection is established. Log and continue.
+      logger.warn('Failed to enqueue Garmin backfill job after connect (non-fatal)', {
+        userId,
+        error: backfillError instanceof Error ? backfillError.message : 'unknown',
+      })
+    }
 
     const deviceData = {
       userId,
