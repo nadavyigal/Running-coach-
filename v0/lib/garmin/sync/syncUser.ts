@@ -186,9 +186,10 @@ export async function syncGarminUser(input: {
   })
 
   const warnings: string[] = []
+  const importJobLimit = input.trigger === 'backfill' ? 50 : 4
 
   const initialWorkerStats = await processPendingGarminJobs({
-    limit: input.trigger === 'backfill' ? 8 : 4,
+    limit: importJobLimit,
     workerId: `manual-sync-${userId}`,
   })
   let workerStats = initialWorkerStats
@@ -201,7 +202,7 @@ export async function syncGarminUser(input: {
     })
 
     const backfillWorkerStats = await processPendingGarminJobs({
-      limit: input.trigger === 'backfill' ? 8 : 4,
+      limit: importJobLimit,
       workerId: `manual-sync-backfill-${userId}`,
     })
     workerStats = sumWorkerStats(initialWorkerStats, backfillWorkerStats)

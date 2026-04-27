@@ -1,33 +1,40 @@
 import { describe, expect, it } from 'vitest'
 
-import { mapGarminActivityToRun } from '@/lib/integrations/garmin/mapGarminActivityToRun'
+import {
+  isGarminRunLikeActivity,
+  mapGarminActivityToRun,
+} from '@/lib/integrations/garmin/mapGarminActivityToRun'
 import type { GarminNormalizedActivity } from '@/lib/integrations/garmin/types'
+
+function buildActivity(typeKey: string, activityId = `garmin-${typeKey}`): GarminNormalizedActivity {
+  return {
+    activityId,
+    sourceProvider: 'garmin',
+    sourceExternalId: 'summary-1',
+    sourcePayloadRef: 'garmin_webhook_events:evt-1',
+    name: 'Morning Run',
+    typeKey,
+    startTime: '2026-03-01T06:30:00.000Z',
+    timezone: 'UTC',
+    distanceMeters: 10250,
+    durationSeconds: 3120,
+    movingDurationSeconds: 3000,
+    averagePaceSecondsPerKm: 293,
+    elevationGainMeters: 82,
+    averageHeartRate: 151,
+    maxHeartRate: 172,
+    calories: 712,
+    routePoints: [{ lat: 32.1, lng: 34.8 }],
+    polyline: null,
+    lapSummaries: [{ lap: 1 }],
+    splitSummaries: [{ split: 1 }],
+    raw: { activityId },
+  }
+}
 
 describe('mapGarminActivityToRun', () => {
   it('maps a Garmin activity into the canonical run shape', () => {
-    const activity: GarminNormalizedActivity = {
-      activityId: 'garmin-run-1',
-      sourceProvider: 'garmin',
-      sourceExternalId: 'summary-1',
-      sourcePayloadRef: 'garmin_webhook_events:evt-1',
-      name: 'Morning Run',
-      typeKey: 'running',
-      startTime: '2026-03-01T06:30:00.000Z',
-      timezone: 'UTC',
-      distanceMeters: 10250,
-      durationSeconds: 3120,
-      movingDurationSeconds: 3000,
-      averagePaceSecondsPerKm: 293,
-      elevationGainMeters: 82,
-      averageHeartRate: 151,
-      maxHeartRate: 172,
-      calories: 712,
-      routePoints: [{ lat: 32.1, lng: 34.8 }],
-      polyline: null,
-      lapSummaries: [{ lap: 1 }],
-      splitSummaries: [{ split: 1 }],
-      raw: { activityId: 'garmin-run-1' },
-    }
+    const activity = buildActivity('running', 'garmin-run-1')
 
     const mapped = mapGarminActivityToRun(activity, {
       profileId: 'profile-1',
@@ -49,4 +56,25 @@ describe('mapGarminActivityToRun', () => {
     })
     expect(mapped.route).toEqual([{ lat: 32.1, lng: 34.8 }])
   })
+
+  it.each([
+    'INDOOR_RUNNING',
+    'trail_run',
+    'treadmill_running',
+    '5K',
+    '10K',
+    'MARATHON',
+    'HALF_MARATHON',
+    'obstacle_run',
+    'ultra_run',
+  ])('recognizes %s as a run-like Garmin activity', (typeKey) => {
+    expect(isGarminRunLikeActivity(buildActivity(typeKey))).toBe(true)
+  })
+
+  it.each(['cycling', 'walking', 'strength_training', 'swimming'])(
+    'does not import %s as a run-like Garmin activity',
+    (typeKey) => {
+      expect(isGarminRunLikeActivity(buildActivity(typeKey))).toBe(false)
+    }
+  )
 })

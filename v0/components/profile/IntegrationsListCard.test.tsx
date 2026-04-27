@@ -9,6 +9,7 @@ function renderCard(overrides: Partial<ComponentProps<typeof IntegrationsListCar
     garminConnected: false,
     onGarminConnect: vi.fn(),
     onGarminSync: vi.fn(),
+    onGarminBackfill: vi.fn(),
     onGarminDisconnect: vi.fn(),
     onGarminDetails: vi.fn(),
     rows: [
@@ -36,17 +37,19 @@ describe('IntegrationsListCard', () => {
     expect(props.onGarminConnect).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps Garmin reconnect, sync, and disconnect visible when connected', () => {
+  it('keeps Garmin reconnect, sync, re-sync all, and disconnect visible when connected', () => {
     const props = renderCard({
       garminConnected: true,
       garminStatusLabel: 'Connected to Garmin Connect',
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Sync' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Re-sync all' }))
     fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }))
     fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }))
 
     expect(props.onGarminSync).toHaveBeenCalledTimes(1)
+    expect(props.onGarminBackfill).toHaveBeenCalledTimes(1)
     expect(props.onGarminConnect).toHaveBeenCalledTimes(1)
     expect(props.onGarminDisconnect).toHaveBeenCalledTimes(1)
   })

@@ -37,7 +37,24 @@ function mapActivityType(typeKey: string): CanonicalGarminRun['type'] {
 
 export function isGarminRunLikeActivity(activity: GarminNormalizedActivity): boolean {
   const normalized = activity.typeKey.toLowerCase()
-  return ['run', 'running', 'trail_run', 'treadmill', 'race'].some((token) => normalized.includes(token))
+  const tokens = normalized.split(/[^a-z0-9]+/).filter(Boolean)
+  const compact = tokens.join('')
+
+  if (tokens.some((token) => token === 'run' || token === 'running' || token.endsWith('running') || token.endsWith('run'))) {
+    return true
+  }
+
+  return [
+    'race',
+    'treadmill',
+    'trailrun',
+    'obstaclerun',
+    'ultrarun',
+    'marathon',
+    'halfmarathon',
+    '5k',
+    '10k',
+  ].some((token) => compact.includes(token))
 }
 
 export function mapGarminActivityToRun(

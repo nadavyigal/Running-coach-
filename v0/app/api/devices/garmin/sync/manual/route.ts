@@ -38,6 +38,15 @@ function parseUserIdFromRequest(req: Request, body: Record<string, unknown>): nu
   return null
 }
 
+function parseTriggerFromRequest(req: Request, body: Record<string, unknown>): 'manual' | 'backfill' {
+  const { searchParams } = new URL(req.url)
+  const fromQuery = searchParams.get('trigger')?.trim()
+  if (fromQuery === 'backfill') return 'backfill'
+
+  const fromBody = body.trigger
+  return fromBody === 'backfill' ? 'backfill' : 'manual'
+}
+
 export async function POST(req: Request) {
   const body = await readBodySafely(req)
   const userId = parseUserIdFromRequest(req, body)
@@ -69,10 +78,11 @@ export async function POST(req: Request) {
   }
 
   let result: Awaited<ReturnType<typeof syncGarminUser>>
+  const trigger = parseTriggerFromRequest(req, body)
   try {
     result = await syncGarminUser({
       userId,
-      trigger: 'manual',
+      trigger,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal sync error'
@@ -130,7 +140,7 @@ export async function POST(req: Request) {
       retryAfterSeconds: result.retryAfterSeconds ?? null,
       freshnessLabel,
       confidenceLabel,
-      trigger: 'manual',
+      trigger,
       triggeredAt: new Date().toISOString(),
     },
     { status: result.status }

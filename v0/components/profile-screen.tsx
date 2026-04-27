@@ -123,7 +123,7 @@ export function ProfileScreen() {
   const [mergeSourceGoal, setMergeSourceGoal] = useState<Goal | null>(null)
   const [isSwitchingPrimary, setIsSwitchingPrimary] = useState(false)
   const [joiningChallengeSlug, setJoiningChallengeSlug] = useState<string | null>(null)
-  const [garminAction, setGarminAction] = useState<"connect" | "sync" | "disconnect" | null>(null)
+  const [garminAction, setGarminAction] = useState<"connect" | "sync" | "backfill" | "disconnect" | null>(null)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'signup' | 'login'>('signup')
   const { user: authUser, signOut: authSignOut, loading: authLoading } = useAuth()
@@ -301,6 +301,55 @@ export function ProfileScreen() {
       console.error('Garmin sync failed:', err)
       toast({
         title: 'Garmin sync failed',
+        description: 'Please try syncing again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setGarminAction(null)
+    }
+  }
+
+  const handleGarminBackfill = async () => {
+    if (!userId) return
+    setGarminAction("backfill")
+    try {
+      const result = await syncGarminEnabledData(userId, { trigger: 'backfill' })
+      await garminConnection.refresh({ source: 'manual_backfill' })
+
+      if (result.needsReauth) {
+        toast({
+          title: 'Reconnect Garmin',
+          description: 'Garmin needs you to reconnect before data can sync.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      if (result.errors.length > 0) {
+        void trackAnalyticsEvent('garmin_sync_partial', {
+          userId,
+          source: 'manual_backfill',
+          error: result.errors[0] ?? null,
+        })
+        toast({
+          title: 'Garmin re-sync failed',
+          description: result.errors[0] ?? 'Please try syncing again.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      await refreshContext()
+      toast({
+        title: 'Garmin re-sync started',
+        description: result.activitiesImported > 0
+          ? `Imported ${result.activitiesImported} Garmin activities.`
+          : 'RunSmart is draining queued Garmin data.',
+      })
+    } catch (err) {
+      console.error('Garmin backfill failed:', err)
+      toast({
+        title: 'Garmin re-sync failed',
         description: 'Please try syncing again.',
         variant: 'destructive',
       })
@@ -1488,6 +1537,7 @@ export function ProfileScreen() {
             garminAction={garminAction}
             onGarminConnect={() => void handleGarminConnect()}
             onGarminSync={() => void handleGarminSync()}
+            onGarminBackfill={() => void handleGarminBackfill()}
             onGarminDisconnect={() => void handleGarminDisconnect()}
             onGarminDetails={() => router.push('/garmin/details')}
             rows={integrationRows}

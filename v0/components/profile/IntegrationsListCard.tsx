@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronRight, Link2, Watch } from "lucide-react"
+import { CheckCircle2, ChevronRight, Link2, RefreshCw, RotateCcw, Watch } from "lucide-react"
 import { rowItemVariants, profileCardVariants, statusChipVariants } from "@/components/profile/variants"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -16,9 +16,10 @@ interface IntegrationsListCardProps {
   garminConnected: boolean
   garminStatusLabel?: string
   garminStatusTone?: "connected" | "available" | "warning"
-  garminAction?: "connect" | "sync" | "disconnect" | null
+  garminAction?: "connect" | "sync" | "backfill" | "disconnect" | null
   onGarminConnect: () => void
   onGarminSync: () => void
+  onGarminBackfill: () => void
   onGarminDisconnect: () => void
   onGarminDetails: () => void
   rows: IntegrationRow[]
@@ -31,6 +32,7 @@ export function IntegrationsListCard({
   garminAction = null,
   onGarminConnect,
   onGarminSync,
+  onGarminBackfill,
   onGarminDisconnect,
   onGarminDetails,
   rows,
@@ -75,7 +77,18 @@ export function IntegrationsListCard({
                   onClick={onGarminSync}
                   disabled={garminAction != null}
                 >
+                  <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", garminAction === "sync" && "animate-spin")} />
                   {garminAction === "sync" ? "Syncing..." : "Sync"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={onGarminBackfill}
+                  disabled={garminAction != null}
+                >
+                  <RotateCcw className={cn("mr-1.5 h-3.5 w-3.5", garminAction === "backfill" && "animate-spin")} />
+                  {garminAction === "backfill" ? "Syncing..." : "Re-sync all"}
                 </Button>
                 <Button
                   variant={showGarminAttention ? "default" : "outline"}

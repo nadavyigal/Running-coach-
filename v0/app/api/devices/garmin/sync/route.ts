@@ -29,8 +29,8 @@ const GARMIN_MAX_WINDOW_SECONDS = 86400
 const SYNC_NAME = 'RunSmart Garmin Export Sync'
 const DEFAULT_INCREMENTAL_DAYS = 7
 const DEFAULT_ACTIVITY_SYNC_DAYS = 7
-const BACKFILL_DAILY_DAYS = 56
-const BACKFILL_ACTIVITY_DAYS = 56
+const BACKFILL_DAILY_DAYS = 90
+const BACKFILL_ACTIVITY_DAYS = 90
 const CURSOR_OVERLAP_MS = 24 * 60 * 60 * 1000
 
 type GarminPermission = 'ACTIVITY_EXPORT' | 'HEALTH_EXPORT'
@@ -1702,7 +1702,12 @@ export async function runGarminSyncForUser(params: {
       })
     } catch (storageError) {
       notices.push('Garmin analytics storage unavailable; sync data was not persisted to analytics tables.')
-      logger.warn('Garmin analytics storage warning:', storageError)
+      logger.warn('Garmin analytics storage warning:', {
+        userId,
+        message: storageError instanceof Error ? storageError.message : String(storageError),
+        stack: storageError instanceof Error ? storageError.stack : undefined,
+        error: storageError,
+      })
     }
 
     await safeMarkSyncState({
