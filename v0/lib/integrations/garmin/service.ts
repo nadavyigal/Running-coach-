@@ -4,7 +4,11 @@ import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
 import { runGarminDeriveForPayload } from '@/lib/server/garmin-derive-worker'
-import { GARMIN_EXPORT_DATASET_KEYS, GARMIN_WEBHOOK_DATASET_KEYS } from '@/lib/garmin/datasets'
+import {
+  GARMIN_ACTIVITY_DATASET_KEYS,
+  GARMIN_EXPORT_DATASET_KEYS,
+  GARMIN_WEBHOOK_DATASET_KEYS,
+} from '@/lib/garmin/datasets'
 import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
 import { storeGarminWebhookPayload } from '@/lib/server/garmin-export-store'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -250,10 +254,23 @@ export async function enqueueGarminImportJobsForEvent(event: GarminWebhookEventR
   const activityFileUsers = new Set<number>()
   let activityFilesQueued = 0
 
+  const ACTIVITY_DATASET_SET = new Set<string>(GARMIN_ACTIVITY_DATASET_KEYS)
+
   for (const row of datasetRows) {
     let connection = row.providerUserId ? await getGarminConnectionByProviderUserId(row.providerUserId) : null
     if (!connection && event.provider_user_id) {
       connection = await getGarminConnectionByProviderUserId(event.provider_user_id)
+    }
+
+    // Wellness datasets (epochs, dailies, sleeps, hrv, stressDetails, ...) are
+    // already persisted via storeGarminWebhookPayload during recordGarminWebhookDelivery.
+    // They must NOT be enqueued as activity_import jobs — doing so caused each
+    // 15-minute "epochs" interval to be imported as a fake "run", burying real
+    // activities in the user's feed. Only activities, manuallyUpdatedActivities,
+    // and activityDetails should become activity import jobs. activityFiles is
+    // handled in its own branch below.
+    if (row.datasetKey !== 'activityFiles' && !ACTIVITY_DATASET_SET.has(row.datasetKey)) {
+      continue
     }
 
     if (row.datasetKey === 'activityFiles') {
