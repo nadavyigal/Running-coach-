@@ -534,10 +534,18 @@ export async function getGarminConnectionByProviderUserId(providerUserId: string
   if (!normalized) return null
 
   const supabase = createAdminClient()
+  // Prefer connections with profile_id set (so importGarminActivity can succeed),
+  // then connected status, then most-recently-used. The previous limit(1) was
+  // non-deterministic and frequently picked an orphaned re-connect row whose
+  // profile_id was NULL, causing every webhook for that user to fail.
   const { data, error } = await supabase
     .from('garmin_connections')
-    .select('user_id')
+    .select('user_id, profile_id, status, last_webhook_received_at')
     .or(`provider_user_id.eq.${normalized},garmin_user_id.eq.${normalized}`)
+    .order('profile_id', { ascending: false, nullsFirst: false })
+    .order('status', { ascending: true })
+    .order('last_webhook_received_at', { ascending: false, nullsFirst: false })
+    .order('user_id', { ascending: true })
     .limit(1)
     .maybeSingle()
 
