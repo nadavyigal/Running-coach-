@@ -38,7 +38,7 @@ export function GarminDeepLinkListener() {
           }
         })(),
       })
-      window.dispatchEvent(new CustomEvent("garmin-app-return", { detail: { url } }))
+      window.dispatchEvent(new CustomEvent("garmin-app-return", { detail: { source: "deep_link", url } }))
       router.push(callbackPath)
     }).then((handle) => {
       if (cancelled) {
@@ -50,7 +50,7 @@ export function GarminDeepLinkListener() {
 
     App.addListener("appStateChange", ({ isActive }) => {
       if (!isActive) return
-      window.dispatchEvent(new Event("garmin-app-return"))
+      window.dispatchEvent(new CustomEvent("garmin-app-return", { detail: { source: "resume" } }))
     }).then((handle) => {
       if (cancelled) {
         void handle.remove()

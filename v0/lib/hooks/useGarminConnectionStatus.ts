@@ -7,6 +7,7 @@ import {
   rehydrateGarminDeviceFromServer,
   type GarminConnectionStatus,
 } from "@/lib/garmin/connection-status"
+import { syncGarminEnabledData } from "@/lib/garminSync"
 
 interface RefreshOptions {
   source?: string
@@ -15,8 +16,10 @@ interface RefreshOptions {
 export function useGarminConnectionStatus(userId: number | null | undefined) {
   const [status, setStatus] = useState<GarminConnectionStatus | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const latestRequestRef = useRef(0)
+  const postConnectSyncInFlightRef = useRef(false)
 
   const refresh = useCallback(
     async (options?: RefreshOptions): Promise<GarminConnectionStatus | null> => {
@@ -55,6 +58,33 @@ export function useGarminConnectionStatus(userId: number | null | undefined) {
     [userId]
   )
 
+  const reconcileAndSync = useCallback(
+    async (source: string): Promise<void> => {
+      if (!userId || postConnectSyncInFlightRef.current) return
+
+      const nextStatus = await refresh({ source })
+      if (!nextStatus?.connected || nextStatus.needsReauth) return
+
+      postConnectSyncInFlightRef.current = true
+      setIsSyncing(true)
+      try {
+        const syncResult = await syncGarminEnabledData(userId, { trigger: "backfill" })
+        if (syncResult.errors.length > 0) {
+          void trackAnalyticsEvent("garmin_sync_partial", {
+            userId,
+            source,
+            error: syncResult.errors[0] ?? null,
+          })
+        }
+        await refresh({ source: `${source}_post_sync` })
+      } finally {
+        postConnectSyncInFlightRef.current = false
+        setIsSyncing(false)
+      }
+    },
+    [refresh, userId]
+  )
+
   useEffect(() => {
     void refresh({ source: "mount" })
   }, [refresh])
@@ -62,7 +92,12 @@ export function useGarminConnectionStatus(userId: number | null | undefined) {
   useEffect(() => {
     if (!userId || typeof window === "undefined") return
 
-    const refreshFromResume = () => {
+    const refreshFromResume = (event: Event) => {
+      const source = event instanceof CustomEvent ? event.detail?.source : null
+      if (source === "deep_link") {
+        void reconcileAndSync("app_return_deep_link")
+        return
+      }
       void refresh({ source: "app_resume" })
     }
     const refreshFromFocus = () => {
@@ -74,7 +109,7 @@ export function useGarminConnectionStatus(userId: number | null | undefined) {
       }
     }
     const refreshFromCallback = () => {
-      void refresh({ source: "callback_completed" })
+      void reconcileAndSync("callback_completed")
     }
 
     window.addEventListener("garmin-app-return", refreshFromResume)
@@ -88,18 +123,19 @@ export function useGarminConnectionStatus(userId: number | null | undefined) {
       window.removeEventListener("focus", refreshFromFocus)
       document.removeEventListener("visibilitychange", refreshFromVisibility)
     }
-  }, [refresh, userId])
+  }, [reconcileAndSync, refresh, userId])
 
   return useMemo(
     () => ({
       status,
       connected: Boolean(status?.connected),
-      syncState: status?.syncState ?? status?.connectionStatus ?? null,
+      syncState: isSyncing ? "syncing" : status?.syncState ?? status?.connectionStatus ?? null,
       needsReauth: Boolean(status?.needsReauth),
       isLoading,
+      isSyncing,
       error,
       refresh,
     }),
-    [error, isLoading, refresh, status]
+    [error, isLoading, isSyncing, refresh, status]
   )
 }
