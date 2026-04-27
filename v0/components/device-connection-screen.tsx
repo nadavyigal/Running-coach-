@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { db } from "@/lib/db"
+import { trackAnalyticsEvent } from "@/lib/analytics"
 
 interface WearableDevice {
   id?: number;
@@ -74,7 +75,6 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
 
   const loadConnectedDevices = async () => {
     try {
-      // Always read from client-side Dexie.js (IndexedDB) — this is a PWA with local storage
       const devices = await db.wearableDevices.where('userId').equals(userId).toArray()
       await Promise.all(
         devices
@@ -166,6 +166,11 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
         if (!isSafeRedirect(data.authUrl)) {
           throw new Error('Blocked unsafe redirect URL')
         }
+        void trackAnalyticsEvent('garmin_connect_started', {
+          userId,
+          surface: 'device_connection',
+          redirectUri: `${window.location.origin}/garmin/callback`,
+        })
         window.location.href = data.authUrl
       } else {
         throw new Error(data.error)

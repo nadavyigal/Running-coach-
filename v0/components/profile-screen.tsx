@@ -66,7 +66,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/use-toast";
 import { UserDataSettings } from "@/components/user-data-settings";
 import { useData } from "@/contexts/DataContext";
-import { trackFeatureUsed, trackScreenViewed } from "@/lib/analytics";
+import { trackAnalyticsEvent, trackFeatureUsed, trackScreenViewed } from "@/lib/analytics";
 import { getChallengeHistory, getActiveChallenge, type DailyChallengeData } from "@/lib/challengeEngine";
 import { getActiveChallengeTemplates } from "@/lib/challengeTemplates";
 import { DATABASE } from "@/lib/constants";
@@ -74,6 +74,7 @@ import { type Goal, type Run, db } from "@/lib/db";
 import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db";
 import { dbUtils } from "@/lib/dbUtils";
 import { syncGarminEnabledData } from "@/lib/garminSync";
+import { useGarminConnectionStatus } from "@/lib/hooks/useGarminConnectionStatus";
 import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine";
 import { isSafeRedirect } from "@/lib/validateRedirect"
 import { useAuth } from "@/lib/auth-context"
@@ -122,12 +123,13 @@ export function ProfileScreen() {
   const [mergeSourceGoal, setMergeSourceGoal] = useState<Goal | null>(null)
   const [isSwitchingPrimary, setIsSwitchingPrimary] = useState(false)
   const [joiningChallengeSlug, setJoiningChallengeSlug] = useState<string | null>(null)
-  const [garminConnected, setGarminConnected] = useState(false)
-  const [garminSyncState, setGarminSyncState] = useState<string | null>(null)
   const [garminAction, setGarminAction] = useState<"connect" | "sync" | "disconnect" | null>(null)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'signup' | 'login'>('signup')
   const { user: authUser, signOut: authSignOut, loading: authLoading } = useAuth()
+  const garminConnection = useGarminConnectionStatus(userId)
+  const garminConnected = garminConnection.connected
+  const garminSyncState = garminConnection.syncState
   const hasGarminRuns = recentRuns.some((run) => run.importSource === "garmin")
   const showGarminInsights = garminConnected || hasGarminRuns
 
@@ -155,39 +157,6 @@ export function ProfileScreen() {
     if (activeGoals.length > 0) setGoals(activeGoals)
     setRecentRuns(filterRunsToRecentWindow(contextRecentRuns))
   }, [contextUserId, contextPrimaryGoal, activeGoals, contextRecentRuns, filterRunsToRecentWindow])
-
-  const refreshGarminStatus = useCallback(async () => {
-    if (!userId) return
-    try {
-      const response = await fetch(`/api/devices/garmin/status?userId=${encodeURIComponent(String(userId))}`, {
-        headers: { 'x-user-id': String(userId) },
-      })
-      const status = (await response.json()) as { connected?: boolean; syncState?: string }
-      setGarminConnected(Boolean(status.connected))
-      setGarminSyncState(status.syncState ?? null)
-    } catch {
-      try {
-        const device = await db.wearableDevices
-          .where('[userId+type]' as any)
-          .equals([userId, 'garmin'])
-          .first()
-        setGarminConnected(!!device && device.connectionStatus !== 'disconnected')
-        setGarminSyncState(device?.connectionStatus ?? null)
-      } catch {
-        // Keep the last known UI state when both server and local status checks fail.
-      }
-    }
-  }, [userId])
-
-  // Load Garmin connection status
-  useEffect(() => {
-    if (!userId) return
-    let mounted = true
-    void refreshGarminStatus().finally(() => {
-      if (!mounted) return
-    })
-    return () => { mounted = false }
-  }, [refreshGarminStatus, userId])
 
   // Load goal progress using GoalProgressEngine for consistency with GoalProgressDashboard
   useEffect(() => {
@@ -280,6 +249,11 @@ export function ProfileScreen() {
       if (!isSafeRedirect(data.authUrl)) {
         throw new Error('Blocked unsafe redirect URL')
       }
+      void trackAnalyticsEvent('garmin_connect_started', {
+        userId,
+        surface: 'profile',
+        redirectUri: `${window.location.origin}/garmin/callback`,
+      })
       window.location.href = data.authUrl
     } catch (err) {
       console.error('Garmin connect failed:', err)
@@ -293,10 +267,9 @@ export function ProfileScreen() {
     setGarminAction("sync")
     try {
       const result = await syncGarminEnabledData(userId)
-      await refreshGarminStatus()
+      await garminConnection.refresh({ source: 'manual_sync' })
 
       if (result.needsReauth) {
-        setGarminSyncState('reauth_required')
         toast({
           title: 'Reconnect Garmin',
           description: 'Garmin needs you to reconnect before data can sync.',
@@ -306,6 +279,11 @@ export function ProfileScreen() {
       }
 
       if (result.errors.length > 0) {
+        void trackAnalyticsEvent('garmin_sync_partial', {
+          userId,
+          source: 'manual_sync',
+          error: result.errors[0] ?? null,
+        })
         toast({
           title: 'Garmin sync failed',
           description: result.errors[0] ?? 'Please try syncing again.',
@@ -362,8 +340,7 @@ export function ProfileScreen() {
         // Server disconnect is the source of truth; local cleanup is best effort.
       }
 
-      setGarminConnected(false)
-      setGarminSyncState('disconnected')
+      await garminConnection.refresh({ source: 'disconnect' })
       toast({
         title: 'Garmin disconnected',
         description: 'You can reconnect Garmin from this profile card anytime.',

@@ -21,6 +21,12 @@ vi.mock('@/lib/dbUtils')
 vi.mock('@/lib/run-recording')
 vi.mock('next/navigation')
 vi.mock('@/hooks/use-toast')
+vi.mock('@/lib/analytics', () => ({
+  trackAnalyticsEvent: vi.fn().mockResolvedValue(undefined),
+  trackRunStarted: vi.fn().mockResolvedValue(undefined),
+  trackRunCompleted: vi.fn().mockResolvedValue(undefined),
+  trackRunAbandoned: vi.fn().mockResolvedValue(undefined),
+}))
 
 vi.mock('@/components/route-selector-modal', () => ({
   RouteSelectorModal: () => null,

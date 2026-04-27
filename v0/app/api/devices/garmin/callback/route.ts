@@ -253,6 +253,7 @@ async function handleGarminCallback(req: ApiRequest) {
       })
     } catch (backfillError) {
       // Non-fatal: the OAuth connection is established. Log and continue.
+      warnings.push('Garmin connected. Initial sync queue was unavailable; use Sync Garmin to import data now.')
       logger.warn('Failed to enqueue Garmin backfill job after connect (non-fatal)', {
         userId,
         error: backfillError instanceof Error ? backfillError.message : 'unknown',
