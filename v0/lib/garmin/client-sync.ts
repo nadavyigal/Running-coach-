@@ -2,7 +2,6 @@
 
 import { db, type Run } from '@/lib/db'
 import { updateRun } from '@/lib/dbUtils'
-import { createClient } from '@/lib/supabase/client'
 
 function asDate(value: string | null | undefined): Date {
   const parsed = value ? new Date(value) : new Date()
@@ -33,21 +32,25 @@ function mapSupabaseRunToDexie(userId: number, row: Record<string, unknown>): Om
 }
 
 export async function mirrorRecentGarminRunsToDexie(userId: number): Promise<number> {
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from('runs')
-    .select('*')
-    .eq('source_provider', 'garmin')
-    .order('completed_at', { ascending: false })
-    .limit(10)
+  const response = await fetch(`/api/devices/garmin/runs?userId=${encodeURIComponent(String(userId))}&limit=50`, {
+    method: 'GET',
+    headers: { 'x-user-id': String(userId) },
+    credentials: 'include',
+  })
 
-  if (error) {
-    throw error
+  const payload = (await response.json().catch(() => ({}))) as {
+    success?: boolean
+    runs?: Array<Record<string, unknown>>
+    error?: string
+  }
+
+  if (!response.ok || payload.success === false) {
+    throw new Error(payload.error ?? 'Failed to load Garmin runs from RunSmart')
   }
 
   let imported = 0
 
-  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+  for (const row of payload.runs ?? []) {
     const importRequestId = typeof row.source_activity_id === 'string' ? row.source_activity_id : null
     if (!importRequestId) continue
 
