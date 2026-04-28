@@ -29,7 +29,9 @@ const SUPPORTED_WEBHOOK_DATASETS: GarminDatasetKey[] = [...GARMIN_WEBHOOK_DATASE
 
 const DELAYED_SYNC_THRESHOLD_MS = 30 * 60 * 1000
 const HEALTHY_SYNC_THRESHOLD_MS = 12 * 60 * 60 * 1000
-const BACKFILL_LOOKBACK_DAYS = 90
+// Garmin rejects activity backfill requests older than the app's provisioned
+// minimum start time. Production currently accepts roughly the last 30 days.
+const BACKFILL_LOOKBACK_DAYS = 30
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}

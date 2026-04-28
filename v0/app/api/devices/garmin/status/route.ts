@@ -13,6 +13,13 @@ import { groupRowsByDataset, lookbackStartIso, readGarminExportRows } from '@/li
 import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
+export const fetchCache = 'force-no-store'
+
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+  Pragma: 'no-cache',
+}
 
 function parseUserId(req: Request): number | null {
   const fromHeader = req.headers.get('x-user-id')?.trim() ?? ''
@@ -63,7 +70,7 @@ export async function GET(req: Request) {
         freshnessLabel: 'unknown',
         confidenceLabel: 'low',
       },
-      { status: 400 }
+      { status: 400, headers: NO_STORE_HEADERS }
     )
   }
 
@@ -95,7 +102,7 @@ export async function GET(req: Request) {
       errorState: { message },
       freshnessLabel: getGarminFreshnessLabel(lastSyncAt),
       confidenceLabel: getGarminConfidenceLabel(lastSyncAt),
-    })
+    }, { headers: NO_STORE_HEADERS })
   }
 
   if (!connection?.garminUserId) {
@@ -120,7 +127,7 @@ export async function GET(req: Request) {
       errorState: syncState.errorState,
       freshnessLabel: getGarminFreshnessLabel(lastSyncAt),
       confidenceLabel: getGarminConfidenceLabel(lastSyncAt),
-    })
+    }, { headers: NO_STORE_HEADERS })
   }
 
   const readResult = await readGarminExportRows({
@@ -190,5 +197,5 @@ export async function GET(req: Request) {
     errorState: syncState.errorState,
     freshnessLabel: getGarminFreshnessLabel(lastSyncAt),
     confidenceLabel: getGarminConfidenceLabel(lastSyncAt),
-  })
+  }, { headers: NO_STORE_HEADERS })
 }
