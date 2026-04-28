@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { GARMIN_EXPORT_DATASET_KEYS } from '@/lib/garmin/datasets'
 import { getGarminConfidenceLabel, getGarminFreshnessLabel } from '@/lib/garmin/ui/freshness'
+import { GarminClient } from '@/lib/integrations/garmin/client'
 import { getGarminSyncState } from '@/lib/integrations/garmin/service'
 import {
   createEmptyGarminCanonicalStatusResponse,
@@ -34,6 +35,19 @@ function latestIso(values: Array<string | null | undefined>): string | null {
     .sort((left, right) => Date.parse(right) - Date.parse(left))
 
   return sorted[0] ?? null
+}
+
+async function getEffectivePermissions(userId: number, storedScopes: string[] | null | undefined): Promise<string[]> {
+  if (Array.isArray(storedScopes) && storedScopes.length > 0) {
+    return storedScopes
+  }
+
+  try {
+    const client = await GarminClient.forUser(userId)
+    return await client.fetchPermissions()
+  } catch {
+    return []
+  }
 }
 
 export async function GET(req: Request) {
@@ -113,6 +127,7 @@ export async function GET(req: Request) {
     garminUserId: connection.garminUserId,
     sinceIso: lookbackStartIso(),
   })
+  const permissions = await getEffectivePermissions(userId, connection.scopes)
 
   const datasetCounts = createEmptyGarminDatasetCounts()
   const datasetCompleteness = createEmptyGarminDatasetCompleteness()
@@ -126,8 +141,8 @@ export async function GET(req: Request) {
       if (
         datasetCounts[key] === 0 &&
         ((key === 'activities' || key === 'manuallyUpdatedActivities' || key === 'activityDetails')
-          ? connection.scopes.includes('ACTIVITY_EXPORT')
-          : connection.scopes.includes('HEALTH_EXPORT'))
+          ? permissions.includes('ACTIVITY_EXPORT')
+          : permissions.includes('HEALTH_EXPORT'))
       ) {
         datasetCompleteness.missingDatasets.push(key)
       }
@@ -144,10 +159,10 @@ export async function GET(req: Request) {
     }
   }
 
-  if (!connection.scopes.includes('ACTIVITY_EXPORT')) {
+  if (!permissions.includes('ACTIVITY_EXPORT')) {
     notices.push('Missing ACTIVITY_EXPORT permission.')
   }
-  if (!connection.scopes.includes('HEALTH_EXPORT')) {
+  if (!permissions.includes('HEALTH_EXPORT')) {
     notices.push('Missing HEALTH_EXPORT permission.')
   }
 

@@ -2,7 +2,6 @@
 
 import { db, type Run } from '@/lib/db'
 import { updateRun } from '@/lib/dbUtils'
-import { createClient } from '@/lib/supabase/client'
 
 function asDate(value: string | null | undefined): Date {
   const parsed = value ? new Date(value) : new Date()
@@ -33,25 +32,32 @@ function mapSupabaseRunToDexie(userId: number, row: Record<string, unknown>): Om
 }
 
 export async function mirrorRecentGarminRunsToDexie(userId: number): Promise<number> {
-  const supabase = createClient()
   // Pull a generous window so we can reconcile deletions in addition to
   // inserts/updates. Server-side cleanup (e.g. removing a fake-imported
   // wellness "run") would otherwise leave stale rows in local IndexedDB
   // forever — which is exactly what produced the wrong counts on the
   // profile/today pages on iOS.
   const RECENT_GARMIN_RUN_LIMIT = 200
-  const { data, error } = await supabase
-    .from('runs')
-    .select('*')
-    .eq('source_provider', 'garmin')
-    .order('completed_at', { ascending: false })
-    .limit(RECENT_GARMIN_RUN_LIMIT)
+  const response = await fetch(
+    `/api/devices/garmin/runs?userId=${encodeURIComponent(String(userId))}&limit=${RECENT_GARMIN_RUN_LIMIT}`,
+    {
+      method: 'GET',
+      headers: { 'x-user-id': String(userId) },
+      credentials: 'include',
+    }
+  )
 
-  if (error) {
-    throw error
+  const payload = (await response.json().catch(() => ({}))) as {
+    success?: boolean
+    runs?: Array<Record<string, unknown>>
+    error?: string
   }
 
-  const remoteRows = ((data ?? []) as Array<Record<string, unknown>>).filter(
+  if (!response.ok || payload.success === false) {
+    throw new Error(payload.error ?? 'Failed to load Garmin runs from RunSmart')
+  }
+
+  const remoteRows = (payload.runs ?? []).filter(
     (row) => typeof row.source_activity_id === 'string'
   )
   const remoteIds = new Set(remoteRows.map((row) => row.source_activity_id as string))
