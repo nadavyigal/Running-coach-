@@ -34,23 +34,51 @@ function mapSupabaseRunToDexie(userId: number, row: Record<string, unknown>): Om
 
 export async function mirrorRecentGarminRunsToDexie(userId: number): Promise<number> {
   const supabase = createClient()
+  // Pull a generous window so we can reconcile deletions in addition to
+  // inserts/updates. Server-side cleanup (e.g. removing a fake-imported
+  // wellness "run") would otherwise leave stale rows in local IndexedDB
+  // forever — which is exactly what produced the wrong counts on the
+  // profile/today pages on iOS.
+  const RECENT_GARMIN_RUN_LIMIT = 200
   const { data, error } = await supabase
     .from('runs')
     .select('*')
     .eq('source_provider', 'garmin')
     .order('completed_at', { ascending: false })
-    .limit(10)
+    .limit(RECENT_GARMIN_RUN_LIMIT)
 
   if (error) {
     throw error
   }
 
+  const remoteRows = ((data ?? []) as Array<Record<string, unknown>>).filter(
+    (row) => typeof row.source_activity_id === 'string'
+  )
+  const remoteIds = new Set(remoteRows.map((row) => row.source_activity_id as string))
+
+  // Reconcile deletions: any local Garmin-sourced run whose source_activity_id
+  // is no longer in Supabase has been removed server-side and must be removed
+  // locally too. This keeps Supabase as the source of truth for Garmin runs.
+  const localGarminRuns = await db.runs
+    .where('userId')
+    .equals(userId)
+    .filter((run) => run.importSource === 'garmin' && typeof run.importRequestId === 'string')
+    .toArray()
+
+  const stale = localGarminRuns.filter(
+    (run) => run.importRequestId && !remoteIds.has(run.importRequestId)
+  )
+  if (stale.length > 0) {
+    const ids = stale.map((run) => run.id).filter((id): id is number => typeof id === 'number')
+    if (ids.length > 0) {
+      await db.runs.bulkDelete(ids)
+    }
+  }
+
   let imported = 0
 
-  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
-    const importRequestId = typeof row.source_activity_id === 'string' ? row.source_activity_id : null
-    if (!importRequestId) continue
-
+  for (const row of remoteRows) {
+    const importRequestId = row.source_activity_id as string
     const mappedRun = mapSupabaseRunToDexie(userId, row)
     const existing = await db.runs
       .where('[userId+importRequestId]' as never)
