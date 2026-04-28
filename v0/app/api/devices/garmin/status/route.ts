@@ -173,17 +173,30 @@ export async function GET(req: Request) {
     notices.push('Missing HEALTH_EXPORT permission.')
   }
 
-  const lastSyncAt = syncState.lastSuccessfulSyncAt ?? syncState.lastSyncAt
   const lastDataReceivedAt = latestIso([latestReceivedAt, syncState.lastWebhookReceivedAt])
+  const canTrustLatestReceivedAsSynced =
+    syncState.pendingJobs === 0 &&
+    !syncState.lastSyncError &&
+    Boolean(latestReceivedAt)
+  const effectiveLastSuccessfulSyncAt = canTrustLatestReceivedAsSynced
+    ? latestIso([syncState.lastSuccessfulSyncAt, latestReceivedAt])
+    : syncState.lastSuccessfulSyncAt
+  const effectiveLastSyncAt = effectiveLastSuccessfulSyncAt ?? syncState.lastSyncAt
+  const effectiveSyncState =
+    syncState.syncState === 'delayed' &&
+    canTrustLatestReceivedAsSynced &&
+    effectiveLastSuccessfulSyncAt
+      ? 'connected'
+      : syncState.syncState
 
   return NextResponse.json({
     success: true,
     connected: syncState.connected,
     connectionStatus: syncState.connectionStatus,
-    syncState: syncState.syncState,
-    needsReauth: syncState.syncState === 'reauth_required',
-    lastSyncAt: syncState.lastSyncAt,
-    lastSuccessfulSyncAt: syncState.lastSuccessfulSyncAt,
+    syncState: effectiveSyncState,
+    needsReauth: effectiveSyncState === 'reauth_required',
+    lastSyncAt: effectiveLastSyncAt,
+    lastSuccessfulSyncAt: effectiveLastSuccessfulSyncAt,
     lastDataReceivedAt,
     pendingJobs: syncState.pendingJobs,
     datasetCounts,
@@ -195,7 +208,7 @@ export async function GET(req: Request) {
     lastWebhookReceivedAt: syncState.lastWebhookReceivedAt,
     lastSyncError: syncState.lastSyncError,
     errorState: syncState.errorState,
-    freshnessLabel: getGarminFreshnessLabel(lastSyncAt),
-    confidenceLabel: getGarminConfidenceLabel(lastSyncAt),
+    freshnessLabel: getGarminFreshnessLabel(effectiveLastSyncAt),
+    confidenceLabel: getGarminConfidenceLabel(effectiveLastSyncAt),
   }, { headers: NO_STORE_HEADERS })
 }

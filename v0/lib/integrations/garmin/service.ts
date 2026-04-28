@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger'
 import { runGarminDeriveForPayload } from '@/lib/server/garmin-derive-worker'
 import { GARMIN_EXPORT_DATASET_KEYS, GARMIN_WEBHOOK_DATASET_KEYS } from '@/lib/garmin/datasets'
 import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
+import { isDuplicateBackfillRequest } from '@/lib/server/garmin-error-utils'
 import { storeGarminWebhookPayload } from '@/lib/server/garmin-export-store'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GarminClient, buildGarminServiceError, isGarminServiceError, mapGarminPayloadToNormalizedActivity } from '@/lib/integrations/garmin/client'
@@ -738,6 +739,13 @@ export async function processPendingGarminJobs(params?: {
       succeeded += 1
     } catch (error) {
       const errorMessage = serializeError(error)
+
+      if (job.job_type === 'backfill' && isDuplicateBackfillRequest(errorMessage)) {
+        await markJobSuccess(job.id)
+        logger.info('[garmin] metric=job_success_duplicate_backfill', { job_id: job.id })
+        succeeded += 1
+        continue
+      }
 
       if (isGarminServiceError(error) && error.type === 'auth_error' && job.user_id != null) {
         await markGarminAuthError(job.user_id, errorMessage)

@@ -59,6 +59,10 @@ export function isActivityBackfillNotProvisioned(body: string): boolean {
   return /Endpoint not enabled for summary type:\s*CONNECT_ACTIVITY/i.test(body)
 }
 
+export function isDuplicateBackfillRequest(body: string): boolean {
+  return /duplicate backfill processed/i.test(body)
+}
+
 export function isSleepBackfillNotProvisioned(body: string): boolean {
   return /Endpoint not enabled for summary type:\s*CONNECT_SLEEP/i.test(body)
 }

@@ -9,6 +9,7 @@ import {
   isMissingTimeRange,
   isFallbackWorthyWellnessStatus,
   isActivityBackfillNotProvisioned,
+  isDuplicateBackfillRequest,
   isSleepBackfillNotProvisioned,
   isSleepEndpointNotProvisioned,
   isDailiesBackfillNotProvisioned,
@@ -150,6 +151,20 @@ describe('isSleepEndpointNotProvisioned', () => {
 
   it('returns false for unrelated error', () => {
     expect(isSleepEndpointNotProvisioned(400, 'Missing time range')).toBe(false)
+  })
+})
+
+describe('isDuplicateBackfillRequest', () => {
+  it('matches Garmin duplicate backfill responses', () => {
+    expect(
+      isDuplicateBackfillRequest(
+        '{"errorMessage":"[id]duplicate backfill processed at 2026-04-28T08:15:17Z [2026-03-29T08:15:18Z to 2026-03-30T08:15:17Z]"}'
+      )
+    ).toBe(true)
+  })
+
+  it('returns false for unrelated errors', () => {
+    expect(isDuplicateBackfillRequest('Endpoint not enabled for summary type: CONNECT_ACTIVITY')).toBe(false)
   })
 })
 
