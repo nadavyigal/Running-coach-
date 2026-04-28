@@ -445,6 +445,7 @@ export async function getValidGarminAccessToken(userId: number): Promise<string>
 export async function markGarminSyncState(params: {
   userId: number
   lastSyncAt?: string
+  lastSuccessfulSyncAt?: string | null
   lastSyncCursor?: string | null
   errorState?: Record<string, unknown> | null
 }): Promise<void> {
@@ -460,6 +461,7 @@ export async function markGarminSyncState(params: {
   await upsertGarminConnection({
     userId: params.userId,
     ...(params.lastSyncAt !== undefined ? { lastSyncAt: params.lastSyncAt } : {}),
+    ...(params.lastSuccessfulSyncAt !== undefined ? { lastSuccessfulSyncAt: params.lastSuccessfulSyncAt } : {}),
     ...(params.lastSyncCursor !== undefined ? { lastSyncCursor: monotonicCursor ?? null } : {}),
     ...(params.errorState !== undefined ? { errorState: params.errorState } : {}),
   })

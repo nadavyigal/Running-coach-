@@ -1250,6 +1250,7 @@ async function safeMarkAuthError(userId: number, message: string): Promise<void>
 async function safeMarkSyncState(params: {
   userId: number
   lastSyncAt?: string
+  lastSuccessfulSyncAt?: string | null
   lastSyncCursor?: string | null
   errorState?: Record<string, unknown> | null
 }): Promise<void> {
@@ -1713,6 +1714,7 @@ export async function runGarminSyncForUser(params: {
     await safeMarkSyncState({
       userId,
       lastSyncAt: nowIso,
+      lastSuccessfulSyncAt: nowIso,
       lastSyncCursor: nextSyncCursorIso,
       errorState: null,
     })
