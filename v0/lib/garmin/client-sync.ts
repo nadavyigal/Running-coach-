@@ -32,7 +32,8 @@ function mapSupabaseRunToDexie(userId: number, row: Record<string, unknown>): Om
 }
 
 export async function mirrorRecentGarminRunsToDexie(userId: number): Promise<number> {
-  const response = await fetch(`/api/devices/garmin/runs?userId=${encodeURIComponent(String(userId))}&limit=50`, {
+  // 200-row window so reconciliation can detect server-side deletions
+  const response = await fetch(`/api/devices/garmin/runs?userId=${encodeURIComponent(String(userId))}&limit=200`, {
     method: 'GET',
     headers: { 'x-user-id': String(userId) },
     credentials: 'include',
@@ -48,12 +49,34 @@ export async function mirrorRecentGarminRunsToDexie(userId: number): Promise<num
     throw new Error(payload.error ?? 'Failed to load Garmin runs from RunSmart')
   }
 
+  const remoteRows = (payload.runs ?? []).filter(
+    (row) => typeof row.source_activity_id === 'string'
+  )
+  const remoteIds = new Set(remoteRows.map((row) => row.source_activity_id as string))
+
+  // Reconcile deletions: any local Garmin-sourced run whose source_activity_id
+  // is no longer in Supabase has been removed server-side and must be removed
+  // locally too. This keeps Supabase as the source of truth for Garmin runs.
+  const localGarminRuns = await db.runs
+    .where('userId')
+    .equals(userId)
+    .filter((run) => run.importSource === 'garmin' && typeof run.importRequestId === 'string')
+    .toArray()
+
+  const stale = localGarminRuns.filter(
+    (run) => run.importRequestId && !remoteIds.has(run.importRequestId)
+  )
+  if (stale.length > 0) {
+    const ids = stale.map((run) => run.id).filter((id): id is number => typeof id === 'number')
+    if (ids.length > 0) {
+      await db.runs.bulkDelete(ids)
+    }
+  }
+
   let imported = 0
 
-  for (const row of payload.runs ?? []) {
-    const importRequestId = typeof row.source_activity_id === 'string' ? row.source_activity_id : null
-    if (!importRequestId) continue
-
+  for (const row of remoteRows) {
+    const importRequestId = row.source_activity_id as string
     const mappedRun = mapSupabaseRunToDexie(userId, row)
     const existing = await db.runs
       .where('[userId+importRequestId]' as never)
