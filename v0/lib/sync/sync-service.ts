@@ -5,15 +5,20 @@ import { createClient } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 import { trackSyncEvent } from '@/lib/analytics'
 import { compressGPSPath } from '@/lib/compression'
-import type { Run, Goal, Shoe } from '@/lib/db'
+import { syncPlansAndWorkouts } from '@/lib/sync/plan-workout-sync'
+import type { Run, Goal, Shoe, Plan, Workout } from '@/lib/db'
 
 type SyncStatus = 'idle' | 'syncing' | 'error'
 
 type SyncStats = {
+  plans: number
+  workouts: number
   runs: number
   goals: number
   shoes: number
 }
+
+const PLAN_WORKOUT_BACKFILL_KEY = 'plan_workout_sync_complete_v1'
 
 export class SyncService {
   private static instance: SyncService | null = null
@@ -105,10 +110,22 @@ export class SyncService {
 
       // Sync each table
       const stats: SyncStats = {
+        plans: 0,
+        workouts: 0,
         runs: 0,
         goals: 0,
         shoes: 0,
       }
+
+      const planWorkoutBackfillRequired = !this.hasCompletedPlanWorkoutBackfill()
+      const planWorkoutStats = await this.syncPlansAndWorkouts(
+        supabase,
+        profileId,
+        planWorkoutBackfillRequired ? null : lastSyncTimestamp,
+        session.user.id
+      )
+      stats.plans = planWorkoutStats.plans
+      stats.workouts = planWorkoutStats.workouts
 
       // Sync runs
       stats.runs = await this.syncRuns(supabase, profileId, lastSyncTimestamp)
@@ -122,9 +139,10 @@ export class SyncService {
       // Update last sync time
       this.lastSyncTime = new Date()
       this.setLastSyncTimestamp(this.lastSyncTime)
+      this.markPlanWorkoutBackfillComplete()
       this.status = 'idle'
 
-      const totalRecords = stats.runs + stats.goals + stats.shoes
+      const totalRecords = stats.plans + stats.workouts + stats.runs + stats.goals + stats.shoes
       logger.info('[SyncService] Sync completed successfully', stats)
       await trackSyncEvent('sync_completed', totalRecords)
     } catch (error) {
@@ -182,6 +200,46 @@ export class SyncService {
       logger.error('[SyncService] Error syncing runs:', error)
       throw error
     }
+  }
+
+  private async syncPlansAndWorkouts(
+    supabase: ReturnType<typeof createClient>,
+    profileId: string,
+    since: Date | null,
+    authUserId: string
+  ): Promise<{ plans: number; workouts: number }> {
+    const changedWorkouts = since
+      ? await db.workouts.filter((workout) => !!(workout.updatedAt && workout.updatedAt > since)).toArray()
+      : await db.workouts.toArray()
+
+    const changedPlans = since
+      ? await db.plans.filter((plan) => !!(plan.updatedAt && plan.updatedAt > since)).toArray()
+      : await db.plans.toArray()
+
+    if (changedPlans.length === 0 && changedWorkouts.length === 0) {
+      return { plans: 0, workouts: 0 }
+    }
+
+    const plansById = new Map<number, Plan>()
+    const allPlans = await db.plans.toArray()
+    for (const plan of allPlans) {
+      if (typeof plan.id === 'number') {
+        plansById.set(plan.id, plan)
+      }
+    }
+
+    const workouts = changedWorkouts.filter((workout): workout is Workout & { id: number } => {
+      return typeof workout.id === 'number'
+    })
+
+    return syncPlansAndWorkouts(
+      supabase,
+      profileId,
+      [...plansById.values()],
+      workouts,
+      '[SyncService]',
+      authUserId
+    )
   }
 
   private async syncGoals(
@@ -387,6 +445,27 @@ export class SyncService {
       localStorage.setItem('last_sync_timestamp', date.toISOString())
     } catch (error) {
       logger.warn('[SyncService] Failed to save last sync timestamp:', error)
+    }
+  }
+
+  private hasCompletedPlanWorkoutBackfill(): boolean {
+    if (typeof window === 'undefined') return false
+
+    try {
+      return localStorage.getItem(PLAN_WORKOUT_BACKFILL_KEY) === 'true'
+    } catch (error) {
+      logger.warn('[SyncService] Failed to read plan/workout backfill status:', error)
+      return false
+    }
+  }
+
+  private markPlanWorkoutBackfillComplete(): void {
+    if (typeof window === 'undefined') return
+
+    try {
+      localStorage.setItem(PLAN_WORKOUT_BACKFILL_KEY, 'true')
+    } catch (error) {
+      logger.warn('[SyncService] Failed to save plan/workout backfill status:', error)
     }
   }
 

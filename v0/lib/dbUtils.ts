@@ -1632,16 +1632,22 @@ export async function markMilestoneAchieved(milestoneId: number, achievedValue?:
 export async function createPlan(planData: Omit<Plan, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
   return safeDbOperation(async () => {
     if (!db) throw new Error('Database not available');
+    const timestamp = nowUTC();
     
     // Deactivate other active plans for this user
-    await db.plans.where('userId').equals(planData.userId).and(plan => plan.isActive).modify({ isActive: false });
+    await db.plans
+      .where('userId')
+      .equals(planData.userId)
+      .and(plan => plan.isActive)
+      .modify({ isActive: false, updatedAt: timestamp });
     
     const id = await db.plans.add({
       ...planData,
-      createdAt: nowUTC(),
-      updatedAt: nowUTC()
+      createdAt: timestamp,
+      updatedAt: timestamp
     });
     console.log('✅ Plan created successfully:', id);
+    triggerSync();
     return id as number;
   }, 'createPlan');
 }
@@ -1953,6 +1959,7 @@ export async function createWorkout(workoutData: Omit<Workout, 'id' | 'createdAt
       updatedAt: new Date()
     });
     console.log('✅ Workout created successfully:', id);
+    triggerSync();
     return id as number;
   }, 'createWorkout');
 }
@@ -1964,7 +1971,7 @@ export async function completeWorkout(workoutId: number, runData?: Partial<Run>)
   return safeDbOperation(async () => {
     if (!db) throw new Error('Database not available');
     
-    await db.workouts.update(workoutId, { completed: true, updatedAt: new Date() });
+    await db.workouts.update(workoutId, { completed: true, completedAt: new Date(), updatedAt: new Date() });
     
     if (runData) {
       const workout = await db.workouts.get(workoutId);
@@ -1985,6 +1992,7 @@ export async function completeWorkout(workoutId: number, runData?: Partial<Run>)
       }
     }
     console.log('✅ Workout completed successfully:', workoutId);
+    triggerSync();
   }, 'completeWorkout');
 }
 
@@ -2240,6 +2248,7 @@ export async function updateWorkout(workoutId: number, updates: Partial<Omit<Wor
     }
     
     await db.workouts.update(workoutId, updateData);
+    triggerSync();
   }, 'updateWorkout');
 }
 
@@ -2263,6 +2272,7 @@ export async function markWorkoutCompleted(workoutId: number): Promise<void> {
         await updateUserStreak(plan.userId);
       }
     }
+    triggerSync();
   }, 'markWorkoutCompleted');
 }
 

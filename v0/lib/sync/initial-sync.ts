@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { createClient } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 import { trackSyncEvent } from '@/lib/analytics'
+import { syncPlansAndWorkouts } from '@/lib/sync/plan-workout-sync'
 import type { Run, Goal, Shoe } from '@/lib/db'
 
 const CHUNK_SIZE = 100
@@ -18,19 +19,39 @@ export async function performInitialSync(profileId: string): Promise<void> {
 
   try {
     const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
 
     // Get all local data
+    const plans = await db.plans.toArray()
+    const workouts = await db.workouts.toArray()
     const runs = await db.runs.toArray()
     const goals = await db.goals.toArray()
     const shoes = await db.shoes.toArray()
 
     logger.info('[InitialSync] Found local data:', {
+      plans: plans.length,
+      workouts: workouts.length,
       runs: runs.length,
       goals: goals.length,
       shoes: shoes.length,
     })
 
     let totalSynced = 0
+
+    if (plans.length > 0 || workouts.length > 0) {
+      const planWorkoutStats = await syncPlansAndWorkouts(
+        supabase,
+        profileId,
+        plans,
+        workouts,
+        '[InitialSync]',
+        session?.user?.id
+      )
+      totalSynced += planWorkoutStats.plans + planWorkoutStats.workouts
+      logger.info(
+        `[InitialSync] Synced ${planWorkoutStats.plans} plans and ${planWorkoutStats.workouts} workouts`
+      )
+    }
 
     // Upload runs in batches
     if (runs.length > 0) {
@@ -235,6 +256,7 @@ function markInitialSyncComplete(): void {
   try {
     localStorage.setItem('initial_sync_complete', 'true')
     localStorage.setItem('initial_sync_timestamp', new Date().toISOString())
+    localStorage.setItem('plan_workout_sync_complete_v1', 'true')
   } catch (error) {
     logger.warn('[InitialSync] Failed to mark initial sync complete:', error)
   }
