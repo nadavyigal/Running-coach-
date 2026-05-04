@@ -39,13 +39,14 @@ export async function performInitialSync(profileId: string): Promise<void> {
     let totalSynced = 0
 
     if (plans.length > 0 || workouts.length > 0) {
+      const planOwnerId = session?.user?.id ?? profileId
       const planWorkoutStats = await syncPlansAndWorkouts(
         supabase,
-        profileId,
+        planOwnerId,
         plans,
         workouts,
         '[InitialSync]',
-        session?.user?.id
+        planOwnerId
       )
       totalSynced += planWorkoutStats.plans + planWorkoutStats.workouts
       logger.info(
@@ -256,7 +257,7 @@ function markInitialSyncComplete(): void {
   try {
     localStorage.setItem('initial_sync_complete', 'true')
     localStorage.setItem('initial_sync_timestamp', new Date().toISOString())
-    localStorage.setItem('plan_workout_sync_complete_v1', 'true')
+    localStorage.setItem('plan_workout_sync_complete_v2', 'true')
   } catch (error) {
     logger.warn('[InitialSync] Failed to mark initial sync complete:', error)
   }

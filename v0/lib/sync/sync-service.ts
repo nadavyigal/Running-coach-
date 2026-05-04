@@ -18,7 +18,7 @@ type SyncStats = {
   shoes: number
 }
 
-const PLAN_WORKOUT_BACKFILL_KEY = 'plan_workout_sync_complete_v1'
+const PLAN_WORKOUT_BACKFILL_KEY = 'plan_workout_sync_complete_v2'
 
 export class SyncService {
   private static instance: SyncService | null = null
@@ -120,7 +120,7 @@ export class SyncService {
       const planWorkoutBackfillRequired = !this.hasCompletedPlanWorkoutBackfill()
       const planWorkoutStats = await this.syncPlansAndWorkouts(
         supabase,
-        profileId,
+        session.user.id,
         planWorkoutBackfillRequired ? null : lastSyncTimestamp,
         session.user.id
       )
