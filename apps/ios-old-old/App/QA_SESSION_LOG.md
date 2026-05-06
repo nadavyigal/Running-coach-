@@ -129,13 +129,94 @@ User attempted to reset password using "Forgot Password" link on login screen. S
 
 ---
 
+---
+
+### Bug #2: App Stuck Loading - Profile Not Loading After Auth
+**Status:** INVESTIGATING
+**Severity:** CRITICAL - BLOCKING
+**Title:** App stuck in loading state - user profile never loads after successful authentication
+
+**Description:**
+App successfully authenticates user but gets stuck in infinite loading state. Console logs show `auth.loading: true` and `profileId: null` indefinitely. User cannot proceed to main app.
+
+**Steps to Reproduce:**
+1. Launch RunSmart app
+2. Sign in with existing account (or app auto-signs in)
+3. Observe app stays on loading screen
+4. Never reaches main screen
+
+**Expected Result:**
+- User profile loads after authentication
+- App proceeds to main screen
+- `auth.loading: false` and `profileId` populated
+
+**Actual Result:**
+- `auth.loading: true` permanently
+- `profileId: null` never changes
+- App stuck in "waiting_for_auth" phase
+- User ID exists: `068053fd-204e-4053-b1af-c70cf74a0440`
+
+**Console Evidence:**
+```
+⚡️  [Auth] Auth state changed: SIGNED_IN
+⚡️  [info] - [app:init:diag] auth_state {
+  "auth": {
+    "loading": true,
+    "hasUser": true,
+    "profileId": null  ← STUCK HERE
+  }
+}
+```
+
+**Root Cause Analysis:**
+Likely causes (in order):
+1. Profile row doesn't exist in database for this user
+2. RLS (Row Level Security) blocking profile query
+3. Profile API query timing out
+4. JavaScript exception preventing profile load
+
+**Impact:**
+- **BLOCKING** - App completely unusable
+- Cannot access any features
+- User cannot proceed past loading screen
+- Affects all users who sign in
+
+**Device Info:**
+- Device: iPhone 13
+- iOS: 26.3
+- Build: TestFlight Build 1
+- Timestamp: 2026-04-26T13:15:12.895Z
+- User ID: 068053fd-204e-4053-b1af-c70cf74a0440
+
+**Additional Console Warnings:**
+```
+⚡️  JS Eval error A JavaScript exception occurred
+```
+(Full exception details needed - requires Safari DevTools)
+
+**Next Steps:**
+1. ✅ Check if profile exists: `SELECT * FROM profiles WHERE id = '068053fd-204e-4053-b1af-c70cf74a0440'`
+2. ⏳ Check RLS policies on profiles table
+3. ⏳ Review Supabase logs for failed queries
+4. ⏳ Connect Safari DevTools to see full JavaScript error
+5. ⏳ Fix root cause based on findings
+
+**Priority:** IMMEDIATE - Must fix before any testing can continue
+
+---
+
 ## SESSION SUMMARY
 **Total Tests Completed:** 0 / 10
 **Pass:** 0
 **Fail:** 0
-**Blockers Found:** 0
+**Blockers Found:** 2
+**Critical:** 2 (Password Reset, Profile Loading)
 **High Severity:** 0
 **Medium/Low:** 0
 
-**Overall Status:** IN PROGRESS
-**Recommendation:** TBD
+**Overall Status:** BLOCKED - Cannot proceed with testing
+**Recommendation:** HALT TESTING - Fix critical bugs before continuing
+**Blocking Issues:**
+1. Bug #1: Password reset email fails (HIGH)
+2. Bug #2: App stuck loading - profile not loading (CRITICAL - BLOCKING ALL TESTING)
+

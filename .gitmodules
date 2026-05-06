@@ -1,0 +1,4 @@
+[submodule "apps/ios-native"]
+	path = apps/ios-native
+	url = https://github.com/nadavyigal/IOS-runsmart-light-app-.git
+	branch = runsmart-lite-build

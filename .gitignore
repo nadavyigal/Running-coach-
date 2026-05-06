@@ -16,8 +16,9 @@
 .mcp.json
 Running-coach-/
 v0/test-results/
-apps/ios/App/Pods/
-apps/ios/build/
+apps/ios-old-old/App/Pods/
+apps/ios-old-old/build/
+apps/ios-native/build/
 
 # accidental nested V0 directory
 V0/V0/
