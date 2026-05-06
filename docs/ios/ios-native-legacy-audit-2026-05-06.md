@@ -21,7 +21,7 @@ Date: 2026-05-06
 
 - Added native Fastlane files under `apps/ios-native/fastlane`.
 - Added the simulator selector under `apps/ios-native/scripts/select-simulator.rb`.
-- Updated parent GitHub Actions to checkout submodules and build/deploy from `apps/ios-native`.
+- Updated parent GitHub Actions to initialize `apps/ios-native` and build/deploy from the native project.
 - Kept the native bundle identifier as `com.runsmart.lite`, matching the current Xcode project.
 
 ## Do Not Copy
@@ -29,7 +29,7 @@ Date: 2026-05-06
 - Capacitor/Cordova runtime files, `config.xml`, generated `public` web assets, and the old `AppDelegate`/`SceneDelegate` webview boot flow.
 - Old generated `SharedModels.swift` output from `origin/iOS-application`; it contains TypeScript union/object syntax that is not valid Swift and should only be treated as schema history.
 - DerivedData, Pods, local build products, and Xcode user state.
-- Old iOS GitHub Actions as-is. They synced Capacitor and built `apps/ios`; the parent workflows now target `apps/ios-native`, initialize submodules, and build `IOS RunSmart app.xcodeproj`.
+- Old iOS GitHub Actions as-is. They synced Capacitor and built `apps/ios`; the parent workflows now target `apps/ios-native`, initialize that submodule, and build `IOS RunSmart app.xcodeproj`.
 
 ## Branch Cleanup Note
 
