@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowLeft, Mail, MessageCircle } from 'lucide-react'
+import { ArrowLeft, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export const metadata = {
