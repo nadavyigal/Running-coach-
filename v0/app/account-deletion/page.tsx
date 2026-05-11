@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowLeft, Trash2, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export const metadata = {
