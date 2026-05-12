@@ -1,51 +1,34 @@
-# Repository Guidelines
+# RunSmart Agent Router
 
-## Project Structure & Module Organization
-- `v0/` is the main Next.js app. Key folders: `app/`, `components/`, `lib/`, `hooks/`, `public/`, `styles/`, `__tests__/`, `e2e/`, `scripts/`.
-- `docs/` holds stories, plans, troubleshooting, and cowork prompts.
-- `tasks/lessons.md` is the shared debugging memory. Treat it as required input for triage work.
-- Build output lives in `v0/.next/`. Do not commit generated artifacts.
+This repo uses a thin Agent OS. Do not load every OS file. Read this file first, then route to only the files needed for the task.
 
-## Build, Test, and Development Commands
-- Run app commands from `v0/`, not the repo root.
-- `npm run dev` starts local development.
-- `npm run lint`, `npm run type-check`, and `npm run build` are the minimum deployment gate.
-- `npm run test` runs Vitest. `npm run test:e2e` runs Playwright flows.
-- `npm run quality:check` and `npm run ci:full` remain the pre-push quality gates.
+## Always Start
+- Work in the repo root, but run app commands from `v0/`.
+- Read `tasks/lessons.md` before planning, implementation, bug fixing, QA, or PR work.
+- Check `tasks/todo.md` for current task state before changing files.
+- Preserve app behavior unless the requested task explicitly changes it.
+- Verify before saying done. Record what passed, failed, or was not run.
 
-## Coding Style & Naming Conventions
-- TypeScript + React + Next.js App Router, 2-space indentation, kebab-case files, PascalCase components.
-- Prefer aliases such as `@/components` and `@/lib`.
-- Keep lint clean. Remove unused vars and keep `console` limited to `warn` and `error`.
+## Workflow Route
+- Planning: read `tasks/lessons.md`, `.agent-os/workflows/feature-planning.md`, `docs/product/current-product-state.md`, and relevant templates.
+- Implementation: read `tasks/lessons.md`, `tasks/todo.md`, `.agent-os/workflows/story-implementation.md`, approved spec/story, and relevant code.
+- Bug fix: read `tasks/lessons.md`, `.agent-os/workflows/bug-fix.md`, relevant errors/logs/files.
+- QA: read `tasks/lessons.md`, `.agent-os/workflows/qa-review.md`, `docs/qa/qa-checklist.md`.
+- PR summary: read `.agent-os/workflows/pr-review.md`, relevant spec, QA report, and changed files.
 
-## Codex Workflow Overrides
-- Before any debug session, read `tasks/lessons.md`. If a recurring bug is listed there, reuse that fix path first.
-- Do not retry the same fix more than twice. After two failed attempts, switch approach and widen the investigation.
-- Prefer plan/spec flow for multi-step work. Use the new Codex skills to shape the spec before broad implementation.
-- Use Playwright, Supabase, and Vercel workflows proactively when the task touches UI, backend config, or deployment.
+## Required Flow
+Idea -> Product Brief -> Feature Spec -> Development Stories -> Implementation Plan -> Tests / Validation -> QA Report -> PR Summary -> Lessons Update.
 
-## Deployment Workflow
-- Before any production deploy, run `npm run lint`, `npm run type-check`, and `npm run build` from `v0/`.
-- Verify `v0/.env.local` points at the intended Supabase project, especially `NEXT_PUBLIC_SUPABASE_URL`.
-- After deploy, run a Playwright smoke test on the live URL and check the browser console. Production is not complete with console errors or missing assets.
+## Self-Improvement Rule
+After a user correction, failed implementation, bad assumption, broken test, repeated mistake, confusing output, overengineering, or missed requirement, add a short lesson to `tasks/lessons.md` with a practical future rule.
 
-## Error Triage Protocol
-1. Check `tasks/lessons.md`.
-2. Inspect browser behavior and console output with Playwright for frontend or runtime issues.
-3. Check Supabase config and logs for backend/auth/data issues.
-4. Check Vercel build or deployment logs for release issues.
-5. Record any new reusable fix in `tasks/lessons.md` before closing the session.
+## Verification Rule
+Minimum gate for app changes is usually `npm run lint`, `npm run type-check`, and relevant tests from `v0/`. For UI changes, add a mobile viewport/manual visual check. If a check cannot run, say why.
 
-## Known Recurring Bugs
-| Bug | Root Cause | Default Fix |
-| --- | --- | --- |
-| `406` from Supabase lookup | `.single()` on 0 or multiple rows | Replace with `.maybeSingle()` unless exactly one row is guaranteed |
-| Supabase "missing tables" | Wrong project ref in `.env.local` | Re-copy the project URL from Supabase Settings > API |
-| UI regression after redesign | Visual changes landed without comparison | Run screenshot diff before commit |
-| Production missing latest code | Cached or failed deploy | Check Vercel status and redeploy before debugging app code |
-| Post-deploy console errors | Asset, CSS, or chunk loading failure | Review Vercel logs and live console immediately |
-
-## Self-Improvement Loop
-- When a fix exposed a new recurring failure mode, add a short lesson entry to `tasks/lessons.md`.
-- Keep entries concrete: mistake, why it failed, correct approach, and how to prevent it next time.
-- Prefer updating lessons in the same session that found the bug.
+## Examples
+- "Plan the Garmin readiness feature using the Agent OS."
+- "Implement story 1 from `docs/specs/<feature>.md` only."
+- "Review the Today page UI against RunSmart standards."
+- "Fix this Supabase 406 bug and update lessons if reusable."
+- "Create a QA report for the latest profile changes."
+- "Prepare a PR summary from the spec and QA report."
