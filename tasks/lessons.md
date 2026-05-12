@@ -29,5 +29,10 @@ Reusable lessons for Claude Code, Codex, Cursor, and other agents.
 - Problem: Code can pass while mobile layout regresses.
 - Future Rule: For UI changes, run a browser/mobile viewport check and capture screenshot or clear visual notes.
 
+### Lesson: Save Approved Specs Before Implementation
+- Trigger: Starting implementation when the approved spec only exists in chat history.
+- Problem: Agents have to reconstruct scope, which increases ambiguity and risk.
+- Future Rule: Before implementing a feature story, save the approved spec in `docs/specs/` or explicitly name the spec source in `tasks/todo.md`.
+
 ## Lesson Template
 Use `.agent-os/templates/lesson-template.md` for new entries.
