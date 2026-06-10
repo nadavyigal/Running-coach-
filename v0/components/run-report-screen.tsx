@@ -31,6 +31,9 @@ import { RecoveryTimeline, type DetailedRecovery } from './run-report/RecoveryTi
 import { RouteTimeline } from './run-report/RouteTimeline'
 import { RunReportHeader } from './run-report/RunReportHeader'
 import { ShareRunCTA } from './run-report/ShareRunCTA'
+import { detectNoticeContext, type NoticeContext } from '@/lib/contextDetector'
+import { recordAhaMoment } from '@/lib/dbUtils'
+import { NoticedMoment } from './noticed-moment'
 import { SplitsTable } from './run-report/SplitsTable'
 import { StructuredWorkoutCard, type StructuredWorkout } from './run-report/StructuredWorkoutCard'
 
@@ -368,6 +371,7 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   const [garminTelemetry, setGarminTelemetry] = useState<GarminTelemetry | null>(null)
   const [garminTelemetryResolved, setGarminTelemetryResolved] = useState(false)
   const [historicalContext, setHistoricalContext] = useState<Record<string, unknown> | null>(null)
+  const [noticeContext, setNoticeContext] = useState<NoticeContext | null>(null)
   const autoRegeneratedRunRef = useRef<number | null>(null)
 
   const gpsQualityEnabled = ENABLE_AUTO_PAUSE
@@ -562,6 +566,43 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
   useEffect(() => {
     loadRun()
   }, [loadRun])
+
+  useEffect(() => {
+    if (!run?.id) {
+      setNoticeContext(null)
+      return
+    }
+
+    const detect = async () => {
+      try {
+        const paceMinPerKm =
+          run.distance >= MIN_DISTANCE_FOR_PACE_KM ? run.duration / 60 / run.distance : undefined
+        const context = await detectNoticeContext({
+          id: run.id!,
+          userId: run.userId,
+          distanceKm: run.distance,
+          durationSeconds: run.duration,
+          startedAt: new Date(run.completedAt),
+          paceMinPerKm,
+        })
+
+        if (!context) return
+
+        setNoticeContext(context)
+        const contextKey =
+          context.type === 'streak' ? `streak_${context.days}` : context.type
+        void recordAhaMoment({
+          userId: run.userId,
+          momentId: 'noticed',
+          context: contextKey,
+        })
+      } catch {
+        // Non-critical — never block the run report page
+      }
+    }
+
+    void detect()
+  }, [run])
 
   // Gather historical context from Dexie for richer AI analysis
   useEffect(() => {
@@ -977,6 +1018,9 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
       coachScore && (
         <CoachScoreRing key="coach-score" score={coachScore} variant="garmin" />
       ),
+      noticeContext && (
+        <NoticedMoment key="noticed" context={noticeContext} onShare={onShare} />
+      ),
       <EffortAnalysis
         key="effort"
         avgHr={(garminTelemetry?.avgHr ?? run.heartRate) as any}
@@ -1111,6 +1155,9 @@ export function RunReportScreen({ runId, onBack }: { runId: number | null; onBac
     />,
     coachScore && (
       <CoachScoreRing key="coach-score" score={coachScore} variant="light" />
+    ),
+    noticeContext && (
+      <NoticedMoment key="noticed" context={noticeContext} onShare={onShare} />
     ),
     (runEffort || pacingInsight?.paceConsistency || (garminTelemetry?.avgHr ?? run.heartRate)) && (
       <EffortAnalysis

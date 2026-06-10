@@ -34,6 +34,19 @@ import {
   migrateLocalDateToUTC
 } from './timezone-utils';
 import { SyncService } from './sync/sync-service';
+import { createClient } from './supabase/client';
+
+type AhaMomentId = 'knows_me' | 'achievement' | 'future_vision' | 'noticed';
+
+async function resolveAuthUserId(): Promise<string | null> {
+  try {
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Database Utilities - Comprehensive database operations with error handling
@@ -5226,7 +5239,87 @@ export const dbUtils = {
   createChallengeProgress,
   updateChallengeProgress,
   getChallengeProgressByPlan,
+
+  // Aha moments
+  recordAhaMoment,
+  hasAhaMomentFired,
+  isNoticedMomentOnCooldown,
 };
+
+export async function recordAhaMoment(params: {
+  userId: number
+  momentId: AhaMomentId
+  context?: string
+  variant?: string
+}) {
+  const authUserId = await resolveAuthUserId();
+  if (!authUserId) return;
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('user_aha_moments')
+    .upsert(
+      {
+        user_id: authUserId,
+        moment_id: params.momentId,
+        context: params.context ?? null,
+        variant: params.variant ?? null,
+      },
+      { onConflict: 'user_id,moment_id,context', ignoreDuplicates: true }
+    );
+
+  if (error) {
+    console.warn('[recordAhaMoment] failed silently:', error.message);
+  }
+}
+
+export async function hasAhaMomentFired(
+  _userId: number,
+  momentId: string,
+  context?: string
+): Promise<boolean> {
+  const authUserId = await resolveAuthUserId();
+  if (!authUserId) return false;
+
+  const supabase = createClient();
+  let query = supabase
+    .from('user_aha_moments')
+    .select('id')
+    .eq('user_id', authUserId)
+    .eq('moment_id', momentId);
+
+  if (context) {
+    query = query.eq('context', context);
+  }
+
+  const { data, error } = await query.limit(1).maybeSingle();
+  if (error) {
+    console.warn('[hasAhaMomentFired] failed silently:', error.message);
+    return false;
+  }
+
+  return Boolean(data);
+}
+
+export async function isNoticedMomentOnCooldown(_userId: number): Promise<boolean> {
+  const authUserId = await resolveAuthUserId();
+  if (!authUserId) return false;
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('user_aha_moments')
+    .select('fired_at')
+    .eq('user_id', authUserId)
+    .eq('moment_id', 'noticed')
+    .order('fired_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data?.fired_at) return false;
+
+  const daysSinceLast = (Date.now() - new Date(data.fired_at).getTime()) / 86400000;
+  return daysSinceLast < 3;
+}
 
 export default dbUtils;
 export { seedDemoRoutes } from './seedRoutes';
