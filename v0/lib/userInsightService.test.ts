@@ -39,11 +39,11 @@ describe('getRunningIdentity', () => {
   it('returns an identity with all required fields', () => {
     const result = getRunningIdentity('distance', 'occasional', 7.0)
     expect(result.id).toBeDefined()
-    expect(result.label).toBeTruthy()
-    expect(result.glyph).toBeTruthy()
-    expect(result.headline).toBeTruthy()
-    expect(result.subline).toBeTruthy()
-    expect(result.ctaLabel).toBeTruthy()
+    expect(result.label.trim().length).toBeGreaterThan(0)
+    expect(result.glyph.trim().length).toBeGreaterThan(0)
+    expect(result.headline.trim().length).toBeGreaterThan(0)
+    expect(result.subline.trim().length).toBeGreaterThan(0)
+    expect(result.ctaLabel.trim().length).toBeGreaterThan(0)
   })
 })
 
@@ -73,9 +73,9 @@ describe('projectGoalTimeline', () => {
     expect(result.milestoneWeek).toBe(4)
   })
 
-  it('milestoneWeek is at least 1', () => {
-    const result = projectGoalTimeline('habit', 'regular')
-    expect(result.milestoneWeek).toBeGreaterThanOrEqual(1)
+  it('milestoneWeek is half of weeks rounded down', () => {
+    const result = projectGoalTimeline('habit', 'regular') // 3 weeks → milestoneWeek = 1
+    expect(result.milestoneWeek).toBe(1)
   })
 
   it('projectedDate is in the future', () => {
@@ -84,10 +84,11 @@ describe('projectGoalTimeline', () => {
   })
 
   it('projectedDate is approximately weeks * 7 days from now', () => {
+    const before = Date.now()
     const result = projectGoalTimeline('distance', 'beginner')
     const expectedMs = result.weeks * 7 * 24 * 60 * 60 * 1000
-    const actualMs = result.projectedDate.getTime() - Date.now()
-    expect(actualMs).toBeGreaterThan(expectedMs - 5000) // within 5 seconds
+    const actualMs = result.projectedDate.getTime() - before
+    expect(actualMs).toBeGreaterThan(expectedMs - 5000)
     expect(actualMs).toBeLessThan(expectedMs + 5000)
   })
 
@@ -105,7 +106,7 @@ describe('projectGoalTimeline', () => {
 
   it('returns goalLabel and milestoneLabel strings', () => {
     const result = projectGoalTimeline('distance', 'beginner')
-    expect(result.goalLabel).toBeTruthy()
-    expect(result.milestoneLabel).toBeTruthy()
+    expect(result.goalLabel.trim().length).toBeGreaterThan(0)
+    expect(result.milestoneLabel.trim().length).toBeGreaterThan(0)
   })
 })
