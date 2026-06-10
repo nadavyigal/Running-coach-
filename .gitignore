@@ -47,3 +47,6 @@ Thumbs.db
 GTM/*.txt
 GTM/*.xlsx
 GTM/*.xls
+
+# Stale Capacitor leftovers (real iOS app is the apps/ios-native submodule)
+apps/ios/

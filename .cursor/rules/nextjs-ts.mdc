@@ -1,0 +1,41 @@
+---
+description: RunSmart Web Next.js/TypeScript conventions
+globs: "**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# Next.js TypeScript Rules (RunSmart Web)
+
+## Commands
+
+All commands run from `v0/`, not the repo root:
+- `npm run dev` — development server at localhost:3000
+- `npm run lint` — ESLint
+- `npm run type-check` — TypeScript strict check
+- `npm run build` — production build
+- `npm run test` — Vitest
+- `npm run test:e2e` — Playwright
+
+## Code Style
+
+- 2-space indentation, Prettier formatting
+- Prefer `const` over `let`
+- No `console` except `warn`/`error`
+- Remove unused variables and imports
+- Use path aliases: `@/components`, `@/lib`
+- TypeScript strict mode; no `any` without justification
+
+## Architecture Patterns
+
+- Database: Dexie.js (IndexedDB) for client-side persistence
+- AI: OpenAI GPT-4o via Vercel AI SDK with structured generation (Zod schemas)
+- State: React state + local database (no Redux/Zustand)
+- Testing: Vitest for unit, Playwright for e2e, `fake-indexeddb` for DB mocking
+
+## Error Triage
+
+1. Check `tasks/lessons.md` first
+2. Browser console / Playwright for frontend issues
+3. Supabase config/logs for backend/auth
+4. Vercel build logs for deployment issues
+5. Record new reusable fix in `tasks/lessons.md`

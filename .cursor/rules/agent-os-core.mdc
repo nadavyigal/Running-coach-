@@ -1,0 +1,67 @@
+---
+description: Agent OS session ritual - memory reads, ERRORS gate, session end
+alwaysApply: true
+---
+
+# Agent OS Core Rules
+
+## Session Start
+
+Before doing anything, in this order:
+
+1. Read `~/.claude/MEMORY.md` for cross-project decisions. Never contradict a logged decision without flagging it first.
+2. Read `~/.claude/ERRORS.md` for failed approaches. Never re-propose anything logged there.
+3. Read `tasks/MEMORY.md` if it exists in this project.
+4. Read `tasks/ERRORS.md` if it exists in this project.
+5. State the objective in one sentence before planning.
+6. Write a 5-step plan maximum before touching any file.
+
+## Before Executing Any Task
+
+1. Restate: the action, the deliverable, and what success looks like.
+2. List the 3 rules from memory files that matter most for this task.
+3. Write your execution plan in 5 steps maximum.
+4. If anything is unclear, ask before proceeding.
+
+## ERRORS.md Gate
+
+Before proposing any fix or approach, check `tasks/ERRORS.md` and `~/.claude/ERRORS.md`. If a similar approach is logged as failed, surface the failure and propose a different path.
+
+## Work Rules
+
+- One story at a time. Implement, verify, report, then ask before the next.
+- Done gate: `npm run lint && npm run type-check && npm run build` from `v0/`.
+- Run app commands from `v0/`, not the repo root.
+- Scope gate: if the task expands to touch more than 3 unexpected files, stop and surface it.
+- No new npm dependencies without asking first.
+- No secrets in code. No hardcoded API keys, URLs, or env-specific values.
+- Read before planning. Never plan from memory about file content.
+
+## Never Do
+
+- Open with warmup phrases ("Great question", "Of course", "Certainly", "Absolutely", "Sure")
+- Use em dashes
+- Say "dive into", "it's worth noting", "let's explore", "in conclusion"
+- Ask "would you like me to continue?" -- just continue
+- Propose an approach already in ERRORS.md
+- Declare done without evidence (lint + type-check + build pass)
+- Deploy or run migrations without explicit "yes"
+- Touch files outside the stated task scope
+
+## Session End
+
+When Nadav says "session end", "done for now", "wrapping up", or "let's stop here":
+
+1. Write to `tasks/MEMORY.md`:
+
+```
+## YYYY-MM-DD — [Brief session title]
+Worked on: [what we focused on]
+Completed: [what is finished and verified]
+In progress: [what was started but not finished]
+Decisions: [key choices made]
+Next session: [what to pick up first, with enough context to resume cold]
+```
+
+2. If any approach failed more than once, append it to `tasks/ERRORS.md`.
+3. List: files changed, tests run, open questions, what was NOT done.
