@@ -1,6 +1,8 @@
+import React from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { GoalTimelineMoment } from './goal-timeline-moment'
+import { trackOnboardingEvent } from '@/lib/analytics'
 
 vi.mock('@/lib/analytics', () => ({
   trackOnboardingEvent: vi.fn().mockResolvedValue(undefined),
@@ -42,6 +44,7 @@ describe('GoalTimelineMoment', () => {
   const onSkip = vi.fn()
 
   beforeEach(() => {
+    vi.mocked(trackOnboardingEvent).mockClear()
     onCTA.mockClear()
     onSkip.mockClear()
   })
