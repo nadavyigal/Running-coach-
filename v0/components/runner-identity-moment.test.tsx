@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { RunnerIdentityMoment } from './runner-identity-moment'
+import { trackOnboardingEvent } from '@/lib/analytics'
 
 vi.mock('@/lib/analytics', () => ({
   trackOnboardingEvent: vi.fn().mockResolvedValue(undefined),
@@ -47,6 +48,7 @@ describe('RunnerIdentityMoment', () => {
   beforeEach(() => {
     onCTA.mockClear()
     onSkip.mockClear()
+    vi.mocked(trackOnboardingEvent).mockClear()
   })
 
   it('renders the identity label', () => {

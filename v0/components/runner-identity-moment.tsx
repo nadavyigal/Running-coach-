@@ -22,6 +22,7 @@ export function RunnerIdentityMoment({ identity, onCTA, onSkip }: RunnerIdentity
   }, [identity.id])
 
   const handleCTA = () => {
+    // fire-and-forget: navigation may proceed before event resolves
     void trackOnboardingEvent('aha_moment_cta_clicked', {
       moment_id: 'knows_me',
       variant: 'C',
@@ -31,6 +32,7 @@ export function RunnerIdentityMoment({ identity, onCTA, onSkip }: RunnerIdentity
   }
 
   const handleSkip = () => {
+    // fire-and-forget: navigation may proceed before event resolves
     void trackOnboardingEvent('aha_moment_dismissed', {
       moment_id: 'knows_me',
       variant: 'C',
