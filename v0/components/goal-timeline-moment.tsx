@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { cn } from '@/lib/utils'
 import { trackOnboardingEvent } from '@/lib/analytics'
 import { AhaMomentOverlay } from './aha-moment-overlay'
 import type { GoalTimeline } from '@/lib/userInsightService'
