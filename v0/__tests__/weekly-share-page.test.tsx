@@ -58,7 +58,10 @@ describe('weekly share page', () => {
       writable: true,
     })
 
-    window.history.replaceState({}, '', 'http://localhost:3000/weekly/2026-W12?userId=42')
+    // Explicitly reset window.location in case a prior test replaced it with a plain object
+    // (device-connection-screen.test does `delete window.location` which persists in singleFork)
+    delete (window as any).location;
+    (window as any).location = { href: 'http://localhost:3000/weekly/2026-W12?userId=42', origin: 'http://localhost:3000' }
     ;(global.fetch as unknown as vi.Mock).mockImplementation((url: string | URL) => {
       const urlString = typeof url === 'string' ? url : url.toString()
       if (urlString.includes('/api/garmin/reports/weekly?userId=42')) {
