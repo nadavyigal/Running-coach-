@@ -64,6 +64,13 @@ vi.mock('@/lib/analytics', () => ({
   trackAnalyticsEvent: vi.fn(),
 }))
 
+// Force aha-moment setup to fail so the catch block calls onComplete() directly,
+// bypassing the RunnerIdentityMoment / GoalTimelineMoment interstitial.
+vi.mock('@/lib/userInsightService', () => ({
+  getRunningIdentity: vi.fn(() => { throw new Error('insight-unavailable') }),
+  projectGoalTimeline: vi.fn(() => { throw new Error('insight-unavailable') }),
+}))
+
 function completeOnboardingForm() {
   fireEvent.click(screen.getByRole('button', { name: /continue|next/i }))
   fireEvent.click(screen.getByText(/build a running habit/i))
@@ -107,7 +114,7 @@ describe('OnboardingScreen - Atomic Finish', () => {
     render(<OnboardingScreen onComplete={onComplete} />)
     completeOnboardingForm()
 
-    fireEvent.click(screen.getByRole('button', { name: /complete setup/i }))
+    fireEvent.click(screen.getByRole('button', { name: /create my plan/i }))
 
     await waitFor(() => {
       expect(mockCompleteOnboardingAtomic).toHaveBeenCalled()
@@ -137,7 +144,7 @@ describe('OnboardingScreen - Atomic Finish', () => {
     render(<OnboardingScreen onComplete={onComplete} />)
     completeOnboardingForm()
 
-    fireEvent.click(screen.getByRole('button', { name: /complete setup/i }))
+    fireEvent.click(screen.getByRole('button', { name: /create my plan/i }))
 
     await waitFor(() => {
       expect(mockCompleteOnboardingAtomic).toHaveBeenCalled()

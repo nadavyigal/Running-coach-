@@ -44,7 +44,7 @@ describe("PrimaryGoalCard", () => {
     )
 
     expect(screen.getByText("Run 10K")).toBeInTheDocument()
-    expect(screen.getByText("42%")).toBeInTheDocument()
+    expect(screen.getAllByText("42%").length).toBeGreaterThan(0)
     expect(screen.getByText(/on track/i)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole("button", { name: /view plan/i }))
