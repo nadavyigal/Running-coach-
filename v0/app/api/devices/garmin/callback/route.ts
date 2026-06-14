@@ -78,7 +78,7 @@ async function handleGarminCallback(req: ApiRequest) {
       )
     }
 
-    const { userId, redirectUri, codeVerifier } = storedState
+    const { userId, redirectUri, codeVerifier, authUserId: stateAuthUserId } = storedState
     if (!codeVerifier) {
       logger.error('Missing codeVerifier in OAuth state - state may be from an outdated flow')
       return NextResponse.json(
@@ -219,12 +219,14 @@ async function handleGarminCallback(req: ApiRequest) {
       resolveAuthUserId(),
       resolveCurrentProfileId(),
     ])
+    // Native iOS sends authUserId in the signed state (no browser session available).
+    const effectiveAuthUserId = authUserIdFromSession ?? stateAuthUserId ?? null
     const nowIso = new Date().toISOString()
     const expiresAtIso = new Date(Date.now() + (tokenData.expires_in ?? 7776000) * 1000).toISOString()
 
     await upsertGarminConnection({
       userId,
-      authUserId: authUserIdFromSession,
+      authUserId: effectiveAuthUserId,
       profileId: profileIdFromSession,
       garminUserId: profileUserId != null ? String(profileUserId) : null,
       providerUserId: profileUserId != null ? String(profileUserId) : null,
@@ -238,7 +240,7 @@ async function handleGarminCallback(req: ApiRequest) {
 
     await upsertGarminTokens({
       userId,
-      authUserId: authUserIdFromSession,
+      authUserId: effectiveAuthUserId,
       accessToken: tokenData.access_token,
       refreshToken: tokenData.refresh_token ?? null,
       expiresAt: expiresAtIso,
