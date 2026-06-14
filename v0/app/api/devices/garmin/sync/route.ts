@@ -1795,6 +1795,7 @@ export async function runGarminSyncForUser(params: {
         datasetCounts,
         activities: activitiesForSync,
         sleep,
+        sleepCount: sleep.length,
         persistence,
         deriveQueue,
         datasetCompleteness: {
