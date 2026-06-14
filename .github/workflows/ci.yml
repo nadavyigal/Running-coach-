@@ -38,6 +38,8 @@ jobs:
 
       - name: Run tests
         run: npm run test -- --run
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Build application
         run: npm run build
