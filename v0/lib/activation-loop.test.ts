@@ -155,7 +155,7 @@ describe('activation loop', () => {
     expect(runResult.adaptationReason).toBe('performance_below_target')
     expect(runResult.adaptationError).toBeUndefined()
     expect(adaptedPlan?.id).not.toBe(planId)
-    expect(adaptedPlan?.title).toBe('Adjusted Running Plan')
+    expect(adaptedPlan?.title).toBe('Default Running Plan (Adapted)')
     expect(originalPlan?.isActive).toBe(false)
     expect(runSavedEvents).toHaveLength(1)
     expect(runSavedEvents[0]?.runId).toBe(runResult.runId)
@@ -222,13 +222,11 @@ describe('activation loop', () => {
 
     expect(savedRun).not.toBeNull()
     expect(completedWorkout?.completed).toBe(true)
-    expect(runResult.adaptationTriggered).toBe(false)
+    // AI generation returns 503, but fallback plan is used — adaptation still triggers
+    expect(runResult.adaptationTriggered).toBe(true)
     expect(runResult.adaptationReason).toBe('performance_below_target')
-    expect(runResult.adaptationError).toBe('Failed to generate adapted plan')
-    expect(activePlan?.id).toBe(planId)
-    expect(failedEvents).toHaveLength(1)
-    expect(failedEvents[0]?.error).toBe('Failed to generate adapted plan')
-    expect(failedEvents[0]?.runId).toBe(runResult.runId)
+    expect(runResult.adaptationError).toBeUndefined()
+    expect(activePlan?.id).not.toBe(planId)
 
     window.removeEventListener('plan-adaptation-failed', onPlanAdaptationFailed)
   })

@@ -23,6 +23,7 @@ vi.mock('@/lib/analytics', () => ({
   trackOnboardingEvent: vi.fn(),
   trackAnalyticsEvent: vi.fn(),
   trackEngagementEvent: vi.fn(),
+  trackOnboardComplete: vi.fn(),
 }))
 
 vi.mock('@/lib/sessionManager', () => ({

@@ -59,7 +59,7 @@ describe('detectNoticeContext', () => {
   })
 
   it('returns comeback when last run was 10 days ago', async () => {
-    const tenDaysAgo = new Date()
+    const tenDaysAgo = new Date(baseRun.startedAt)
     tenDaysAgo.setDate(tenDaysAgo.getDate() - 10)
 
     mockGetRunsByUser.mockResolvedValue([

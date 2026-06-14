@@ -16,6 +16,10 @@ vi.mock('@/lib/integrations/garmin/service', () => ({
   getGarminSyncState: getGarminSyncStateMock,
 }))
 
+vi.mock('@/lib/server/garmin-oauth-store', () => ({
+  getGarminOAuthState: vi.fn().mockResolvedValue(null),
+}))
+
 async function loadRoute() {
   return import('@/app/api/garmin/status/route')
 }
