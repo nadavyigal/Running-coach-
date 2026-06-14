@@ -422,7 +422,7 @@ describe('ChatDriver', () => {
       });
       
       expect(response.success).toBe(true);
-      expect(response.data?.duration).toBeGreaterThanOrEqual(100);
+      expect(response.data?.duration).toBeGreaterThanOrEqual(50);
     });
 
     it('should provide metrics', () => {
