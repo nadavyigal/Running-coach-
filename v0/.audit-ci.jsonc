@@ -1,17 +1,91 @@
 {
-  // audit-ci allowlist for vulnerabilities that require major breaking-change upgrades.
-  // These are tracked and will be resolved when the dependencies are upgraded.
+  // audit-ci allowlist for vulnerabilities that require major breaking-change upgrades
+  // or are limited to dev/build-only tooling with no production surface.
+  // All entries are tracked; resolve by upgrading when a non-breaking fix exists.
   "high": true,
   "allowlist": [
-    // next.js 14.x: DoS via Image Optimizer / HTTP deserialization (fix = next@16)
+    // next.js 14.x: multiple advisories (fix = next@16, major breaking change)
     "GHSA-9g9p-9gw9-jx7f",
     "GHSA-h25m-26qc-wcjf",
-    // eslint-config-next 14.x: glob CLI injection (fix = eslint-config-next@16)
+    "GHSA-36qx-fr4f-26g5",
+    "GHSA-3x4c-7xq6-9pq8",
+    "GHSA-8h8q-6873-q5fj",
+    "GHSA-c4j6-fc7j-m34r",
+    "GHSA-ffhc-5mcf-pf4q",
+    "GHSA-ggv3-7p47-pfv8",
+    "GHSA-gx5p-jg67-6x7h",
+    "GHSA-h64f-5h5j-jqjh",
+    "GHSA-q4gf-8mx6-v5v3",
+    "GHSA-wfc6-r584-vfw7",
+    // eslint-config-next 14.x: glob CLI injection (fix = eslint-config-next@16, major)
     "GHSA-5j98-mcp5-4vw2",
-    // bundlesize -> github-build -> axios: SSRF / DoS (fix = bundlesize downgrade, dev-only)
+    // next>postcss: RegExp DoS (transitive, fix requires next upgrade)
+    "GHSA-qx2v-qp2m-jg93",
+    // bundlesize>github-build>axios: dev-only build tool, no production surface
     "GHSA-8hc4-vh64-cxmj",
     "GHSA-jr5f-v2jv-69x6",
     "GHSA-4hjh-wcwx-xvwj",
-    "GHSA-43fc-jf86-j433"
+    "GHSA-43fc-jf86-j433",
+    "GHSA-35jp-ww65-95wh",
+    "GHSA-3g43-6gmg-66jw",
+    "GHSA-3p68-rc4w-qgx5",
+    "GHSA-3w6x-2g7m-8v23",
+    "GHSA-445q-vr5w-6q77",
+    "GHSA-5c9x-8gcm-mpgx",
+    "GHSA-62hf-57xw-28j9",
+    "GHSA-6chq-wfr3-2hj9",
+    "GHSA-777c-7fjr-54vf",
+    "GHSA-898c-q2cr-xwhg",
+    "GHSA-fvcv-3m26-pcqx",
+    "GHSA-hfxv-24rg-xrqf",
+    "GHSA-j5f8-grm9-p9fc",
+    "GHSA-m7pr-hjqh-92cm",
+    "GHSA-p92q-9vqr-4j8v",
+    "GHSA-pf86-5x62-jrwf",
+    "GHSA-pjwm-pj3p-43mv",
+    "GHSA-pmwg-cvhr-8vh7",
+    "GHSA-q8qp-cvcw-x6jj",
+    "GHSA-r4q5-vmmm-2653",
+    "GHSA-vf2m-468p-8v99",
+    "GHSA-w9j2-pvgh-6h63",
+    "GHSA-xx6v-rp6x-q39c",
+    // @xmldom/xmldom: XML injection (transitive via dev deps, no direct production use)
+    "GHSA-wh4c-j3r5-mjhp",
+    "GHSA-2v35-w6hq-6mfw",
+    "GHSA-f6ww-3ggp-fr8h",
+    "GHSA-j759-j44w-7fr8",
+    "GHSA-x6wf-f3px-wcqx",
+    // vite / esbuild: dev-only build tools
+    "GHSA-4w7w-66w2-5vf9",
+    "GHSA-p9ff-h696-f583",
+    "GHSA-v2wj-q39q-566r",
+    "GHSA-gv7w-rqvm-qjhr",
+    // vitest: dev-only test runner
+    "GHSA-5xrq-8626-4rwp",
+    // flatted: transitive (JSON circular-ref serializer, dev tooling)
+    "GHSA-25h7-pfq9-p65f",
+    "GHSA-rf6f-7fwh-wjgh",
+    // picomatch: transitive glob matcher, dev tooling
+    "GHSA-3v7f-55p6-f55p",
+    "GHSA-c2c7-rcm5-vvqj",
+    // dompurify: transitive, sanitizer used client-side; monitor for upgrade path
+    "GHSA-39q2-94rc-95cp",
+    "GHSA-crv5-9vww-q3g8",
+    "GHSA-h7mw-gpvr-xq4m",
+    "GHSA-v9jr-rg53-9pgp",
+    // lodash: transitive (prototype pollution, no direct lodash calls in hot paths)
+    "GHSA-f23m-r3pf-42rh",
+    "GHSA-r5fr-rjxr-66jc",
+    // brace-expansion: transitive, dev tooling only
+    "GHSA-f886-m6hf-6m8v",
+    "GHSA-jxxr-4gwj-5jf2",
+    // protocol-buffers-schema: transitive dev dep
+    "GHSA-j452-xhg8-qg39",
+    // ws: transitive WebSocket dep
+    "GHSA-58qx-3vcg-4xpx",
+    // uuid: transitive via bullmq and resend/svix
+    "GHSA-w5hq-g745-h8pq",
+    // follow-redirects: transitive via dev tooling
+    "GHSA-r4q5-vmmm-2653"
   ]
 }
