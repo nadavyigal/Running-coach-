@@ -284,7 +284,7 @@ function buildDailyMetricsRows(input: {
     if (!date) continue
 
     const metric = getOrCreateDailyMetric(byDate, date)
-    metric.hrv = pickNumber(hrv, ['hrvValue', 'value', 'dailyAvg', 'lastNightAvg']) ?? metric.hrv
+    metric.hrv = pickNumber(hrv, ['lastNight', 'weeklyAvg', 'lastNightAvg', 'dailyAvg', 'hrvValue', 'value']) ?? metric.hrv
     addRawDataset(metric, 'hrv', hrv)
   }
 
