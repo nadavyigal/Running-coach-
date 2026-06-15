@@ -31,6 +31,7 @@ import {
 } from '@/lib/server/garmin-oauth-store'
 
 const SUPPORTED_WEBHOOK_DATASETS: GarminDatasetKey[] = [...GARMIN_WEBHOOK_DATASET_KEYS]
+const ACTIVITY_DATASET_SET = new Set<string>(GARMIN_ACTIVITY_DATASET_KEYS)
 
 const DELAYED_SYNC_THRESHOLD_MS = 30 * 60 * 1000
 const HEALTHY_SYNC_THRESHOLD_MS = 12 * 60 * 60 * 1000
@@ -257,14 +258,7 @@ export async function enqueueGarminImportJobsForEvent(event: GarminWebhookEventR
   const activityFileUsers = new Set<number>()
   let activityFilesQueued = 0
 
-  const ACTIVITY_DATASET_SET = new Set<string>(GARMIN_ACTIVITY_DATASET_KEYS)
-
   for (const row of datasetRows) {
-    let connection = row.providerUserId ? await getGarminConnectionByProviderUserId(row.providerUserId) : null
-    if (!connection && event.provider_user_id) {
-      connection = await getGarminConnectionByProviderUserId(event.provider_user_id)
-    }
-
     // Wellness datasets (epochs, dailies, sleeps, hrv, stressDetails, ...) are
     // already persisted via storeGarminWebhookPayload during recordGarminWebhookDelivery.
     // They must NOT be enqueued as activity_import jobs — doing so caused each
@@ -274,6 +268,11 @@ export async function enqueueGarminImportJobsForEvent(event: GarminWebhookEventR
     // handled in its own branch below.
     if (row.datasetKey !== 'activityFiles' && !ACTIVITY_DATASET_SET.has(row.datasetKey)) {
       continue
+    }
+
+    let connection = row.providerUserId ? await getGarminConnectionByProviderUserId(row.providerUserId) : null
+    if (!connection && event.provider_user_id) {
+      connection = await getGarminConnectionByProviderUserId(event.provider_user_id)
     }
 
     if (row.datasetKey === 'activityFiles') {

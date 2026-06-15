@@ -3,6 +3,8 @@
 import { db, type Run } from '@/lib/db'
 import { updateRun } from '@/lib/dbUtils'
 
+const GARMIN_RUN_MIRROR_LIMIT = 200
+
 function asDate(value: string | null | undefined): Date {
   const parsed = value ? new Date(value) : new Date()
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed
@@ -33,7 +35,7 @@ function mapSupabaseRunToDexie(userId: number, row: Record<string, unknown>): Om
 
 export async function mirrorRecentGarminRunsToDexie(userId: number): Promise<number> {
   // 200-row window so reconciliation can detect server-side deletions
-  const response = await fetch(`/api/devices/garmin/runs?userId=${encodeURIComponent(String(userId))}&limit=200`, {
+  const response = await fetch(`/api/devices/garmin/runs?userId=${encodeURIComponent(String(userId))}&limit=${GARMIN_RUN_MIRROR_LIMIT}`, {
     method: 'GET',
     headers: { 'x-user-id': String(userId) },
     credentials: 'include',
@@ -53,18 +55,36 @@ export async function mirrorRecentGarminRunsToDexie(userId: number): Promise<num
     (row) => typeof row.source_activity_id === 'string'
   )
   const remoteIds = new Set(remoteRows.map((row) => row.source_activity_id as string))
+  const remoteWindowIsComplete = remoteRows.length < GARMIN_RUN_MIRROR_LIMIT
+  const oldestRemoteCompletedAtMs = remoteRows.reduce<number | null>((oldest, row) => {
+    const completedAt = typeof row.completed_at === 'string' ? Date.parse(row.completed_at) : NaN
+    if (!Number.isFinite(completedAt)) return oldest
+    return oldest == null ? completedAt : Math.min(oldest, completedAt)
+  }, null)
 
   // Reconcile deletions: any local Garmin-sourced run whose source_activity_id
-  // is no longer in Supabase has been removed server-side and must be removed
-  // locally too. This keeps Supabase as the source of truth for Garmin runs.
+  // is no longer in Supabase within the fetched remote window has been removed
+  // server-side and must be removed locally too. If the API returns a full page,
+  // older local Garmin runs may still exist server-side outside this bounded
+  // window, so keep them until a later page or smaller result proves deletion.
   const localGarminRuns = await db.runs
     .where('userId')
     .equals(userId)
     .filter((run) => run.importSource === 'garmin' && typeof run.importRequestId === 'string')
     .toArray()
 
+  const isInsideFetchedRemoteWindow = (run: Run): boolean => {
+    if (remoteWindowIsComplete) return true
+    if (oldestRemoteCompletedAtMs == null) return false
+
+    const completedAtMs = run.completedAt instanceof Date
+      ? run.completedAt.getTime()
+      : Date.parse(String(run.completedAt))
+    return Number.isFinite(completedAtMs) && completedAtMs >= oldestRemoteCompletedAtMs
+  }
+
   const stale = localGarminRuns.filter(
-    (run) => run.importRequestId && !remoteIds.has(run.importRequestId)
+    (run) => run.importRequestId && !remoteIds.has(run.importRequestId) && isInsideFetchedRemoteWindow(run)
   )
   if (stale.length > 0) {
     const ids = stale.map((run) => run.id).filter((id): id is number => typeof id === 'number')

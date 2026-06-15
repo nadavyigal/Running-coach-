@@ -35,6 +35,13 @@ interface GarminTokenRow {
   expires_at: string
 }
 
+interface GarminConnectionLookupRow {
+  user_id: number
+  profile_id: string | null
+  status: GarminConnectionStatus
+  last_webhook_received_at: string | null
+}
+
 export interface GarminOAuthState {
   userId: number
   authUserId: string | null
@@ -191,6 +198,29 @@ function parseIsoToMs(value: string | null | undefined): number | null {
   if (!value) return null
   const parsed = Date.parse(value)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function hasProfileContext(row: GarminConnectionLookupRow): boolean {
+  return typeof row.profile_id === 'string' && row.profile_id.trim().length > 0
+}
+
+function compareConnectionLookupRows(
+  left: GarminConnectionLookupRow,
+  right: GarminConnectionLookupRow
+): number {
+  const leftProfileRank = hasProfileContext(left) ? 0 : 1
+  const rightProfileRank = hasProfileContext(right) ? 0 : 1
+  if (leftProfileRank !== rightProfileRank) return leftProfileRank - rightProfileRank
+
+  const leftStatusRank = left.status === 'connected' ? 0 : 1
+  const rightStatusRank = right.status === 'connected' ? 0 : 1
+  if (leftStatusRank !== rightStatusRank) return leftStatusRank - rightStatusRank
+
+  const leftWebhookMs = parseIsoToMs(left.last_webhook_received_at) ?? 0
+  const rightWebhookMs = parseIsoToMs(right.last_webhook_received_at) ?? 0
+  if (leftWebhookMs !== rightWebhookMs) return rightWebhookMs - leftWebhookMs
+
+  return left.user_id - right.user_id
 }
 
 function selectMonotonicCursor(params: {
@@ -544,22 +574,22 @@ export async function getGarminConnectionByProviderUserId(providerUserId: string
     .from('garmin_connections')
     .select('user_id, profile_id, status, last_webhook_received_at')
     .or(`provider_user_id.eq.${normalized},garmin_user_id.eq.${normalized}`)
-    .order('profile_id', { ascending: false, nullsFirst: false })
-    .order('status', { ascending: true })
-    .order('last_webhook_received_at', { ascending: false, nullsFirst: false })
-    .order('user_id', { ascending: true })
-    .limit(1)
-    .maybeSingle()
+    .limit(50)
 
   if (error) {
     throw new Error(`Failed to read garmin_connections by provider user id: ${error.message}`)
   }
 
-  if (!data?.user_id || typeof data.user_id !== 'number') {
+  const rows = ((data ?? []) as GarminConnectionLookupRow[])
+    .filter((row) => typeof row.user_id === 'number')
+    .sort(compareConnectionLookupRows)
+
+  const selected = rows[0]
+  if (!selected) {
     return null
   }
 
-  return getGarminOAuthState(data.user_id)
+  return getGarminOAuthState(selected.user_id)
 }
 
 async function revokeTokenUpstream(token: string): Promise<void> {
