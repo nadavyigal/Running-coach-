@@ -42,6 +42,14 @@ export default function SupportPage() {
         </section>
 
         <section>
+          <h2 className="text-xl font-semibold mb-3">Device Help</h2>
+          <Link href="/support/garmin" className="block rounded-lg border p-4 hover:bg-slate-50">
+            <h3 className="font-medium">Garmin Connect</h3>
+            <p className="text-sm text-gray-500 mt-1">Connecting, syncing, missing data, and disconnecting</p>
+          </Link>
+        </section>
+
+        <section>
           <h2 className="text-xl font-semibold mb-3">Frequently Asked Questions</h2>
 
           <div className="space-y-6">

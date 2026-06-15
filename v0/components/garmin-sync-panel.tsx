@@ -303,6 +303,11 @@ export function GarminSyncPanel({ userId, onReconnect, onDisconnect }: GarminSyn
                 <div className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700 break-all">
                   <span className="font-medium">Error: </span>
                   {syncError}
+                  <div className="mt-2">
+                    <a href="/support/garmin" className="text-xs text-blue-600 underline" target="_blank" rel="noopener noreferrer">
+                      Garmin sync help
+                    </a>
+                  </div>
                 </div>
               )}
 
@@ -403,6 +408,11 @@ export function GarminSyncPanel({ userId, onReconnect, onDisconnect }: GarminSyn
                 <div className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700 break-all">
                   <span className="font-medium">Error: </span>
                   {catalogError}
+                  <div className="mt-2">
+                    <a href="/support/garmin" className="text-xs text-blue-600 underline" target="_blank" rel="noopener noreferrer">
+                      Garmin sync help
+                    </a>
+                  </div>
                 </div>
               ) : catalog?.capabilities.length ? (
                 <div className="space-y-2">
