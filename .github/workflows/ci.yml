@@ -36,28 +36,12 @@ jobs:
       - name: Security audit
         run: npx audit-ci --moderate --config .audit-ci.jsonc
 
-      - name: Run tests (shard 1/5)
-        run: npm run test -- --run --shard=1/5
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
-
-      - name: Run tests (shard 2/5)
-        run: npm run test -- --run --shard=2/5
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
-
-      - name: Run tests (shard 3/5)
-        run: npm run test -- --run --shard=3/5
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
-
-      - name: Run tests (shard 4/5)
-        run: npm run test -- --run --shard=4/5
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
-
-      - name: Run tests (shard 5/5)
-        run: npm run test -- --run --shard=5/5
+      - name: Run tests
+        run: |
+          for shard in $(seq 1 10); do
+            echo "Running Vitest shard ${shard}/10"
+            npm run test -- --run --shard=${shard}/10
+          done
         env:
           NODE_OPTIONS: --max-old-space-size=4096
 
