@@ -33,6 +33,13 @@ vi.mock('@/hooks/use-toast', () => ({
   })
 }));
 
+vi.mock('@/lib/auth-context', () => ({
+  useAuth: () => ({
+    user: { id: 'auth-user-1' },
+    profileId: 'profile-1',
+  }),
+}))
+
 // Mock fetch
 global.fetch = vi.fn();
 
@@ -209,6 +216,8 @@ describe('DeviceConnectionScreen', () => {
           },
           body: JSON.stringify({
             userId: mockUserId,
+            authUserId: 'auth-user-1',
+            profileId: 'profile-1',
             redirectUri: `${window.location.origin}/garmin/callback`
           })
         });

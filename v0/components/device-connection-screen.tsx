@@ -17,6 +17,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { db } from "@/lib/db"
 import { trackAnalyticsEvent } from "@/lib/analytics"
+import { useAuth } from "@/lib/auth-context"
 
 interface WearableDevice {
   id?: number;
@@ -49,6 +50,7 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
   const [isSyncing, setIsSyncing] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
+  const { user: authUser, profileId } = useAuth()
 
   const supportedDevices = [
     {
@@ -155,6 +157,8 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
         },
         body: JSON.stringify({
           userId,
+          authUserId: authUser?.id ?? null,
+          profileId,
           redirectUri: `${window.location.origin}/garmin/callback`
         })
       })

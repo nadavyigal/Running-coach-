@@ -78,7 +78,7 @@ async function handleGarminCallback(req: ApiRequest) {
       )
     }
 
-    const { userId, redirectUri, codeVerifier, authUserId: stateAuthUserId } = storedState
+    const { userId, authUserId, profileId, redirectUri, codeVerifier } = storedState
     if (!codeVerifier) {
       logger.error('Missing codeVerifier in OAuth state - state may be from an outdated flow')
       return NextResponse.json(
@@ -219,15 +219,15 @@ async function handleGarminCallback(req: ApiRequest) {
       resolveAuthUserId(),
       resolveCurrentProfileId(),
     ])
-    // Native iOS sends authUserId in the signed state (no browser session available).
-    const effectiveAuthUserId = authUserIdFromSession ?? stateAuthUserId ?? null
+    const resolvedAuthUserId = authUserIdFromSession ?? authUserId ?? null
+    const resolvedProfileId = profileIdFromSession ?? profileId ?? null
     const nowIso = new Date().toISOString()
     const expiresAtIso = new Date(Date.now() + (tokenData.expires_in ?? 7776000) * 1000).toISOString()
 
     await upsertGarminConnection({
       userId,
-      authUserId: effectiveAuthUserId,
-      profileId: profileIdFromSession,
+      authUserId: resolvedAuthUserId,
+      profileId: resolvedProfileId,
       garminUserId: profileUserId != null ? String(profileUserId) : null,
       providerUserId: profileUserId != null ? String(profileUserId) : null,
       scopes,
@@ -240,7 +240,7 @@ async function handleGarminCallback(req: ApiRequest) {
 
     await upsertGarminTokens({
       userId,
-      authUserId: effectiveAuthUserId,
+      authUserId: resolvedAuthUserId,
       accessToken: tokenData.access_token,
       refreshToken: tokenData.refresh_token ?? null,
       expiresAt: expiresAtIso,
@@ -250,7 +250,7 @@ async function handleGarminCallback(req: ApiRequest) {
     try {
       await enqueueGarminBackfillJob({
         userId,
-        profileId: profileIdFromSession,
+        profileId: resolvedProfileId,
         providerUserId: profileUserId != null ? String(profileUserId) : null,
       })
     } catch (backfillError) {

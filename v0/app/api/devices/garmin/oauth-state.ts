@@ -3,7 +3,8 @@ import { logger } from '@/lib/logger';
 
 interface OAuthStatePayload {
   userId: number;
-  authUserId?: string | null; // set by native iOS clients; absent in web browser flow
+  authUserId?: string | null;
+  profileId?: string | null;
   redirectUri: string;
   nonce: string;
   createdAt: number;
@@ -74,12 +75,19 @@ async function generateCodeChallenge(codeVerifier: string): Promise<string> {
   return createHash('sha256').update(codeVerifier).digest('base64url');
 }
 
-function generateSignedState(userId: number, redirectUri: string, codeVerifier: string, authUserId?: string | null) {
+function generateSignedState(
+  userId: number,
+  redirectUri: string,
+  codeVerifier: string,
+  authUserId?: string | null,
+  profileId?: string | null,
+) {
   const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
   return signStatePayload({
     userId,
-    authUserId: authUserId ?? null,
+    ...(authUserId ? { authUserId } : {}),
+    ...(profileId ? { profileId } : {}),
     redirectUri,
     codeVerifier,
     createdAt: Date.now(),

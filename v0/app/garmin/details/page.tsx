@@ -9,12 +9,14 @@ import { GarminReadinessCard } from '@/components/garmin-readiness-card'
 import { PerformanceManagementChart } from '@/components/performance-management-chart'
 import { useData } from '@/contexts/DataContext'
 import { useToast } from '@/components/ui/use-toast'
+import { useAuth } from '@/lib/auth-context'
 import { isSafeRedirect } from '@/lib/validateRedirect'
 
 export default function GarminDetailsPage() {
   const router = useRouter()
   const { userId } = useData()
   const { toast } = useToast()
+  const { user: authUser, profileId } = useAuth()
   const [isDisconnecting, setIsDisconnecting] = useState(false)
   const [isReconnecting, setIsReconnecting] = useState(false)
 
@@ -63,6 +65,8 @@ export default function GarminDetailsPage() {
         },
         body: JSON.stringify({
           userId,
+          authUserId: authUser?.id ?? null,
+          profileId,
           redirectUri: `${window.location.origin}/garmin/callback`,
         }),
       })

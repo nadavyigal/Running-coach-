@@ -7,7 +7,7 @@ import { generateSignedState, generateCodeVerifier, generateCodeChallenge } from
 // POST - Initiate Garmin OAuth 2.0 PKCE flow (SECURED)
 async function handleGarminConnect(req: ApiRequest) {
   try {
-    const { userId, redirectUri, authUserId: reqAuthUserId } = await req.json();
+    const { userId, authUserId, profileId, redirectUri } = await req.json();
 
     // Security: Validate userId
     if (!userId || typeof userId !== 'number' || userId <= 0) {
@@ -25,23 +25,11 @@ async function handleGarminConnect(req: ApiRequest) {
       }, { status: 400 });
     }
 
-    // Optional: Supabase auth UUID from native iOS clients (absent in web browser flow)
-    if (reqAuthUserId !== undefined && reqAuthUserId !== null &&
-        (typeof reqAuthUserId !== 'string' || reqAuthUserId.length > 128)) {
-      return NextResponse.json({
-        success: false,
-        error: 'Invalid auth user ID'
-      }, { status: 400 });
-    }
-    const nativeAuthUserId: string | null = typeof reqAuthUserId === 'string' ? reqAuthUserId : null;
-
     const envRedirectUri = process.env.GARMIN_OAUTH_REDIRECT_URI?.trim();
     const requestRedirectUri = typeof redirectUri === 'string' ? redirectUri.trim() : '';
     const origin = req.headers.get('origin')?.trim();
     const fallbackRedirectUri = origin ? `${origin}/garmin/callback` : '';
-    // Native iOS sends its own runsmart:// scheme; the env var only applies to web browser flows.
-    const isNativeRedirect = requestRedirectUri.startsWith('runsmart://');
-    const resolvedRedirectUri = isNativeRedirect ? requestRedirectUri : (envRedirectUri || requestRedirectUri || fallbackRedirectUri);
+    const resolvedRedirectUri = requestRedirectUri || envRedirectUri || fallbackRedirectUri;
 
     logger.info('Garmin connect: redirect URI resolution', {
       envRedirectUri: envRedirectUri ?? '(not set)',
@@ -69,13 +57,19 @@ async function handleGarminConnect(req: ApiRequest) {
       }, { status: 400 });
     }
 
-    // Allow https/http for web and runsmart: for native iOS deep-link callbacks.
     if (!['https:', 'http:', 'runsmart:'].includes(parsedRedirectUri.protocol)) {
       return NextResponse.json({
         success: false,
         error: 'Invalid redirect URI protocol'
       }, { status: 400 });
     }
+
+    const normalizedAuthUserId = typeof authUserId === 'string' && authUserId.trim().length > 0
+      ? authUserId.trim()
+      : null;
+    const normalizedProfileId = typeof profileId === 'string' && profileId.trim().length > 0
+      ? profileId.trim()
+      : null;
 
     const clientId = process.env.GARMIN_CLIENT_ID;
     if (!clientId) {
@@ -90,10 +84,14 @@ async function handleGarminConnect(req: ApiRequest) {
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = await generateCodeChallenge(codeVerifier);
 
-    // Embed code_verifier securely in the signed state so callback can retrieve it.
-    // nativeAuthUserId is set by iOS clients so the callback can persist auth_user_id
-    // without relying on browser session cookies (which native apps don't have).
-    const state = generateSignedState(userId, parsedRedirectUri.toString(), codeVerifier, nativeAuthUserId);
+    // Embed code_verifier securely in the signed state so callback can retrieve it
+    const state = generateSignedState(
+      userId,
+      parsedRedirectUri.toString(),
+      codeVerifier,
+      normalizedAuthUserId,
+      normalizedProfileId
+    );
 
     // Garmin Connect OAuth 2.0 PKCE authorization URL
     // Ref: https://developerportal.garmin.com/sites/default/files/OAuth2PKCE_1.pdf

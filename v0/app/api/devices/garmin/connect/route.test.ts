@@ -32,6 +32,9 @@ describe('/api/devices/garmin/connect', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    generateSignedStateMock.mockClear()
+    generateCodeVerifierMock.mockClear()
+    generateCodeChallengeMock.mockClear()
     delete process.env.GARMIN_CLIENT_ID
     delete process.env.GARMIN_OAUTH_REDIRECT_URI
   })
@@ -61,5 +64,56 @@ describe('/api/devices/garmin/connect', () => {
     expect(authUrl.searchParams.get('code_challenge')).toBe('pkce-challenge')
     expect(authUrl.searchParams.get('code_challenge_method')).toBe('S256')
     expect(authUrl.searchParams.get('scope')).toBeNull()
+  })
+
+  it('prefers a request redirect URI and carries auth/profile IDs in signed state', async () => {
+    const { POST } = await loadRoute()
+
+    const req = new Request('http://localhost/api/devices/garmin/connect', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        userId: 42,
+        authUserId: ' auth-user-1 ',
+        profileId: ' profile-1 ',
+        redirectUri: 'https://preview.runsmart-ai.com/garmin/callback',
+      }),
+    })
+
+    const res = await POST(req as any)
+    const body = await res.json()
+    const authUrl = new URL(body.authUrl)
+
+    expect(res.status).toBe(200)
+    expect(authUrl.searchParams.get('redirect_uri')).toBe('https://preview.runsmart-ai.com/garmin/callback')
+    expect(generateSignedStateMock).toHaveBeenCalledWith(
+      42,
+      'https://preview.runsmart-ai.com/garmin/callback',
+      'pkce-verifier',
+      'auth-user-1',
+      'profile-1'
+    )
+  })
+
+  it('allows the native app custom scheme as the OAuth redirect URI', async () => {
+    const { POST } = await loadRoute()
+
+    const req = new Request('http://localhost/api/devices/garmin/connect', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        userId: 42,
+        authUserId: 'auth-user-1',
+        profileId: 'profile-1',
+        redirectUri: 'runsmart://garmin/connected',
+      }),
+    })
+
+    const res = await POST(req as any)
+    const body = await res.json()
+    const authUrl = new URL(body.authUrl)
+
+    expect(res.status).toBe(200)
+    expect(authUrl.searchParams.get('redirect_uri')).toBe('runsmart://garmin/connected')
   })
 })

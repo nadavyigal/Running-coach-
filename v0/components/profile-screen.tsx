@@ -126,7 +126,7 @@ export function ProfileScreen() {
   const [garminAction, setGarminAction] = useState<"connect" | "sync" | "backfill" | "disconnect" | null>(null)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'signup' | 'login'>('signup')
-  const { user: authUser, signOut: authSignOut, loading: authLoading } = useAuth()
+  const { user: authUser, profileId, signOut: authSignOut, loading: authLoading } = useAuth()
   const garminConnection = useGarminConnectionStatus(userId)
   const garminConnected = garminConnection.connected
   const garminSyncState = garminConnection.syncState
@@ -240,7 +240,12 @@ export function ProfileScreen() {
       const response = await fetch('/api/devices/garmin/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-user-id': String(userId) },
-        body: JSON.stringify({ userId, redirectUri: `${window.location.origin}/garmin/callback` }),
+        body: JSON.stringify({
+          userId,
+          authUserId: authUser?.id ?? null,
+          profileId,
+          redirectUri: `${window.location.origin}/garmin/callback`,
+        }),
       })
       const data = await response.json()
       if (!response.ok || !data?.success || !data?.authUrl) {
