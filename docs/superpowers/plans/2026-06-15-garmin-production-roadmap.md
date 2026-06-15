@@ -108,7 +108,7 @@ Q1. May RunSmart use Garmin-imported activity data inside a subscription product
 Q2. Are AI coaching insights derived from Garmin data permitted?
 Q3. Do Health API metrics (sleep, HRV, stress, Body Battery, resting HR, Pulse Ox,
     respiration) carry license fees, revenue sharing, or usage caps in Production?
-Q4. Is HISTORICAL_DATA_EXPORT (90-day backfill) enabled by default in Production,
+Q4. Is HISTORICAL_DATA_EXPORT (30-day maximum historical export) enabled by default in Production,
     or does it require a separate enablement request?
 Q5. Is attribution required inside AI insights, run reports, App Store screenshots,
     or exported content? What is the approved attribution language?
@@ -125,7 +125,7 @@ Q6. May RunSmart use the phrase "Works with Garmin Connect" in App Store metadat
 | Q1 | Using Garmin in Pro subscription copy |
 | Q2 | AI insights that cite Garmin data by name |
 | Q3 | Unit economics confirmation; paid positioning |
-| Q4 | Mentioning "recent history" vs "90 days" in marketing |
+| Q4 | Mentioning "recent history" vs "up to 30 days" in marketing |
 | Q5 | Attribution wording in UI and screenshots |
 | Q6 | "Works with Garmin Connect" in App Store |
 ```
@@ -164,7 +164,7 @@ Questions:
    Pulse Ox, respiration rate — carry license fees, revenue sharing requirements,
    or usage caps in Production?
 
-4. Is HISTORICAL_DATA_EXPORT (90-day backfill) enabled by default in Production,
+4. Is HISTORICAL_DATA_EXPORT (30-day maximum historical export) enabled by default in Production,
    or does it require a separate enablement request after approval?
 
 5. Are we required to attribute Garmin Connect as the data source in AI insights,
@@ -194,7 +194,7 @@ In `commercial-terms.md`, replace `[DATE]` with today's date. Set a calendar rem
 | "Works with Garmin Connect" in App Store | Do not use — use "Syncs with Garmin" |
 | Garmin in Pro subscription copy | Do not reference Garmin in paid tier marketing |
 | AI insights citing Garmin by name | Use "Based on your connected device data" |
-| "90 days of history" | Use "recent history" |
+| More than 30 days of history | Use "recent history" or "up to 30 days" |
 | Health API metrics as paid upsell | Do not list individual metrics as Pro features |
 
 ---
@@ -1195,7 +1195,7 @@ Nadav
 RunSmart
 ```
 
-**Do not say:** "no restrictions", "all devices", "last 90 days of history", "unlocks Pro features" — none of these are confirmed yet.
+**Do not say:** "no restrictions", "all devices", "more than 30 days of history", "unlocks Pro features" — none of these are approved.
 
 ---
 
@@ -1213,7 +1213,7 @@ Run this checklist before any public announcement or paid marketing.
 - [ ] `/support/garmin` is live and linked from the sync panel
 - [ ] Garmin attribution appears in activity list, recovery cards, and AI insights
 - [ ] App Store copy does not say "Works with Garmin Connect" unless B0 Q6 confirmed
-- [ ] App Store copy does not claim "90 days of history" unless B0 Q4 confirmed
+- [ ] App Store copy does not claim more than 30 days of history; B0 Q4 confirmed a 30-day maximum
 - [ ] No surface implies Garmin endorses RunSmart
 - [ ] Fallback coaching works without Garmin connected
 - [ ] Commercial terms email has been sent (B0 Step 3)
