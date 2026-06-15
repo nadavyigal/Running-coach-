@@ -4,6 +4,7 @@ import { GARMIN_WEBHOOK_DATASET_KEYS } from '@/lib/garmin/datasets'
 import { logger } from '@/lib/logger'
 import {
   enqueueGarminImportJobsForEvent,
+  handleGarminUserDeregistrations,
   recordGarminWebhookDelivery,
 } from '@/lib/integrations/garmin/service'
 import { getGarminWebhookSecret } from '@/lib/server/garmin-webhook-secret'
@@ -11,6 +12,17 @@ import { getGarminWebhookSecret } from '@/lib/server/garmin-webhook-secret'
 export const dynamic = 'force-dynamic'
 
 const SUPPORTED_DATASETS = [...GARMIN_WEBHOOK_DATASET_KEYS]
+
+function payloadContainsSupportedDatasets(payload: Record<string, unknown>): boolean {
+  return SUPPORTED_DATASETS.some((datasetKey) => {
+    const value = payload[datasetKey]
+    if (Array.isArray(value)) return value.length > 0
+    if (value && typeof value === 'object') {
+      return Object.values(value as Record<string, unknown>).some((nested) => Array.isArray(nested) && nested.length > 0)
+    }
+    return false
+  })
+}
 
 function getWebhookAuthResult(req: Request): { authorized: boolean; status: number; error?: string } {
   const { value: configuredSecret } = getGarminWebhookSecret()
@@ -52,6 +64,35 @@ export async function GET(req: Request) {
   })
 }
 
+export async function processGarminWebhookPayload(rawBody: string, payload: Record<string, unknown>) {
+  const { event, duplicate } = await recordGarminWebhookDelivery({
+    rawBody,
+    payload,
+    eventType: 'garmin_push',
+  })
+
+  if (!event) {
+    throw new Error('Failed to persist Garmin webhook event')
+  }
+
+  await handleGarminUserDeregistrations(payload)
+
+  if (duplicate || !payloadContainsSupportedDatasets(payload)) {
+    return {
+      duplicate,
+      queuedJobs: 0,
+      webhookEventId: event.id,
+    }
+  }
+
+  const enqueueResult = await enqueueGarminImportJobsForEvent(event)
+  return {
+    duplicate: false,
+    queuedJobs: enqueueResult.queuedJobs,
+    webhookEventId: event.id,
+  }
+}
+
 export async function POST(req: Request) {
   const authResult = getWebhookAuthResult(req)
   if (!authResult.authorized) {
@@ -75,41 +116,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'Invalid Garmin webhook JSON payload' }, { status: 400 })
   }
 
-  try {
-    const { event, duplicate } = await recordGarminWebhookDelivery({
-      rawBody,
-      payload,
-      eventType: 'garmin_push',
-    })
+  const responsePromise = NextResponse.json({ status: 'ok' }, { status: 200 })
 
-    if (!event) {
-      return NextResponse.json({ ok: false, error: 'Failed to persist Garmin webhook event' }, { status: 500 })
-    }
+  void processGarminWebhookPayload(rawBody, payload).catch((error) => {
+    logger.error('Garmin webhook processing error:', error)
+  })
 
-    if (duplicate) {
-      return NextResponse.json({
-        ok: true,
-        duplicate: true,
-        queuedJobs: 0,
-        webhookEventId: event.id,
-      })
-    }
-
-    const enqueueResult = await enqueueGarminImportJobsForEvent(event)
-    return NextResponse.json({
-      ok: true,
-      duplicate: false,
-      queuedJobs: enqueueResult.queuedJobs,
-      webhookEventId: event.id,
-    })
-  } catch (error) {
-    logger.error('Garmin webhook persistence failure:', error)
-    return NextResponse.json(
-      {
-        ok: false,
-        error: error instanceof Error ? error.message : 'Failed to process Garmin webhook',
-      },
-      { status: 500 }
-    )
-  }
+  return responsePromise
 }

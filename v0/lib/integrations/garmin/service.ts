@@ -20,6 +20,8 @@ import type {
   GarminWebhookEventRecord,
 } from '@/lib/integrations/garmin/types'
 import {
+  deleteGarminTokens,
+  findRunSmartUserIdsByGarminUserId,
   getGarminConnectionByProviderUserId,
   getGarminOAuthState,
   markGarminAuthError,
@@ -84,6 +86,10 @@ function extractProviderUserId(payload: Record<string, unknown>): string | null 
     }
   }
   return null
+}
+
+function extractDeregistrationRows(payload: Record<string, unknown>): Record<string, unknown>[] {
+  return parseRows(payload.deregistrations)
 }
 
 function extractActivityId(row: Record<string, unknown>): string | null {
@@ -239,6 +245,59 @@ export async function recordGarminWebhookDelivery(params: {
   return {
     event: data as GarminWebhookEventRecord,
     duplicate: false,
+  }
+}
+
+export async function handleGarminUserDeregistrations(payload: Record<string, unknown>): Promise<{
+  deregistrations: number
+  affectedUsers: number
+}> {
+  const rows = extractDeregistrationRows(payload)
+  if (rows.length === 0) {
+    return { deregistrations: 0, affectedUsers: 0 }
+  }
+
+  const revokedAt = new Date().toISOString()
+  const affectedUserIds = new Set<number>()
+
+  for (const row of rows) {
+    const garminUserId = getString(row.userId) ?? getString(row.ownerUserId) ?? getString(row.userID)
+    if (!garminUserId) {
+      logger.warn('[garmin] metric=deregistration_missing_user_id', { payload: row })
+      continue
+    }
+
+    const userIds = await findRunSmartUserIdsByGarminUserId(garminUserId)
+    if (userIds.length === 0) {
+      logger.warn('[garmin] metric=deregistration_unknown_user', { garmin_user_id: garminUserId })
+      continue
+    }
+
+    for (const userId of userIds) {
+      await deleteGarminTokens(userId)
+      await upsertGarminConnection({
+        userId,
+        status: 'revoked',
+        revokedAt,
+        lastSyncError: 'Garmin user deregistration received',
+        errorState: {
+          reason: 'garmin_user_deregistration',
+          garminUserId,
+          uploadStartTimeInSeconds: row.uploadStartTimeInSeconds ?? null,
+        },
+      })
+      affectedUserIds.add(userId)
+    }
+  }
+
+  logger.info('[garmin] metric=deregistrations_processed', {
+    deregistrations: rows.length,
+    affected_users: affectedUserIds.size,
+  })
+
+  return {
+    deregistrations: rows.length,
+    affectedUsers: affectedUserIds.size,
   }
 }
 
