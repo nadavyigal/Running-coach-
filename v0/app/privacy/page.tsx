@@ -48,6 +48,40 @@ export default function PrivacyPolicy() {
           </ul>
         </section>
 
+        <section className="mb-8">
+          <h2 className="text-xl font-semibold mb-3">Garmin Connect data (if you connect a Garmin device)</h2>
+          <p className="mb-3 text-gray-700">
+            If you choose to connect your Garmin account, we import completed running activities and
+            wellness data after you explicitly authorize access via Garmin&apos;s OAuth flow. You can
+            disconnect at any time from Profile → Devices.
+          </p>
+          <p className="mb-2 text-gray-700">Imported data may include:</p>
+          <ul className="list-disc pl-6 mb-3 text-gray-700 space-y-1">
+            <li>Activity records: timestamps, distance, duration, pace, elevation, GPS track</li>
+            <li>Heart rate: per-activity averages, resting heart rate, HRV (last night and weekly average)</li>
+            <li>Wellness: sleep quality and duration, daily stress, body battery, steps</li>
+            <li>Training: VO2 max estimates and daily step count (device-dependent)</li>
+          </ul>
+          <p className="mb-3 text-gray-700">
+            This data is used exclusively to power your coaching insights, training plan adjustments,
+            and recovery recommendations inside RunSmart. We do not sell or share Garmin data with
+            third parties.
+          </p>
+          <p className="mb-3 text-gray-700">
+            <strong>Token storage:</strong> Garmin OAuth tokens are stored server-side, encrypted at
+            rest using AES-256-GCM. Tokens are deleted when you disconnect Garmin.
+          </p>
+          <p className="mb-3 text-gray-700">
+            <strong>Disconnecting:</strong> Go to Profile → Devices → Disconnect Garmin. This deletes
+            your stored tokens and stops all future imports.
+          </p>
+          <p className="text-gray-700">
+            <strong>Data deletion:</strong> To request deletion of all imported Garmin data, email{' '}
+            <a href="mailto:hello@runsmart.ai" className="text-blue-600 underline">hello@runsmart.ai</a>{' '}
+            with subject &quot;Delete my Garmin data&quot;. We process requests within 30 days.
+          </p>
+        </section>
+
         <section>
           <h2 className="text-xl font-semibold mb-3">3. How Your Data is Stored</h2>
           <p>
@@ -100,35 +134,7 @@ export default function PrivacyPolicy() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold mb-3">6. Garmin Connect Integration</h2>
-          <p>
-            If you choose to connect Garmin, we only access the data you authorize and only for coaching and analytics.
-          </p>
-          <ul className="list-disc pl-5 mt-2 space-y-1">
-            <li>
-              <strong>Data accessed:</strong> running activities, heart rate, and training metrics.
-            </li>
-            <li>
-              <strong>Purpose:</strong> import runs into RunSmart for coaching insights, recovery scores, and analytics.
-            </li>
-            <li>
-              <strong>Storage:</strong> imported activity data is stored locally on your device. OAuth tokens are encrypted
-              with AES-256-GCM before storage.
-            </li>
-            <li>
-              <strong>No resale or write-back:</strong> we do not sell Garmin data and we do not write data back to Garmin.
-            </li>
-            <li>
-              <strong>Disconnect:</strong> Settings {'->'} Devices {'->'} Garmin {'->'} Disconnect.
-            </li>
-            <li>
-              <strong>Delete:</strong> you can delete all imported Garmin data from the app.
-            </li>
-          </ul>
-        </section>
-
-        <section>
-          <h2 className="text-xl font-semibold mb-3">7. Your Rights</h2>
+          <h2 className="text-xl font-semibold mb-3">6. Your Rights</h2>
           <p>Since your data is stored locally, you have full control over it. You can:</p>
           <ul className="list-disc pl-5 mt-2 space-y-1">
             <li>
@@ -142,7 +148,7 @@ export default function PrivacyPolicy() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold mb-3">8. Contact Us</h2>
+          <h2 className="text-xl font-semibold mb-3">7. Contact Us</h2>
           <p>
             If you have any questions about this Privacy Policy, please contact us at
             support@runsmart.app.
