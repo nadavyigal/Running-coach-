@@ -48,8 +48,8 @@ export default function PrivacyPolicy() {
           </ul>
         </section>
 
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold mb-3">Garmin Connect data (if you connect a Garmin device)</h2>
+        <section id="garmin-connect-data" className="mb-8 scroll-mt-24">
+          <h2 className="text-xl font-semibold mb-3">Garmin Connect data</h2>
           <p className="mb-3 text-gray-700">
             If you choose to connect your Garmin account, we import completed running activities and
             wellness data after you explicitly authorize access via Garmin&apos;s OAuth flow. You can
@@ -66,6 +66,13 @@ export default function PrivacyPolicy() {
             This data is used exclusively to power your coaching insights, training plan adjustments,
             and recovery recommendations inside RunSmart. We do not sell or share Garmin data with
             third parties.
+          </p>
+          <p className="mb-3 text-gray-700">
+            When you connect your Garmin account, some of your Garmin wellness and activity data is
+            processed by OpenAI&apos;s API to generate personalized coaching recommendations, training plan
+            adjustments, and recovery insights. OpenAI processes this data as a data processor on our
+            behalf and does not use it to train models. No Garmin data is sold or shared with any other
+            third party.
           </p>
           <p className="mb-3 text-gray-700">
             <strong>Token storage:</strong> Garmin OAuth tokens are stored server-side, encrypted at
