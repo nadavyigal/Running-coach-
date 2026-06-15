@@ -202,3 +202,48 @@ describe('processPendingGarminJobs', () => {
     expect(markGarminAuthErrorMock).toHaveBeenCalledWith(42, 'token revoked')
   })
 })
+
+describe('enqueueGarminImportJobsForEvent', () => {
+  beforeEach(() => {
+    createAdminClientMock.mockReset()
+    getGarminConnectionByProviderUserIdMock.mockReset()
+    upsertGarminConnectionMock.mockClear()
+  })
+
+  it('skips wellness datasets without reading connection state for activity imports', async () => {
+    createAdminClientMock.mockReturnValue({
+      from: vi.fn(() => ({
+        update: vi.fn(() => ({
+          eq: vi.fn(async () => ({ error: null })),
+        })),
+      })),
+    })
+
+    const { enqueueGarminImportJobsForEvent } = await import('@/lib/integrations/garmin/service')
+
+    const result = await enqueueGarminImportJobsForEvent({
+      id: 'evt-wellness-1',
+      delivery_key: 'delivery-1',
+      event_type: 'garmin_delivery',
+      provider_user_id: 'garmin-user-1',
+      raw_payload: {
+        epochs: [
+          {
+            userId: 'garmin-user-1',
+            summaryId: 'epoch-1',
+            activityType: 'RUNNING',
+          },
+        ],
+      },
+      received_at: '2026-06-15T00:00:00.000Z',
+      processed_at: null,
+      status: 'received',
+      error_message: null,
+      attempt_count: 0,
+    })
+
+    expect(result).toEqual({ queuedJobs: 0, jobs: [], activityFilesQueued: 0 })
+    expect(getGarminConnectionByProviderUserIdMock).not.toHaveBeenCalled()
+    expect(upsertGarminConnectionMock).not.toHaveBeenCalled()
+  })
+})
