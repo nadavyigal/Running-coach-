@@ -10,7 +10,7 @@
     "lint": "node scripts/run-eslint.cjs",
     "lint:fix": "node scripts/run-eslint.cjs --fix",
     "type-check": "tsc --noEmit -p tsconfig.typecheck.json",
-    "test": "vitest",
+    "test": "NODE_OPTIONS=--max-old-space-size=12288 vitest",
     "test:coverage": "vitest --coverage",
     "test:coverage:ci": "vitest --coverage --run",
     "test:coverage:watch": "vitest --coverage --watch",
