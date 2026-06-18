@@ -61,6 +61,23 @@ Complete the Garmin evaluation fixes around redirect handling, signed state owne
 ## Open Questions
 - Missing plan file means implementation is based on code evidence, not a saved plan document.
 
+---
+
+## Next Session — Story 1: Today Content Inventory + Preservation Map
+
+Spec: docs/specs/2026-05-12-today-command-center.md (read this first)
+
+Objective: Before any Today redesign, produce a complete inventory of what the current Today page renders,
+where each data element comes from, and which elements must be preserved in the redesign.
+
+Deliverable: A markdown table in tasks/today-content-inventory.md listing:
+- Component name
+- Data source (API route, Supabase table, or computed)
+- Whether it is required in the new design or can be dropped
+- Any known dependencies or side effects
+
+Estimated time: 45-60 min session.
+
 ## Validation
 - `npm run test -- app/api/devices/garmin/connect/route.test.ts app/api/devices/garmin/callback/route.test.ts app/api/devices/garmin/oauth-state.test.ts app/garmin/connect/route.test.ts --run`: passed, 10 tests.
 - `npm run test -- app/api/devices/garmin/connect/route.test.ts app/api/devices/garmin/callback/route.test.ts app/api/devices/garmin/oauth-state.test.ts app/garmin/connect/route.test.ts components/device-connection-screen.test.tsx --run`: passed, 25 tests. Existing mocked DB console errors appear in device tests.
