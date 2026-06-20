@@ -13,7 +13,7 @@
 | Agent Swarm & Operations | 7 | `.claude/skills/swarm-*`, `dev-swarm`, `ops-*`, `growth-*`, `pwa-*`, `community-*` |
 | Solo Founder Toolkit | 3 | `.claude/skills/solo-founder/` |
 
-> **2026-06-20 cleanup:** The imported **Marketing (25)**, **Creative (16)**, and **Product (7)** packs were removed from `.claude/skills/` — they duplicated capabilities available elsewhere and were flagged by SkillSpector (scores 80/100/100). See "Where those capabilities live now" below. The `.codex/skills/` and `.cursor/skills/` mirrors are retained intentionally for Codex/Cursor work.
+> **2026-06-20 cleanup:** The imported **Marketing (25)**, **Creative (16)**, and **Product (7)** packs were removed from `.claude/skills/` — they duplicated capabilities available elsewhere and were flagged by SkillSpector (scores 80/100/100). See "Where those capabilities live now" below. The **same three packs were also removed from `.codex/skills/` and `.cursor/skills/`** so Codex and Cursor behave identically to Claude Code; those mirrors otherwise remain for running-domain and dev skills (and `solo-founder/`).
 
 ---
 
@@ -134,7 +134,7 @@ Marketing / Product / Creative packs removed 2026-06-20 — see "Where those cap
 
 ## Version History
 
-- **v4.0** (2026-06-20): Removed imported Marketing/Creative/Product packs (redundant + SkillSpector-flagged); capabilities relocated to Agentic OS skills + official plugins. Solo-founder trimmed to 3.
+- **v4.0** (2026-06-20): Removed imported Marketing/Creative/Product packs from `.claude/`, `.codex/`, and `.cursor/` (redundant + SkillSpector-flagged); capabilities relocated to Agentic OS skills + official plugins. Solo-founder trimmed to 3.
 - **v3.0** (2026-02-08): Added 7 swarm/ops skills, enabled Agent Teams.
 - **v2.0** (2026-01-29): Major expansion.
 - **v1.0** (2026-01-23): Initial 12 running coach skills.
