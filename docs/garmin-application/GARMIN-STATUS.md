@@ -8,7 +8,7 @@
 ## Current Phase: PHASE 2 — Garmin Production Gate Remediation
 
 **Open gate:** Garmin Production Gates 1-4 from Garmin's 2026-06-15 response.
-**Status as of:** 2026-06-15
+**Status as of:** 2026-06-21
 
 ---
 
@@ -19,7 +19,7 @@
 | **B0** — Commercial terms email sent | DONE — email sent and Garmin answers received 2026-06-15 | C4 App Store copy, B7 paid gate |
 | **T1** — P0 fixes verified live in production | BLOCKED — web diagnose flow needs iOS/live verification path | T4 submission |
 | **T2** — Privacy policy Garmin section live | DONE — Garmin section, anchor, and OpenAI disclosure committed | T4 submission |
-| **T3** — 5 screenshots taken | NOT DONE | T4 submission |
+| **T3** — 5 screenshots taken | PARTIAL — iOS simulator 4/5; shot 2 OAuth consent needs device capture | T4 submission |
 | **T4** — Garmin Production enablement submitted | IN PROGRESS — awaiting Garmin response / Gate 1-4 evidence | T5, T6, Phase 4 |
 | **T5** — Production credentials live in Vercel | NOT DONE | C5 beta email |
 | **T6** — Reconnect prompt for existing users | NOT DONE | C5 beta email |
@@ -33,9 +33,9 @@
 | Gate | Requirement | Status |
 |---|---|---|
 | **Gate 1** | Privacy policy anchor link + OpenAI disclosure | IN PROGRESS — code committed; confirm live deployment and Garmin review |
-| **Gate 2** | PUSH webhook verified, User Deregistration endpoint, Data Generator + Partner Verification, Training/Courses API screenshot, 2+ users authorized | BLOCKED / WAITING — webhook code fixed; remaining evidence is manual/Garmin portal |
-| **Gate 3** | API Blog signup, team accounts using non-Gmail/non-freemail addresses | BLOCKED / WAITING — manual account setup |
-| **Gate 4** | Zipped UX screenshots, brand compliance with GCDP Branding Assets v2 | BLOCKED / WAITING — screenshots + brand review package |
+| **Gate 2** | PUSH webhook verified, User Deregistration endpoint, Data Generator + Partner Verification, Training/Courses API screenshot, 2+ users authorized | PARTIAL — Data Generator + Partner Verification run 2026-06-21; 3 active users, HTTP/Ping PASS; Endpoint Coverage still warns on GC_ACTIVITY_UPDATE + USER_DEREG webhook receipt |
+| **Gate 3** | API Blog signup, team accounts using non-Gmail/non-freemail addresses | PASS — team audit + blog notify enabled (nadav.yigal@runsmart-ai.com) 2026-06-21 |
+| **Gate 4** | Zipped UX screenshots, brand compliance with GCDP Branding Assets v2 | BRAND FIXES DONE (2026-06-22) — Marc rejected shots 01/04/05; fixed in iOS app (3 Swift files, build PASS) and re-captured → `runsmart-garmin-screenshots-ios-2026-06-22.zip`. All 4 flagged shots verified compliant against the real brand PDF + approved examples. Remaining: swap official Garmin Connect tile into modal (founder fetches asset); capture full UX flow if Marc wants every surface. See `12-MARC-2026-06-22-REJECTION-REMEDIATION-PLAN.md` |
 
 ---
 
@@ -84,9 +84,8 @@
 | Item | Waiting on |
 |---|---|
 | Gate 1 privacy review | Live deployment check + Garmin compliance review of anchor/OpenAI disclosure |
-| Gate 2 PUSH verification | Garmin Data Generator + Partner Verification, Training/Courses API screenshot, 2+ authorized users |
-| Gate 3 account readiness | API Blog signup and team accounts using non-Gmail/non-freemail addresses |
-| Gate 4 brand package | Zipped UX screenshots and GCDP Branding Assets v2 compliance review |
+| Gate 2 endpoint coverage | GC_ACTIVITY_UPDATE + USER_DEREG need webhook receipt in 24h (may clear after next live user activity/deregistration) |
+| Gate 4 brand package | Shot 2 OAuth consent (device) + Q5/Q6 formal badge review |
 | T4 Garmin Production submission | Gate 1 + Gate 2 + Gate 3 + Gate 4 evidence |
 | T5 credential rotation | Garmin Production approval (~Day 17) |
 | T6 reconnect prompt | T5 |
@@ -104,6 +103,14 @@
 |---|---|---|
 | 2026-06-15 | Research, P0 implementation QA, iOS build fix, pushed to main, wrote all three plans + unified roadmap | Send B0 email; verify T1 live; write privacy policy; take screenshots; submit T4 |
 | 2026-06-15 | Received Garmin commercial answers; recorded Q1 YES, Q2 YES, Q3 no fees, Q4 30-day max; added Privacy Gate 1 anchor/OpenAI disclosure; fixed webhook to return HTTP 200 asynchronously and handle User Deregistration | Push docs; confirm privacy deploy; complete Gate 2 portal verification, Gate 3 accounts, Gate 4 screenshots/brand review |
+| 2026-06-21 | Supabase migration applied; portal audit: app Approved (Evaluation tier), 7 connected users, team members PASS; blog notify master switch off; API Tools blocked on credentials | Founder: API Tools login → Partner Verification + Data Generator + Test Push; enable blog notify; Gate 4 screenshots; send Marc Lussi email |
+| 2026-06-21 | Browser session: Partner Verification run (HTTP/Ping/Active User PASS); Data Generator Daily+Activity; blog notify enabled | Optional: shot 2 OAuth consent on device; send Marc Lussi email from hello@runsmart.ai |
+| 2026-06-21 | Gate 4 iOS: Simulator capture 4/5 (Profile Garmin connect/disconnect, Report Garmin runs, Recovery dashboard); zip `runsmart-garmin-screenshots-ios-2026-06-21.zip`; web Playwright path retired | Replace shot 2 with OAuth consent if Garmin requires; send Marc Lussi email |
+| 2026-06-22 | Gate 4 docs: `11-GATE-4-IOS-FOUNDER-RUN-SHEET.md`; checklist + email draft aligned; zip/screenshots verified on disk | Founder: review `10-MARC-LUSSI-GATE-1-4-EMAIL-DRAFT.md`, optional shot 2 + diagnose JSON, send from hello@runsmart.ai |
+| 2026-06-22 | QA caught shot 3 (`03-garmin-connected-state.png`) actually showing **Disconnected** — root cause: capture script only `terminate`d the app between launches, so shot 1's disconnected state persisted into shot 3's launch instead of resetting to the demo default (Connected). Reinstalled clean, re-captured (now correctly shows Connected), re-zipped, patched script to uninstall/reinstall before shot 3 | Founder: re-review zip before sending — all 5 shots now verified correct |
+| 2026-06-22 | Caught and fixed bad sender/recipient in email draft (`hello@runsmart.ai` did not exist; salutation said "Hi Marc" but the real thread is with Elena Kononova). Corrected to reply from `nadav.yigal@runsmart-ai.com` | Founder sent Gate 1-4 evidence reply to Elena Kononova (ticket 213145/213165) |
+| 2026-06-22 | **Gate 1-4 evidence email sent** to Elena Kononova (Garmin Connect Partner Services), reply from nadav.yigal@runsmart-ai.com, zip attached | Await Garmin review; respond promptly if she asks for fixes (GC_ACTIVITY_UPDATE/USER_DEREG coverage, shot 2 consent); do not touch Garmin env vars/credentials until Production approval + explicit founder go-ahead |
+| 2026-06-22 | **Marc Lussi rejected shots 01/04/05 on brand grounds.** Studied actual `Garmin_Developer_API_Brand_Guidelines.pdf` + 5 approved partner examples. Wrote remediation plan `12-MARC-2026-06-22-REJECTION-REMEDIATION-PLAN.md`. Found rejected screenshots are from the **iOS SwiftUI app**, not web. Implemented 3 Swift brand fixes (build PASS each): (04) `ActivityRow.swift` — removed recolored green "Garmin" pill, now plain `date · Garmin` metadata under title; (05) `RecoveryDashboardView.swift` — added "Garmin" title-level attribution + verbatim "Insights derived in part from Garmin device-sourced data." footer, gated on Garmin connected; (01/03) `SecondaryFlowView.swift` `FlowHeader` — removed RunSmart RS logo paired with "Garmin Connect" name (neutral glyph fallback until official Garmin Connect tile asset added). Re-captured 5 iOS screenshots → `runsmart-garmin-screenshots-ios-2026-06-22.zip`; all 4 flagged shots verified compliant | Founder: (a) obtain official Garmin Connect tile from `creative.garmin.com/styleguide/brand/` and swap into `FlowHeader.headerMark`; (b) clear Partner Verification Endpoint Coverage (GC_ACTIVITY_UPDATE + USER_DEREG); (c) D1 build workout-push (Training API) for the transfer screenshot; (d) reply to ticket 213145/213165 with corrected zip |
 
 ---
 
@@ -117,4 +124,7 @@
 | Privacy policy live URL | `https://runsmart-ai.com/privacy` |
 | Support page (to build) | `https://runsmart-ai.com/support/garmin` |
 | Commercial terms tracker | `docs/garmin-application/commercial-terms.md` |
+| Gate 4 iOS run sheet | `docs/garmin-application/11-GATE-4-IOS-FOUNDER-RUN-SHEET.md` |
+| Gate 4 screenshot zip | `docs/garmin-application/runsmart-garmin-screenshots-ios-2026-06-21.zip` |
+| Marc Lussi email draft | `docs/garmin-application/10-MARC-LUSSI-GATE-1-4-EMAIL-DRAFT.md` |
 | Full roadmap | `docs/superpowers/plans/2026-06-15-garmin-production-roadmap.md` |
