@@ -27,6 +27,9 @@ interface TrainingDerivedMetricsRow {
 interface MergedDay {
   date: string
   bodyBattery: number | null
+  bodyBatteryStart: number | null
+  bodyBatteryPeak: number | null
+  bodyBatteryEnd: number | null
   bodyBatterySource: 'direct' | 'balance' | 'none'
   bodyBatteryBalance: number | null
   spo2: number | null
@@ -182,6 +185,9 @@ function buildMergedDays(params: {
   const createEmptyDay = (date: string): MergedDay => ({
     date,
     bodyBattery: null,
+    bodyBatteryStart: null,
+    bodyBatteryPeak: null,
+    bodyBatteryEnd: null,
     bodyBatterySource: 'none',
     bodyBatteryBalance: null,
     spo2: null,
@@ -200,6 +206,9 @@ function buildMergedDays(params: {
     merged.set(day.date, {
       ...createEmptyDay(day.date),
       bodyBattery: day.bodyBattery,
+      bodyBatteryStart: day.bodyBatteryStart,
+      bodyBatteryPeak: day.bodyBatteryPeak,
+      bodyBatteryEnd: day.bodyBatteryEnd,
       bodyBatterySource: day.bodyBatterySource,
       bodyBatteryBalance: day.bodyBatteryBalance,
       spo2: day.spo2,
@@ -315,7 +324,7 @@ export async function GET(req: Request) {
   const [dailyQuery, derivedQuery, runsQuery] = await Promise.all([
     admin
       .from('garmin_daily_metrics')
-      .select('date,body_battery,body_battery_balance,body_battery_charged,body_battery_drained,hrv,sleep_score,resting_hr,stress,raw_json')
+      .select('date,body_battery,body_battery_start,body_battery_peak,body_battery_end,body_battery_balance,body_battery_charged,body_battery_drained,hrv,sleep_score,resting_hr,stress,raw_json')
       .eq('user_id', userId)
       .gte('date', startDate)
       .order('date', { ascending: true }),
@@ -431,6 +440,9 @@ export async function GET(req: Request) {
       return values.length > 0 ? round(mean(values), 2) : null
     })(),
     bodyBatteryToday: bodyBattery7d.at(-1)?.value ?? null,
+    bodyBatteryTodayStart: mergedDays.get(endDateIso)?.bodyBatteryStart ?? null,
+    bodyBatteryTodayPeak: mergedDays.get(endDateIso)?.bodyBatteryPeak ?? null,
+    bodyBatteryTodayEnd: mergedDays.get(endDateIso)?.bodyBatteryEnd ?? bodyBattery7d.at(-1)?.value ?? null,
     bodyBatteryTodaySource: bodyBattery7d.at(-1)?.source ?? 'none',
     bodyBatteryTodayBalance: bodyBattery7d.at(-1)?.fallbackBalance ?? null,
     bodyBattery7d,

@@ -1,4 +1,5 @@
 import type { GarminDailyMetricsRow } from '@/lib/garminWellnessExtractor'
+import { clampBodyBattery } from '@/lib/garmin/bodyBatteryTimeSeries'
 
 export interface GarminBodyBatterySample {
   timestamp: string
@@ -53,8 +54,8 @@ function resolveSampleTimestamp(sample: Record<string, unknown>, fallbackDate: s
   return `${fallbackDate}T12:${String(index % 60).padStart(2, '0')}:00.000Z`
 }
 
-function clampBodyBattery(value: number): number {
-  return Math.max(0, Math.min(100, Math.round(value)))
+function clampBodyBatteryValue(value: number): number {
+  return clampBodyBattery(value)
 }
 
 export function extractGarminBodyBatteryTimeseries(
@@ -65,16 +66,42 @@ export function extractGarminBodyBatteryTimeseries(
   for (const row of rows) {
     const raw = asRecord(row.raw_json)
     const dailiesEntries = asArray(raw.dailies)
+    const stressDetailsEntries = asArray(raw.stressDetails)
     const fallbackDate = row.date
 
-    const directDailyValue = toNumber(row.body_battery)
-    if (directDailyValue != null) {
-      const timestamp = `${fallbackDate}T12:00:00.000Z`
+    const storedEnd = toNumber(row.body_battery_end) ?? toNumber(row.body_battery)
+    if (storedEnd != null) {
+      const timestamp = `${fallbackDate}T23:59:00.000Z`
       samples.set(timestamp, {
         timestamp,
-        value: clampBodyBattery(directDailyValue),
+        value: clampBodyBatteryValue(storedEnd),
         source: 'daily',
       })
+    }
+
+    for (const entry of stressDetailsEntries) {
+      const record = asRecord(entry)
+      const startTimeSeconds = toNumber(record.startTimeInSeconds)
+      const timeOffsetMap = record.timeOffsetBodyBatteryValues
+      if (!timeOffsetMap || typeof timeOffsetMap !== 'object' || Array.isArray(timeOffsetMap)) continue
+
+      const dayStartSeconds =
+        startTimeSeconds ??
+        Math.floor(Date.parse(`${fallbackDate}T00:00:00.000Z`) / 1000)
+      if (!Number.isFinite(dayStartSeconds)) continue
+
+      for (const [offsetKey, rawValue] of Object.entries(timeOffsetMap as Record<string, unknown>)) {
+        const offset = Number(offsetKey)
+        const value = toNumber(rawValue)
+        if (!Number.isFinite(offset) || value == null) continue
+
+        const timestamp = new Date((dayStartSeconds + offset) * 1000).toISOString()
+        samples.set(timestamp, {
+          timestamp,
+          value: clampBodyBatteryValue(value),
+          source: 'timeseries',
+        })
+      }
     }
 
     for (const entry of dailiesEntries) {
@@ -87,7 +114,7 @@ export function extractGarminBodyBatteryTimeseries(
         const timestamp = resolveSampleTimestamp(record, fallbackDate, 0)
         samples.set(timestamp, {
           timestamp,
-          value: clampBodyBattery(directFromDaily),
+          value: clampBodyBatteryValue(directFromDaily),
           source: 'daily',
         })
       }
@@ -111,7 +138,7 @@ export function extractGarminBodyBatteryTimeseries(
           const timestamp = resolveSampleTimestamp(sample, fallbackDate, index)
           samples.set(timestamp, {
             timestamp,
-            value: clampBodyBattery(value),
+            value: clampBodyBatteryValue(value),
             source: 'timeseries',
           })
         })

@@ -9,6 +9,9 @@ import { clampScore, formatShortDate, type DailyValuePoint } from "@/lib/garminD
 
 interface GarminBodyBatteryCardProps {
   todayValue: number | null
+  todayStart: number | null
+  todayPeak: number | null
+  todayEnd: number | null
   todaySource: "direct" | "balance" | "none"
   fallbackBalance: number | null
   trend7d: DailyValuePoint[]
@@ -20,6 +23,9 @@ interface GarminBodyBatteryCardProps {
 
 export function GarminBodyBatteryCard({
   todayValue,
+  todayStart,
+  todayPeak,
+  todayEnd,
   todaySource,
   fallbackBalance,
   trend7d,
@@ -28,7 +34,8 @@ export function GarminBodyBatteryCard({
   onRefresh,
   isRefreshing = false,
 }: GarminBodyBatteryCardProps) {
-  const score = todayValue != null ? clampScore(todayValue) : null
+  const score = todayEnd != null ? clampScore(todayEnd) : todayValue != null ? clampScore(todayValue) : null
+  const hasDailySummary = todayStart != null || todayPeak != null || todayEnd != null
   const fallbackLabel =
     todaySource === "balance" && fallbackBalance != null
       ? `Net ${fallbackBalance >= 0 ? "+" : ""}${fallbackBalance.toFixed(0)}`
@@ -49,6 +56,22 @@ export function GarminBodyBatteryCard({
         <p className="text-sm text-muted-foreground">
           Today&apos;s level may indicate available energy. Consider easier work if this stays low.
         </p>
+        {hasDailySummary ? (
+          <div className="grid grid-cols-3 gap-2 rounded-md border border-slate-200 bg-slate-50 p-2 text-center text-xs">
+            <div>
+              <p className="text-muted-foreground">Start</p>
+              <p className="text-sm font-semibold">{todayStart ?? "n/a"}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Peak</p>
+              <p className="text-sm font-semibold">{todayPeak ?? "n/a"}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">End</p>
+              <p className="text-sm font-semibold">{todayEnd ?? score ?? "n/a"}</p>
+            </div>
+          </div>
+        ) : null}
         {fallbackLabel ? (
           <p className="text-xs text-muted-foreground">
             Direct Body Battery was unavailable. Showing wellness balance fallback: {fallbackLabel}.
@@ -58,6 +81,7 @@ export function GarminBodyBatteryCard({
         <Badge variant="secondary" className="text-xs">
           {confidenceBadge}
         </Badge>
+        <p className="text-[11px] text-muted-foreground">Body Battery metrics provided by Garmin.</p>
 
         <div className="h-24 w-full" data-testid="garmin-body-battery-chart">
           <ResponsiveContainer width="100%" height="100%">

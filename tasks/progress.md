@@ -3,14 +3,14 @@
 Project: RunSmart Web
 Status: Active
 Current Phase: Garmin production enablement (web/backend audit + hardening)
-Active Story: Garmin worker-RPC grant lockdown migration (written, awaiting founder approval to apply)
-Last Completed Story: Garmin production-enablement audit (2026-06-21): cleared stranded branch fix/garmin-ios-branch-fixes (fully landed via PR #94, deleted local), confirmed Gate 1 privacy policy live in code, webhook async-200 + deregistration handler verified, table grants confirmed scoped
-Next Recommended Story: Founder approval to apply migration 20260621000000_restrict_garmin_worker_rpc_grants.sql; then manual Gate 2/3/4 portal+email tasks (see tasks/work-pack-garmin-gate-1-4.md)
-Estimated Completion: Web/backend code is production-ready; remaining gates are Garmin-portal/email/manual founder tasks
-Blockers: Migration apply needs founder "yes" (no DB push without approval). Garmin Production approval is external (~2-4 weeks after submission).
-Risks: Worker RPCs (claim/requeue/fail_garmin_import_job) are SECURITY DEFINER and PUBLIC-executable until the lockdown migration is applied; SECURITY DEFINER functions also lack set search_path (noted follow-up)
-Last Validation: 15/15 Garmin route tests pass (webhook, activities, sleep) via npx vitest in v0/ on 2026-06-21. Migration not yet applied.
-Latest QA Report: —
+Active Story: Founder review of Gate 1-4 evidence package before sending to Marc Lussi (hello@runsmart.ai); decision pending on "Apply for Production Key" given 2 Partner Verification coverage gaps
+Last Completed Story: Gate 4 QA fix (2026-06-22) — caught screenshot 3 (`03-garmin-connected-state.png`) showing the wrong state (Disconnected instead of Connected) due to stale app-container state carrying over between simulator launches; re-captured clean, re-zipped, patched `docs/garmin-application/scripts/capture-gate4-ios-screenshots.sh` to uninstall/reinstall before that shot so it can't regress. All 5 Gate 4 screenshots now visually verified correct.
+Next Recommended Story: Founder reviews `docs/garmin-application/10-MARC-LUSSI-GATE-1-4-EMAIL-DRAFT.md` and zip, then sends from hello@runsmart.ai (email sending is explicitly founder-only, not automated). Separately: founder decision needed on whether to click "Apply for Production Key" in Garmin API Tools now (Active User/HTTP/Ping/Pull/Setup all pass; only GC_ACTIVITY_UPDATE + USER_DEREG coverage remain unfilled and can't be synthetically generated).
+Estimated Completion: Web/backend + DB migration + Gate 2/3 portal verification + Gate 4 screenshots all complete. Remaining: founder email send, optional shot 2 device retake, Production Key application decision.
+Blockers: Email send and Production Key click are founder-only actions (not automated). Garmin Production approval is external (~2-4 weeks after submission) once requested.
+Risks: Migration drift — production has ~26 applied Supabase migrations with no matching file in v0/supabase/migrations/ (separate finding, not blocking Garmin work, needs a dedicated cleanup session)
+Last Validation: 2026-06-22 — Gate 2 Partner Verification: Endpoint Setup/Active User(3,req 2)/HTTP/Ping/Pull all PASS; Gate 3 team audit PASS (single non-freemail account); Gate 4 all 5 screenshots visually re-verified after fixing shot 3
+Latest QA Report: Gate 4 screenshot defect found and fixed same-session (see Last Completed Story)
 
 <!--
 Seeded 2026-06-12 per Agentic OS MANUAL.md "How to make a project reach High confidence"
@@ -22,3 +22,4 @@ Note found during seeding: v0/node_modules was inconsistent with package-lock.js
 (eslint-scope missing, lint crashed). Fixed with npm ci on 2026-06-12. If lint crashes
 with "Cannot find module", run npm ci in v0/ first.
 -->
+Last Updated: 2026-06-23
