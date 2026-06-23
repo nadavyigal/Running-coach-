@@ -88,6 +88,7 @@ export function extractGarminBodyBatteryTimeseries(
       const dayStartSeconds =
         startTimeSeconds ??
         Math.floor(Date.parse(`${fallbackDate}T00:00:00.000Z`) / 1000)
+      if (!Number.isFinite(dayStartSeconds)) continue
 
       for (const [offsetKey, rawValue] of Object.entries(timeOffsetMap as Record<string, unknown>)) {
         const offset = Number(offsetKey)

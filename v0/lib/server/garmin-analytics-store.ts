@@ -306,12 +306,27 @@ function buildDailyMetricsRows(input: {
     metric.stress =
       pickNumber(stressDetail, ['stressLevel', 'averageStressLevel', 'stressLevelValue']) ?? metric.stress
 
+    // A day can have multiple stressDetails entries (e.g. multiple sync segments); merge
+    // extremes across all of them instead of letting the last-processed entry win.
     const bodyBatterySummary = extractBodyBatteryDailySummary(stressDetail.timeOffsetBodyBatteryValues)
-    if (bodyBatterySummary.start != null) metric.bodyBatteryStart = bodyBatterySummary.start
-    if (bodyBatterySummary.peak != null) metric.bodyBatteryPeak = bodyBatterySummary.peak
+    if (bodyBatterySummary.start != null) {
+      metric.bodyBatteryStart =
+        metric.bodyBatteryStart == null
+          ? bodyBatterySummary.start
+          : Math.min(metric.bodyBatteryStart, bodyBatterySummary.start)
+    }
+    if (bodyBatterySummary.peak != null) {
+      metric.bodyBatteryPeak =
+        metric.bodyBatteryPeak == null
+          ? bodyBatterySummary.peak
+          : Math.max(metric.bodyBatteryPeak, bodyBatterySummary.peak)
+    }
     if (bodyBatterySummary.end != null) {
-      metric.bodyBatteryEnd = bodyBatterySummary.end
-      metric.bodyBattery = bodyBatterySummary.end
+      metric.bodyBatteryEnd =
+        metric.bodyBatteryEnd == null
+          ? bodyBatterySummary.end
+          : Math.max(metric.bodyBatteryEnd, bodyBatterySummary.end)
+      metric.bodyBattery = metric.bodyBatteryEnd
     }
 
     addRawDataset(metric, 'stressDetails', stressDetail)
