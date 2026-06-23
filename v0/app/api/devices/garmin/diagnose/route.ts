@@ -194,7 +194,7 @@ async function runBackendReadinessProbe(): Promise<BackendReadinessResult> {
     {
       name: 'garmin_daily_metrics_body_battery_columns',
       table: 'garmin_daily_metrics',
-      select: 'body_battery,body_battery_charged,body_battery_drained,body_battery_balance,raw_json',
+      select: 'body_battery,body_battery_start,body_battery_peak,body_battery_end,body_battery_charged,body_battery_drained,body_battery_balance,raw_json',
     },
     {
       name: 'garmin_activities_telemetry_columns',

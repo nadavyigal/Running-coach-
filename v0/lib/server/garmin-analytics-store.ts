@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { extractBodyBatteryDailySummary } from '@/lib/garmin/bodyBatteryTimeSeries'
 import type { GarminDatasetKey } from '@/lib/server/garmin-export-store'
 import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -57,6 +58,9 @@ interface DailyMetricAccumulator {
   restingHr: number | null
   stress: number | null
   bodyBattery: number | null
+  bodyBatteryStart: number | null
+  bodyBatteryPeak: number | null
+  bodyBatteryEnd: number | null
   bodyBatteryCharged: number | null
   bodyBatteryDrained: number | null
   bodyBatteryBalance: number | null
@@ -158,6 +162,9 @@ function getOrCreateDailyMetric(map: Map<string, DailyMetricAccumulator>, date: 
     restingHr: null,
     stress: null,
     bodyBattery: null,
+    bodyBatteryStart: null,
+    bodyBatteryPeak: null,
+    bodyBatteryEnd: null,
     bodyBatteryCharged: null,
     bodyBatteryDrained: null,
     bodyBatteryBalance: null,
@@ -298,6 +305,15 @@ function buildDailyMetricsRows(input: {
     const metric = getOrCreateDailyMetric(byDate, date)
     metric.stress =
       pickNumber(stressDetail, ['stressLevel', 'averageStressLevel', 'stressLevelValue']) ?? metric.stress
+
+    const bodyBatterySummary = extractBodyBatteryDailySummary(stressDetail.timeOffsetBodyBatteryValues)
+    if (bodyBatterySummary.start != null) metric.bodyBatteryStart = bodyBatterySummary.start
+    if (bodyBatterySummary.peak != null) metric.bodyBatteryPeak = bodyBatterySummary.peak
+    if (bodyBatterySummary.end != null) {
+      metric.bodyBatteryEnd = bodyBatterySummary.end
+      metric.bodyBattery = bodyBatterySummary.end
+    }
+
     addRawDataset(metric, 'stressDetails', stressDetail)
   }
 
@@ -454,6 +470,9 @@ export async function persistGarminSyncSnapshot(input: PersistGarminSyncInput): 
       resting_hr: row.restingHr,
       stress: row.stress,
       body_battery: row.bodyBattery,
+      body_battery_start: row.bodyBatteryStart,
+      body_battery_peak: row.bodyBatteryPeak,
+      body_battery_end: row.bodyBatteryEnd,
       body_battery_charged: row.bodyBatteryCharged,
       body_battery_drained: row.bodyBatteryDrained,
       body_battery_balance: row.bodyBatteryBalance,

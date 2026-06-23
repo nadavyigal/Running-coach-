@@ -1,3 +1,7 @@
+import {
+  extractBodyBatteryDailySummary,
+} from '@/lib/garmin/bodyBatteryTimeSeries'
+
 export interface GarminNormalizedDailyMetric {
   user_id: number
   auth_user_id: string | null
@@ -9,6 +13,9 @@ export interface GarminNormalizedDailyMetric {
   resting_hr: number | null
   stress: number | null
   body_battery: number | null
+  body_battery_start: number | null
+  body_battery_peak: number | null
+  body_battery_end: number | null
   body_battery_charged: number | null
   body_battery_drained: number | null
   body_battery_balance: number | null
@@ -67,6 +74,14 @@ export function normalizeGarminDailyMetric(input: {
       ? bodyBatteryCharged - bodyBatteryDrained
       : null)
 
+  const bodyBatterySummary = extractBodyBatteryDailySummary(record.timeOffsetBodyBatteryValues)
+  const bodyBatteryEnd =
+    getNumber(record.body_battery_end) ??
+    getNumber(record.body_battery) ??
+    getNumber(record.bodyBattery) ??
+    getNumber(record.bodyBatteryMostRecentValue) ??
+    bodyBatterySummary.end
+
   return {
     user_id: input.userId,
     auth_user_id: input.authUserId ?? null,
@@ -87,8 +102,10 @@ export function normalizeGarminDailyMetric(input: {
           0
       ) || null,
     stress: getNumber(record.stress) ?? getNumber(record.stressLevel) ?? getNumber(record.averageStressLevel),
-    body_battery:
-      getNumber(record.body_battery) ?? getNumber(record.bodyBattery) ?? getNumber(record.bodyBatteryMostRecentValue),
+    body_battery: bodyBatteryEnd,
+    body_battery_start: getNumber(record.body_battery_start) ?? bodyBatterySummary.start,
+    body_battery_peak: getNumber(record.body_battery_peak) ?? bodyBatterySummary.peak,
+    body_battery_end: bodyBatteryEnd,
     body_battery_charged: bodyBatteryCharged,
     body_battery_drained: bodyBatteryDrained,
     body_battery_balance: bodyBatteryBalance,
