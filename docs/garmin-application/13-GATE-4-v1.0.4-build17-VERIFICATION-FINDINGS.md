@@ -60,8 +60,8 @@ Install **1.0.4 (17)** via TestFlight/Xcode, then confirm:
 - [ ] Health app HRV **Data Sources & Access** list recorded (see section a)
 - [ ] Today HRV card: **"Apple Health"** when HealthKit-sourced; **"Garmin"** only for Garmin API or Garmin-via-HealthKit
 - [ ] Recovery dashboard HRV tile: same attribution rule
-- [ ] Profile → Connected → **Garmin Wellness** tile opens wellness screen (real entry point, WP-15)
-- [ ] Profile → Garmin Connect + Garmin Wellness: neutral header icon, visible Garmin attribution
+- [x] Simulator: Profile → Connected → **Garmin Wellness** tile opens wellness screen (demo mode, WP-15, 2026-06-24)
+- [ ] Profile → Garmin Connect + Garmin Wellness: neutral header icon, visible Garmin attribution (founder device)
 - [ ] Report tab: `· Garmin` plain text on imported runs
 
 ---
