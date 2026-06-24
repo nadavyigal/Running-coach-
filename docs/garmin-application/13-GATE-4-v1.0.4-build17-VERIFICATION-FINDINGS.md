@@ -35,7 +35,7 @@ Third-party articles disagree on whether Garmin writes HRV to HealthKit; **the H
 | 03 | `03-garmin-connected-state.png` | **PASS** | Neutral icon + **Connected** + last sync timestamp |
 | 04 | `04-garmin-imported-runs.png` | **PASS** | Run rows show plain gray `· Garmin` metadata — **no green Garmin pill** |
 | 05 | `05-garmin-recovery-analytics.png` | **PASS** (partial) | "Garmin" under RECOVERY DASHBOARD; HRV tile shows value but **HRV "Garmin" attribution is below the fold** in portrait capture |
-| 06 | `06-garmin-wellness.png` | **PASS** (partial) | Neutral header icon + "Garmin" under GARMIN WELLNESS; **footer line** *"Insights derived in part from Garmin device-sourced data."* **requires scroll** — present in code (`GarminWellnessViews.swift`) but not visible in full-screen capture |
+| 06 | `06-garmin-wellness.png` | **PASS** (partial) | Neutral header icon + "Garmin" under GARMIN WELLNESS; **footer line** *"Insights derived in part from Garmin device-sourced data."* **requires scroll** — present in code (`GarminWellnessViews.swift`) but not visible in full-screen capture. **Entry point (2026-06-24):** real users reach this screen via **Profile → Connected → Garmin Wellness** tile (WP-15); screenshot mode remains a secondary capture path only |
 
 Demo/preview data intentionally uses `hrvSource: .garmin` for recovery surfaces, so production attribution on those tiles should read **"Garmin"** when demo Garmin data is active.
 
@@ -60,6 +60,7 @@ Install **1.0.4 (17)** via TestFlight/Xcode, then confirm:
 - [ ] Health app HRV **Data Sources & Access** list recorded (see section a)
 - [ ] Today HRV card: **"Apple Health"** when HealthKit-sourced; **"Garmin"** only for Garmin API or Garmin-via-HealthKit
 - [ ] Recovery dashboard HRV tile: same attribution rule
+- [ ] Profile → Connected → **Garmin Wellness** tile opens wellness screen (real entry point, WP-15)
 - [ ] Profile → Garmin Connect + Garmin Wellness: neutral header icon, visible Garmin attribution
 - [ ] Report tab: `· Garmin` plain text on imported runs
 
