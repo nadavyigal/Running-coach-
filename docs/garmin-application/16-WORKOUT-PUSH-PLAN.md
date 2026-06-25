@@ -1,5 +1,15 @@
 # Plan: Garmin Workout-Push (Training API) — D1 = BUILD
 
+> **PARKED 2026-06-25.** Founder ran this plan in a Cursor session; the resulting spec confirmed
+> the real blocker is Garmin's Training API workout-schema contract (endpoint URLs, payload shape,
+> sport-type enum) is not in any public doc the founder has access to — closing this gap requires
+> directly petitioning Garmin Partner Services, the same team gatekeeping Production approval. Not
+> worth blocking the Gate-4 reply on. **Decision: drop Training API from the Garmin Developer
+> Portal scope now (import-only product), revisit workout-push once RunSmart has enough traffic to
+> justify reopening that conversation with Garmin.** This file and the Cursor-session spec are kept
+> as reference for that future attempt, not deleted. The Garmin reply going out now states
+> RunSmart is import-only and Training API is being removed from scope.
+
 > Run this in a new session inside `/Users/nadavyigal/Documents/RunSmart`. This is a plan to
 > execute via `superpowers:brainstorming` first, then `superpowers:writing-plans` /
 > `superpowers:test-driven-development` — do not start writing implementation code before the
