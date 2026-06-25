@@ -46,19 +46,18 @@ What changed since our last submission:
    • GC_ACTIVITY_UPDATE: resolved organically — we've now received and processed multiple real
      activity-update webhook deliveries from connected users over the past three weeks.
    • USER_DEREG: still open. No user has disconnected their Garmin account yet, so we haven't had
-     a live deregistration event to demonstrate receipt against. We're monitoring for one and will
-     confirm as soon as it clears, or can trigger a controlled test disconnect if that's the
-     faster path for you — let us know which you'd prefer.
+     a live deregistration event to demonstrate receipt against. We're monitoring for one
+     organically and will confirm as soon as it clears.
 
-3. Training/Courses API — removing from scope:
+3. Training/Courses API — requesting your guidance:
    RunSmart is an import-only product today: we read activity, health, and wellness data from
-   Garmin Connect, and we do not write workouts, courses, or any other data back to a Garmin
-   device. We don't have a transfer screenshot to provide because there's no transfer
-   functionality in the product. Rather than build that out solely to produce a screenshot, we'd
-   like to remove Training API from our Developer Portal scope now and keep our enablement request
-   scoped to Health + Activity (import-only). We may revisit a workout-push feature once we have
-   more usage data to justify the investment, and would reapply for Training API access at that
-   point with a real implementation to demonstrate.
+   Garmin Connect, and we do not currently write workouts, courses, or any other data back to a
+   Garmin device. We don't have a transfer screenshot to provide because that functionality isn't
+   built yet. We're weighing whether to build real workout-push to produce a genuine transfer
+   screenshot, or to drop Training API from our scope for now and request it again once we build
+   that feature. Given what you've seen of our use case, which would you recommend — is there a
+   lighter-weight way to demonstrate Training API compliance short of a full transfer, or is
+   removing it from scope until we build the feature the cleaner path on your end?
 
 Current state, otherwise unchanged from our June 22 evidence:
    • Gate 1 (Legal): privacy policy + OpenAI disclosure, live at
@@ -84,9 +83,9 @@ nadav.yigal@runsmart-ai.com
 ## Founder checklist before send
 
 - [ ] Re-zip the 6 current Gate-4 screenshots (corrected 01/03/04/05 + new Garmin Wellness shot 06) into `runsmart-garmin-screenshots-ios-2026-06-25.zip` — confirm filename matches the body text above
-- [ ] Confirm v1.0.4 (build 17) is genuinely the live App Store version before sending (done — founder confirmed 2026-06-25 via the App Store app itself)
-- [ ] Decide USER_DEREG path: wait for an organic disconnect, or trigger a controlled test disconnect from your own connected account before sending (your call — either is honest, pick whichever you want to commit to in the email)
-- [ ] In the Garmin Developer Portal, actually remove Training API from the app's enabled API scope (manual portal action — not something I can do from here) so the portal state matches what this email claims
+- [x] Confirm v1.0.4 (build 17) is genuinely the live App Store version before sending — founder confirmed 2026-06-25 via the App Store app itself
+- [x] USER_DEREG path: wait for an organic disconnect, do not trigger a controlled test (founder decision 2026-06-25)
+- [x] Training API: do NOT remove from Developer Portal scope yet — ask Elena Kononova for her recommendation first (founder decision 2026-06-25, reflected in body point 3 above)
 - [ ] Send as a reply in the existing Elena Kononova thread (ticket 213145/213165), not a new email
 
 ---
