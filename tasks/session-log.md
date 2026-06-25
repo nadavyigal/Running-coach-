@@ -1,5 +1,19 @@
 # Session Log
 
+## 2026-06-24 - WP-14 RunSmart status + Garmin reply reconciliation
+
+### Task Summary
+Aligned RunSmart Web `tasks/progress.md` with reconciled iOS App Store state (EXD-014).
+
+### Evidence Used
+- RunSmart iOS `tasks/progress.md`: LIVE v1.0.3 (build 16) since 2026-06-19; v1.0.4 (17) submitted 2026-06-24
+- Agentic OS groundTruth: App Store LIVE, PostHog 12 users/7d for RunSmart
+
+### Garmin Reply Decision
+**Still blocked** on iOS v1.0.4 (build 17) Apple approval. Web/backend Gate-4 work complete; reply waits on live build matching evidence package.
+
+---
+
 ## 2026-05-12
 
 ### Task Summary
