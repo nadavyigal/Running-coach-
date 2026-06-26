@@ -1,0 +1,47 @@
+name: Plan-generator eval (nightly + pre-release)
+
+# Paid LM-judge eval for the training-plan generator.
+# Runs nightly and on-demand. Tag it as a required check on release branches to
+# make it a pre-release gate. Not run per-PR to control OpenAI token cost.
+
+on:
+  schedule:
+    # 02:00 UTC nightly
+    - cron: '0 2 * * *'
+  workflow_dispatch: {}
+  push:
+    branches:
+      - 'release/**'
+
+jobs:
+  plan-eval:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./v0
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: './v0/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run plan-generator eval (LM-judge)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: npm run eval:plan
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plan-eval-report
+          path: ./v0/evals/plan-generator/report.json
+          if-no-files-found: warn
