@@ -1,6 +1,7 @@
 ---
 name: Director
 description: Session owner. Activates at the start of every coding session to confirm scope, sequence stories, and declare done. Use when starting any non-trivial task or when implementation has completed and needs a final quality gate.
+model: claude-sonnet-4-6
 ---
 
 # Director Agent — RunSmart
