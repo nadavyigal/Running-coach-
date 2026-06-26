@@ -227,6 +227,7 @@ export function mapGarminPayloadToNormalizedActivity(
     polyline: getString(payload.polyline),
     lapSummaries,
     splitSummaries,
+    deviceName: getString(payload.deviceName),
     raw: payload,
   }
 }

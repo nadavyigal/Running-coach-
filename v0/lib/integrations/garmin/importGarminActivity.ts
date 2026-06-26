@@ -83,6 +83,7 @@ export async function importGarminActivity(params: {
         elevation_gain_m: params.activity.elevationGainMeters,
         calories: params.activity.calories,
         source: 'garmin_auto_sync',
+        device_name: params.activity.deviceName,
         raw_json: params.activity.raw,
         updated_at: new Date().toISOString(),
       },
@@ -91,6 +92,20 @@ export async function importGarminActivity(params: {
 
   if (activityError) {
     throw new Error(`Failed to upsert garmin_activities: ${activityError.message}`)
+  }
+
+  if (params.activity.deviceName) {
+    // Garmin only reports device identity on activity records, never on daily/wellness
+    // summaries - cache the most recently seen device on the connection row so Recovery
+    // dashboard and Garmin Wellness can still show a "Garmin [device model]" attribution.
+    const { error: deviceNameError } = await supabase
+      .from('garmin_connections')
+      .update({ device_name: params.activity.deviceName })
+      .eq('user_id', params.connection.userId)
+
+    if (deviceNameError) {
+      throw new Error(`Failed to update garmin_connections.device_name: ${deviceNameError.message}`)
+    }
   }
 
   const heuristicDuplicate = await findHeuristicDuplicate({

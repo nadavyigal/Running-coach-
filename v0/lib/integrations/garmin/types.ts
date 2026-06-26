@@ -112,6 +112,7 @@ export interface GarminNormalizedActivity {
   polyline: string | null
   lapSummaries: Array<Record<string, unknown>>
   splitSummaries: Array<Record<string, unknown>>
+  deviceName: string | null
   raw: Record<string, unknown>
 }
 

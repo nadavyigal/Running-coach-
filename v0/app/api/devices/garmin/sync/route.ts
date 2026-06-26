@@ -285,6 +285,7 @@ interface RunSmartActivity {
   splitSummaries: Record<string, unknown>[]
   intervalSummaries: Record<string, unknown>[]
   telemetry: Record<string, unknown>
+  deviceName: string | null
 }
 
 interface RunSmartSleepRecord {
@@ -826,6 +827,7 @@ function toRunSmartActivity(activity: Record<string, unknown>): RunSmartActivity
     splitSummaries,
     intervalSummaries,
     telemetry: activity,
+    deviceName: getString(activity.deviceName),
   }
 }
 
@@ -863,6 +865,7 @@ function mergeRunSmartActivities(base: RunSmartActivity, candidate: RunSmartActi
     lapSummaries: mergeTelemetryArrays(base.lapSummaries, candidate.lapSummaries),
     splitSummaries: mergeTelemetryArrays(base.splitSummaries, candidate.splitSummaries),
     intervalSummaries: mergeTelemetryArrays(base.intervalSummaries, candidate.intervalSummaries),
+    deviceName: candidate.deviceName ?? base.deviceName,
     telemetry:
       Object.keys(candidate.telemetry).length > Object.keys(base.telemetry).length
         ? candidate.telemetry
@@ -896,7 +899,7 @@ async function fetchRecentStoredGarminActivities(
   const { data, error } = await supabase
     .from('garmin_activities')
     .select(
-      'activity_id, start_time, sport, duration_s, distance_m, avg_hr, max_hr, avg_pace, elevation_gain_m, elevation_loss_m, max_speed_mps, avg_cadence_spm, max_cadence_spm, lap_summaries, split_summaries, interval_summaries, telemetry_json, calories, raw_json, updated_at'
+      'activity_id, start_time, sport, duration_s, distance_m, avg_hr, max_hr, avg_pace, elevation_gain_m, elevation_loss_m, max_speed_mps, avg_cadence_spm, max_cadence_spm, lap_summaries, split_summaries, interval_summaries, telemetry_json, calories, device_name, raw_json, updated_at'
     )
     .eq('user_id', userId)
     .order('updated_at', { ascending: false })
@@ -960,6 +963,7 @@ async function fetchRecentStoredGarminActivities(
         splitSummaries: asRecordArray(row.split_summaries),
         intervalSummaries: asRecordArray(row.interval_summaries),
         telemetry: asRecord(row.telemetry_json),
+        deviceName: getString(row.device_name) ?? getString(raw.deviceName),
         __updatedAt: updatedAt,
       }
     })
