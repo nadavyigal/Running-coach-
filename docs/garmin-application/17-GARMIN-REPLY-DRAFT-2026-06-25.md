@@ -2,7 +2,7 @@
 
 **Send from:** nadav.yigal@runsmart-ai.com (reply, to preserve thread)
 **Reply to:** Elena Kononova thread (Garmin Connect Partner Services, ticket 213145/213165)
-**Status:** READY FOR FOUNDER REVIEW
+**Status:** SUPERSEDED 2026-06-26 — Marc rejected screenshots again before this was sent. See `20-GARMIN-REPLY-DRAFT-2026-06-26.md` for the current draft. Do not send this version.
 **Prepared:** 2026-06-25
 **Context:** Reply to Marc Lussi's 2026-06-22 rejection of screenshots 01/04/05 on brand grounds. All flagged issues fixed and verified live on the App Store (RunSmart iOS v1.0.4, build 17, confirmed live by founder 2026-06-25). This reply also resolves the Training/Courses API transfer-screenshot requirement by removing Training API from scope rather than building workout-push (see "Decision" note below).
 
