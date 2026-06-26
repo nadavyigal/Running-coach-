@@ -16,6 +16,7 @@
     "test:coverage:watch": "vitest --coverage --watch",
     "test:coverage:threshold": "vitest --coverage --run --coverage.thresholds.100",
     "test:summary": "node scripts/test-summary.js",
+    "eval:plan": "RUN_LIVE_EVAL=1 vitest run --config evals/plan-generator/vitest.eval.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
