@@ -25,6 +25,7 @@ interface GarminSyncActivity {
   splitSummaries?: Record<string, unknown>[]
   intervalSummaries?: Record<string, unknown>[]
   telemetry?: Record<string, unknown>
+  deviceName?: string | null
 }
 
 interface GarminSyncSleepRecord {
@@ -466,6 +467,7 @@ export async function persistGarminSyncSnapshot(input: PersistGarminSyncInput): 
       interval_summaries: asRecordArray(activity.intervalSummaries),
       calories: activity.calories,
       source: 'garmin_sync',
+      device_name: activity.deviceName ?? null,
       raw_json: activity,
       telemetry_json: asRecord(activity.telemetry),
       updated_at: nowIso,
@@ -512,6 +514,25 @@ export async function persistGarminSyncSnapshot(input: PersistGarminSyncInput): 
       .upsert(activityChunk, { onConflict: 'user_id,activity_id' })
     if (error) {
       throw new Error(`Failed to upsert garmin_activities: ${error.message}`)
+    }
+  }
+
+  // Garmin only reports device identity on activity records, never on daily/wellness
+  // summaries - cache the most recently seen device name on the connection row so Recovery
+  // dashboard and Garmin Wellness can attribute to a specific device, not just "Garmin".
+  const latestDeviceName = activityRows
+    .slice()
+    .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''))
+    .reverse()
+    .find((row) => row.device_name)?.device_name
+
+  if (latestDeviceName) {
+    const { error: deviceNameError } = await supabase
+      .from('garmin_connections')
+      .update({ device_name: latestDeviceName })
+      .eq('user_id', userId)
+    if (deviceNameError) {
+      throw new Error(`Failed to update garmin_connections.device_name: ${deviceNameError.message}`)
     }
   }
 
