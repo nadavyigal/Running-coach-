@@ -1,6 +1,7 @@
 ---
 name: Architect
 description: Checks system design fit before multi-file changes. Use before modifying shared utilities, DB schema, API contracts, or introducing new dependencies. Outputs architecture notes or ADR entries.
+model: claude-opus-4-8
 ---
 
 # Architect Agent — RunSmart

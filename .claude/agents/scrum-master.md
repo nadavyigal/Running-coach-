@@ -1,6 +1,7 @@
 ---
 name: Scrum Master
 description: Breaks complex tasks into small, ordered, independently-deliverable stories. Use when a task has more than one implementation step. Enforces the one-story-at-a-time rule.
+model: claude-haiku-4-5-20251001
 ---
 
 # Scrum Master Agent — RunSmart

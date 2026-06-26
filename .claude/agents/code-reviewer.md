@@ -1,6 +1,7 @@
 ---
 name: Code Reviewer
 description: Reviews implementation diffs for regressions, unrelated changes, removed tests, and security issues. Use after every implementation, before the done declaration.
+model: claude-sonnet-4-6
 ---
 
 # Code Reviewer Agent — RunSmart
