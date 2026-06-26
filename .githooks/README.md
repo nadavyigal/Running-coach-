@@ -11,3 +11,4 @@ git config core.hooksPath .githooks
 ```
 
 Bypass for a confirmed false positive: `git commit --no-verify`.
+# hooks active
