@@ -1,0 +1,47 @@
+#!/bin/bash
+# Git pre-commit hook — block commits that stage hardcoded secrets.
+#
+# Tool-agnostic: runs for every commit (Claude, Codex, manual git). Scans only
+# the ADDED lines of the staged diff for high-confidence secret shapes.
+# Activate once per clone:  git config core.hooksPath .githooks
+#
+# Bypass for a confirmed false positive:  git commit --no-verify
+
+ADDED=$(git diff --cached -U0 --no-color -- . ':(exclude)*lock*' ':(exclude)*.lock' 2>/dev/null \
+  | grep '^+' | grep -v '^+++' | sed 's/^+//')
+[ -z "$ADDED" ] && exit 0
+
+PATTERNS=(
+  'sk-ant-[A-Za-z0-9_-]{20,}'                 # Anthropic
+  'sk-proj-[A-Za-z0-9_-]{20,}'                # OpenAI project
+  'sk-[A-Za-z0-9]{32,}'                       # OpenAI classic
+  'AKIA[0-9A-Z]{16}'                          # AWS access key id
+  'AIza[0-9A-Za-z_-]{35}'                     # Google
+  'xox[baprs]-[0-9A-Za-z-]{10,}'              # Slack
+  '(sk|rk)_live_[0-9A-Za-z]{24,}'             # Stripe live
+  'ghp_[0-9A-Za-z]{36}'                       # GitHub PAT
+  '-----BEGIN [A-Z ]*PRIVATE KEY-----'        # private key
+  'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}' # JWT (e.g. Supabase service_role)
+)
+
+FOUND=0
+REPORT=""
+while IFS= read -r line; do
+  for pat in "${PATTERNS[@]}"; do
+    if echo "$line" | grep -qE -- "$pat"; then
+      masked=$(echo "$line" | sed -E "s/($pat)/[REDACTED-SECRET]/g" | cut -c1-100)
+      REPORT="${REPORT}  - ${masked}"$'\n'
+      FOUND=1
+      break
+    fi
+  done
+done <<< "$ADDED"
+
+if [ "$FOUND" -eq 1 ]; then
+  echo "pre-commit BLOCKED: this commit stages hardcoded secret(s):" >&2
+  printf '%s' "$REPORT" >&2
+  echo "Move the value to an environment variable / secret store and unstage it." >&2
+  echo "False positive? Re-run with: git commit --no-verify" >&2
+  exit 1
+fi
+exit 0
