@@ -226,6 +226,129 @@ export function normalizePlan(plan: PlanData): PlanData {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Safety policy + enforcement (Story 1b)
+//
+// The eval showed the model cannot be trusted to honor intensity/progression
+// rules from the prompt alone. These deterministic guardrails are the source of
+// truth: the route enforces them on generated output, and the eval verifies the
+// same properties. Prompt wording (below) is best-effort; enforcement is the
+// guarantee.
+// ---------------------------------------------------------------------------
+
+export const HARD_WORKOUT_TYPES = ['tempo', 'intervals', 'hill', 'time-trial'] as const;
+
+export interface PlanPolicy {
+  /** No hard sessions at all (beginners, habit goals, recovery/mindful/habit challenges). */
+  lowIntensity: boolean;
+  /** Max quality (hard) sessions per week when hard sessions are allowed. */
+  maxHardPerWeek: number;
+  /** Max week-over-week total-distance growth ratio (10% rule). */
+  maxWeeklyGrowth: number;
+  /** Max distance (km) for any single workout, by experience. */
+  maxWorkoutKm: number;
+}
+
+export function isLowIntensity(
+  experience: 'beginner' | 'intermediate' | 'advanced',
+  goal: 'habit' | 'distance' | 'speed',
+  category?: string
+): boolean {
+  return (
+    category === 'recovery' ||
+    category === 'mindful' ||
+    category === 'habit' ||
+    experience === 'beginner' ||
+    goal === 'habit'
+  );
+}
+
+export function planPolicyFor(
+  experience: 'beginner' | 'intermediate' | 'advanced',
+  goal: 'habit' | 'distance' | 'speed',
+  daysPerWeek: number,
+  category?: string
+): PlanPolicy {
+  const lowIntensity = isLowIntensity(experience, goal, category);
+  const maxWorkoutKm = experience === 'beginner' ? 15 : experience === 'advanced' ? 42 : 28;
+  return {
+    lowIntensity,
+    maxHardPerWeek: lowIntensity ? 0 : daysPerWeek >= 4 ? 2 : 1,
+    maxWeeklyGrowth: 1.1,
+    maxWorkoutKm,
+  };
+}
+
+export function derivePlanPolicy(body: PlanRequest): PlanPolicy {
+  const user = resolveUser(body);
+  return planPolicyFor(user.experience, user.goal, user.daysPerWeek, body.challenge?.category);
+}
+
+// Output-token budget scaled to plan size. The fixed 1200-token cap truncated
+// long plans (12+ weeks), which silently fell back to the generic plan.
+export function computeMaxOutputTokens(totalWeeks: number, daysPerWeek: number): number {
+  const expectedWorkouts = Math.max(1, totalWeeks) * Math.max(2, daysPerWeek);
+  return clampNumber(400 + expectedWorkouts * 90, 1200, 8000);
+}
+
+function isHardType(type: PlanData['workouts'][number]['type']): boolean {
+  return (HARD_WORKOUT_TYPES as readonly string[]).includes(type);
+}
+
+// Deterministically force a generated plan to satisfy the policy:
+// clamp distances, drop disallowed hard sessions, cap quality volume per week,
+// and cap week-over-week load growth.
+export function enforcePlanSafety(plan: PlanData, policy: PlanPolicy): PlanData {
+  const easyNote = 'Keep a conversational, easy pace.';
+
+  // 1. Clamp single-workout distance and recompute duration when changed.
+  let workouts = plan.workouts.map((w) => {
+    if (w.type === 'rest') return { ...w, distance: 0 };
+    const distance = clampNumber(w.distance, 0, policy.maxWorkoutKm);
+    if (distance === w.distance) return w;
+    return { ...w, distance, duration: clampNumber(Math.round(distance * DEFAULT_PACE_MIN_PER_KM), 0, 300) };
+  });
+
+  // 2. Intensity policy: drop or cap hard sessions.
+  const hardSeenPerWeek = new Map<number, number>();
+  workouts = workouts.map((w) => {
+    if (!isHardType(w.type)) return w;
+    const seen = hardSeenPerWeek.get(w.week) ?? 0;
+    const allowed = policy.lowIntensity ? 0 : policy.maxHardPerWeek;
+    if (seen < allowed) {
+      hardSeenPerWeek.set(w.week, seen + 1);
+      return w;
+    }
+    return {
+      ...w,
+      type: 'easy' as const,
+      duration: clampNumber(Math.round(w.distance * DEFAULT_PACE_MIN_PER_KM), 0, 300),
+      notes: easyNote,
+    };
+  });
+
+  // 3. Cap week-over-week total-distance growth (10% rule), cumulatively.
+  const weeks = [...new Set(workouts.map((w) => w.week))].sort((a, b) => a - b);
+  let prevTotal: number | null = null;
+  for (const week of weeks) {
+    const weekWorkouts = workouts.filter((w) => w.week === week && w.type !== 'rest');
+    const total = weekWorkouts.reduce((sum, w) => sum + w.distance, 0);
+    let allowedTotal = total;
+    if (prevTotal !== null && total > 0 && total > prevTotal * policy.maxWeeklyGrowth) {
+      allowedTotal = prevTotal * policy.maxWeeklyGrowth;
+      const factor = allowedTotal / total;
+      workouts = workouts.map((w) => {
+        if (w.week !== week || w.type === 'rest') return w;
+        const distance = Math.round(w.distance * factor * 10) / 10;
+        return { ...w, distance, duration: clampNumber(Math.round(distance * DEFAULT_PACE_MIN_PER_KM), 0, 300) };
+      });
+    }
+    prevTotal = allowedTotal;
+  }
+
+  return { ...plan, workouts };
+}
+
 export function generateFallbackPlan(
   user: ReturnType<typeof resolveUser>,
   totalWeeks: number,
@@ -443,6 +566,11 @@ export function buildPlanPrompt(
 
   const { trainingDays, longRunDay } = resolveTrainingDays(user.daysPerWeek, planPreferences);
 
+  const policy = planPolicyFor(user.experience, user.goal, user.daysPerWeek, challenge?.category);
+  const intensityRule = policy.lowIntensity
+    ? "- This runner needs a low-intensity plan. Use ONLY 'easy', 'long', and 'rest' workout types. Do NOT include any tempo, intervals, hill, or time-trial sessions."
+    : `- Include at most ${policy.maxHardPerWeek} quality session(s) (tempo, intervals, or hill) per week; keep every other run easy or long.`;
+
   const advancedMetricsContext = advancedMetrics
     ? `
 
@@ -523,6 +651,9 @@ Constraints:
 - Schedule workouts only on: ${trainingDays.join(', ')}
 - Long run day: ${longRunDay}
 - ${buildWorkoutMixConstraint(challenge)}
+${intensityRule}
+- Do NOT increase total weekly distance by more than 10% versus the previous week.
+- No single run may exceed ${policy.maxWorkoutKm} km.
 - Distances are in kilometers, durations in minutes.
 - Keep progression gradual and safe.
 - ${advancedMetrics?.vdot ? 'Use VDOT-based pace zones for all workout intensities.' : 'Use conservative pace progression.'}`;

@@ -15,6 +15,9 @@ import {
   generateFallbackPlan,
   buildPlanPrompt,
   normalizePlan,
+  derivePlanPolicy,
+  enforcePlanSafety,
+  computeMaxOutputTokens,
 } from '@/lib/plan/plan-core';
 
 export const runtime = 'nodejs';
@@ -123,7 +126,7 @@ export async function POST(req: Request) {
         schema: PlanSchema,
         prompt,
         temperature: 0.7,
-        maxOutputTokens: 1200,
+        maxOutputTokens: computeMaxOutputTokens(totalWeeks, user.daysPerWeek),
       });
     });
 
@@ -156,7 +159,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       {
-        plan: normalizePlan(generated.object),
+        plan: enforcePlanSafety(normalizePlan(generated.object), derivePlanPolicy(body)),
         source: 'ai',
         requestId,
       },

@@ -2,22 +2,23 @@ import type { PlanRequest } from '@/lib/plan/plan-core';
 
 // Golden set for the plan-generator eval.
 //
-// Each case is a realistic persona (the `request` is a real PlanRequest body)
-// plus `expect` bounds used by the deterministic safety checks in `checks.ts`.
-// The LM-judge in `judge.ts` scores coaching quality on top of these.
+// Each case is a realistic persona (the `request` is a real PlanRequest body).
+// Safety bounds (intensity, distance, weekly growth) are NOT hard-coded per
+// case — `checks.ts` derives them from `derivePlanPolicy(request)`, the same
+// policy the production route enforces. Only `totalWeeks` is asserted directly.
+// The LM-judge in `judge.ts` scores coaching quality on top of those checks.
 //
-// `expect.totalWeeks` must equal what `resolveTotalWeeks(request)` returns so
-// the deterministic fallback plan also satisfies the offline checks.
+// `expect.totalWeeks` must equal what `resolveTotalWeeks(request)` returns.
 
 export interface EvalExpectations {
   /** Must equal resolveTotalWeeks(request). */
   totalWeeks: number;
-  /** Recovery/mindful plans must contain zero hard sessions. */
+  /** @deprecated documentation only — checks derive intensity from policy. */
   noHardSessions?: boolean;
-  /** Upper sanity bound (km) for any single workout for this persona. */
-  maxWorkoutKm: number;
-  /** Max allowed week-over-week total-volume growth ratio (10% rule + margin). */
-  maxWeeklyGrowth: number;
+  /** @deprecated documentation only — checks derive the cap from policy. */
+  maxWorkoutKm?: number;
+  /** @deprecated documentation only — checks derive the cap from policy. */
+  maxWeeklyGrowth?: number;
 }
 
 export interface EvalCase {

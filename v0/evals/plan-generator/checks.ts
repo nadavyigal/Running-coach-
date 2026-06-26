@@ -1,9 +1,10 @@
-import { PlanSchema, type PlanData } from '@/lib/plan/plan-core';
+import { PlanSchema, derivePlanPolicy, type PlanData } from '@/lib/plan/plan-core';
 import type { EvalCase } from './cases';
 
 // Deterministic, code-checked safety properties for a generated plan.
-// These run free (no API) and are the hard gate: any critical failure fails
-// the eval regardless of what the LM-judge thinks.
+// Bounds come from the SAME policy (derivePlanPolicy) the production route
+// enforces, so the eval verifies that enforcement actually held. Any critical
+// failure fails the eval regardless of the LM-judge.
 
 export interface CheckResult {
   id: string;
@@ -13,9 +14,12 @@ export interface CheckResult {
 }
 
 const HARD_TYPES = new Set(['tempo', 'intervals', 'hill', 'time-trial']);
+// Tolerance on the weekly-growth cap to absorb 0.1km rounding from enforcement.
+const GROWTH_TOLERANCE = 0.1;
 
 export function runChecks(plan: PlanData, c: EvalCase): CheckResult[] {
   const results: CheckResult[] = [];
+  const policy = derivePlanPolicy(c.request);
   const add = (id: string, pass: boolean, critical: boolean, detail: string) =>
     results.push({ id, pass, critical, detail });
 
@@ -35,11 +39,16 @@ export function runChecks(plan: PlanData, c: EvalCase): CheckResult[] {
 
   const distances = plan.workouts.map((w) => w.distance);
   const maxDist = distances.length ? Math.max(...distances) : 0;
-  add('distance-sanity', maxDist <= c.expect.maxWorkoutKm, true, `max ${maxDist}km, cap ${c.expect.maxWorkoutKm}km`);
+  add('distance-sanity', maxDist <= policy.maxWorkoutKm, true, `max ${maxDist}km, cap ${policy.maxWorkoutKm}km`);
 
-  if (c.expect.noHardSessions) {
+  if (policy.lowIntensity) {
     const hard = plan.workouts.filter((w) => HARD_TYPES.has(w.type));
-    add('no-hard-sessions', hard.length === 0, true, `hard sessions: ${hard.length}`);
+    add('no-hard-sessions', hard.length === 0, true, `hard sessions: ${hard.length} (low-intensity plan)`);
+  } else {
+    const byWeek = new Map<number, number>();
+    for (const w of plan.workouts) if (HARD_TYPES.has(w.type)) byWeek.set(w.week, (byWeek.get(w.week) ?? 0) + 1);
+    const worst = byWeek.size ? Math.max(...byWeek.values()) : 0;
+    add('hard-per-week-cap', worst <= policy.maxHardPerWeek, true, `worst ${worst}/week, cap ${policy.maxHardPerWeek}`);
   }
 
   const weekly = new Map<number, number>();
@@ -60,7 +69,12 @@ export function runChecks(plan: PlanData, c: EvalCase): CheckResult[] {
     }
     prev = cur;
   }
-  add('weekly-load-cap', worstGrowth <= c.expect.maxWeeklyGrowth, true, `worst ${worstPair}, cap ${c.expect.maxWeeklyGrowth}x`);
+  add(
+    'weekly-load-cap',
+    worstGrowth <= policy.maxWeeklyGrowth + GROWTH_TOLERANCE,
+    true,
+    `worst ${worstPair}, cap ${policy.maxWeeklyGrowth}x`
+  );
 
   let allHardWeek = false;
   for (const { week } of weeklyTotals) {

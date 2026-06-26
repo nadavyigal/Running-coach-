@@ -5,6 +5,9 @@ import {
   buildPlanPrompt,
   normalizePlan,
   generateFallbackPlan,
+  enforcePlanSafety,
+  derivePlanPolicy,
+  computeMaxOutputTokens,
   resolveUser,
   resolveTotalWeeks,
   type PlanData,
@@ -47,9 +50,10 @@ export async function generatePlanForEval(
       schema: PlanSchema,
       prompt,
       temperature: 0.7,
-      maxOutputTokens: 1200,
+      maxOutputTokens: computeMaxOutputTokens(totalWeeks, user.daysPerWeek),
     });
-    return { plan: normalizePlan(object as PlanData), source: 'ai' };
+    const safe = enforcePlanSafety(normalizePlan(object as PlanData), derivePlanPolicy(body));
+    return { plan: safe, source: 'ai' };
   } catch (err) {
     return {
       plan: generateFallbackPlan(user, totalWeeks, body.planPreferences, body.challenge),
