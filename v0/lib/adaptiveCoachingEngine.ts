@@ -3,6 +3,7 @@ import { generateObject } from 'ai';
 import { z } from 'zod';
 import { CoachingProfile, CoachingFeedback } from './db';
 import { dbUtils } from '@/lib/dbUtils';
+import { captureAIGeneration } from '@/lib/ai-observability';
 
 // Context interfaces
 export interface UserContext {
@@ -100,6 +101,7 @@ export class AdaptiveCoachingEngine {
     context: UserContext,
     options?: { throwOnError?: boolean }
   ): Promise<CoachingResponse> {
+    const responseStartedAt = Date.now();
     try {
       const profile = (await dbUtils.getCoachingProfile(userId)) ?? undefined;
       const adaptedPrompt = await this.adaptPromptToProfile(query, profile, context);
@@ -119,6 +121,21 @@ export class AdaptiveCoachingEngine {
         maxOutputTokens: 800,
       });
 
+      await captureAIGeneration({
+        traceName: 'chat',
+        distinctId: userId,
+        model: modelName,
+        input: adaptedPrompt,
+        output: result.object,
+        usage: (result as any).usage,
+        latencyMs: Date.now() - responseStartedAt,
+        properties: {
+          interaction_id: interactionId,
+          adaptive_coaching: true,
+          streaming: false,
+        },
+      });
+
       const response: CoachingResponse = {
         response: result.object.response,
         confidence: result.object.confidence,
@@ -135,6 +152,21 @@ export class AdaptiveCoachingEngine {
       return response;
     } catch (error) {
       console.error('Error generating personalized response:', error);
+      void captureAIGeneration({
+        traceName: 'chat',
+        distinctId: userId,
+        model:
+          process.env.CHAT_COACHING_MODEL ||
+          process.env.CHAT_DEFAULT_MODEL ||
+          'gpt-4o',
+        input: { query, context },
+        latencyMs: Date.now() - responseStartedAt,
+        error,
+        properties: {
+          adaptive_coaching: true,
+          streaming: false,
+        },
+      });
 
       if (options?.throwOnError) {
         throw error;
@@ -162,17 +194,19 @@ export class AdaptiveCoachingEngine {
     userId: number,
     context: UserContext
   ): Promise<AdaptiveRecommendation[]> {
+    const recommendationStartedAt = Date.now();
+    let recommendationPrompt = '';
+    const modelName =
+      process.env.CHAT_COACHING_MODEL ||
+      process.env.CHAT_DEFAULT_MODEL ||
+      'gpt-4o';
+
     try {
       const profile = (await dbUtils.getCoachingProfile(userId)) ?? undefined;
       const patterns = await dbUtils.getBehaviorPatterns(userId);
       const recentFeedback = await dbUtils.getCoachingFeedback(userId, 10);
       
-      const recommendationPrompt = this.buildRecommendationPrompt(profile, patterns, recentFeedback, context);
-
-      const modelName =
-        process.env.CHAT_COACHING_MODEL ||
-        process.env.CHAT_DEFAULT_MODEL ||
-        'gpt-4o';
+      recommendationPrompt = this.buildRecommendationPrompt(profile, patterns, recentFeedback, context);
       
       const result = await generateObject({
         model: openai(modelName),
@@ -180,6 +214,20 @@ export class AdaptiveCoachingEngine {
         prompt: recommendationPrompt,
         temperature: 0.6,
         maxOutputTokens: 900,
+      });
+
+      await captureAIGeneration({
+        traceName: 'chat',
+        distinctId: userId,
+        model: modelName,
+        input: recommendationPrompt,
+        output: result.object,
+        usage: (result as any).usage,
+        latencyMs: Date.now() - recommendationStartedAt,
+        properties: {
+          adaptive_recommendations: true,
+          streaming: false,
+        },
       });
 
       return result.object.recommendations.map(rec => ({
@@ -194,6 +242,18 @@ export class AdaptiveCoachingEngine {
       }));
     } catch (error) {
       console.error('Error generating adaptive recommendations:', error);
+      void captureAIGeneration({
+        traceName: 'chat',
+        distinctId: userId,
+        model: modelName,
+        input: recommendationPrompt || { context },
+        latencyMs: Date.now() - recommendationStartedAt,
+        error,
+        properties: {
+          adaptive_recommendations: true,
+          streaming: false,
+        },
+      });
       return [];
     }
   }

@@ -14,6 +14,7 @@ import {
   type WeeklyInsightInput,
 } from "@/lib/garminInsightBuilder"
 import { logger } from "@/lib/logger"
+import { captureAIGeneration } from "@/lib/ai-observability"
 import { getGarminOAuthState } from "@/lib/server/garmin-oauth-store"
 import { createAdminClient } from "@/lib/supabase/admin"
 
@@ -428,14 +429,32 @@ export async function generateInsightForUser(
     }
   }
 
+  const startedAt = Date.now()
+  const messages = [
+    { role: "system" as const, content: prompts.systemPrompt },
+    { role: "user" as const, content: enrichedUserPrompt },
+  ]
   const result = await generateText({
     model: openai(DEFAULT_MODEL),
-    messages: [
-      { role: "system", content: prompts.systemPrompt },
-      { role: "user", content: enrichedUserPrompt },
-    ],
+    messages,
     temperature: 0.35,
     maxOutputTokens: 280,
+  })
+
+  await captureAIGeneration({
+    traceName: "garmin-insights",
+    distinctId: request.userId,
+    model: DEFAULT_MODEL,
+    input: messages,
+    output: result.text,
+    usage: (result as any).usage,
+    latencyMs: Date.now() - startedAt,
+    properties: {
+      insight_type: request.insightType,
+      activity_id: request.activityId,
+      streaming: false,
+      persisted_insight: true,
+    },
   })
 
   return {

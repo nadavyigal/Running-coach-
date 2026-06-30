@@ -19,6 +19,7 @@ import {
   enforcePlanSafety,
   computeMaxOutputTokens,
 } from '@/lib/plan/plan-core';
+import { captureAIGeneration } from '@/lib/ai-observability';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,6 +40,7 @@ function getClientIP(request: Request): string {
 
 export async function POST(req: Request) {
   const requestId = `plan_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const startedAt = Date.now();
 
   // Rate limiting check (10 requests per minute for AI routes)
   const clientIP = getClientIP(req);
@@ -87,10 +89,10 @@ export async function POST(req: Request) {
     const fallbackPlan = generateFallbackPlan(user, totalWeeks, body.planPreferences, body.challenge);
 
     let advancedMetrics: PersonalizationContext['advancedMetrics'] | undefined;
+    const resolvedUserId = body.userContext?.userId ?? body.userId;
+    const parsedUserId =
+      typeof resolvedUserId === 'string' ? parseInt(resolvedUserId, 10) : resolvedUserId;
     if (body.userContext?.userId || body.userId) {
-      const resolvedUserId = body.userContext?.userId ?? body.userId;
-      const parsedUserId =
-        typeof resolvedUserId === 'string' ? parseInt(resolvedUserId, 10) : resolvedUserId;
       if (typeof parsedUserId === 'number' && Number.isFinite(parsedUserId)) {
         try {
           const context = await PersonalizationContextBuilder.build(parsedUserId);
@@ -120,17 +122,37 @@ export async function POST(req: Request) {
       body.goals
     );
 
+    const modelName = 'gpt-4o';
+    const maxOutputTokens = computeMaxOutputTokens(totalWeeks, user.daysPerWeek);
+
     const result = await withSecureOpenAI(async () => {
       return generateObject({
-        model: openai('gpt-4o'),
+        model: openai(modelName),
         schema: PlanSchema,
         prompt,
         temperature: 0.7,
-        maxOutputTokens: computeMaxOutputTokens(totalWeeks, user.daysPerWeek),
+        maxOutputTokens,
       });
     });
 
     if (!result.success || !result.data) {
+      await captureAIGeneration({
+        traceName: 'generate-plan',
+        distinctId: typeof parsedUserId === 'number' ? parsedUserId : user.id,
+        model: modelName,
+        input: prompt,
+        latencyMs: Date.now() - startedAt,
+        error: result.error?.message || 'AI service unavailable',
+        properties: {
+          request_id: requestId,
+          streaming: false,
+          total_weeks: totalWeeks,
+          plan_type: body.planType,
+          target_distance: body.targetDistance,
+          max_output_tokens: maxOutputTokens,
+        },
+      });
+
       return NextResponse.json(
         {
           plan: fallbackPlan,
@@ -156,6 +178,24 @@ export async function POST(req: Request) {
         { status: 502 }
       );
     }
+
+    await captureAIGeneration({
+      traceName: 'generate-plan',
+      distinctId: typeof parsedUserId === 'number' ? parsedUserId : user.id,
+      model: modelName,
+      input: prompt,
+      output: generated.object,
+      usage: (result.data as any).usage,
+      latencyMs: Date.now() - startedAt,
+      properties: {
+        request_id: requestId,
+        streaming: false,
+        total_weeks: totalWeeks,
+        plan_type: body.planType,
+        target_distance: body.targetDistance,
+        max_output_tokens: maxOutputTokens,
+      },
+    });
 
     return NextResponse.json(
       {

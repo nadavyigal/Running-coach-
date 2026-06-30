@@ -6,6 +6,7 @@ import { buildGarminContext, buildGarminContextSummary } from "@/lib/enhanced-ai
 import { logger } from "@/lib/logger"
 import { rateLimiter, securityConfig } from "@/lib/security.config"
 import { securityMonitor } from "@/lib/security.monitoring"
+import { captureAIGeneration } from "@/lib/ai-observability"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -63,6 +64,9 @@ function toChatMessage(input: { role?: unknown; content?: unknown }): ChatInputM
 }
 
 export async function POST(req: Request): Promise<Response> {
+  const requestId = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  const startedAt = Date.now()
+
   if (!process.env.OPENAI_API_KEY?.trim()) {
     return NextResponse.json({ error: "OpenAI API key not configured", fallback: true }, { status: 503 })
   }
@@ -140,15 +144,49 @@ export async function POST(req: Request): Promise<Response> {
     const transformed = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder()
+        let output = ""
         try {
           for await (const text of textStream) {
             if (!text) continue
+            output += text
             const chunk = `0:${JSON.stringify({ textDelta: text })}\n`
             controller.enqueue(encoder.encode(chunk))
           }
+          void Promise.resolve((result as any).usage)
+            .then((usage) =>
+              captureAIGeneration({
+                traceName: "chat",
+                distinctId: parsedUserId,
+                model: OPENAI_MODEL,
+                input: apiMessages,
+                output,
+                usage,
+                latencyMs: Date.now() - startedAt,
+                properties: {
+                  request_id: requestId,
+                  streaming: true,
+                  has_garmin_context: Boolean(garminContextSummary),
+                },
+              })
+            )
+            .catch(() => {})
           controller.close()
         } catch (streamError) {
           logger.error("Chat stream error:", streamError)
+          void captureAIGeneration({
+            traceName: "chat",
+            distinctId: parsedUserId,
+            model: OPENAI_MODEL,
+            input: apiMessages,
+            output,
+            latencyMs: Date.now() - startedAt,
+            error: streamError,
+            properties: {
+              request_id: requestId,
+              streaming: true,
+              has_garmin_context: Boolean(garminContextSummary),
+            },
+          })
           const errorChunk = `0:${JSON.stringify({ textDelta: "\n\n[Error: Failed to complete response.]" })}\n`
           controller.enqueue(encoder.encode(errorChunk))
           controller.close()
@@ -205,4 +243,3 @@ export async function OPTIONS(req: Request): Promise<Response> {
     },
   })
 }
-

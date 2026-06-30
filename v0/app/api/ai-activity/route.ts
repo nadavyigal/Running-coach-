@@ -10,6 +10,7 @@ import {
   parseLocaleNumber,
   parsePaceToSecondsPerKm,
 } from "@/lib/activityParsing"
+import { captureAIGeneration } from "@/lib/ai-observability"
 
 // Use Node.js runtime for sharp image processing
 export const runtime = 'nodejs'
@@ -224,6 +225,7 @@ const validateAndNormalizeExtracted = (extracted: {
 
 export async function POST(req: Request) {
   const requestId = crypto.randomUUID()
+  const startedAt = Date.now()
 
   try {
     if (!process.env.OPENAI_API_KEY) {
@@ -363,8 +365,35 @@ export async function POST(req: Request) {
         ],
       })
       structuredRaw = structured.object
+      await captureAIGeneration({
+        traceName: "ai-activity",
+        model: PRIMARY_MODEL,
+        input: prompt,
+        output: structured.object,
+        usage: (structured as any).usage,
+        latencyMs: Date.now() - startedAt,
+        properties: {
+          request_id: requestId,
+          extraction_method: "vision_structured",
+          mime_type: preprocessed.mimeType,
+          streaming: false,
+        },
+      })
     } catch (error) {
       logger.warn("Structured vision extraction failed", { requestId, error })
+      await captureAIGeneration({
+        traceName: "ai-activity",
+        model: PRIMARY_MODEL,
+        input: prompt,
+        latencyMs: Date.now() - startedAt,
+        error,
+        properties: {
+          request_id: requestId,
+          extraction_method: "vision_structured",
+          mime_type: preprocessed.mimeType,
+          streaming: false,
+        },
+      })
     }
 
     let extracted = structuredRaw ? normalizeStructured(structuredRaw, preprocessed.exifDateIso) : null
@@ -397,6 +426,20 @@ export async function POST(req: Request) {
           : typeof rawOcrText === "function"
             ? String(rawOcrText())
             : ""
+      await captureAIGeneration({
+        traceName: "ai-activity",
+        model: OCR_FALLBACK_MODEL,
+        input: ocrPrompt,
+        output: ocrText,
+        usage: (ocrResult as any).usage,
+        latencyMs: Date.now() - startedAt,
+        properties: {
+          request_id: requestId,
+          extraction_method: "vision_text_fallback",
+          mime_type: preprocessed.mimeType,
+          streaming: false,
+        },
+      })
       const parsedFromText = parseActivityFromText(ocrText)
       extracted = {
         type: extracted?.type || "run",
