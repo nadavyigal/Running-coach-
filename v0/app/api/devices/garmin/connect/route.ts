@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { withApiSecurity, ApiRequest } from '@/lib/security.middleware';
+import { resolveGarminOAuthClientId } from '@/lib/server/garmin-credentials';
 import { GARMIN_OAUTH_AUTHORIZE_URL } from '@/lib/server/garmin-endpoints';
 import { generateSignedState, generateCodeVerifier, generateCodeChallenge } from '../oauth-state';
 
@@ -71,9 +72,17 @@ async function handleGarminConnect(req: ApiRequest) {
       ? profileId.trim()
       : null;
 
-    const clientId = process.env.GARMIN_CLIENT_ID;
-    if (!clientId) {
-      logger.error('Garmin client ID not configured');
+    let clientId: string;
+    try {
+      const credentials = resolveGarminOAuthClientId();
+      clientId = credentials.clientId;
+      logger.info('Garmin connect: OAuth credential mode resolved', {
+        credentialMode: credentials.mode,
+      });
+    } catch (credentialError) {
+      logger.error('Garmin client ID not configured or not allowed', {
+        error: credentialError instanceof Error ? credentialError.message : 'unknown',
+      });
       return NextResponse.json({
         success: false,
         error: 'Service configuration error'

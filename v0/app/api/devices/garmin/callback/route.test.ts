@@ -13,6 +13,13 @@ const upsertGarminTokensMock = vi.hoisted(() => vi.fn(async () => undefined))
 const enqueueGarminBackfillJobMock = vi.hoisted(() => vi.fn(async () => ({ id: 'job-1' })))
 const getCurrentUserMock = vi.hoisted(() => vi.fn(async () => ({ id: 'auth-user-1' })))
 const getCurrentProfileMock = vi.hoisted(() => vi.fn(async () => ({ id: 'profile-1' })))
+const resolveGarminOAuthClientCredentialsMock = vi.hoisted(() =>
+  vi.fn(() => ({
+    clientId: 'garmin-client-id',
+    clientSecret: 'garmin-client-secret',
+    mode: 'commercial',
+  }))
+)
 
 vi.mock('@/lib/security.middleware', () => ({
   withApiSecurity: (handler: unknown) => handler,
@@ -40,6 +47,10 @@ vi.mock('@/lib/server/garmin-oauth-store', () => ({
   upsertGarminTokens: upsertGarminTokensMock,
 }))
 
+vi.mock('@/lib/server/garmin-credentials', () => ({
+  resolveGarminOAuthClientCredentials: resolveGarminOAuthClientCredentialsMock,
+}))
+
 vi.mock('@/lib/integrations/garmin/service', () => ({
   enqueueGarminBackfillJob: enqueueGarminBackfillJobMock,
 }))
@@ -50,8 +61,11 @@ async function loadRoute() {
 
 describe('/api/devices/garmin/callback', () => {
   beforeEach(() => {
-    process.env.GARMIN_CLIENT_ID = 'garmin-client-id'
-    process.env.GARMIN_CLIENT_SECRET = 'garmin-client-secret'
+    resolveGarminOAuthClientCredentialsMock.mockReturnValue({
+      clientId: 'garmin-client-id',
+      clientSecret: 'garmin-client-secret',
+      mode: 'commercial',
+    })
   })
 
   afterEach(() => {
@@ -63,14 +77,13 @@ describe('/api/devices/garmin/callback', () => {
     getCurrentProfileMock.mockReset()
     getCurrentUserMock.mockResolvedValue({ id: 'auth-user-1' })
     getCurrentProfileMock.mockResolvedValue({ id: 'profile-1' })
+    resolveGarminOAuthClientCredentialsMock.mockReset()
     verifyAndParseStateMock.mockReset()
     verifyAndParseStateMock.mockReturnValue({
       userId: 42,
       redirectUri: 'https://runsmart-ai.com/garmin/callback',
       codeVerifier: 'pkce-verifier',
     })
-    delete process.env.GARMIN_CLIENT_ID
-    delete process.env.GARMIN_CLIENT_SECRET
   })
 
   it('exchanges token, stores the connection, and queues the initial backfill', async () => {
@@ -224,5 +237,25 @@ describe('/api/devices/garmin/callback', () => {
         profileId: 'profile-from-state',
       })
     )
+  })
+
+  it('fails closed when Garmin credentials are not allowed', async () => {
+    resolveGarminOAuthClientCredentialsMock.mockImplementationOnce(() => {
+      throw new Error('Production Garmin OAuth cannot use internal-test credentials')
+    })
+
+    const { POST } = await loadRoute()
+    const req = new Request('http://localhost/api/devices/garmin/callback', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: 'auth-code-123', state: 'state-123' }),
+    })
+
+    const res = await POST(req as never)
+    const body = await res.json()
+
+    expect(res.status).toBe(503)
+    expect(body.success).toBe(false)
+    expect(body.error).toBe('Service configuration error')
   })
 })
