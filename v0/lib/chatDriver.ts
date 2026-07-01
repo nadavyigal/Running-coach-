@@ -480,40 +480,36 @@ export class ChatDriver {
             messages,
             maxOutputTokens,
             abortSignal: controller.signal,
+            // Runs as part of stream consumption, so the AI SDK keeps the
+            // response stream open until this resolves — unlike a bare
+            // fire-and-forget call, it can't be dropped by an early
+            // serverless function teardown once bytes are flushed.
+            onFinish: async ({ text, totalUsage }) => {
+              const promptTokens =
+                typeof totalUsage?.inputTokens === 'number' ? totalUsage.inputTokens : metrics.tokensIn
+              const completionTokens =
+                typeof totalUsage?.outputTokens === 'number' ? totalUsage.outputTokens : 0
+              this.addTokens(monthKey, Math.max(0, promptTokens - metrics.tokensIn) + completionTokens)
+
+              await captureAIGeneration({
+                traceName,
+                distinctId: request.userId,
+                model: modelName,
+                input: messages,
+                output: text,
+                usage: totalUsage,
+                latencyMs: Date.now() - startTime,
+                properties: {
+                  request_id: requestId,
+                  streaming: true,
+                  current_phase: request.currentPhase,
+                },
+              })
+            },
           }),
           config.timeoutMs,
           () => controller.abort()
         )
-
-        void Promise.resolve((result as any).usage)
-          .then((usage: any) => {
-            const promptTokens = typeof usage?.promptTokens === 'number' ? usage.promptTokens : metrics.tokensIn
-            const completionTokens = typeof usage?.completionTokens === 'number' ? usage.completionTokens : 0
-            this.addTokens(monthKey, Math.max(0, promptTokens - metrics.tokensIn) + completionTokens)
-          })
-          .catch(() => {})
-
-        void Promise.allSettled([
-          Promise.resolve((result as any).text ?? ''),
-          Promise.resolve((result as any).usage),
-        ]).then(([textResult, usageResult]) => {
-          const output = textResult.status === 'fulfilled' ? textResult.value : ''
-          const usage = usageResult.status === 'fulfilled' ? usageResult.value : undefined
-          return captureAIGeneration({
-            traceName,
-            distinctId: request.userId,
-            model: modelName,
-            input: messages,
-            output,
-            usage,
-            latencyMs: Date.now() - startTime,
-            properties: {
-              request_id: requestId,
-              streaming: true,
-              current_phase: request.currentPhase,
-            },
-          })
-        })
 
         const response = (result as any).toDataStreamResponse?.() ?? (result as any).toTextStreamResponse?.()
         return { success: true, stream: response?.body }

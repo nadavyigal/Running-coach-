@@ -152,28 +152,25 @@ export async function POST(req: Request): Promise<Response> {
             const chunk = `0:${JSON.stringify({ textDelta: text })}\n`
             controller.enqueue(encoder.encode(chunk))
           }
-          void Promise.resolve((result as any).usage)
-            .then((usage) =>
-              captureAIGeneration({
-                traceName: "chat",
-                distinctId: parsedUserId,
-                model: OPENAI_MODEL,
-                input: apiMessages,
-                output,
-                usage,
-                latencyMs: Date.now() - startedAt,
-                properties: {
-                  request_id: requestId,
-                  streaming: true,
-                  has_garmin_context: Boolean(garminContextSummary),
-                },
-              })
-            )
-            .catch(() => {})
+          const usage = await Promise.resolve((result as any).usage).catch(() => undefined)
+          await captureAIGeneration({
+            traceName: "chat",
+            distinctId: parsedUserId,
+            model: OPENAI_MODEL,
+            input: apiMessages,
+            output,
+            usage,
+            latencyMs: Date.now() - startedAt,
+            properties: {
+              request_id: requestId,
+              streaming: true,
+              has_garmin_context: Boolean(garminContextSummary),
+            },
+          })
           controller.close()
         } catch (streamError) {
           logger.error("Chat stream error:", streamError)
-          void captureAIGeneration({
+          await captureAIGeneration({
             traceName: "chat",
             distinctId: parsedUserId,
             model: OPENAI_MODEL,
