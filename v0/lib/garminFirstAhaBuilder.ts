@@ -2,6 +2,7 @@ import {
   analyzeGarminFirstAhaInputs,
   buildProfileSummary,
   buildStarterPlan,
+  daysSinceLastRun,
   shiftIsoDate,
 } from '@/lib/garminFirstAhaPlan'
 import { selectRecommendedChallenge } from '@/lib/garminFirstAhaChallenge'
@@ -13,24 +14,6 @@ import {
   type GarminFirstAhaStatus,
   type GarminFirstAhaWellnessDay,
 } from '@/lib/garminFirstAhaTypes'
-
-function toDateKey(value: string): string {
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return new Date().toISOString().slice(0, 10)
-  return parsed.toISOString().slice(0, 10)
-}
-
-function daysSinceLastRun(runs: GarminFirstAhaRunInput[], endDate: string): number | null {
-  if (runs.length === 0) return null
-  const latest = runs
-    .map((run) => toDateKey(run.completedAt))
-    .sort()
-    .at(-1)
-  if (!latest) return null
-  const endMs = Date.parse(`${endDate}T00:00:00.000Z`)
-  const latestMs = Date.parse(`${latest}T00:00:00.000Z`)
-  return Math.round((endMs - latestMs) / (24 * 60 * 60 * 1000))
-}
 
 export function buildGarminFirstAhaResult(params: {
   runs: GarminFirstAhaRunInput[]

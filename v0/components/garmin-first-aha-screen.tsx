@@ -65,8 +65,13 @@ export function GarminFirstAhaScreen() {
         credentials: 'include',
       })
       const data = (await response.json()) as GarminFirstAhaResult & { error?: string }
+      const isFirstAhaResult =
+        typeof (data as { status?: unknown }).status === 'string' &&
+        ['ready', 'partial', 'insufficient_data', 'error'].includes(
+          (data as { status: string }).status
+        )
 
-      if (!response.ok) {
+      if (!response.ok && !isFirstAhaResult) {
         throw new Error(data.error || 'Failed to load Garmin First Aha')
       }
 
@@ -117,7 +122,7 @@ export function GarminFirstAhaScreen() {
   }, [phase])
 
   const handleSkip = () => {
-    markGarminFirstAhaSeen()
+    if (userId) markGarminFirstAhaSeen(userId)
     void trackAnalyticsEvent('garmin_first_aha_skipped', analyticsProps)
     router.replace('/?screen=profile')
   }
@@ -132,7 +137,7 @@ export function GarminFirstAhaScreen() {
     setIsAccepting(true)
     try {
       await acceptGarminFirstAhaPlan({ userId, result, replaceExisting })
-      markGarminFirstAhaSeen()
+      markGarminFirstAhaSeen(userId)
       await refresh()
       void trackAnalyticsEvent('garmin_first_aha_plan_accepted', analyticsProps)
       toast({
@@ -163,7 +168,7 @@ export function GarminFirstAhaScreen() {
         userId,
         challengeSlug: result.recommendedChallenge.id,
       })
-      markGarminFirstAhaSeen()
+      markGarminFirstAhaSeen(userId)
       void trackAnalyticsEvent('garmin_first_aha_challenge_started', analyticsProps)
       toast({
         title: 'Challenge started',
@@ -312,17 +317,25 @@ export function GarminFirstAhaScreen() {
         )}
 
         <div className="sticky bottom-0 space-y-2 border-t bg-gray-50 p-4 sm:static sm:border-0 sm:bg-transparent sm:p-0">
-          <Button className="w-full" onClick={() => void handleAcceptPlan()} disabled={isAccepting}>
-            {isAccepting ? 'Saving plan...' : 'Accept 14-day plan'}
-          </Button>
-          <Button
-            className="w-full"
-            variant="secondary"
-            onClick={() => void handleStartChallenge()}
-            disabled={isStartingChallenge}
-          >
-            {isStartingChallenge ? 'Starting challenge...' : 'Start recommended challenge'}
-          </Button>
+          {result.status === 'error' ? (
+            <Button className="w-full" asChild>
+              <Link href="/?screen=profile">Connect Garmin</Link>
+            </Button>
+          ) : (
+            <>
+              <Button className="w-full" onClick={() => void handleAcceptPlan()} disabled={isAccepting}>
+                {isAccepting ? 'Saving plan...' : 'Accept 14-day plan'}
+              </Button>
+              <Button
+                className="w-full"
+                variant="secondary"
+                onClick={() => void handleStartChallenge()}
+                disabled={isStartingChallenge}
+              >
+                {isStartingChallenge ? 'Starting challenge...' : 'Start recommended challenge'}
+              </Button>
+            </>
+          )}
           <div className="flex gap-2">
             <Button className="flex-1" variant="outline" asChild>
               <Link href="/?screen=onboarding">Adjust goal</Link>

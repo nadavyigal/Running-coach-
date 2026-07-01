@@ -14,9 +14,13 @@ vi.mock('@/lib/server/garmin-oauth-store', () => ({
   getGarminOAuthState: getGarminOAuthStateMock,
 }))
 
-vi.mock('@/lib/server/garmin-first-aha-service', () => ({
-  generateGarminFirstAha: generateGarminFirstAhaMock,
-}))
+vi.mock('@/lib/server/garmin-first-aha-service', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/server/garmin-first-aha-service')>()
+  return {
+    ...actual,
+    generateGarminFirstAha: generateGarminFirstAhaMock,
+  }
+})
 
 async function loadRoute() {
   return import('./route')
@@ -106,6 +110,24 @@ describe('GET /api/garmin/first-aha', () => {
     )
 
     expect(res.status).toBe(403)
+    expect(generateGarminFirstAhaMock).not.toHaveBeenCalled()
+  })
+
+  it('returns the rich unavailable fallback (not a bare error) when no Garmin connection exists', async () => {
+    getUserMock.mockResolvedValueOnce({ data: { user: { id: 'auth-1' } }, error: null })
+    getGarminOAuthStateMock.mockResolvedValueOnce(null)
+
+    const { GET } = await loadRoute()
+    const res = await GET(
+      new Request('http://localhost/api/garmin/first-aha?userId=1', {
+        headers: { 'x-user-id': '1' },
+      })
+    )
+    const body = await res.json()
+
+    expect(res.status).toBe(404)
+    expect(body.status).toBe('error')
+    expect(body.profile.headline).toBeTruthy()
     expect(generateGarminFirstAhaMock).not.toHaveBeenCalled()
   })
 

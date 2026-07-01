@@ -2,7 +2,7 @@ import 'server-only'
 
 import { buildGarminFirstAhaResult } from '@/lib/garminFirstAhaBuilder'
 import type { GarminFirstAhaResult } from '@/lib/garminFirstAhaTypes'
-import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
+import type { GarminOAuthState } from '@/lib/server/garmin-oauth-store'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 interface GarminRunRow {
@@ -26,51 +26,53 @@ function shiftIsoDate(dateIso: string, deltaDays: number): string {
   return new Date(base + deltaDays * dayMs).toISOString().slice(0, 10)
 }
 
-export async function generateGarminFirstAha(userId: number): Promise<GarminFirstAhaResult> {
-  const oauthState = await getGarminOAuthState(userId)
-  if (!oauthState) {
-    return {
-      status: 'error',
-      generatedAt: new Date().toISOString(),
-      dataWindow: { activitiesDays: 28 },
-      profile: {
-        runnerType: 'Unavailable',
-        headline: 'Garmin connection required',
-        summaryBullets: ['Connect Garmin to generate your first running profile.'],
-        confidence: 'low',
+export function buildUnavailableGarminFirstAha(): GarminFirstAhaResult {
+  return {
+    status: 'error',
+    generatedAt: new Date().toISOString(),
+    dataWindow: { activitiesDays: 28 },
+    profile: {
+      runnerType: 'Unavailable',
+      headline: 'Garmin connection required',
+      summaryBullets: ['Connect Garmin to generate your first running profile.'],
+      confidence: 'low',
+    },
+    signals: {
+      consistency: {
+        runsLast14Days: 0,
+        runsLast28Days: 0,
+        weeklyPatternLabel: 'No Garmin runs synced yet',
       },
-      signals: {
-        consistency: {
-          runsLast14Days: 0,
-          runsLast28Days: 0,
-          weeklyPatternLabel: 'No Garmin runs synced yet',
-        },
-        load: { acwrLabel: 'unknown' },
-        intensity: {
-          label: 'No intensity data',
-          source: 'insufficient',
-        },
+      load: { acwrLabel: 'unknown' },
+      intensity: {
+        label: 'No intensity data',
+        source: 'insufficient',
       },
-      guardrails: {
-        level: 'yellow',
-        message: 'Connect Garmin and sync activities before building a starter plan.',
-        reasons: ['No Garmin connection found'],
-      },
-      starterPlan: {
-        title: 'Starter block unavailable',
-        rationale: 'Sync Garmin activities first.',
-        days: [],
-      },
-      recommendedChallenge: {
-        id: 'start-running',
-        title: 'Start Running Challenge',
-        reason: 'Available after your first Garmin sync.',
-        fitScoreLabel: 'Pending data',
-      },
-      disclaimers: ['Connect Garmin and try again after your activities sync.'],
-    }
+    },
+    guardrails: {
+      level: 'yellow',
+      message: 'Connect Garmin and sync activities before building a starter plan.',
+      reasons: ['No Garmin connection found'],
+    },
+    starterPlan: {
+      title: 'Starter block unavailable',
+      rationale: 'Sync Garmin activities first.',
+      days: [],
+    },
+    recommendedChallenge: {
+      id: 'start-running',
+      title: 'Start Running Challenge',
+      reason: 'Available after your first Garmin sync.',
+      fitScoreLabel: 'Pending data',
+    },
+    disclaimers: ['Connect Garmin and try again after your activities sync.'],
   }
+}
 
+export async function generateGarminFirstAha(
+  userId: number,
+  oauthState: GarminOAuthState
+): Promise<GarminFirstAhaResult> {
   const admin = createAdminClient()
   const endDate = new Date().toISOString().slice(0, 10)
   const startDate = shiftIsoDate(endDate, -27)

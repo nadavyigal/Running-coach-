@@ -53,7 +53,7 @@ export async function acceptGarminFirstAhaPlan(params: {
     totalWeeks: 2,
     isActive: true,
     planType: 'basic',
-    trainingDaysPerWeek: Math.max(2, Math.min(5, sessionDays.length / 2)),
+    trainingDaysPerWeek: Math.max(2, Math.min(5, Math.round(sessionDays.length / 2))),
     fitnessLevel: 'beginner',
     difficulty: 'beginner',
     complexityLevel: 'basic',

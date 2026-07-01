@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { generateGarminFirstAha } from '@/lib/server/garmin-first-aha-service'
+import { buildUnavailableGarminFirstAha, generateGarminFirstAha } from '@/lib/server/garmin-first-aha-service'
 import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
 import { createClient } from '@/lib/supabase/server'
 
@@ -38,7 +38,7 @@ export async function GET(req: Request) {
 
   const oauthState = await getGarminOAuthState(userId)
   if (!oauthState) {
-    return NextResponse.json({ error: 'Garmin connection not found' }, { status: 404 })
+    return NextResponse.json(buildUnavailableGarminFirstAha(), { status: 404 })
   }
 
   if (oauthState.authUserId !== user.id) {
@@ -46,10 +46,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const result = await generateGarminFirstAha(userId)
-    if (result.status === 'error') {
-      return NextResponse.json(result, { status: 404 })
-    }
+    const result = await generateGarminFirstAha(userId, oauthState)
     return NextResponse.json(result)
   } catch (error) {
     console.error('[api/garmin/first-aha] Failed:', error)

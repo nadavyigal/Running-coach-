@@ -118,7 +118,11 @@ function GarminCallbackContent() {
         setMessage("Garmin connected. Redirecting...")
 
         setTimeout(() => {
-          const destination = hasSeenGarminFirstAha() ? "/?screen=profile" : "/garmin/first-aha"
+          const callbackUserId = typeof data.userId === "number" ? data.userId : null
+          const destination =
+            callbackUserId != null && hasSeenGarminFirstAha(callbackUserId)
+              ? "/?screen=profile"
+              : "/garmin/first-aha"
           router.replace(destination)
         }, 1200)
       } catch (error) {

@@ -17,7 +17,7 @@ export function shiftIsoDate(dateIso: string, deltaDays: number): string {
   return new Date(parsed + deltaDays * MILLISECONDS_PER_DAY).toISOString().slice(0, 10)
 }
 
-function toDateKey(value: string): string {
+export function toDateKey(value: string): string {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return new Date().toISOString().slice(0, 10)
   return parsed.toISOString().slice(0, 10)
@@ -53,8 +53,8 @@ function classifyIntensity(runs: GarminFirstAhaRunInput[]): {
 
   if (runs.length >= 2) {
     return {
-      label: 'Intensity estimated from run patterns',
-      source: 'pace',
+      label: 'Not enough heart-rate data to assess intensity yet',
+      source: 'insufficient',
       hardRunShare: 0.2,
     }
   }
@@ -66,7 +66,7 @@ function classifyIntensity(runs: GarminFirstAhaRunInput[]): {
   }
 }
 
-function daysSinceLastRun(runs: GarminFirstAhaRunInput[], endDate: string): number | null {
+export function daysSinceLastRun(runs: GarminFirstAhaRunInput[], endDate: string): number | null {
   if (runs.length === 0) return null
   const latest = runs
     .map((run) => toDateKey(run.completedAt))
@@ -98,7 +98,11 @@ function resolveLongestRunLabel(runs: GarminFirstAhaRunInput[], endDate: string)
     const meters = run.distanceMeters ?? 0
     return meters > max ? meters : max
   }, 0)
-  if (longest <= 0) return 'Longest recent run duration-based'
+  if (longest <= 0) {
+    const longestDuration = recent.reduce((max, run) => Math.max(max, run.durationSeconds ?? 0), 0)
+    if (longestDuration <= 0) return undefined
+    return `Longest recent run about ${Math.round(longestDuration / 60)} min`
+  }
   const km = (longest / 1000).toFixed(1)
   return `Longest recent run about ${km} km`
 }
@@ -168,7 +172,9 @@ export function computeGuardrails(params: {
     reasons.push('Training load looks elevated compared with your recent baseline')
   }
 
-  if (params.hardRunShare >= 0.35) {
+  const weakOrMissingRecovery =
+    !params.hasWellness || (params.readinessScore != null && params.readinessScore < 50)
+  if (params.hardRunShare >= 0.35 && weakOrMissingRecovery) {
     if (level === 'green') level = 'yellow'
     reasons.push('A high share of recent runs looked hard')
   }
@@ -200,6 +206,7 @@ function sessionsPerWeek(runnerType: RunnerTypeId, guardrailLevel: GuardrailLeve
   if (runnerType === 'new_or_low_data_runner') return 2
   if (guardrailLevel === 'red') return Math.max(2, Math.min(3, Math.round(basePerWeek)))
   if (guardrailLevel === 'yellow') return Math.max(2, Math.min(3, Math.round(basePerWeek)))
+  if (basePerWeek >= 5) return 5
   if (basePerWeek >= 4) return 4
   if (basePerWeek >= 2.5) return 3
   return 2
@@ -255,6 +262,7 @@ export function buildStarterPlan(params: {
     if (sessions >= 3 && params.runnerType !== 'new_or_low_data_runner') {
       const longOffset = Math.max(...week1Offsets) - 1
       if (!usedOffsets.has(longOffset) && longOffset >= 0) {
+        usedOffsets.add(longOffset)
         const date = shiftIsoDate(weekStart, longOffset)
         days.push(
           buildSession(
@@ -269,7 +277,10 @@ export function buildStarterPlan(params: {
       }
     }
 
-    const restOffset = 6
+    let restOffset = 6
+    while (usedOffsets.has(restOffset) && restOffset > 0) {
+      restOffset -= 1
+    }
     if (!usedOffsets.has(restOffset)) {
       days.push(
         buildSession(
