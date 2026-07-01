@@ -17,14 +17,14 @@ Both root causes are already found and fixed in code (merged to `main` 2026-07-0
 - Removed a `.clipShape(RoundedRectangle(...))` that was reshaping the official Garmin Connect tile in two places — same PR.
 - Version bumped to `1.0.7 (20)` (PR #70) — this is the build the founder will archive/upload next.
 
-This reply is **not** a resubmission. It tells Marc we've made the fixes, shares simulator screenshots as an early confidence check only, and asks two clarifying questions before we do the larger "start all over" work — filing a fresh Developer Portal Production application (tracked as Agentic OS WP-24) is a bigger, harder-to-reverse step than a code fix, and we'd rather sequence it correctly than guess a 4th time.
+This reply is **not** a resubmission. It's short and text-only: tells Marc we're fixing the codebase, that real screenshots follow once the new build is Apple-approved, and asks two short questions before we do the larger "start all over" work — filing a fresh Developer Portal Production application (tracked as Agentic OS WP-24) is a bigger, harder-to-reverse step than a code fix, and we'd rather sequence it correctly than guess a 4th time.
 
 ---
 
 ## Subject
 
 ```
-Re: RunSmart — Garmin Production Enablement — Fixes In Progress, Two Questions Before We Resubmit (Ticket 213145/213165)
+Re: RunSmart — Garmin Production Enablement (Ticket 213145/213165)
 ```
 
 ---
@@ -34,67 +34,28 @@ Re: RunSmart — Garmin Production Enablement — Fixes In Progress, Two Questio
 ```
 Hi Marc, hi Elena,
 
-Thank you for the direct feedback. We've found and fixed both root causes in our codebase:
+We're fixing our codebase now to comply with your comments — removing "Garmin Wellness" and
+fixing the logo issue. Once the new build is approved by Apple, I'll send another email with
+screenshots as requested.
 
-1. "Garmin Wellness" — you're right that this was never an authorized term. We had invented a
-   compound feature name pairing "Garmin" with a label your brand guidelines don't mention. We've
-   removed it entirely — not just the on-screen title, but the underlying feature name and routing
-   in the app. The screen is now called "Wellness Trends." Garmin device attribution still appears
-   inside the screen exactly where your guidelines require it (e.g. "Garmin [device model]" next to
-   health data derived from your API), but the feature itself no longer carries your brand name.
+Two quick questions on "start all over":
 
-2. The logo — we found the official Garmin Connect tile was being rendered with rounded corners in
-   our code (a clipShape applied to the image), which alters the mark. That was happening in two
-   places in the app. We've removed it from both, so the tile now renders at its native shape with
-   no reshaping or cropping.
+1. Does that mean a new Developer Portal app with new credentials? That would disconnect our
+   current connected users — can we reset the existing application instead?
+2. Should we verify on a real device first, then file the new app — or file it now and send
+   evidence after?
 
-Both fixes are code-complete and merged. Attached are simulator screenshots so you can confirm
-we're heading in the right direction — please treat these as an early check only, not final
-evidence. Our next build (v1.0.7, build 20) needs to go through Apple review before we can capture
-real-device screenshots against it, and we don't want to send you evidence again that doesn't match
-what's actually live. We'll follow up with real-device screenshots once that build is approved and
-confirmed live.
-
-Two questions before we do more, since your last message ("generate a production app to start all
-over") is a bigger step than a code fix and we'd rather confirm than guess again:
-
-1. To make sure we understand correctly: do you mean we should file a brand-new Production
-   application in the Garmin Developer Portal, separate from the application that's now been
-   rejected three times, rather than continuing to resubmit against that same record? If so, one
-   thing we want to flag before we do it: our production backend currently authenticates using a
-   single client ID and secret issued to the existing application. If starting over means a genuinely
-   new application with new credentials, that would disconnect our currently-connected Garmin users
-   until they reconnect. Is there a way to reset or restart the review on the existing application
-   without new credentials, or is a fully new application the only path on your end?
-
-2. What's the right order of operations from your side — should we (a) finish verifying the iOS
-   fixes on a real device first and attach that verified evidence to the fresh application when we
-   file it, or (b) file the fresh application now and follow up with corrected evidence once it's
-   ready? We want to sequence this the way that's actually useful for your review, not assume.
-
-Attached: 5 simulator screenshots (early confirmation only) showing the "Garmin Wellness" rename and
-the unclipped Garmin Connect tile — runsmart-garmin-screenshots-ios-2026-07-01-simulator-v2.zip.
-
-Thanks for your patience — we'd rather get this right than keep sending incremental fixes.
-
-Best,
-Nadav Yigal
-RunSmart
-nadav.yigal@runsmart-ai.com
+Thanks,
+Nadav
 ```
 
 ---
 
 ## Attachment
 
-`docs/garmin-application/runsmart-garmin-screenshots-ios-2026-07-01-simulator-v2.zip` (5 simulator screenshots, iPhone 17 Pro Max, `RUNSMART_DEMO_MODE`/`RUNSMART_SCREENSHOT_MODE`, built from `main` at commit including PR #69 + #70):
-- `01-connect-garmin-devices.png` — disconnected state, unclipped Garmin Connect tile
-- `03-garmin-connected-state.png` — connected state, unclipped tile
-- `04-garmin-imported-runs.png` — Report tab
-- `05-garmin-recovery-analytics.png` — Recovery dashboard
-- `06-wellness-trends.png` — renamed "Wellness Trends" screen (was "Garmin Wellness")
+None — this reply is text only. Real-device screenshots follow in a separate email once `1.0.7 (20)` is approved by Apple and confirmed live, per the body above.
 
-These are simulator captures, explicitly labeled as such in the email body — not the on-device Gate-4 evidence set.
+The simulator screenshots captured this session (`docs/garmin-application/runsmart-garmin-screenshots-ios-2026-07-01-simulator-v2.zip`) are kept in the repo for the founder's own reference/confidence check, but are not attached to this email.
 
 ---
 
