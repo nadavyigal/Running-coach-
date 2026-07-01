@@ -41,7 +41,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Garmin connection not found' }, { status: 404 })
   }
 
-  if (oauthState.authUserId && oauthState.authUserId !== user.id) {
+  if (oauthState.authUserId !== user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

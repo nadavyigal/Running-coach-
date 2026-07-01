@@ -79,6 +79,36 @@ describe('GET /api/garmin/first-aha', () => {
     expect(body.recommendedChallenge.id).toBe('start-running')
   })
 
+  it('rejects a mismatched authUserId', async () => {
+    getUserMock.mockResolvedValueOnce({ data: { user: { id: 'auth-1' } }, error: null })
+    getGarminOAuthStateMock.mockResolvedValueOnce({ authUserId: 'someone-else', profileId: 10 })
+
+    const { GET } = await loadRoute()
+    const res = await GET(
+      new Request('http://localhost/api/garmin/first-aha?userId=1', {
+        headers: { 'x-user-id': '1' },
+      })
+    )
+
+    expect(res.status).toBe(403)
+    expect(generateGarminFirstAhaMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects when the connection has no owner recorded, instead of allowing any authenticated user through', async () => {
+    getUserMock.mockResolvedValueOnce({ data: { user: { id: 'auth-1' } }, error: null })
+    getGarminOAuthStateMock.mockResolvedValueOnce({ authUserId: null, profileId: 10 })
+
+    const { GET } = await loadRoute()
+    const res = await GET(
+      new Request('http://localhost/api/garmin/first-aha?userId=1', {
+        headers: { 'x-user-id': '1' },
+      })
+    )
+
+    expect(res.status).toBe(403)
+    expect(generateGarminFirstAhaMock).not.toHaveBeenCalled()
+  })
+
   it('returns insufficient_data without 500 for empty history', async () => {
     getUserMock.mockResolvedValueOnce({ data: { user: { id: 'auth-1' } }, error: null })
     getGarminOAuthStateMock.mockResolvedValueOnce({ authUserId: 'auth-1', profileId: 10 })
