@@ -34,5 +34,10 @@ Reusable lessons for Claude Code, Codex, Cursor, and other agents.
 - Problem: Agents have to reconstruct scope, which increases ambiguity and risk.
 - Future Rule: Before implementing a feature story, save the approved spec in `docs/specs/` or explicitly name the spec source in `tasks/todo.md`.
 
+### Lesson: Smoke New Test Files Before Moving On
+- Trigger: Adding a new focused test file.
+- Problem: A missing closing delimiter in a new test file can hide behind otherwise-passing neighboring suites until the full command runs.
+- Future Rule: After creating a new test file, run that exact file once before treating broader validation as meaningful.
+
 ## Lesson Template
 Use `.agent-os/templates/lesson-template.md` for new entries.

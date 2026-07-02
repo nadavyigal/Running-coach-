@@ -82,7 +82,7 @@ export default function GarminDetailsPage() {
       console.error('Garmin reconnect failed:', err)
       toast({
         title: 'Reconnect failed',
-        description: 'Could not start Garmin reconnect. Please try again.',
+        description: err instanceof Error ? err.message : 'Could not start Garmin reconnect. Please try again.',
         variant: 'destructive',
       })
     } finally {

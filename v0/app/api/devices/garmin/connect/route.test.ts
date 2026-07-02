@@ -44,6 +44,7 @@ describe('/api/devices/garmin/connect', () => {
     generateCodeChallengeMock.mockClear()
     resolveGarminOAuthClientIdMock.mockReset()
     delete process.env.GARMIN_OAUTH_REDIRECT_URI
+    delete process.env.GARMIN_CONNECT_ENABLED
   })
 
   it('builds Garmin OAuth URL without scope parameter', async () => {
@@ -143,5 +144,28 @@ describe('/api/devices/garmin/connect', () => {
     expect(res.status).toBe(503)
     expect(body.success).toBe(false)
     expect(body.error).toBe('Service configuration error')
+  })
+
+  it('blocks new OAuth connections when Garmin connect is disabled', async () => {
+    process.env.GARMIN_CONNECT_ENABLED = 'false'
+
+    const { POST } = await loadRoute()
+
+    const req = new Request('http://localhost/api/devices/garmin/connect', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ userId: 42 }),
+    })
+
+    const res = await POST(req as any)
+    const body = await res.json()
+
+    expect(res.status).toBe(503)
+    expect(body.success).toBe(false)
+    expect(body.error).toBe(
+      "Garmin sync is temporarily unavailable while we complete Garmin production approval. Existing activity data remains in RunSmart. We'll notify you when reconnection is available."
+    )
+    expect(resolveGarminOAuthClientIdMock).not.toHaveBeenCalled()
+    expect(generateSignedStateMock).not.toHaveBeenCalled()
   })
 })

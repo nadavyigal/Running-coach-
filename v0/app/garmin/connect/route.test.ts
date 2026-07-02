@@ -60,6 +60,7 @@ describe('/garmin/connect native gateway', () => {
     generateCodeVerifierMock.mockClear()
     generateCodeChallengeMock.mockClear()
     delete process.env.GARMIN_CLIENT_ID
+    delete process.env.GARMIN_CONNECT_ENABLED
   })
 
   it('redirects a valid native session token into Garmin OAuth with app callback state', async () => {
@@ -96,5 +97,21 @@ describe('/garmin/connect native gateway', () => {
 
     expect(res.status).toBe(401)
     expect(body.success).toBe(false)
+  })
+
+  it('blocks new native OAuth connections when Garmin connect is disabled', async () => {
+    process.env.GARMIN_CONNECT_ENABLED = 'false'
+    const { GET } = await loadRoute()
+
+    const res = await GET(new Request('https://runsmart-ai.com/garmin/connect?token=session-token') as never)
+    const body = await res.json()
+
+    expect(res.status).toBe(503)
+    expect(body.success).toBe(false)
+    expect(body.error).toBe(
+      "Garmin sync is temporarily unavailable while we complete Garmin production approval. Existing activity data remains in RunSmart. We'll notify you when reconnection is available."
+    )
+    expect(getUserMock).not.toHaveBeenCalled()
+    expect(generateSignedStateMock).not.toHaveBeenCalled()
   })
 })
