@@ -1,65 +1,66 @@
 # Agent Task Board
 
 ## Current Task
-Implement Garmin evaluation OAuth fixes.
+WP-24 — Garmin two-app recovery: live-user impact check plus production/internal-test credential separation.
 
 ## Exact Story
-As a RunSmart web or iOS user, I want Garmin OAuth to preserve my app identity through the OAuth round trip so that Garmin evaluation connects the right account and returns cleanly to the initiating client.
+As RunSmart, production Garmin OAuth must never use Evaluation/internal-test credentials, because Garmin confirmed Evaluation apps cannot connect real external users and is deactivating the old sole app.
 
 ## Goal
-Complete the Garmin evaluation fixes around redirect handling, signed state ownership context, native gateway support, and callback persistence fallback.
+Check current Garmin user impact and implement the web-side guard that separates commercial credentials from internal-test credentials.
 
 ## Expected Files To Change
 - `tasks/todo.md`
+- `tasks/progress.md`
+- `docs/garmin-application/GARMIN-STATUS.md`
+- `v0/.env.example`
+- `v0/lib/server/garmin-credentials.ts`
+- `v0/lib/server/garmin-credentials.test.ts`
+- `v0/lib/server/garmin-oauth-store.ts`
 - `v0/app/api/devices/garmin/connect/route.ts`
 - `v0/app/api/devices/garmin/connect/route.test.ts`
 - `v0/app/api/devices/garmin/callback/route.ts`
 - `v0/app/api/devices/garmin/callback/route.test.ts`
-- `v0/app/api/devices/garmin/oauth-state.ts`
-- `v0/app/api/devices/garmin/oauth-state.test.ts`
-- `v0/app/garmin/connect/route.ts`
-- `v0/app/garmin/connect/route.test.ts`
-- Garmin web callers that start OAuth
-- `apps/ios-native/IOS RunSmart app/Services/Garmin/GarminBridge.swift`
 
 ## Validation Plan
-- Add focused tests for signed state ownership context, connect route redirect/context behavior, callback state fallback behavior, and native gateway redirect.
-- Run focused Garmin OAuth tests from `v0/`.
+- Query aggregate `garmin_connections` health without printing user IDs or secrets.
+- Run focused Garmin credential/OAuth tests from `v0/`.
 - Run `npm run type-check` from `v0/`.
 - Run targeted lint for changed TypeScript files if possible.
 
 ## Risks
-- The requested plan file is missing from the repo, so scope is inferred from the existing partial Garmin OAuth diff and native gateway configuration.
-- Native iOS build verification may require Xcode/project tooling outside the web test suite.
-- The native gateway depends on `profiles.id` being numeric for Garmin server tables.
+- Garmin Developer Portal app creation/submission is founder-authenticated and cannot be completed from repo code.
+- Production sync may still go dark once Garmin fully deactivates the old Evaluation app.
+- Production Vercel env vars must not be rotated until commercial credentials exist.
 
 ## Will Not Change
-- No Garmin sync dataset/provisioning logic.
-- No database schema changes.
-- No unrelated Today page or monetization work.
-- No Garmin support docs beyond what the implementation requires.
+- No production credential rotation.
+- No Garmin portal submission or email to Marc.
+- No iOS screenshot recapture.
+- No schema changes.
 
 ## Checklist
-- [x] Confirm actual git repo before editing.
-- [x] Read Agent OS router files and Garmin skill context.
-- [x] Locate requested plan or identify absence.
-- [x] Add focused tests first.
-- [x] Implement server OAuth fixes.
-- [x] Implement web/native caller fixes.
+- [x] Locate WP-24 and read current Garmin status.
+- [x] Check aggregate live-user impact.
+- [x] Add production/internal-test credential resolver.
+- [x] Guard connect, callback, refresh, and revoke paths.
+- [x] Add focused credential and route tests.
 - [x] Run focused validation.
-- [x] Update final progress and QA notes.
+- [x] Run type-check and targeted lint.
+- [x] Update final progress and status docs.
 
 ## Progress
-- Confirmed actual repo root: `/Users/nadavyigal/Documents/Projects /RunSmart /Running-coach-`.
-- Requested `docs/superpowers/plans/2026-06-15-garmin-evaluation-fixes.md` is not present in the repo or workspace parent.
-- Existing partial diff already added request redirect precedence, `runsmart:` URI allowance, and auth/profile state fields in Garmin OAuth server files.
-- Added focused tests for Garmin signed state, connect redirect/context handling, callback state fallback, native gateway redirect, and web device connect request payload.
-- Added `/garmin/connect` native gateway route for iOS `ASWebAuthenticationSession`.
-- Wired web Garmin connect/reconnect callers to send `authUserId` and `profileId`.
-- Updated iOS `GarminBridge` to complete the backend callback after Garmin returns `code` and `state`.
+- Supabase aggregate check at `2026-07-01T16:12:29.112Z`: 9 Garmin connection rows, 7 `connected`, 2 `reauth_required`, 0 connected rows with `last_sync_error`, 7 connected rows with successful sync in the prior 24h.
+- Added `resolveGarminOAuthClientId()` / `resolveGarminOAuthClientCredentials()` with production fail-closed checks.
+- Non-production can use `GARMIN_TEST_CLIENT_ID` / `GARMIN_TEST_CLIENT_SECRET`; production always uses `GARMIN_CLIENT_ID` / `GARMIN_CLIENT_SECRET`.
+- Production errors if `GARMIN_USE_TEST_CREDENTIALS=true`, `GARMIN_CREDENTIAL_SET` selects test/evaluation, or `GARMIN_CLIENT_ID` matches `GARMIN_TEST_CLIENT_ID`.
+- `npm run test -- lib/server/garmin-credentials.test.ts app/api/devices/garmin/connect/route.test.ts app/api/devices/garmin/callback/route.test.ts lib/server/garmin-oauth-store.test.ts --run`: passed, 13 tests.
+- `npm run type-check`: passed.
+- `npx eslint lib/server/garmin-credentials.ts lib/server/garmin-credentials.test.ts lib/server/garmin-oauth-store.ts app/api/devices/garmin/connect/route.ts app/api/devices/garmin/connect/route.test.ts app/api/devices/garmin/callback/route.ts app/api/devices/garmin/callback/route.test.ts`: passed with no warnings.
 
 ## Open Questions
-- Missing plan file means implementation is based on code evidence, not a saved plan document.
+- Founder still needs to decide user-facing outage messaging for connected Garmin users.
+- Founder still needs to create the Internal Test and Commercial apps in the Garmin Developer Portal.
 
 ---
 

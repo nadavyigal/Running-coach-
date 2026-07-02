@@ -1,6 +1,9 @@
 const generateSignedStateMock = vi.hoisted(() => vi.fn(() => 'signed-state'))
 const generateCodeVerifierMock = vi.hoisted(() => vi.fn(() => 'pkce-verifier'))
 const generateCodeChallengeMock = vi.hoisted(() => vi.fn(async () => 'pkce-challenge'))
+const resolveGarminOAuthClientIdMock = vi.hoisted(() =>
+  vi.fn(() => ({ clientId: 'garmin-client-id', mode: 'commercial' }))
+)
 
 vi.mock('@/lib/security.middleware', () => ({
   withApiSecurity: (handler: any) => handler,
@@ -20,14 +23,18 @@ vi.mock('../oauth-state', () => ({
   generateCodeChallenge: generateCodeChallengeMock,
 }))
 
+vi.mock('@/lib/server/garmin-credentials', () => ({
+  resolveGarminOAuthClientId: resolveGarminOAuthClientIdMock,
+}))
+
 async function loadRoute() {
   return import('./route')
 }
 
 describe('/api/devices/garmin/connect', () => {
   beforeEach(() => {
-    process.env.GARMIN_CLIENT_ID = 'garmin-client-id'
     process.env.GARMIN_OAUTH_REDIRECT_URI = 'https://runsmart-ai.com/garmin/callback'
+    resolveGarminOAuthClientIdMock.mockReturnValue({ clientId: 'garmin-client-id', mode: 'commercial' })
   })
 
   afterEach(() => {
@@ -35,7 +42,7 @@ describe('/api/devices/garmin/connect', () => {
     generateSignedStateMock.mockClear()
     generateCodeVerifierMock.mockClear()
     generateCodeChallengeMock.mockClear()
-    delete process.env.GARMIN_CLIENT_ID
+    resolveGarminOAuthClientIdMock.mockReset()
     delete process.env.GARMIN_OAUTH_REDIRECT_URI
   })
 
@@ -115,5 +122,26 @@ describe('/api/devices/garmin/connect', () => {
 
     expect(res.status).toBe(200)
     expect(authUrl.searchParams.get('redirect_uri')).toBe('runsmart://garmin/connected')
+  })
+
+  it('fails closed when Garmin credentials are not allowed', async () => {
+    resolveGarminOAuthClientIdMock.mockImplementationOnce(() => {
+      throw new Error('Production Garmin OAuth cannot use internal-test credentials')
+    })
+
+    const { POST } = await loadRoute()
+
+    const req = new Request('http://localhost/api/devices/garmin/connect', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ userId: 42 }),
+    })
+
+    const res = await POST(req as any)
+    const body = await res.json()
+
+    expect(res.status).toBe(503)
+    expect(body.success).toBe(false)
+    expect(body.error).toBe('Service configuration error')
   })
 })

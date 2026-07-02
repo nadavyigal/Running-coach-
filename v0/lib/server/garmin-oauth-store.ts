@@ -2,6 +2,7 @@ import 'server-only'
 
 import { decryptToken, encryptToken } from '@/app/api/devices/garmin/token-crypto'
 import { logger } from '@/lib/logger'
+import { resolveGarminOAuthClientCredentials } from '@/lib/server/garmin-credentials'
 import { GARMIN_OAUTH_REVOKE_URL, GARMIN_OAUTH_TOKEN_URL } from '@/lib/server/garmin-endpoints'
 import { createAdminClient } from '@/lib/supabase/admin'
 const TOKEN_REFRESH_SKEW_SECONDS = 5 * 60
@@ -125,12 +126,10 @@ async function sleep(ms: number): Promise<void> {
 async function executeTokenRefresh(params: {
   refreshToken: string
 }): Promise<GarminRefreshResponse> {
-  const clientId = process.env.GARMIN_CLIENT_ID
-  const clientSecret = process.env.GARMIN_CLIENT_SECRET
-
-  if (!clientId || !clientSecret) {
-    throw new Error('Garmin OAuth client credentials are not configured')
-  }
+  const { clientId, clientSecret, mode } = resolveGarminOAuthClientCredentials()
+  logger.info('Garmin token refresh: OAuth credential mode resolved', {
+    credentialMode: mode,
+  })
 
   let lastError: Error | null = null
 
@@ -593,9 +592,19 @@ export async function getGarminConnectionByProviderUserId(providerUserId: string
 }
 
 async function revokeTokenUpstream(token: string): Promise<void> {
-  const clientId = process.env.GARMIN_CLIENT_ID
-  const clientSecret = process.env.GARMIN_CLIENT_SECRET
-  if (!clientId || !clientSecret) return
+  let clientId: string
+  let clientSecret: string
+
+  try {
+    const credentials = resolveGarminOAuthClientCredentials()
+    clientId = credentials.clientId
+    clientSecret = credentials.clientSecret
+  } catch (error) {
+    logger.warn('Garmin revoke skipped because OAuth credentials are unavailable or not allowed', {
+      error: error instanceof Error ? error.message : 'unknown',
+    })
+    return
+  }
 
   const response = await fetch(GARMIN_OAUTH_REVOKE_URL, {
     method: 'POST',

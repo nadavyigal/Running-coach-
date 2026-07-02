@@ -4,6 +4,7 @@ import { verifyAndParseState } from '../oauth-state'
 import { logger } from '@/lib/logger'
 import { getCurrentProfile, getCurrentUser } from '@/lib/supabase/server'
 import { enqueueGarminBackfillJob } from '@/lib/integrations/garmin/service'
+import { resolveGarminOAuthClientCredentials } from '@/lib/server/garmin-credentials'
 import {
   upsertGarminConnection,
   upsertGarminTokens,
@@ -90,10 +91,19 @@ async function handleGarminCallback(req: ApiRequest) {
       )
     }
 
-    const clientId = process.env.GARMIN_CLIENT_ID
-    const clientSecret = process.env.GARMIN_CLIENT_SECRET
-    if (!clientId || !clientSecret) {
-      logger.error('Garmin API credentials not configured')
+    let clientId: string
+    let clientSecret: string
+    try {
+      const credentials = resolveGarminOAuthClientCredentials()
+      clientId = credentials.clientId
+      clientSecret = credentials.clientSecret
+      logger.info('Garmin callback: OAuth credential mode resolved', {
+        credentialMode: credentials.mode,
+      })
+    } catch (credentialError) {
+      logger.error('Garmin API credentials not configured or not allowed', {
+        error: credentialError instanceof Error ? credentialError.message : 'unknown',
+      })
       return NextResponse.json(
         {
           success: false,
