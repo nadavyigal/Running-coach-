@@ -13,8 +13,12 @@
 
 **Live impact check (2026-07-01T16:12:29Z):** Supabase aggregate read showed 9 `garmin_connections` rows: 7 `connected`, 2 `reauth_required`, 0 connected rows with `last_sync_error`, and all 7 connected rows had a successful sync inside the prior 24 hours. Newest successful sync was `2026-07-01T03:40:58.044+00:00`; newest webhook was `2026-06-28T06:07:03.186+00:00`. This means there was no aggregate evidence yet that the 7 connected users had already failed, but deactivation risk remains active.
 
+**WP-25 update (2026-07-02):** Credential guard PR #114 is merged to `main`. New Garmin OAuth connection attempts are now gated in code by `GARMIN_CONNECT_ENABLED`, which defaults to off in production. When the gate is off, `/api/devices/garmin/connect` and `/garmin/connect` return the temporary-unavailable message before generating OAuth state or redirecting to Garmin. Already-connected users' token refresh, webhook ingestion, and sync paths were not changed by the connection gate.
+
+**Env check (2026-07-02, read-only):** `vercel env ls production` shows production still has `GARMIN_CLIENT_ID` / `GARMIN_CLIENT_SECRET`; it does **not** show `GARMIN_TEST_CLIENT_ID`, `GARMIN_TEST_CLIENT_SECRET`, or `GARMIN_CONNECT_ENABLED`. Production env vars were not rotated or edited in WP-25. Internal-test credentials remain unavailable until the separate founder-only Internal Test app packet.
+
 **Open gate:** Garmin Production Gates 1-4 from Garmin's 2026-06-15 response.
-**Status as of:** 2026-07-01
+**Status as of:** 2026-07-02
 
 ---
 
@@ -73,7 +77,8 @@
 | Privacy anchor + OpenAI disclosure for Gate 1 | `5fe7ab0` | 2026-06-15 |
 | Webhook async 200 + User Deregistration handling | `2cc4228` | 2026-06-15 |
 | Commercial terms answers recorded | docs update | 2026-06-15 |
-| Production/internal-test Garmin credential guard | local WP-24 implementation | 2026-07-01 |
+| Production/internal-test Garmin credential guard | PR #114 / `d74348d` | 2026-07-02 |
+| New Garmin connection gate (`GARMIN_CONNECT_ENABLED`) | WP-25 branch pending PR | 2026-07-02 |
 
 ---
 

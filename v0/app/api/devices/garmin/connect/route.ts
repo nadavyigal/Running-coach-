@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { withApiSecurity, ApiRequest } from '@/lib/security.middleware';
+import { GARMIN_CONNECT_DISABLED_MESSAGE, isGarminConnectEnabled } from '@/lib/server/garmin-connect-gate';
 import { resolveGarminOAuthClientId } from '@/lib/server/garmin-credentials';
 import { GARMIN_OAUTH_AUTHORIZE_URL } from '@/lib/server/garmin-endpoints';
 import { generateSignedState, generateCodeVerifier, generateCodeChallenge } from '../oauth-state';
@@ -8,6 +9,14 @@ import { generateSignedState, generateCodeVerifier, generateCodeChallenge } from
 // POST - Initiate Garmin OAuth 2.0 PKCE flow (SECURED)
 async function handleGarminConnect(req: ApiRequest) {
   try {
+    if (!isGarminConnectEnabled()) {
+      logger.warn('Garmin connect blocked by GARMIN_CONNECT_ENABLED feature flag');
+      return NextResponse.json({
+        success: false,
+        error: GARMIN_CONNECT_DISABLED_MESSAGE
+      }, { status: 503 });
+    }
+
     const { userId, authUserId, profileId, redirectUri } = await req.json();
 
     // Security: Validate userId

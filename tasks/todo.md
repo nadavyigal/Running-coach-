@@ -1,66 +1,77 @@
 # Agent Task Board
 
 ## Current Task
-WP-24 — Garmin two-app recovery: live-user impact check plus production/internal-test credential separation.
+WP-25 — Garmin gate off new connections and land the credential guard.
 
 ## Exact Story
-As RunSmart, production Garmin OAuth must never use Evaluation/internal-test credentials, because Garmin confirmed Evaluation apps cannot connect real external users and is deactivating the old sole app.
+As RunSmart, new Garmin OAuth connection attempts must be blocked while Garmin production approval is pending, and the previously local-only credential guard must be merged so production cannot use internal-test/Evaluation credentials.
 
 ## Goal
-Check current Garmin user impact and implement the web-side guard that separates commercial credentials from internal-test credentials.
+Land the stranded credential guard branch, add a production-default-off `GARMIN_CONNECT_ENABLED` gate for new connection starts, preserve already-connected users' sync paths, and document the current env/approval state.
 
 ## Expected Files To Change
 - `tasks/todo.md`
 - `tasks/progress.md`
 - `docs/garmin-application/GARMIN-STATUS.md`
 - `v0/.env.example`
-- `v0/lib/server/garmin-credentials.ts`
-- `v0/lib/server/garmin-credentials.test.ts`
-- `v0/lib/server/garmin-oauth-store.ts`
+- `v0/lib/server/garmin-connect-gate.ts`
+- `v0/lib/server/garmin-connect-gate.test.ts`
 - `v0/app/api/devices/garmin/connect/route.ts`
 - `v0/app/api/devices/garmin/connect/route.test.ts`
-- `v0/app/api/devices/garmin/callback/route.ts`
-- `v0/app/api/devices/garmin/callback/route.test.ts`
+- `v0/app/garmin/connect/route.ts`
+- `v0/app/garmin/connect/route.test.ts`
+- `v0/app/garmin/details/page.tsx`
+- `v0/components/device-connection-screen.tsx`
+- `v0/components/profile-screen.tsx`
 
 ## Validation Plan
-- Query aggregate `garmin_connections` health without printing user IDs or secrets.
-- Run focused Garmin credential/OAuth tests from `v0/`.
+- Verify the credential guard branch exists locally and has no origin counterpart before push.
+- Diff/rebase the guard branch against current `origin/main`, then push/open/merge PR.
+- Run focused Garmin credential/OAuth/connect-gate tests from `v0/`.
 - Run `npm run type-check` from `v0/`.
-- Run targeted lint for changed TypeScript files if possible.
+- Run targeted lint for changed TypeScript/TSX files.
+- Read-only `vercel env ls production` to confirm Internal Test credentials are absent and production credentials are untouched.
 
 ## Risks
 - Garmin Developer Portal app creation/submission is founder-authenticated and cannot be completed from repo code.
 - Production sync may still go dark once Garmin fully deactivates the old Evaluation app.
 - Production Vercel env vars must not be rotated until commercial credentials exist.
+- The connection gate must not touch refresh/webhook/sync paths used by already-connected users.
 
 ## Will Not Change
 - No production credential rotation.
 - No Garmin portal submission or email to Marc.
 - No iOS screenshot recapture.
 - No schema changes.
+- No Training/Courses API scope work.
 
 ## Checklist
-- [x] Locate WP-24 and read current Garmin status.
-- [x] Check aggregate live-user impact.
-- [x] Add production/internal-test credential resolver.
-- [x] Guard connect, callback, refresh, and revoke paths.
-- [x] Add focused credential and route tests.
-- [x] Run focused validation.
-- [x] Run type-check and targeted lint.
-- [x] Update final progress and status docs.
+- [x] Verify `codex/wp24-garmin-credential-guard` and `baa19aa` existed locally only before push.
+- [x] Rebase/diff credential guard against current `origin/main`.
+- [x] Push and merge the credential guard PR (#114).
+- [x] Add `GARMIN_CONNECT_ENABLED` feature flag, default off in production.
+- [x] Block `/api/devices/garmin/connect` and `/garmin/connect` when the flag is off.
+- [x] Surface the exact temporary-unavailable message from Garmin connect CTAs.
+- [x] Verify production Vercel env read-only; do not rotate credentials.
+- [x] Run final focused Garmin tests, type-check, and targeted lint.
+- [ ] Push/open/merge the connection gate PR.
+- [ ] Update final progress and status docs with PR/validation results.
 
 ## Progress
-- Supabase aggregate check at `2026-07-01T16:12:29.112Z`: 9 Garmin connection rows, 7 `connected`, 2 `reauth_required`, 0 connected rows with `last_sync_error`, 7 connected rows with successful sync in the prior 24h.
-- Added `resolveGarminOAuthClientId()` / `resolveGarminOAuthClientCredentials()` with production fail-closed checks.
-- Non-production can use `GARMIN_TEST_CLIENT_ID` / `GARMIN_TEST_CLIENT_SECRET`; production always uses `GARMIN_CLIENT_ID` / `GARMIN_CLIENT_SECRET`.
-- Production errors if `GARMIN_USE_TEST_CREDENTIALS=true`, `GARMIN_CREDENTIAL_SET` selects test/evaluation, or `GARMIN_CLIENT_ID` matches `GARMIN_TEST_CLIENT_ID`.
-- `npm run test -- lib/server/garmin-credentials.test.ts app/api/devices/garmin/connect/route.test.ts app/api/devices/garmin/callback/route.test.ts lib/server/garmin-oauth-store.test.ts --run`: passed, 13 tests.
+- Initial verification showed `codex/wp24-garmin-credential-guard` with commit `baa19aa` local-only and no remote counterpart.
+- Credential guard branch was already aligned with current `origin/main`; no rebase conflicts.
+- PR #114 merged to `main` at merge commit `d74348d`.
+- Added `GARMIN_CONNECT_ENABLED`; production defaults to disabled unless explicitly truthy.
+- When disabled, connect routes return: "Garmin sync is temporarily unavailable while we complete Garmin production approval. Existing activity data remains in RunSmart. We'll notify you when reconnection is available."
+- Updated client CTA error handling so the exact server message reaches the user.
+- Read-only `vercel env ls production` showed `GARMIN_CLIENT_ID` / `GARMIN_CLIENT_SECRET` still present, and no `GARMIN_TEST_CLIENT_ID`, no `GARMIN_TEST_CLIENT_SECRET`, and no `GARMIN_CONNECT_ENABLED`.
+- `npm run test -- lib/server/garmin-credentials.test.ts lib/server/garmin-connect-gate.test.ts app/api/devices/garmin/connect/route.test.ts app/api/devices/garmin/callback/route.test.ts app/garmin/connect/route.test.ts lib/server/garmin-oauth-store.test.ts components/device-connection-screen.test.tsx --run`: passed, 36 tests.
 - `npm run type-check`: passed.
-- `npx eslint lib/server/garmin-credentials.ts lib/server/garmin-credentials.test.ts lib/server/garmin-oauth-store.ts app/api/devices/garmin/connect/route.ts app/api/devices/garmin/connect/route.test.ts app/api/devices/garmin/callback/route.ts app/api/devices/garmin/callback/route.test.ts`: passed with no warnings.
+- `npx eslint lib/server/garmin-connect-gate.ts lib/server/garmin-connect-gate.test.ts app/api/devices/garmin/connect/route.ts app/api/devices/garmin/connect/route.test.ts app/garmin/connect/route.ts app/garmin/connect/route.test.ts app/garmin/details/page.tsx components/device-connection-screen.tsx components/profile-screen.tsx`: exited 0 with 14 existing warnings in the two component files.
 
 ## Open Questions
-- Founder still needs to decide user-facing outage messaging for connected Garmin users.
 - Founder still needs to create the Internal Test and Commercial apps in the Garmin Developer Portal.
+- Production env cutover remains blocked until a commercial application exists.
 
 ---
 

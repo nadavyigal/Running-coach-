@@ -262,7 +262,11 @@ export function ProfileScreen() {
       window.location.href = data.authUrl
     } catch (err) {
       console.error('Garmin connect failed:', err)
-      toast({ title: 'Connection failed', description: 'Could not start Garmin connection. Please try again.', variant: 'destructive' })
+      toast({
+        title: 'Connection failed',
+        description: err instanceof Error ? err.message : 'Could not start Garmin connection. Please try again.',
+        variant: 'destructive',
+      })
       setGarminAction(null)
     }
   }

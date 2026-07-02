@@ -183,7 +183,7 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
       console.error('Garmin connection error:', error)
       toast({
         title: "Connection Failed",
-        description: "Failed to initiate Garmin connection. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to initiate Garmin connection. Please try again.",
         variant: "destructive",
       })
       setIsConnecting(null)

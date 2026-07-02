@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { generateCodeChallenge, generateCodeVerifier, generateSignedState } from '@/app/api/devices/garmin/oauth-state'
 import { logger } from '@/lib/logger'
+import { GARMIN_CONNECT_DISABLED_MESSAGE, isGarminConnectEnabled } from '@/lib/server/garmin-connect-gate'
+import { resolveGarminOAuthClientId } from '@/lib/server/garmin-credentials'
 import { GARMIN_OAUTH_AUTHORIZE_URL } from '@/lib/server/garmin-endpoints'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -23,6 +25,17 @@ function asPositiveUserId(value: unknown): number | null {
 
 export async function GET(request: NextRequest) {
   try {
+    if (!isGarminConnectEnabled()) {
+      logger.warn('Garmin native gateway blocked by GARMIN_CONNECT_ENABLED feature flag')
+      return NextResponse.json(
+        {
+          success: false,
+          error: GARMIN_CONNECT_DISABLED_MESSAGE,
+        },
+        { status: 503 }
+      )
+    }
+
     const requestUrl = new URL(request.url)
     const token = requestUrl.searchParams.get('token')?.trim()
     if (!token) {
@@ -35,9 +48,17 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const clientId = process.env.GARMIN_CLIENT_ID
-    if (!clientId) {
-      logger.error('Garmin client ID not configured for native gateway')
+    let clientId: string
+    try {
+      const credentials = resolveGarminOAuthClientId()
+      clientId = credentials.clientId
+      logger.info('Garmin native gateway: OAuth credential mode resolved', {
+        credentialMode: credentials.mode,
+      })
+    } catch (credentialError) {
+      logger.error('Garmin client ID not configured or not allowed for native gateway', {
+        error: credentialError instanceof Error ? credentialError.message : 'unknown',
+      })
       return NextResponse.json(
         {
           success: false,
