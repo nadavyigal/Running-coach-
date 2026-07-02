@@ -54,8 +54,8 @@ Land the stranded credential guard branch, add a production-default-off `GARMIN_
 - [x] Surface the exact temporary-unavailable message from Garmin connect CTAs.
 - [x] Verify production Vercel env read-only; do not rotate credentials.
 - [x] Run final focused Garmin tests, type-check, and targeted lint.
-- [ ] Push/open/merge the connection gate PR.
-- [ ] Update final progress and status docs with PR/validation results.
+- [x] Push/open/merge the connection gate PR (#115).
+- [x] Update final progress and status docs with PR/validation results.
 
 ## Progress
 - Initial verification showed `codex/wp24-garmin-credential-guard` with commit `baa19aa` local-only and no remote counterpart.

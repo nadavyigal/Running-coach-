@@ -78,7 +78,7 @@
 | Webhook async 200 + User Deregistration handling | `2cc4228` | 2026-06-15 |
 | Commercial terms answers recorded | docs update | 2026-06-15 |
 | Production/internal-test Garmin credential guard | PR #114 / `d74348d` | 2026-07-02 |
-| New Garmin connection gate (`GARMIN_CONNECT_ENABLED`) | WP-25 branch pending PR | 2026-07-02 |
+| New Garmin connection gate (`GARMIN_CONNECT_ENABLED`) | PR #115 / `7128efb` | 2026-07-02 |
 
 ---
 
