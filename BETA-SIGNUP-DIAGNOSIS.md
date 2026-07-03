@@ -140,7 +140,7 @@ fetch(url, {
 cd V0
 node -e "
 const { Resend } = require('resend');
-const resend = new Resend('re_efPcCWBq_LuXJazpP7wewtJusRxcJNV1a');
+const resend = new Resend('re_EXAMPLE_ROTATED_KEY_REDACTED');
 resend.emails.send({
   from: 'Run-Smart <noreply@runsmart-ai.com>',
   to: ['nadav.yigal@gmail.com'],
@@ -363,7 +363,7 @@ fetch('https://dxqglotcyirxzyqaxqln.supabase.co/rest/v1/beta_signups?select=emai
 cd V0
 node -e "
 const { Resend } = require('resend');
-const resend = new Resend('re_efPcCWBq_LuXJazpP7wewtJusRxcJNV1a');
+const resend = new Resend('re_EXAMPLE_ROTATED_KEY_REDACTED');
 resend.emails.send({
   from: 'Run-Smart <noreply@runsmart-ai.com>',
   to: ['YOUR-EMAIL@example.com'],  // Replace with your email

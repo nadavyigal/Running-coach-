@@ -3,6 +3,8 @@
 ## Date: 2026-01-01
 ## Status: ✅ DEPLOYED WITH NEW API KEYS
 
+> **⚠️ Correction added 2026-07-02**: this report's "rotation complete" status covered only OpenAI, Resend, and PostHog. It did **not** cover Supabase or MapTiler — both listed as needing rotation in `SECURITY-NOTICE.md` and, as of 2026-07-02, the Supabase service role key still has not been rotated (confirmed identical to the key currently in production). Do not treat this file as evidence the security incident is closed. This snapshot is also stale (production URL, commit hash, and infra details are from 2026-01-01) — treat as historical, not current.
+
 ---
 
 ## Summary

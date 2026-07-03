@@ -17,7 +17,7 @@ Run-Smart uses [Resend](https://resend.com) as its transactional email service. 
 The Resend API key is stored in `v0/.env.local`:
 
 ```env
-RESEND_API_KEY=re_efPcCWBq_LuXJazpP7wewtJusRxcJNV1a
+RESEND_API_KEY=re_EXAMPLE_ROTATED_KEY_REDACTED
 ```
 
 ### Email Settings

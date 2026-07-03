@@ -307,7 +307,7 @@ To help you better, tell me:
 3. **Test Resend API Key:**
    ```bash
    curl -X POST 'https://api.resend.com/emails' \
-     -H 'Authorization: Bearer re_efPcCWBq_LuXJazpP7wewtJusRxcJNV1a' \
+     -H 'Authorization: Bearer re_EXAMPLE_ROTATED_KEY_REDACTED' \
      -H 'Content-Type: application/json' \
      -d '{
        "from": "runsmartteam@gmail.com",

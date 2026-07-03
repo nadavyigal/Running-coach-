@@ -166,7 +166,7 @@ node -e "
 fetch('https://api.resend.com/emails', {
   method: 'POST',
   headers: {
-    'Authorization': 'Bearer re_efPcCWBq_LuXJazpP7wewtJusRxcJNV1a',
+    'Authorization': 'Bearer re_EXAMPLE_ROTATED_KEY_REDACTED',
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({
