@@ -40,6 +40,7 @@ import { CoachingProfilePanel } from "@/components/profile/CoachingProfilePanel"
 import { PerformanceAnalyticsSection } from "@/components/profile/PerformanceAnalyticsSection";
 import { AchievementsSection } from "@/components/profile/AchievementsSection";
 import { GarminReadinessCard } from "@/components/garmin-readiness-card";
+import { GARMIN_CONNECT_DISABLED_MESSAGE } from "@/lib/server/garmin-connect-gate";
 import { IntegrationsListCard, type IntegrationRow } from "@/components/profile/IntegrationsListCard";
 import { SettingsListCard, type SettingsRow } from "@/components/profile/SettingsListCard";
 import { DeveloperToolsAccordion } from "@/components/profile/DeveloperToolsAccordion";
@@ -262,10 +263,12 @@ export function ProfileScreen() {
       window.location.href = data.authUrl
     } catch (err) {
       console.error('Garmin connect failed:', err)
+      const message = err instanceof Error ? err.message : 'Could not start Garmin connection. Please try again.'
+      const isPlannedPause = message === GARMIN_CONNECT_DISABLED_MESSAGE
       toast({
-        title: 'Connection failed',
-        description: err instanceof Error ? err.message : 'Could not start Garmin connection. Please try again.',
-        variant: 'destructive',
+        title: isPlannedPause ? 'Garmin sync paused' : 'Connection failed',
+        description: message,
+        variant: isPlannedPause ? 'default' : 'destructive',
       })
       setGarminAction(null)
     }
