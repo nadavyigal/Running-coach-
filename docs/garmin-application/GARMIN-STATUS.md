@@ -55,8 +55,8 @@
 |---|---|---|---|
 | **Q1** — Subscription use | YES | Confirmed | Garmin-imported activity data may be used inside a subscription product |
 | **Q2** — AI coaching from Garmin data | YES | Confirmed | AI coaching, training adjustments, and recovery insights may derive from Garmin data |
-| **Q3** — License fees | NO fees | Confirmed | No Garmin license fees, revenue share, or Health API usage fees were stated |
-| **Q4** — Historical data | 30 days max | Confirmed limit | Marketing and product copy must not claim more than 30 days of historical data |
+| **Q3** — License fees | NO fees | **Marc-stated only, not independently confirmed (2026-07-06)** | Garmin's own Agreement reserves future/excess-volume fees, and its public FAQ + Health API page both say commercial use may require a license fee. This may hold as a RunSmart-specific answer from Marc, not a general Garmin policy — confirm in writing before relying on it. See `22-OFFICIAL-REQUIREMENTS-VS-MARC-NOTES-2026-07-06.md` |
+| **Q4** — Historical data | 30 days max | **Marc-stated only, not independently confirmed (2026-07-06)** | No official public Garmin source found for a 30-day cap; a third party (Open Wearables) describes 30 days as a Garmin *backfill* limit, not a general retention rule. See `22-OFFICIAL-REQUIREMENTS-VS-MARC-NOTES-2026-07-06.md` |
 | **Q5/Q6** — Attribution + "Works with Garmin Connect" | Deferred to brand guidelines | Pending compliance review | Keep conservative wording until brand approval |
 
 ---
