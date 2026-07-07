@@ -23,4 +23,4 @@ Note found during seeding: v0/node_modules was inconsistent with package-lock.js
 (eslint-scope missing, lint crashed). Fixed with npm ci on 2026-06-12. If lint crashes
 with "Cannot find module", run npm ci in v0/ first.
 -->
-Last Updated: 2026-07-03
+Last Updated: 2026-07-07
