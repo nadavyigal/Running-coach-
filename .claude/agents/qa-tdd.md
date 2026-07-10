@@ -1,7 +1,7 @@
 ---
 name: QA / TDD
 description: Defines test plans before implementation and verifies behavior after. Use before any implementation to define what tests are needed, and after implementation to run tests and report results.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 ---
 
 # QA / TDD Agent — RunSmart

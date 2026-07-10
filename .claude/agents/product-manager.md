@@ -1,7 +1,7 @@
 ---
 name: Product Manager
 description: Clarifies user value and acceptance criteria. Use when a task description is vague, when there is no clear success definition, or when proposed implementation doesn't map to a real user need.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 ---
 
 # Product Manager Agent — RunSmart
