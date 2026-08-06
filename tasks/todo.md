@@ -75,6 +75,20 @@ Land the stranded credential guard branch, add a production-default-off `GARMIN_
 
 ---
 
+## Completed Task — 2026-08-06 iOS registration return path
+
+As a runner who starts registration in iOS, an email/browser confirmation must return to RunSmart with the native Supabase session instead of stranding the runner on the website.
+
+- [x] Confirm the shipped iOS team and bundle identity.
+- [x] Add red-first tests for AASA and native-return behavior.
+- [x] Correct the AASA app identity and narrow it to auth paths.
+- [x] Return allowlisted code/error fields to a fixed custom-scheme callback when Universal Links do not intercept.
+- [x] Keep ordinary web callback exchange unchanged.
+- [x] Pass 5 focused tests, TypeScript type-check, targeted lint, and diff checks.
+- [ ] Merge and deploy before or alongside the paired native release.
+
+---
+
 ## Next Session — Story 1: Today Content Inventory + Preservation Map
 
 Spec: docs/specs/2026-05-12-today-command-center.md (read this first)
