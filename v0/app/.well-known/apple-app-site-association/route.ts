@@ -5,8 +5,8 @@ const AASA = {
     apps: [],
     details: [
       {
-        appID: '8VC4R5M425.com.runsmart.coach',
-        paths: ['/auth/callback', '/auth/callback/*', '/auth/update-password', '/'],
+        appID: '8VC4R5M425.com.runsmart.lite',
+        paths: ['/auth/callback', '/auth/callback/*', '/auth/update-password'],
       },
     ],
   },
