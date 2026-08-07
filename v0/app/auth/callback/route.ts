@@ -1,11 +1,21 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { nativeReturnURL } from './native-return'
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
   const token_hash = requestUrl.searchParams.get('token_hash')
   const type = requestUrl.searchParams.get('type')
+
+  // A native PKCE verifier lives on the device, so the web server cannot
+  // exchange an iOS-originated code. Universal Links normally open the app
+  // before this route runs; this fixed custom-scheme redirect is the fallback
+  // when the association has not been cached by iOS yet.
+  const nativeURL = nativeReturnURL(requestUrl)
+  if (nativeURL) {
+    return NextResponse.redirect(nativeURL)
+  }
 
   const supabase = await createClient()
 
