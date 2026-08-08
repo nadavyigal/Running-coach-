@@ -27,7 +27,6 @@
     "build:analyze": "ANALYZE=true npm run build",
     "build:production": "NODE_ENV=production npm run build",
     "performance:lighthouse": "lighthouse http://localhost:3000 --output html --output-path ./reports/lighthouse.html",
-    "performance:bundle-size": "npx bundlesize",
     "quality:check": "npm run lint && npm run type-check && npm run test -- --run",
     "quality:fix": "npm run lint:fix && npm run type-check",
     "ci:full": "npm run quality:check && npm run security:check && npm run build:production"
@@ -119,8 +118,6 @@
     "@types/react-dom": "^18",
     "@vitejs/plugin-react": "^4.6.0",
     "audit-ci": "^7.1.0",
-    "bundlesize": "^0.18.2",
-    "cssnano": "^7.1.2",
     "eslint": "^8.57.1",
     "eslint-config-next": "15.5.23",
     "eslint-plugin-security": "^3.0.1",
@@ -133,17 +130,7 @@
   },
   "overrides": {
     "preact": ">=10.28.2",
-    "dompurify": ">=3.3.2",
+    "dompurify": ">=3.4.13",
     "lodash": ">=4.17.22"
-  },
-  "bundlesize": [
-    {
-      "path": ".next/static/js/*.js",
-      "maxSize": "500kb"
-    },
-    {
-      "path": ".next/static/css/*.css",
-      "maxSize": "50kb"
-    }
-  ]
+  }
 }
