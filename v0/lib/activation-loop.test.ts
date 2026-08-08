@@ -19,6 +19,38 @@ function getWeekdayKey(date: Date): Workout['day'] {
   return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()] as Workout['day']
 }
 
+// `determineAdaptationReason` compares PACE (seconds per km), not total duration:
+// it triggers `performance_below_target` when actualPace - plannedPace > 30 s/km.
+//
+// These tests previously added a flat +120s to the planned duration, which makes the
+// pace delta `120 / distance` and therefore dependent on WHICH workout lands on today.
+// The starter plan's weekday sessions are 3-3.5km (delta 34-40 s/km, triggers) but the
+// Saturday long run is 4km (delta exactly 30 s/km, does NOT trigger, since the check is
+// strictly greater-than). That made the suite fail every Saturday. Express the overage
+// in pace terms instead so it is distance-independent.
+//
+// This was one of TWO independent date bugs here; see `buildTrainingDays` below for the
+// Thursday one. Together they made the suite fail on 2 of every 7 days.
+const SLOWER_PACE_DELTA_SECONDS_PER_KM = 60
+
+function buildSlowerRunDuration(workout: Workout | null | undefined) {
+  const plannedMinutes = workout?.duration ?? 30
+  const distance = workout?.distance ?? 3
+  return plannedMinutes * 60 + SLOWER_PACE_DELTA_SECONDS_PER_KM * distance
+}
+
+// These tests need a starter plan that schedules something TODAY, whatever day that is.
+// `resolveStarterTrainingDays` (lib/dbUtils.ts) dedupes the requested training days and,
+// if fewer distinct days remain than `daysPerWeek`, discards the preference entirely and
+// falls back to the Mon/Wed/Sat default. The old fixture passed `[today, 'Thu', 'Sat']`,
+// which collapses to two distinct days whenever today is Thu or Sat -- so on Thursdays the
+// plan fell back to Mon/Wed/Sat and `getTodaysWorkout()` returned null. Build three
+// guaranteed-distinct days that always include both today and the long-run day instead.
+function buildTrainingDays(today: Workout['day']): Workout['day'][] {
+  const candidates: Workout['day'][] = [today, 'Sat', 'Wed', 'Mon']
+  return Array.from(new Set(candidates)).slice(0, 3)
+}
+
 function resolveRunTypeForWorkout(type: string | undefined) {
   switch (type) {
     case 'easy':
@@ -116,7 +148,7 @@ describe('activation loop', () => {
       daysPerWeek: 3,
       consents: { data: true, gdpr: true, push: false },
       planPreferences: {
-        trainingDays: [today, 'Thu', 'Sat'],
+        trainingDays: buildTrainingDays(today),
         longRunDay: 'Sat',
       } satisfies PlanSetupPreferences,
     })
@@ -137,7 +169,7 @@ describe('activation loop', () => {
     const runResult = await recordRunWithSideEffects({
       userId,
       distanceKm: todaysWorkout?.distance ?? 3,
-      durationSeconds: ((todaysWorkout?.duration ?? 30) * 60) + 120,
+      durationSeconds: buildSlowerRunDuration(todaysWorkout),
       completedAt: new Date(),
       workoutId: todaysWorkout?.id,
       autoMatchWorkout: true,
@@ -200,7 +232,7 @@ describe('activation loop', () => {
       daysPerWeek: 3,
       consents: { data: true, gdpr: true, push: false },
       planPreferences: {
-        trainingDays: [today, 'Thu', 'Sat'],
+        trainingDays: buildTrainingDays(today),
         longRunDay: 'Sat',
       } satisfies PlanSetupPreferences,
     })
@@ -209,7 +241,7 @@ describe('activation loop', () => {
     const runResult = await recordRunWithSideEffects({
       userId,
       distanceKm: todaysWorkout?.distance ?? 3,
-      durationSeconds: ((todaysWorkout?.duration ?? 30) * 60) + 120,
+      durationSeconds: buildSlowerRunDuration(todaysWorkout),
       completedAt: new Date(),
       workoutId: todaysWorkout?.id,
       autoMatchWorkout: true,
