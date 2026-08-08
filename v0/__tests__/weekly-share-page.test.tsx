@@ -2,7 +2,7 @@ import '@testing-library/jest-dom'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import ShareWeeklyPage from '@/app/(share)/weekly/[week]/page'
+import ShareWeeklyClient from '@/app/(share)/weekly/[week]/share-weekly-client'
 import { trackAnalyticsEvent } from '@/lib/analytics'
 import { useToast } from '@/hooks/use-toast'
 
@@ -91,14 +91,14 @@ describe('weekly share page', () => {
   })
 
   it('renders the shared weekly report and acquisition CTA', async () => {
-    render(<ShareWeeklyPage params={{ week: '2026-W12' }} />)
+    render(<ShareWeeklyClient week="2026-W12" />)
 
     expect(screen.getByTestId('weekly-share-signup-cta')).toHaveAttribute('href', '/')
     expect(await screen.findByText(/stable volume and strong consistency/i)).toBeInTheDocument()
   })
 
   it('tracks signup CTA clicks from the public share page', async () => {
-    render(<ShareWeeklyPage params={{ week: '2026-W12' }} />)
+    render(<ShareWeeklyClient week="2026-W12" />)
 
     fireEvent.click(screen.getByTestId('weekly-share-signup-cta'))
 
@@ -112,7 +112,7 @@ describe('weekly share page', () => {
   })
 
   it('copies the public share link when secondary share is clicked', async () => {
-    render(<ShareWeeklyPage params={{ week: '2026-W12' }} />)
+    render(<ShareWeeklyClient week="2026-W12" />)
 
     await screen.findByText(/stable volume and strong consistency/i)
     fireEvent.click(screen.getByTestId('weekly-share-copy-link'))

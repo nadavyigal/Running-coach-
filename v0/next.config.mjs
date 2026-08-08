@@ -23,11 +23,13 @@ const nextConfig = {
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 
+  // Treat as external (server-only). Moved out of `experimental` in Next 15;
+  // `experimental.serverComponentsExternalPackages` is rejected by Next 16.
+  serverExternalPackages: ['sharp', 'exifr', 'isomorphic-dompurify'],
+
   // Disable critters optimization to fix dependency issue
-  // Fixed: sharp and exifr externalization for Vercel deployment
   experimental: {
     optimizeCss: false, // Disable CSS optimization that uses critters
-    serverComponentsExternalPackages: ['sharp', 'exifr', 'isomorphic-dompurify'], // Treat as external (server-only)
     optimizePackageImports: [
       '@radix-ui/react-icons',
       'date-fns',
