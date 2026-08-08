@@ -26,8 +26,11 @@ function getWeekdayKey(date: Date): Workout['day'] {
 // pace delta `120 / distance` and therefore dependent on WHICH workout lands on today.
 // The starter plan's weekday sessions are 3-3.5km (delta 34-40 s/km, triggers) but the
 // Saturday long run is 4km (delta exactly 30 s/km, does NOT trigger, since the check is
-// strictly greater-than). The result was a suite that passed Sun-Fri and failed every
-// Saturday. Express the overage in pace terms instead so it is distance-independent.
+// strictly greater-than). That made the suite fail every Saturday. Express the overage
+// in pace terms instead so it is distance-independent.
+//
+// This was one of TWO independent date bugs here; see `buildTrainingDays` below for the
+// Thursday one. Together they made the suite fail on 2 of every 7 days.
 const SLOWER_PACE_DELTA_SECONDS_PER_KM = 60
 
 function buildSlowerRunDuration(workout: Workout | null | undefined) {
