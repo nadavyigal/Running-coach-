@@ -4,6 +4,11 @@ Reusable lessons for Claude Code, Codex, Cursor, and other agents.
 
 ## Active Lessons
 
+### Lesson: Mobile Auth Links Need One Verified Cross-Layer Contract
+- Trigger: A native Supabase PKCE flow uses a hosted HTTPS callback.
+- Problem: A wrong AASA bundle ID, a redirected association domain, or server-side code exchange can each strand the same user while every individual component appears configured.
+- Future Rule: Test the exact team/bundle ID, canonical no-redirect AASA host, native associated domain, callback source marker, fixed custom-scheme fallback, and on-device PKCE exchange together.
+
 ### Lesson: Keep Agent OS Router Files Thin
 - Trigger: Installing or updating project instructions.
 - Problem: Long root instruction files waste tokens and reduce compliance.

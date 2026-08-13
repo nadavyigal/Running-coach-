@@ -3,12 +3,11 @@
     "apps": [],
     "details": [
       {
-        "appID": "8VC4R5M425.com.runsmart.coach",
+        "appID": "8VC4R5M425.com.runsmart.lite",
         "paths": [
           "/auth/callback",
           "/auth/callback/*",
-          "/auth/update-password",
-          "/"
+          "/auth/update-password"
         ]
       }
     ]
