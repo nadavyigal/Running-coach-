@@ -1,5 +1,5 @@
 /* eslint-disable no-console -- this runner intentionally prints the eval summary */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { cases } from './cases';
@@ -19,6 +19,21 @@ const LIVE = process.env.RUN_LIVE_EVAL === '1';
 const JUDGE_PASS_THRESHOLD = 0.85;
 
 describe.runIf(LIVE)('plan-generator live eval', () => {
+  // Without this, a missing key surfaces as `AI_APICallError: Incorrect API key
+  // provided: ''` from deep inside the SDK, which reads like a plan-generator
+  // regression. It is not: it is a setup gap. The nightly job failed 25 straight
+  // runs on exactly this and nobody could tell from the error what was wrong.
+  beforeAll(() => {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error(
+        'OPENAI_API_KEY is not set, so this eval cannot run. This is a setup gap, ' +
+          'NOT a plan-generator quality regression.\n' +
+          '  CI:    add the repo secret -> gh secret set OPENAI_API_KEY\n' +
+          '  Local: add OPENAI_API_KEY to v0/.env.local (gitignored)'
+      );
+    }
+  });
+
   it(
     'meets safety and quality gates across the golden set',
     async () => {
