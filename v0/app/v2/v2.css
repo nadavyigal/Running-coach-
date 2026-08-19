@@ -1,0 +1,40 @@
+/* RunSmart v2 preview — iOS-tuned baseline */
+
+.rs-v2-root {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+.rs-v2-root *::selection {
+  background: rgba(45, 255, 193, 0.25);
+  color: #fff;
+}
+
+.rs-v2-root ::-webkit-scrollbar {
+  width: 4px;
+}
+.rs-v2-root ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.rs-v2-root ::-webkit-scrollbar-thumb {
+  background: rgba(45, 255, 193, 0.2);
+  border-radius: 4px;
+}
+
+/* Loading dots used in Today chat */
+@keyframes rs-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+/* Fullscreen iOS shell — used by /v2/[screen] */
+.rs-v2-fullscreen {
+  background: #070E09;
+  color: #DFF2E9;
+  min-height: 100vh;
+  min-height: 100dvh;
+  position: relative;
+  overflow: hidden;
+}
