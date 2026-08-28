@@ -9,7 +9,8 @@ alwaysApply: true
 
 Before doing anything, in this order:
 
-1. Read `~/.claude/MEMORY.md` for cross-project decisions. Never contradict a logged decision without flagging it first.
+1. Read the auto-memory index at `~/.claude/projects/*/memory/MEMORY.md` -- the index only; open an individual memory file when its one-line hook matches the objective. Also read this repo's `AGENTS.md` and `CLAUDE.md`. Never contradict a logged decision without flagging it first.
+   **Do not read `~/.claude/MEMORY.md`** -- it was retired 2026-07-03, is frozen at that date, and is kept for historical reference only.
 2. Read `~/.claude/ERRORS.md` for failed approaches. Never re-propose anything logged there.
 3. Read `tasks/MEMORY.md` if it exists in this project.
 4. Read `tasks/ERRORS.md` if it exists in this project.
@@ -25,7 +26,7 @@ Before doing anything, in this order:
 
 ## ERRORS.md Gate
 
-Before proposing any fix or approach, check `tasks/ERRORS.md` and `~/.claude/ERRORS.md`. If a similar approach is logged as failed, surface the failure and propose a different path.
+Before proposing any fix or approach, check `tasks/ERRORS.md` and `~/.claude/ERRORS.md`. Grep the `## ` headings and open only the entries that match -- these files are large and mostly about other projects, so reading them whole is waste. If a similar approach is logged as failed, surface the failure and propose a different path.
 
 ## Work Rules
 
@@ -55,7 +56,7 @@ When Nadav says "session end", "done for now", "wrapping up", or "let's stop her
 1. Write to `tasks/MEMORY.md`:
 
 ```
-## YYYY-MM-DD — [Brief session title]
+## YYYY-MM-DD -- [Brief session title]
 Worked on: [what we focused on]
 Completed: [what is finished and verified]
 In progress: [what was started but not finished]
