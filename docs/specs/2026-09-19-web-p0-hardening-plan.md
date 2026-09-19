@@ -137,6 +137,25 @@ Six load-bearing claims are false. Agents read this file at the start of every s
 
 ---
 
+## STORY 5 — The suite is not green; three of four failures are environmental
+
+A full `vitest run` on an idle machine (2026-09-19) gives **4 files failed, 2 tests failed, 1 unhandled error, 1400 passed, 2 skipped, 3436s**. `tasks/progress.md` recorded "1418 passed / 0 failed" from 2026-08-08; that no longer holds.
+
+| Failure | Nature | Action |
+|---|---|---|
+| `lib/userInsightService.test.ts` | **Real.** Asserted a fixed ms delta against `setDate()` calendar math; off by exactly one hour because now + 8 weeks crosses the end of Israel Daylight Time on 2026-10-25. Production logic correct, test wrong | **Fixed 2026-09-19.** Lesson in `tasks/lessons.md` |
+| `lib/habitAnalytics.test.ts` | `[vitest-worker]: Timeout calling "fetch"` on `dexie/import-wrapper.mjs` — dies at module load, not on an assertion | Environmental, see below |
+| `lib/reminderService.test.ts` | `[vitest-worker]: Timeout calling "resolveId"` on `posthog-js` — same | Environmental, see below |
+| `lib/integrations/garmin/service.test.ts` | Timed out at the 5000ms `testTimeout` | Re-run in isolation before treating as real |
+
+The three environmental failures are consistent with the documented File Provider content-read stalls under `~/Documents`: `collect` alone took 4918s of the 3436s wall time. This is the same root cause already recorded for `xcodebuild` deadlocks and for `require('jsdom')` taking 27 minutes in ResumeBuilder Web. The durable fix is the founder's standing one: move the repo, or at least `node_modules`, off the synced path.
+
+**Do not** raise `testTimeout` to make these pass. That hides a real environment problem behind a green build.
+
+**Measurement hygiene, learned expensively while producing this plan.** An earlier two-file run in the same session took 2788s and reported a failure. That was contamination from two concurrent full-suite runs, not a property of the suite; a clean control run of the same two files is **15.77s, 31 passed, 0 failed**. Check the machine is idle before trusting any timing. And `~/Documents` **is** iCloud-managed — `defaults read com.apple.finder FXICloudDriveDesktop` returns 1. Do not re-derive the opposite from an inode comparison; that argument is invalid under Desktop & Documents sync and has now misled this project twice.
+
+---
+
 ## Verification before declaring done
 
 ```

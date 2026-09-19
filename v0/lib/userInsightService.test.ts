@@ -83,13 +83,22 @@ describe('projectGoalTimeline', () => {
     expect(result.projectedDate.getTime()).toBeGreaterThan(Date.now())
   })
 
-  it('projectedDate is approximately weeks * 7 days from now', () => {
-    const before = Date.now()
+  it('projectedDate is exactly weeks * 7 calendar days from now', () => {
+    // Compare calendar days, not elapsed milliseconds. projectGoalTimeline uses
+    // setDate(), which preserves local wall-clock time, so the elapsed ms differ
+    // by an hour whenever the window crosses a DST transition. Asserting a fixed
+    // ms delta made this test fail every day from ~2026-09-01 to ~2026-11-14,
+    // when now + 8 weeks crossed the end of Israel Daylight Time on 2026-10-25.
+    const before = new Date()
     const result = projectGoalTimeline('distance', 'beginner')
-    const expectedMs = result.weeks * 7 * 24 * 60 * 60 * 1000
-    const actualMs = result.projectedDate.getTime() - before
-    expect(actualMs).toBeGreaterThan(expectedMs - 5000)
-    expect(actualMs).toBeLessThan(expectedMs + 5000)
+
+    const expected = new Date(before)
+    expected.setDate(expected.getDate() + result.weeks * 7)
+
+    const startOfDay = (d: Date) =>
+      new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+
+    expect(startOfDay(result.projectedDate)).toBe(startOfDay(expected))
   })
 
   it('uses beginner as fallback for unknown experience', () => {

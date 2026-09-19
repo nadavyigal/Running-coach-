@@ -44,5 +44,10 @@ Reusable lessons for Claude Code, Codex, Cursor, and other agents.
 - Problem: A missing closing delimiter in a new test file can hide behind otherwise-passing neighboring suites until the full command runs.
 - Future Rule: After creating a new test file, run that exact file once before treating broader validation as meaningful.
 
+### Lesson: Date Tests Must Assert Calendar Units, Not Elapsed Milliseconds
+- Trigger: A test checks that a projected/scheduled date is N days or weeks away.
+- Problem: Production date math built on `setDate()` preserves local wall-clock time, so elapsed **milliseconds** shift by an hour whenever the window crosses a DST transition. A test asserting a fixed ms delta then fails for a two-month stretch each year while the production code is correct. This has now happened twice: `activation-loop.test.ts` (fixed 2026-08-08, failed every Thu/Sat) and `userInsightService.test.ts` (fixed 2026-09-19, failed daily from ~2026-09-01 to ~2026-11-14 because now + 8 weeks crossed the end of Israel Daylight Time on 2026-10-25).
+- Future Rule: Assert on calendar units. Normalise both sides to start-of-day (`new Date(y, m, d)`) and compare, or build the expectation with the same calendar arithmetic production uses. Never assert `date.getTime() - now` against `days * 24 * 3600 * 1000`. Before fixing, check whether the production logic or the test is wrong — in both cases so far it was the test.
+
 ## Lesson Template
 Use `.agent-os/templates/lesson-template.md` for new entries.
