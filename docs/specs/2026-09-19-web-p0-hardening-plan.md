@@ -152,6 +152,20 @@ The three environmental failures are consistent with the documented File Provide
 
 **Do not** raise `testTimeout` to make these pass. That hides a real environment problem behind a green build.
 
+### Fixed 2026-09-19: 45 iCloud conflict-copies were breaking `tsc`
+
+`npx tsc --noEmit` exited 2 with 45 errors, every one of them `TS2688: Cannot find type definition file for 'babel__core 2'` / `'chai 3'` / `'d3-array 2'` and so on. Those are **iCloud sync conflict-copies** in `node_modules/@types/` — directories named `<package> 2` and `<package> 3`. TypeScript auto-includes everything under `@types/`, tries to resolve each phantom package, and fails.
+
+Removing them took `tsc` from **50+ minutes and exit 2** to **35 seconds and exit 0, zero errors**:
+
+```
+find node_modules/@types -maxdepth 1 -type d -regex '.* [0-9]+$' -print0 | xargs -0 rm -rf
+```
+
+There are **1,286 such conflict-copies** across the whole of `v0/node_modules`; the 45 in `@types/` were the ones breaking the build, and the rest are files inside packages (`license 3`, `lib 2`) that bloat module resolution. `dexie` and `posthog-js` have none, so the two module-load timeouts above are the stall, not duplicates. The clean full remedy is `npm ci` in `v0/` — flag it before running, per the standing no-dependency-changes-without-asking rule.
+
+`node_modules` is gitignored, so this fix is not in any commit. If the suite fails this way again, re-run the `find` above before investigating code.
+
 **Measurement hygiene, learned expensively while producing this plan.** An earlier two-file run in the same session took 2788s and reported a failure. That was contamination from two concurrent full-suite runs, not a property of the suite; a clean control run of the same two files is **15.77s, 31 passed, 0 failed**. Check the machine is idle before trusting any timing. And `~/Documents` **is** iCloud-managed — `defaults read com.apple.finder FXICloudDriveDesktop` returns 1. Do not re-derive the opposite from an inode comparison; that argument is invalid under Desktop & Documents sync and has now misled this project twice.
 
 ---
