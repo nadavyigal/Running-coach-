@@ -3,7 +3,7 @@
 Status: ready to implement
 Created: 2026-09-19
 Source: CTO review 2026-09-12, revised 2026-09-19. Vault note `02-Products/RunSmart/2026-09-12-runsmart-web-cto-review.md` in Nadav Builder OS.
-Scope decision: **maintenance-only.** Phase 1 needs no new founder decision. Phase 2+ does — see "Gated" at the bottom.
+Scope: Phase 1 is the three live P0s. RunSmart is an active project (2026-09-23: all projects are equally important; the maintenance-only rule is retired). What comes after Phase 1 depends on the spin-off brainstorm.
 
 All paths are relative to `v0/`.
 
@@ -185,12 +185,12 @@ Then finish per the Session End Rule: `git status --short --branch`, `git log --
 
 ---
 
-## Gated — do NOT start without explicit founder approval in-session
+## After Phase 1
 
-RunSmart is maintenance-only (2026-07-02, reconfirmed 2026-09-09). The following are real but are product work on a deprioritized product:
+The maintenance-only gate that used to sit here is retired (2026-09-23). These are real candidates, to be ordered after the spin-off brainstorm decides what RunSmart becomes:
 
-- **Delete the ~50 dead Dexie-on-server routes** and the duplicate `app/api/garmin/*` namespace. Defensible as attack-surface reduction; highest leverage for future velocity. Needs an Astra-reviewed deletion list first.
-- **Close the Garmin IDOR shape** in `app/api/devices/garmin/{runs,sync,diagnose}` and `app/api/garmin/activities/[activityId]/recap`. These read `userId` from the query string and query with a service-role client. Not exploitable today only because 0 connections are healthy. **This is a precondition for any Garmin restoration, not a follow-up to it.**
-- **Account prompt at plan generation** to stop anonymous users losing their plan. The only item here that plausibly moves retention.
+- **Delete the ~50 dead Dexie-on-server routes** and the duplicate `app/api/garmin/*` namespace. Needs an Astra-reviewed deletion list first.
+- **Close the Garmin IDOR shape** in `app/api/devices/garmin/{runs,sync,diagnose}` and `app/api/garmin/activities/[activityId]/recap`. These read `userId` from the query string and query with a service-role client. Safe today only because 0 connections are healthy. A precondition for any Garmin restoration.
+- **Account prompt at plan generation** so anonymous users stop losing their plan.
 
-Not now, at any priority: Dexie→Supabase migration, the `app/v2/` prototype, monetization, repairing (rather than deleting) the dead routes.
+Still not recommended on evidence (not on priority): a Dexie-to-Supabase rewrite, and repairing the dead routes instead of deleting them.
