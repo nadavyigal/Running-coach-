@@ -49,5 +49,15 @@ Reusable lessons for Claude Code, Codex, Cursor, and other agents.
 - Problem: Production date math built on `setDate()` preserves local wall-clock time, so elapsed **milliseconds** shift by an hour whenever the window crosses a DST transition. A test asserting a fixed ms delta then fails for a two-month stretch each year while the production code is correct. This has now happened twice: `activation-loop.test.ts` (fixed 2026-08-08, failed every Thu/Sat) and `userInsightService.test.ts` (fixed 2026-09-19, failed daily from ~2026-09-01 to ~2026-11-14 because now + 8 weeks crossed the end of Israel Daylight Time on 2026-10-25).
 - Future Rule: Assert on calendar units. Normalise both sides to start-of-day (`new Date(y, m, d)`) and compare, or build the expectation with the same calendar arithmetic production uses. Never assert `date.getTime() - now` against `days * 24 * 3600 * 1000`. Before fixing, check whether the production logic or the test is wrong — in both cases so far it was the test.
 
+### Lesson: Run the Toolchain From node_modules Outside ~/Documents
+- Trigger: `tsc`, `vitest` or `next build` in `v0/` is slow, times out at module load, or behaves like an old version.
+- Problem: On 2026-09-27 the main checkout's `v0/node_modules` had Next 14.2.35 installed against a lockfile pinning 16.3.0 (`next build --webpack` failed with "unknown option"), and iCloud File Provider stalls made module-load timeouts look like test failures. A clean `npm ci` of the same lockfile, placed outside `~/Documents` and symlinked in, ran the full suite in about 400s with the three "environmental" failures gone. Separately, the committed lockfile does not install `@testing-library/dom` (a peer of `@testing-library/react`, imported by `vitest.setup.ts`), so a clean install cannot load any vitest file until it is added.
+- Future Rule: Before debugging a build or test failure, check `node -e "console.log(require('next/package.json').version)"` against `package.json`. Keep a clean install off the synced path. Adding `@testing-library/dom` to devDependencies needs the founder's OK.
+
+### Lesson: PostHog Drops identify() Called Before init Finishes
+- Trigger: Identifying users from auth code that runs at mount.
+- Problem: `lib/posthog-provider.tsx` loads PostHog lazily (idle callback, then a dynamic import), and PostHog ignores `identify()` until `init` has finished. Auth restores the session earlier, so a direct call is lost silently and returning users stay anonymous.
+- Future Rule: Route identity through `lib/analytics-identity.ts`, which holds the id until PostHog's `loaded` callback applies it. Never call `window.posthog.identify` directly.
+
 ## Lesson Template
 Use `.agent-os/templates/lesson-template.md` for new entries.
