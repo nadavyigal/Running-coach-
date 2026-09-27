@@ -17,6 +17,28 @@
   // Keep it empty. Adding an entry means shipping a known vulnerability, so it needs
   // a dated justification recorded alongside it, naming why the advisory is not
   // reachable in the deployed application and what would make it reachable again.
+  //
+  // 2026-09-27: two dated entries, added so the P0 security fixes (PRs #133-#135)
+  // can land behind a green CI. Both are temporary; remove each when its upgrade
+  // story lands. Everything else was fixed, not suppressed: next 16.3.0 -> 16.3.6
+  // (two critical unauthenticated-RCE advisories), sharp -> 0.35.4, and lockfile
+  // refreshes of @xmldom/xmldom, browserslist, js-yaml and fflate.
+  //
+  // GHSA-jrc7-96c5-q579 (maplibre-gl <=6.4.0, critical): XSS sanitizer bypass in
+  //   DOM.sanitize(). Not reachable today: the app never calls Popup or setHTML
+  //   (only lib/mapLibreMock.ts mentions them), and the only HTML the sanitizer
+  //   sees is the hard-coded attribution string in components/maps/RouteMap.tsx
+  //   and RunMap.tsx. Becomes reachable if any map popup, marker label or
+  //   attribution is built from user, route or third-party data. Fix is
+  //   maplibre-gl 6.x, which is ESM-only and resolves its worker from
+  //   import.meta.url, so it needs setWorkerUrl() plus a served worker file and
+  //   a browser check of both map screens. Remove by 2026-10-31.
+  //
+  // GHSA-82fw-gwwq-j7x9 (vitest <4.1.11, moderate): path traversal via the
+  //   @vitest/mocker redirect mock. vitest is a devDependency that never ships to
+  //   Vercel; exploiting it requires running a malicious test file locally or in
+  //   CI. Becomes reachable if vitest ever runs untrusted test code. Fix is the
+  //   vitest 3 -> 4.1.11+ major upgrade across the full suite. Remove by 2026-10-31.
   "high": true,
-  "allowlist": []
+  "allowlist": ["GHSA-jrc7-96c5-q579", "GHSA-82fw-gwwq-j7x9"]
 }
