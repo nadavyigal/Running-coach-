@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { logger } from '@/lib/logger'
+import { onPosthogLoaded } from '@/lib/analytics-identity'
 
 const DEFAULT_POSTHOG_HOST = 'https://us.i.posthog.com'
 const API_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || DEFAULT_POSTHOG_HOST
@@ -73,8 +74,9 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
         posthog.init(apiKey, {
           api_host: API_HOST,
           person_profiles: 'identified_only',
-          loaded: () => {
+          loaded: (instance: PosthogInstance) => {
             posthogInitialized = true
+            onPosthogLoaded(instance)
             if (process.env.NODE_ENV === 'development') {
               logger.info('PostHog initialized (deferred)')
             }
