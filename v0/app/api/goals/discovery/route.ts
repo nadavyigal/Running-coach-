@@ -16,6 +16,7 @@ import {
   type GoalAnalysisContext
 } from '@/lib/goalDiscoveryEngine';
 import { logger } from '@/lib/logger';
+import { requireApiUser } from '@/lib/api-auth';
 
 // Get client IP for rate limiting
 function getClientIP(request: NextRequest): string {
@@ -154,6 +155,8 @@ Please provide a structured analysis in JSON format with the following structure
 };
 
 export async function POST(request: NextRequest) {
+  const auth = await requireApiUser(request);
+  if (auth.response) return auth.response;
   logger.log('🎯 Goal Discovery API: Starting goal discovery request');
 
   // Rate limiting check (10 requests per minute for AI routes)
@@ -269,6 +272,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const auth = await requireApiUser(request);
+  if (auth.response) return auth.response;
   logger.log('🎯 Goal Discovery API: Goal refinement request');
   
   try {

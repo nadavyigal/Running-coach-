@@ -9,6 +9,7 @@ import { calculateGPSQualityScore, getGPSQualityLevel, type GPSAccuracyData } fr
 import { logger } from '@/lib/logger'
 import { withApiSecurity, type ApiRequest } from '@/lib/security.middleware'
 import { captureAIGeneration } from '@/lib/ai-observability'
+import { requireApiUser } from '@/lib/api-auth'
 
 const RUN_TYPES = ['easy', 'tempo', 'intervals', 'long', 'time-trial', 'hill', 'other'] as const
 type RunType = (typeof RUN_TYPES)[number]
@@ -1069,6 +1070,8 @@ function normalizeInsight(insight: RunInsight, fallback: RunInsight): RunInsight
 }
 
 const handler = async (req: ApiRequest) => {
+  const auth = await requireApiUser(req)
+  if (auth.response) return auth.response
   const requestStartedAt = Date.now()
   let rawBody: unknown = null
 

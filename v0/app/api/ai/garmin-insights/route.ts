@@ -10,6 +10,7 @@ import {
   type GenerateGarminInsightRequest,
 } from "@/lib/server/garmin-insights-service"
 import { captureAIGeneration } from "@/lib/ai-observability"
+import { requireApiUser } from "@/lib/api-auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -79,6 +80,8 @@ export async function GET(req: Request): Promise<Response> {
 }
 
 export async function POST(req: Request): Promise<Response> {
+  const auth = await requireApiUser(req)
+  if (auth.response) return auth.response
   const requestId = `garmin_insight_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   const startedAt = Date.now()
 
