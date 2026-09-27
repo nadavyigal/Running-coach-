@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { logger } from "@/lib/logger"
 import { rateLimiter, securityConfig } from '@/lib/security.config'
 import { securityMonitor } from '@/lib/security.monitoring'
+import { requireApiUser } from "@/lib/api-auth"
 
 // Get client IP for rate limiting
 function getClientIP(request: NextRequest): string {
@@ -385,6 +386,8 @@ function generateGoalsFromConversation(messages: any[]): GoalData[] {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireApiUser(req)
+  if (auth.response) return auth.response
   // Rate limiting check (10 requests per minute for AI routes)
   const clientIP = getClientIP(req);
   const rateLimitResult = await rateLimiter.check(clientIP, securityConfig.apiSecurity.chatRateLimit);

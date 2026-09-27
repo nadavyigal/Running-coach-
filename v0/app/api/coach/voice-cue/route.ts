@@ -3,6 +3,7 @@ import { generateText } from "ai"
 import { createOpenAI } from "@ai-sdk/openai"
 import { captureServerEvent } from "@/lib/server/posthog"
 import { checkVoiceCueThrottle } from "@/lib/server/voice-cue-throttle"
+import { requireApiUser } from "@/lib/api-auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -45,6 +46,8 @@ Never advise running through pain — if the runner mentions pain, say stop and 
 Sound like a real coach, not a chatbot.`
 
 export async function POST(request: Request): Promise<Response> {
+  const auth = await requireApiUser(request)
+  if (auth.response) return auth.response
   if (process.env.VOICE_COACH_ENABLED !== "true") {
     return NextResponse.json({ error: "Voice coach is not enabled" }, { status: 503 })
   }

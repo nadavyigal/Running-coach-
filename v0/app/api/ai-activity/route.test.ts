@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+// Signed-in: these tests cover the route behind the session gate. The gate itself is
+// covered by lib/api-auth.test.ts and __tests__/openai-routes-auth-gate.api.test.ts.
+vi.mock("@/lib/api-auth", () => ({
+  requireApiUser: async () => ({ user: { id: "test-user" } }),
+}))
+
 vi.mock("@ai-sdk/openai", () => ({
   openai: (model: string) => ({ model }),
 }))

@@ -4,6 +4,7 @@ import { openai } from '@ai-sdk/openai';
 import { sanitizeForPrompt, sanitizeDistance } from '@/lib/security';
 import { withSecureOpenAI } from '@/lib/apiKeyManager';
 import { logger } from '@/lib/logger';
+import { requireApiUser } from '@/lib/api-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -68,6 +69,8 @@ function extractJson(text: string) {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireApiUser(req);
+  if (auth.response) return auth.response;
   const requestId = `workout_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
   try {
