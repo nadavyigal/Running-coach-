@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev --webpack",
     "init": "npm install",
+    "predev": "node scripts/copy-maplibre-worker.mjs",
+    "prebuild": "node scripts/copy-maplibre-worker.mjs",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "node scripts/run-eslint.cjs",
@@ -32,7 +34,7 @@
     "ci:full": "npm run quality:check && npm run security:check && npm run build:production"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^2.0.88",
+    "@ai-sdk/openai": "^2.0.110",
     "@capacitor-community/background-geolocation": "^1.2.26",
     "@capacitor/app": "^7.0.1",
     "@capacitor/core": "^7.4.3",
@@ -72,7 +74,7 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.89.0",
     "@vercel/analytics": "^1.6.1",
-    "ai": "^5.0.115",
+    "ai": "5.0.207",
     "autoprefixer": "^10.4.20",
     "bullmq": "^5.66.4",
     "class-variance-authority": "^0.7.1",
@@ -87,7 +89,7 @@
     "input-otp": "1.4.1",
     "isomorphic-dompurify": "^2.35.0",
     "lucide-react": "^0.454.0",
-    "maplibre-gl": "^5.13.0",
+    "maplibre-gl": "^6.11.2",
     "next": "16.3.6",
     "next-themes": "^0.4.4",
     "node-fetch": "^3.3.2",
@@ -130,7 +132,17 @@
   },
   "overrides": {
     "preact": ">=10.28.2",
-    "dompurify": ">=3.4.13",
-    "lodash": ">=4.17.22"
+    "dompurify": ">=3.4.16",
+    "lodash": ">=4.17.22",
+    "minimatch@3": {
+      "brace-expansion": "1.1.21"
+    },
+    "minimatch@9": {
+      "brace-expansion": "2.1.7"
+    },
+    "minimatch@10": {
+      "brace-expansion": "5.0.12"
+    },
+    "postcss-selector-parser": ">=6.1.3"
   }
 }

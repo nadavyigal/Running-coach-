@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LatLng } from '@/lib/mapConfig';
 import { MAP_CONFIG, getTileUrl, hasMapTilerToken } from '@/lib/mapConfig';
+import { loadMapLibre } from '@/lib/maplibreClient';
 import { MapFallback } from './MapFallback';
 
 // Dynamic import types for MapLibre
@@ -83,11 +84,11 @@ export function RunMap({
   useEffect(() => {
     let mounted = true;
 
-    const loadMapLibre = async () => {
+    const initializeMapLibre = async () => {
       try {
-        const maplibregl = await import('maplibre-gl');
+        const maplibregl = await loadMapLibre();
         if (mounted) {
-          setMapLibre(maplibregl.default);
+          setMapLibre(maplibregl);
         }
       } catch (error) {
         console.error('Failed to load MapLibre GL JS:', error);
@@ -99,7 +100,7 @@ export function RunMap({
       }
     };
 
-    loadMapLibre();
+    initializeMapLibre();
 
     return () => {
       mounted = false;

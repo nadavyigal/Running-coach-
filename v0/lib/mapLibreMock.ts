@@ -65,6 +65,7 @@ export const createMapLibreMock = () => {
     GeolocateControl: vi.fn(),
     ScaleControl: vi.fn(),
     FullscreenControl: vi.fn(),
+    setWorkerUrl: vi.fn(),
   };
 };
 

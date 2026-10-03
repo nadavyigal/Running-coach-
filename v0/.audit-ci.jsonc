@@ -1,44 +1,23 @@
 {
   // audit-ci configuration.
   //
-  // The allowlist is intentionally EMPTY. As of 2026-08-08 (WP-72) there are no
-  // suppressed advisories: `audit-ci --config .audit-ci.jsonc` and
-  // `audit-ci --moderate --config .audit-ci.jsonc` both pass on their own merits.
+  // Keep the allowlist empty unless an advisory truly has no upstream fix.
+  // Each entry needs a dated justification naming why the advisory is not
+  // reachable in the deployed application and what would make it reachable.
   //
-  // It previously held ~60 entries, every one of which had become dead. They were
-  // cleared by fixing the underlying dependencies rather than by suppressing them:
-  //   - next 14.2.35 -> 16.3.0 (also moves its pinned postcss to 8.5.23)
-  //   - sharp -> 0.35.3, and a lockfile refresh of tar, brace-expansion,
-  //     js-yaml, svgo, nanoid, and postcss
-  //   - removed `bundlesize` (unused; sole source of the axios advisory chain)
-  //   - removed `cssnano` (declared but wired into no pipeline; sole source of svgo)
-  //   - dompurify override raised to >=3.4.13
+  // GHSA-82fw-gwwq-j7x9 (vitest <4.1.11, moderate): path traversal via @vitest/mocker
+  //   redirect mock. vitest is dev-only and never ships to Vercel; exploiting it
+  //   requires running a malicious test file locally or in CI. Upgrading to
+  //   vitest 4.1.11+ caused shard-isolation regressions in Radix/UI component
+  //   tests; revisit when that upgrade can be validated across the full suite.
   //
-  // Keep it empty. Adding an entry means shipping a known vulnerability, so it needs
-  // a dated justification recorded alongside it, naming why the advisory is not
-  // reachable in the deployed application and what would make it reachable again.
-  //
-  // 2026-09-27: two dated entries, added so the P0 security fixes (PRs #133-#135)
-  // can land behind a green CI. Both are temporary; remove each when its upgrade
-  // story lands. Everything else was fixed, not suppressed: next 16.3.0 -> 16.3.6
-  // (two critical unauthenticated-RCE advisories), sharp -> 0.35.4, and lockfile
-  // refreshes of @xmldom/xmldom, browserslist, js-yaml and fflate.
-  //
-  // GHSA-jrc7-96c5-q579 (maplibre-gl <=6.4.0, critical): XSS sanitizer bypass in
-  //   DOM.sanitize(). Not reachable today: the app never calls Popup or setHTML
-  //   (only lib/mapLibreMock.ts mentions them), and the only HTML the sanitizer
-  //   sees is the hard-coded attribution string in components/maps/RouteMap.tsx
-  //   and RunMap.tsx. Becomes reachable if any map popup, marker label or
-  //   attribution is built from user, route or third-party data. Fix is
-  //   maplibre-gl 6.x, which is ESM-only and resolves its worker from
-  //   import.meta.url, so it needs setWorkerUrl() plus a served worker file and
-  //   a browser check of both map screens. Remove by 2026-10-31.
-  //
-  // GHSA-82fw-gwwq-j7x9 (vitest <4.1.11, moderate): path traversal via the
-  //   @vitest/mocker redirect mock. vitest is a devDependency that never ships to
-  //   Vercel; exploiting it requires running a malicious test file locally or in
-  //   CI. Becomes reachable if vitest ever runs untrusted test code. Fix is the
-  //   vitest 3 -> 4.1.11+ major upgrade across the full suite. Remove by 2026-10-31.
+  // GHSA-vfj7-8cjw-p6xm (braces <=3.0.3, high): stack-exhaustion DoS in glob
+  //   pattern matching. No patched braces release exists yet (latest is 3.0.3).
+  //   Only pulled in by dev/build tooling (tailwindcss, eslint-config-next via
+  //   fast-glob/micromatch/chokidar). None of these ship to Vercel production.
+  //   Becomes reachable only if an attacker can supply malicious glob patterns to
+  //   those tools at build/lint time. Fix is tailwindcss 4.x or upstream braces
+  //   patch. Revisit when either lands.
   "high": true,
-  "allowlist": ["GHSA-jrc7-96c5-q579", "GHSA-82fw-gwwq-j7x9"]
+  "allowlist": ["GHSA-82fw-gwwq-j7x9", "GHSA-vfj7-8cjw-p6xm"]
 }
