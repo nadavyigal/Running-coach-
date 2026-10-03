@@ -8,8 +8,19 @@
  */
 
 import { sendEmail } from '../email'
-import { db } from '../db'
 import { logger } from '../logger'
+import {
+  assertEmailSequenceStoreConfigured,
+  countRuns,
+  countRunsForPlan,
+  getActivePlan,
+  getLastRunCompletedAt,
+  listEligibleUsers,
+  recordSequenceSent,
+  wasSequenceSent,
+  type EmailSequencePlan,
+  type EmailSequenceUser,
+} from '../server/email-sequence-store'
 
 // ============================================================================
 // SEQUENCE DEFINITIONS
@@ -35,8 +46,11 @@ interface SequenceConfig {
   id: EmailSequence
   name: string
   triggerDelay: number // Days after signup or event
-  condition: (user: any) => Promise<boolean>
-  generateEmail: (user: any) => Promise<{ subject: string; html: string; text?: string }>
+  condition: (user: EmailSequenceUser) => Promise<boolean>
+  generateEmail: (
+    user: EmailSequenceUser,
+    context?: { plan?: EmailSequencePlan | null }
+  ) => Promise<{ subject: string; html: string; text?: string }>
 }
 
 /**
@@ -61,8 +75,7 @@ const firstRunReminderSequence: SequenceConfig = {
   name: 'First Run Reminder (D3)',
   triggerDelay: 3,
   condition: async (user) => {
-    // Only send if user hasn't recorded any runs
-    const runCount = await db.runs.where('userId').equals(user.id).count()
+    const runCount = await countRuns(user.profileId)
     return runCount === 0
   },
   generateEmail: async (user) => {
@@ -176,21 +189,15 @@ const planActivationSequence: SequenceConfig = {
   name: 'Plan Activation Reminder (D7)',
   triggerDelay: 7,
   condition: async (user) => {
-    const plan = await db.plans.where('userId').equals(user.id).first()
+    const plan = await getActivePlan(user.profileId)
     if (!plan) return false
 
-    // Check if they've completed any workouts from their plan
-    const workoutCount = await db.runs
-      .where('userId')
-      .equals(user.id)
-      .filter((run) => run.planId === plan.id)
-      .count()
-
+    const workoutCount = await countRunsForPlan(user.profileId, plan.id)
     return workoutCount === 0
   },
-  generateEmail: async (user) => {
+  generateEmail: async (user, context) => {
     const displayName = user.name || 'Runner'
-    const plan = await db.plans.where('userId').equals(user.id).first()
+    const plan = context?.plan ?? (await getActivePlan(user.profileId))
 
     const html = `
       <!DOCTYPE html>
@@ -204,10 +211,10 @@ const planActivationSequence: SequenceConfig = {
                     <td style="padding: 40px;">
                       <h2 style="margin: 0 0 20px; color: #1a1a1a; font-size: 22px;">Hi ${displayName},</h2>
                       <p style="margin: 0 0 16px; color: #4a4a4a; font-size: 16px; line-height: 1.6;">
-                        Your personalized training plan is ready and waiting! It's been designed specifically for your ${user.goal} goal.
+                        Your personalized training plan is ready and waiting! It's been designed specifically for your ${user.goal ?? 'running'} goal.
                       </p>
                       <p style="margin: 0 0 16px; color: #4a4a4a; font-size: 16px; line-height: 1.6;">
-                        Let's make this week count - your plan includes ${plan?.workouts?.length || 3} workouts that will help you build momentum.
+                        Let's make this week count - your plan includes ${plan?.workoutCount || 3} workouts that will help you build momentum.
                       </p>
                       <div style="text-align: center; margin: 32px 0;">
                         <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://runsmart.app'}/plan" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
@@ -240,16 +247,10 @@ const reEngagementSequence: SequenceConfig = {
   name: 'Re-engagement (D30)',
   triggerDelay: 30,
   condition: async (user) => {
-    const lastRun = await db.runs
-      .where('userId')
-      .equals(user.id)
-      .reverse()
-      .sortBy('date')
-      .then((runs) => runs[0])
+    const lastRunCompletedAt = await getLastRunCompletedAt(user.profileId)
+    if (!lastRunCompletedAt) return true
 
-    if (!lastRun) return true // Never ran
-
-    const daysSinceLastRun = daysSince(lastRun.date)
+    const daysSinceLastRun = daysSince(lastRunCompletedAt)
     return daysSinceLastRun >= 30
   },
   generateEmail: async (user) => {
@@ -284,43 +285,28 @@ const ALL_SEQUENCES: SequenceConfig[] = [
  * Check if a user should receive a specific email sequence
  */
 export async function shouldSendSequenceEmail(
-  userId: number,
+  user: EmailSequenceUser,
   sequence: EmailSequence
 ): Promise<boolean> {
-  const user = await db.users.get(userId)
-  if (!user || !user.email) return false
-
   const sequenceConfig = ALL_SEQUENCES.find((s) => s.id === sequence)
   if (!sequenceConfig) return false
 
   const daysSinceSignup = daysSince(user.createdAt)
-
-  // Check if it's time to send this sequence
   if (daysSinceSignup < sequenceConfig.triggerDelay) return false
 
-  // Check sequence-specific conditions
-  const meetsCondition = await sequenceConfig.condition(user)
-  if (!meetsCondition) return false
+  const alreadySent = await wasSequenceSent(user.profileId, sequence)
+  if (alreadySent) return false
 
-  // TODO: Check if email was already sent (requires email_sends table)
-  // For now, we'll assume it hasn't been sent
-
-  return true
+  return sequenceConfig.condition(user)
 }
 
 /**
  * Send a sequence email to a user
  */
 export async function sendSequenceEmail(
-  userId: number,
+  user: EmailSequenceUser,
   sequence: EmailSequence
 ): Promise<void> {
-  const user = await db.users.get(userId)
-  if (!user || !user.email) {
-    logger.warn(`Cannot send email - user ${userId} not found or missing email`)
-    return
-  }
-
   const sequenceConfig = ALL_SEQUENCES.find((s) => s.id === sequence)
   if (!sequenceConfig) {
     logger.error(`Unknown email sequence: ${sequence}`)
@@ -328,7 +314,11 @@ export async function sendSequenceEmail(
   }
 
   try {
-    const { subject, html, text } = await sequenceConfig.generateEmail(user)
+    const plan =
+      sequence === EmailSequence.PLAN_ACTIVATION
+        ? await getActivePlan(user.profileId)
+        : null
+    const { subject, html, text } = await sequenceConfig.generateEmail(user, { plan })
 
     await sendEmail({
       to: user.email,
@@ -337,18 +327,11 @@ export async function sendSequenceEmail(
       text,
     })
 
-    logger.info(
-      `Sent ${sequence} email to user ${userId} (${user.email})`
-    )
+    await recordSequenceSent(user.profileId, sequence)
 
-    // TODO: Log email send to database for tracking
-    // await db.emailSends.add({
-    //   userId,
-    //   sequenceId: sequence,
-    //   sentAt: new Date(),
-    // })
+    logger.info(`Sent ${sequence} email to profile ${user.profileId} (${user.email})`)
   } catch (error) {
-    logger.error(`Failed to send ${sequence} email to user ${userId}:`, error)
+    logger.error(`Failed to send ${sequence} email to profile ${user.profileId}:`, error)
     throw error
   }
 }
@@ -362,28 +345,28 @@ export async function processEmailSequences(): Promise<{
   sent: number
   errors: number
 }> {
+  assertEmailSequenceStoreConfigured()
+
   const stats = { processed: 0, sent: 0, errors: 0 }
 
   try {
-    const users = await db.users.toArray()
+    const users = await listEligibleUsers()
     logger.info(`Processing email sequences for ${users.length} users`)
 
     for (const user of users) {
-      if (!user.id || !user.email) continue
-
       stats.processed++
 
       for (const sequence of ALL_SEQUENCES) {
         try {
-          const shouldSend = await shouldSendSequenceEmail(user.id, sequence.id)
+          const shouldSend = await shouldSendSequenceEmail(user, sequence.id)
 
           if (shouldSend) {
-            await sendSequenceEmail(user.id, sequence.id)
+            await sendSequenceEmail(user, sequence.id)
             stats.sent++
           }
         } catch (error) {
           logger.error(
-            `Error processing ${sequence.id} for user ${user.id}:`,
+            `Error processing ${sequence.id} for profile ${user.profileId}:`,
             error
           )
           stats.errors++
@@ -407,8 +390,8 @@ export async function processEmailSequences(): Promise<{
  * Manually trigger a specific sequence for a user (for testing)
  */
 export async function triggerSequenceManual(
-  userId: number,
+  user: EmailSequenceUser,
   sequence: EmailSequence
 ): Promise<void> {
-  await sendSequenceEmail(userId, sequence)
+  await sendSequenceEmail(user, sequence)
 }

@@ -20,28 +20,57 @@
 import { NextResponse } from 'next/server'
 import { processEmailSequences } from '@/lib/email/sequences'
 import { logger } from '@/lib/logger'
+import {
+  EmailSequenceDataSourceError,
+  isEmailSequenceStoreConfigured,
+} from '@/lib/server/email-sequence-store'
 
-function isDatabaseUnavailableError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false
-  return error.message.includes('Database not available')
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
+
+function isAuthorizedCronRequest(request: Request): boolean {
+  const cronSecret = process.env.CRON_SECRET?.trim()
+  if (!cronSecret) return true
+  return request.headers.get('authorization') === `Bearer ${cronSecret}`
 }
 
-/**
- * GET handler for cron job execution
- * Vercel Cron Jobs call this endpoint on schedule
- */
-export async function GET(request: Request) {
-  // Verify the request is from Vercel Cron (optional but recommended)
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
+function buildDataSourceErrorResponse(error: EmailSequenceDataSourceError) {
+  const status = error.code === 'not_configured' ? 503 : 500
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    logger.warn('Unauthorized cron job attempt')
+  return NextResponse.json(
+    {
+      success: false,
+      error: error.message,
+      code: error.code,
+      timestamp: new Date().toISOString(),
+    },
+    { status }
+  )
+}
+
+async function handleCronExecution(request: Request, manual = false) {
+  if (!isAuthorizedCronRequest(request)) {
+    logger.warn('Unauthorized email sequence cron attempt')
     return new NextResponse('Unauthorized', { status: 401 })
   }
 
+  if (!isEmailSequenceStoreConfigured()) {
+    const message =
+      'Email sequence data source is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
+    logger.error(message)
+    return NextResponse.json(
+      {
+        success: false,
+        error: message,
+        code: 'not_configured',
+        timestamp: new Date().toISOString(),
+      },
+      { status: 503 }
+    )
+  }
+
   try {
-    logger.info('Starting email sequence cron job')
+    logger.info(manual ? 'Manual email sequence execution triggered' : 'Starting email sequence cron job')
 
     const stats = await processEmailSequences()
 
@@ -49,22 +78,14 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
+      manual,
       timestamp: new Date().toISOString(),
       stats,
     })
   } catch (error) {
-    // Server-side cron runs can hit Dexie/IndexedDB unavailability; do not fail cron health in that case.
-    if (isDatabaseUnavailableError(error)) {
-      logger.warn('Email sequence cron skipped: database unavailable in server runtime')
-      return NextResponse.json(
-        {
-          success: true,
-          skipped: true,
-          reason: 'database_unavailable',
-          timestamp: new Date().toISOString(),
-        },
-        { status: 200 }
-      )
+    if (error instanceof EmailSequenceDataSourceError) {
+      logger.error('Email sequence data source error:', error)
+      return buildDataSourceErrorResponse(error)
     }
 
     logger.error('Email sequence cron job failed:', error)
@@ -81,6 +102,14 @@ export async function GET(request: Request) {
 }
 
 /**
+ * GET handler for cron job execution
+ * Vercel Cron Jobs call this endpoint on schedule
+ */
+export async function GET(request: Request) {
+  return handleCronExecution(request)
+}
+
+/**
  * POST handler for manual execution (testing)
  * Call this endpoint to manually trigger email sequence processing
  *
@@ -89,50 +118,9 @@ export async function GET(request: Request) {
  *   -H "Content-Type: application/json"
  */
 export async function POST(request: Request) {
-  // In development, allow manual triggering without auth
-  if (process.env.NODE_ENV !== 'development') {
-    const authHeader = request.headers.get('authorization')
-    const cronSecret = process.env.CRON_SECRET
-
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-      return new NextResponse('Unauthorized', { status: 401 })
-    }
+  if (process.env.NODE_ENV !== 'development' && !isAuthorizedCronRequest(request)) {
+    return new NextResponse('Unauthorized', { status: 401 })
   }
 
-  try {
-    logger.info('Manual email sequence execution triggered')
-
-    const stats = await processEmailSequences()
-
-    return NextResponse.json({
-      success: true,
-      manual: true,
-      timestamp: new Date().toISOString(),
-      stats,
-    })
-  } catch (error) {
-    if (isDatabaseUnavailableError(error)) {
-      logger.warn('Manual email sequence execution skipped: database unavailable in server runtime')
-      return NextResponse.json(
-        {
-          success: true,
-          skipped: true,
-          reason: 'database_unavailable',
-          timestamp: new Date().toISOString(),
-        },
-        { status: 200 }
-      )
-    }
-
-    logger.error('Manual email sequence execution failed:', error)
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-      },
-      { status: 500 }
-    )
-  }
+  return handleCronExecution(request, true)
 }
