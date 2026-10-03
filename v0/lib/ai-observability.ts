@@ -18,7 +18,12 @@ export type AIGenerationCaptureArgs = {
   properties?: Record<string, unknown>
 }
 
-const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com"
+import {
+  resolvePosthogHost,
+  resolveServerPosthogKey,
+  warnMissingPosthogKey,
+} from "@/lib/posthog-config"
+
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi
 const PHONE_PATTERN = /(?:\+?\d[\d\s().-]{7,}\d)/g
 const DATA_URL_PATTERN = /data:[^;,]+\/[^;,]+;base64,[A-Za-z0-9+/=]+/g
@@ -28,17 +33,18 @@ const CAPTURE_TIMEOUT_MS = 1500
 function getPostHogConfig(): { apiKey: string; host: string } | null {
   if (typeof window !== "undefined") return null
 
-  const apiKey = process.env.POSTHOG_API_KEY?.trim() || ""
+  const apiKey = resolveServerPosthogKey()
+  if (!apiKey) {
+    if (process.env.NODE_ENV === "development") {
+      warnMissingPosthogKey("server")
+    }
+    return null
+  }
 
-  if (!apiKey) return null
-
-  const host = (
-    process.env.POSTHOG_HOST?.trim() ||
-    process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim() ||
-    DEFAULT_POSTHOG_HOST
-  ).replace(/\/$/, "")
-
-  return { apiKey, host }
+  return {
+    apiKey,
+    host: resolvePosthogHost({ preferServerHost: true }),
+  }
 }
 
 function redactTelemetryValue(value: unknown, key?: string): unknown {
