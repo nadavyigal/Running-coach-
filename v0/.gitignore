@@ -29,3 +29,6 @@ next-env.d.ts
 
 # Eval run artifacts (regenerated each run)
 evals/**/report.json
+
+# Copied from node_modules/maplibre-gl during predev/prebuild
+/public/maplibre/
