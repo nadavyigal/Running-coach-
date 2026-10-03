@@ -34,6 +34,16 @@ function isAuthorizedCronRequest(request: Request): boolean {
   return request.headers.get('authorization') === `Bearer ${cronSecret}`
 }
 
+function isDryRunRequest(request: Request): boolean {
+  const envValue = process.env.EMAIL_SEQUENCE_DRY_RUN?.trim().toLowerCase()
+  if (envValue === '1' || envValue === 'true' || envValue === 'yes') {
+    return true
+  }
+
+  const param = new URL(request.url).searchParams.get('dry_run')?.trim().toLowerCase()
+  return param === '1' || param === 'true' || param === 'yes'
+}
+
 function buildDataSourceErrorResponse(error: EmailSequenceDataSourceError) {
   const status = error.code === 'not_configured' ? 503 : 500
 
@@ -70,15 +80,24 @@ async function handleCronExecution(request: Request, manual = false) {
   }
 
   try {
-    logger.info(manual ? 'Manual email sequence execution triggered' : 'Starting email sequence cron job')
+    const dryRun = isDryRunRequest(request)
 
-    const stats = await processEmailSequences()
+    logger.info(
+      dryRun
+        ? 'Email sequence dry run started'
+        : manual
+          ? 'Manual email sequence execution triggered'
+          : 'Starting email sequence cron job'
+    )
+
+    const stats = await processEmailSequences({ dryRun })
 
     logger.info('Email sequence cron job completed:', stats)
 
     return NextResponse.json({
       success: true,
       manual,
+      dryRun,
       timestamp: new Date().toISOString(),
       stats,
     })

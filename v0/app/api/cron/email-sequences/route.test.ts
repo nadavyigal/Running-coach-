@@ -37,7 +37,14 @@ describe('/api/cron/email-sequences', () => {
     vi.clearAllMocks()
     process.env.CRON_SECRET = 'cron-secret'
     isEmailSequenceStoreConfiguredMock.mockReturnValue(true)
-    processEmailSequencesMock.mockResolvedValue({ processed: 2, sent: 1, errors: 0 })
+    processEmailSequencesMock.mockResolvedValue({
+      processed: 2,
+      sent: 1,
+      errors: 0,
+      dryRun: false,
+      wouldSend: [],
+      capped: false,
+    })
   })
 
   afterEach(() => {
@@ -84,9 +91,40 @@ describe('/api/cron/email-sequences', () => {
     expect(response.status).toBe(200)
     expect(body).toMatchObject({
       success: true,
+      dryRun: false,
       stats: { processed: 2, sent: 1, errors: 0 },
     })
-    expect(processEmailSequencesMock).toHaveBeenCalledTimes(1)
+    expect(processEmailSequencesMock).toHaveBeenCalledWith({ dryRun: false })
+  })
+
+  it('passes dry_run query param through to processing', async () => {
+    processEmailSequencesMock.mockResolvedValue({
+      processed: 4,
+      sent: 0,
+      errors: 0,
+      dryRun: true,
+      wouldSend: [{ profileId: 'p1', email: 'a@example.com', sequence: 'first_run_reminder' }],
+      capped: false,
+    })
+    const { GET } = await loadRoute()
+
+    const response = await GET(
+      new Request('http://localhost/api/cron/email-sequences?dry_run=true', {
+        headers: { authorization: 'Bearer cron-secret' },
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({
+      success: true,
+      dryRun: true,
+      stats: {
+        dryRun: true,
+        wouldSend: [{ profileId: 'p1', email: 'a@example.com', sequence: 'first_run_reminder' }],
+      },
+    })
+    expect(processEmailSequencesMock).toHaveBeenCalledWith({ dryRun: true })
   })
 
   it('returns 500 when processing fails unexpectedly', async () => {
