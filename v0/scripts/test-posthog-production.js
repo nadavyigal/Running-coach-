@@ -7,19 +7,35 @@
 
 const PRODUCTION_URL = 'https://www.runsmart-ai.com'
 const POSTHOG_API_URL = 'https://us.i.posthog.com/decide'
+const POSTHOG_KEY_ENV = 'NEXT_PUBLIC_POSTHOG_KEY'
+const LEGACY_POSTHOG_KEY_ENV = 'NEXT_PUBLIC_POSTHOG_API_KEY'
+
+function resolvePosthogKey() {
+  return (
+    process.env[POSTHOG_KEY_ENV]?.trim() ||
+    process.env[LEGACY_POSTHOG_KEY_ENV]?.trim() ||
+    null
+  )
+}
 
 console.log('🔍 PostHog Production Verification\n')
-console.log('=' .repeat(60))
+console.log('='.repeat(60))
 
 async function checkPostHogEndpoint() {
   console.log('\n1️⃣  Checking PostHog API endpoint...')
+
+  const apiKey = resolvePosthogKey()
+  if (!apiKey) {
+    console.log(`❌ Set ${POSTHOG_KEY_ENV} before running this script`)
+    return false
+  }
 
   try {
     const response = await fetch(POSTHOG_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        api_key: process.env.NEXT_PUBLIC_POSTHOG_API_KEY || 'phc_2RcjPhReYKSisINOVVehHusghrUtyyiR6sN87SzJLZ6',
+        api_key: apiKey,
         distinct_id: 'test-user',
       })
     })
@@ -63,13 +79,19 @@ async function checkProductionEnvVars() {
 async function testEventSending() {
   console.log('\n3️⃣  Testing event capture...')
 
+  const apiKey = resolvePosthogKey()
+  if (!apiKey) {
+    console.log(`❌ Set ${POSTHOG_KEY_ENV} before running this script`)
+    return false
+  }
+
   // Try to send a test event directly to PostHog
   try {
     const response = await fetch('https://us.i.posthog.com/capture/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        api_key: process.env.NEXT_PUBLIC_POSTHOG_API_KEY || 'phc_2RcjPhReYKSisINOVVehHusghrUtyyiR6sN87SzJLZ6',
+        api_key: apiKey,
         event: 'test_production_verification',
         properties: {
           distinct_id: 'test-script',
@@ -175,7 +197,7 @@ async function main() {
       console.log('1. Verify Vercel environment variables:')
       console.log('   vercel env ls')
       console.log('2. Add missing variables if needed:')
-      console.log('   vercel env add NEXT_PUBLIC_POSTHOG_API_KEY')
+      console.log(`   vercel env add ${POSTHOG_KEY_ENV}`)
       console.log('3. Redeploy if variables were added:')
       console.log('   vercel --prod')
     }

@@ -1,24 +1,25 @@
 import "server-only"
 
 import { logger } from "@/lib/logger"
-
-const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com"
+import {
+  resolvePosthogHost,
+  resolveServerPosthogKey,
+  warnMissingPosthogKey,
+} from "@/lib/posthog-config"
 
 function getPosthogConfig(): { apiKey: string; host: string } | null {
-  const apiKey =
-    process.env.POSTHOG_API_KEY?.trim() ||
-    process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim() ||
-    process.env.NEXT_PUBLIC_POSTHOG_API_KEY?.trim() ||
-    ""
+  const apiKey = resolveServerPosthogKey()
+  if (!apiKey) {
+    if (process.env.NODE_ENV === "development") {
+      warnMissingPosthogKey("server")
+    }
+    return null
+  }
 
-  if (!apiKey) return null
-
-  const host = (
-    process.env.POSTHOG_HOST?.trim() ||
-    process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim() ||
-    DEFAULT_POSTHOG_HOST
-  ).replace(/\/$/, "")
-  return { apiKey, host }
+  return {
+    apiKey,
+    host: resolvePosthogHost({ preferServerHost: true }),
+  }
 }
 
 export async function captureServerEvent(
