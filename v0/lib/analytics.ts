@@ -1,7 +1,6 @@
 import { safeDbOperation } from './db'
 import { getCurrentUser } from './dbUtils'
 import { logger } from './logger'
-import { identifyUser, resetIdentity } from './analytics-identity'
 
 type PosthogInstance = {
   init?: (apiKey: string, config?: Record<string, unknown>) => void
@@ -316,40 +315,6 @@ export const trackFirstRunRecorded = async (properties?: Record<string, any>) =>
   })
 }
 
-const ACTIVATION_STORAGE_PREFIX = 'runsmart_activated_user_'
-
-/**
- * Activation: the user's first completed run, emitted as `first_run_recorded`
- * (the funnel step app/admin/analytics already reads). Emits only when the saved
- * run is the user's only run, and at most once per user on this device.
- * `$set_once` keeps PostHog's `activated_at` stable if another device repeats it.
- * Returns true only when the event was emitted.
- */
-export const trackActivationOnce = async (
-  userId: number,
-  totalRunsForUser: number,
-  properties?: Record<string, unknown>
-): Promise<boolean> => {
-  if (typeof window === 'undefined' || totalRunsForUser !== 1) {
-    return false
-  }
-
-  const storageKey = `${ACTIVATION_STORAGE_PREFIX}${userId}`
-  const activatedAt = new Date().toISOString()
-  try {
-    if (window.localStorage.getItem(storageKey)) {
-      return false
-    }
-    window.localStorage.setItem(storageKey, activatedAt)
-  } catch {
-    // Without storage we cannot promise "once", so stay silent.
-    return false
-  }
-
-  await trackFirstRunRecorded({ ...properties, $set_once: { activated_at: activatedAt } })
-  return true
-}
-
 // ============================================================================
 // CHALLENGE FUNNEL TRACKING
 // ============================================================================
@@ -646,26 +611,18 @@ export const trackAppOpened = async (
  * Set the user ID for tracking
  * IMPORTANT: Call this immediately after user logs in or signs up!
  * This associates all future events with the user ID for funnel analysis.
- * Safe before PostHog has loaded: the identity is applied once it has.
  */
 export const setUserId = (userId: string | number) => {
   if (typeof window === 'undefined') {
     return
   }
 
-  identifyUser(userId)
-}
-
-/**
- * Forget the identified user on sign-out, so the next person on this device
- * starts as a new anonymous visitor instead of inheriting this profile.
- */
-export const resetUserId = () => {
-  if (typeof window === 'undefined') {
-    return
+  const posthog = typeof window !== 'undefined' ? window.posthog : undefined
+  if (posthog && posthog.identify) {
+    posthog.identify(String(userId))
+  } else {
+    logger.debug('PostHog not ready for user identification')
   }
-
-  resetIdentity()
 }
 
 /**
@@ -754,7 +711,6 @@ export const trackPWAInstallDismissed = async (properties?: Record<string, any>)
 // Export analytics object for direct access if needed
 export const analytics = {
   setUserId,
-  resetUserId,
   setUserAttribute,
   forceFlush,
   trackEvent,

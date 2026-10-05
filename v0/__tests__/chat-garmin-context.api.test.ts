@@ -4,12 +4,6 @@ const streamTextMock = vi.hoisted(() => vi.fn())
 const buildGarminContextMock = vi.hoisted(() => vi.fn())
 const buildGarminContextSummaryMock = vi.hoisted(() => vi.fn())
 
-// Signed-in: these tests cover the route behind the session gate. The gate itself is
-// covered by lib/api-auth.test.ts and __tests__/openai-routes-auth-gate.api.test.ts.
-vi.mock("@/lib/api-auth", () => ({
-  requireApiUser: async () => ({ user: { id: "test-user" } }),
-}))
-
 vi.mock("@ai-sdk/openai", () => ({
   openai: vi.fn((model: string) => ({ model })),
 }))

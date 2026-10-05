@@ -126,15 +126,7 @@ describe('Personalized Recommendations Integration', () => {
     }
   });
 
-  it('grants access to pro users and provides upgrade prompts', async () => {
-    vi.mocked(dbUtils.getUser).mockResolvedValue({
-      id: 1,
-      subscriptionTier: 'pro',
-      subscriptionStatus: 'active',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    } as any);
-
+  it('grants access in testing mode and provides upgrade prompts', async () => {
     const hasAccess = await SubscriptionGate.hasAccess(1, ProFeature.RECOVERY_RECOMMENDATIONS);
     expect(hasAccess).toBe(true);
 

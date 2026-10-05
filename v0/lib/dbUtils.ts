@@ -34,19 +34,6 @@ import {
   migrateLocalDateToUTC
 } from './timezone-utils';
 import { SyncService } from './sync/sync-service';
-import { createClient } from './supabase/client';
-
-type AhaMomentId = 'knows_me' | 'achievement' | 'future_vision' | 'noticed';
-
-async function resolveAuthUserId(): Promise<string | null> {
-  try {
-    const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.user?.id ?? null;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Database Utilities - Comprehensive database operations with error handling
@@ -1645,22 +1632,16 @@ export async function markMilestoneAchieved(milestoneId: number, achievedValue?:
 export async function createPlan(planData: Omit<Plan, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
   return safeDbOperation(async () => {
     if (!db) throw new Error('Database not available');
-    const timestamp = nowUTC();
     
     // Deactivate other active plans for this user
-    await db.plans
-      .where('userId')
-      .equals(planData.userId)
-      .and(plan => plan.isActive)
-      .modify({ isActive: false, updatedAt: timestamp });
+    await db.plans.where('userId').equals(planData.userId).and(plan => plan.isActive).modify({ isActive: false });
     
     const id = await db.plans.add({
       ...planData,
-      createdAt: timestamp,
-      updatedAt: timestamp
+      createdAt: nowUTC(),
+      updatedAt: nowUTC()
     });
     console.log('✅ Plan created successfully:', id);
-    triggerSync();
     return id as number;
   }, 'createPlan');
 }
@@ -1972,7 +1953,6 @@ export async function createWorkout(workoutData: Omit<Workout, 'id' | 'createdAt
       updatedAt: new Date()
     });
     console.log('✅ Workout created successfully:', id);
-    triggerSync();
     return id as number;
   }, 'createWorkout');
 }
@@ -1984,7 +1964,7 @@ export async function completeWorkout(workoutId: number, runData?: Partial<Run>)
   return safeDbOperation(async () => {
     if (!db) throw new Error('Database not available');
     
-    await db.workouts.update(workoutId, { completed: true, completedAt: new Date(), updatedAt: new Date() });
+    await db.workouts.update(workoutId, { completed: true, updatedAt: new Date() });
     
     if (runData) {
       const workout = await db.workouts.get(workoutId);
@@ -2005,7 +1985,6 @@ export async function completeWorkout(workoutId: number, runData?: Partial<Run>)
       }
     }
     console.log('✅ Workout completed successfully:', workoutId);
-    triggerSync();
   }, 'completeWorkout');
 }
 
@@ -2261,7 +2240,6 @@ export async function updateWorkout(workoutId: number, updates: Partial<Omit<Wor
     }
     
     await db.workouts.update(workoutId, updateData);
-    triggerSync();
   }, 'updateWorkout');
 }
 
@@ -2285,7 +2263,6 @@ export async function markWorkoutCompleted(workoutId: number): Promise<void> {
         await updateUserStreak(plan.userId);
       }
     }
-    triggerSync();
   }, 'markWorkoutCompleted');
 }
 
@@ -5239,87 +5216,7 @@ export const dbUtils = {
   createChallengeProgress,
   updateChallengeProgress,
   getChallengeProgressByPlan,
-
-  // Aha moments
-  recordAhaMoment,
-  hasAhaMomentFired,
-  isNoticedMomentOnCooldown,
 };
-
-export async function recordAhaMoment(params: {
-  userId: number
-  momentId: AhaMomentId
-  context?: string
-  variant?: string
-}) {
-  const authUserId = await resolveAuthUserId();
-  if (!authUserId) return;
-
-  const supabase = createClient();
-  const { error } = await supabase
-    .from('user_aha_moments')
-    .upsert(
-      {
-        user_id: authUserId,
-        moment_id: params.momentId,
-        context: params.context ?? null,
-        variant: params.variant ?? null,
-      },
-      { onConflict: 'user_id,moment_id,context', ignoreDuplicates: true }
-    );
-
-  if (error) {
-    console.warn('[recordAhaMoment] failed silently:', error.message);
-  }
-}
-
-export async function hasAhaMomentFired(
-  _userId: number,
-  momentId: string,
-  context?: string
-): Promise<boolean> {
-  const authUserId = await resolveAuthUserId();
-  if (!authUserId) return false;
-
-  const supabase = createClient();
-  let query = supabase
-    .from('user_aha_moments')
-    .select('id')
-    .eq('user_id', authUserId)
-    .eq('moment_id', momentId);
-
-  if (context) {
-    query = query.eq('context', context);
-  }
-
-  const { data, error } = await query.limit(1).maybeSingle();
-  if (error) {
-    console.warn('[hasAhaMomentFired] failed silently:', error.message);
-    return false;
-  }
-
-  return Boolean(data);
-}
-
-export async function isNoticedMomentOnCooldown(_userId: number): Promise<boolean> {
-  const authUserId = await resolveAuthUserId();
-  if (!authUserId) return false;
-
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from('user_aha_moments')
-    .select('fired_at')
-    .eq('user_id', authUserId)
-    .eq('moment_id', 'noticed')
-    .order('fired_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error || !data?.fired_at) return false;
-
-  const daysSinceLast = (Date.now() - new Date(data.fired_at).getTime()) / 86400000;
-  return daysSinceLast < 3;
-}
 
 export default dbUtils;
 export { seedDemoRoutes } from './seedRoutes';

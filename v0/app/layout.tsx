@@ -11,7 +11,6 @@ import { ErrorBoundary } from '@/components/error-boundary'
 import { ServiceWorkerRegister } from '@/components/service-worker-register'
 import { DataProvider } from '@/contexts/DataContext'
 import { AuthProvider } from '@/lib/auth-context'
-import { GarminDeepLinkListener } from '@/components/garmin-deep-link-listener'
 
 // Modern Athletic typography system
 // English: Inter for display and body
@@ -156,7 +155,6 @@ export default function RootLayout({
               <AuthProvider>
                 <DataProvider>
                   <ReminderInit />
-                  <GarminDeepLinkListener />
                   {children}
                   <Toaster />
                 {process.env.NEXT_PUBLIC_POSTHOG_SURVEYS_ENABLED !== 'false' && (

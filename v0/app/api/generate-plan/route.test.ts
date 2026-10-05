@@ -4,12 +4,6 @@ import { POST } from './route';
 import { NextRequest } from 'next/server';
 import { generateObject } from 'ai';
 
-// Signed-in: these tests cover the route behind the session gate. The gate itself is
-// covered by lib/api-auth.test.ts and __tests__/openai-routes-auth-gate.api.test.ts.
-vi.mock('@/lib/api-auth', () => ({
-  requireApiUser: async () => ({ user: { id: 'test-user' } }),
-}));
-
 // Mock the 'ai' module
 vi.mock('ai', () => ({
   generateObject: vi.fn(),

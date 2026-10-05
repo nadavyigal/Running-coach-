@@ -1,23 +1,12 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { withApiSecurity, ApiRequest } from '@/lib/security.middleware';
-import { GARMIN_CONNECT_DISABLED_MESSAGE, isGarminConnectEnabled } from '@/lib/server/garmin-connect-gate';
-import { resolveGarminOAuthClientId } from '@/lib/server/garmin-credentials';
-import { GARMIN_OAUTH_AUTHORIZE_URL } from '@/lib/server/garmin-endpoints';
 import { generateSignedState, generateCodeVerifier, generateCodeChallenge } from '../oauth-state';
 
 // POST - Initiate Garmin OAuth 2.0 PKCE flow (SECURED)
 async function handleGarminConnect(req: ApiRequest) {
   try {
-    if (!isGarminConnectEnabled()) {
-      logger.warn('Garmin connect blocked by GARMIN_CONNECT_ENABLED feature flag');
-      return NextResponse.json({
-        success: false,
-        error: GARMIN_CONNECT_DISABLED_MESSAGE
-      }, { status: 503 });
-    }
-
-    const { userId, authUserId, profileId, redirectUri } = await req.json();
+    const { userId, redirectUri } = await req.json();
 
     // Security: Validate userId
     if (!userId || typeof userId !== 'number' || userId <= 0) {
@@ -39,7 +28,7 @@ async function handleGarminConnect(req: ApiRequest) {
     const requestRedirectUri = typeof redirectUri === 'string' ? redirectUri.trim() : '';
     const origin = req.headers.get('origin')?.trim();
     const fallbackRedirectUri = origin ? `${origin}/garmin/callback` : '';
-    const resolvedRedirectUri = requestRedirectUri || envRedirectUri || fallbackRedirectUri;
+    const resolvedRedirectUri = envRedirectUri || requestRedirectUri || fallbackRedirectUri;
 
     logger.info('Garmin connect: redirect URI resolution', {
       envRedirectUri: envRedirectUri ?? '(not set)',
@@ -67,31 +56,16 @@ async function handleGarminConnect(req: ApiRequest) {
       }, { status: 400 });
     }
 
-    if (!['https:', 'http:', 'runsmart:'].includes(parsedRedirectUri.protocol)) {
+    if (!['https:', 'http:'].includes(parsedRedirectUri.protocol)) {
       return NextResponse.json({
         success: false,
         error: 'Invalid redirect URI protocol'
       }, { status: 400 });
     }
 
-    const normalizedAuthUserId = typeof authUserId === 'string' && authUserId.trim().length > 0
-      ? authUserId.trim()
-      : null;
-    const normalizedProfileId = typeof profileId === 'string' && profileId.trim().length > 0
-      ? profileId.trim()
-      : null;
-
-    let clientId: string;
-    try {
-      const credentials = resolveGarminOAuthClientId();
-      clientId = credentials.clientId;
-      logger.info('Garmin connect: OAuth credential mode resolved', {
-        credentialMode: credentials.mode,
-      });
-    } catch (credentialError) {
-      logger.error('Garmin client ID not configured or not allowed', {
-        error: credentialError instanceof Error ? credentialError.message : 'unknown',
-      });
+    const clientId = process.env.GARMIN_CLIENT_ID;
+    if (!clientId) {
+      logger.error('Garmin client ID not configured');
       return NextResponse.json({
         success: false,
         error: 'Service configuration error'
@@ -103,17 +77,11 @@ async function handleGarminConnect(req: ApiRequest) {
     const codeChallenge = await generateCodeChallenge(codeVerifier);
 
     // Embed code_verifier securely in the signed state so callback can retrieve it
-    const state = generateSignedState(
-      userId,
-      parsedRedirectUri.toString(),
-      codeVerifier,
-      normalizedAuthUserId,
-      normalizedProfileId
-    );
+    const state = generateSignedState(userId, parsedRedirectUri.toString(), codeVerifier);
 
     // Garmin Connect OAuth 2.0 PKCE authorization URL
     // Ref: https://developerportal.garmin.com/sites/default/files/OAuth2PKCE_1.pdf
-    const authUrl = new URL(GARMIN_OAUTH_AUTHORIZE_URL);
+    const authUrl = new URL('https://connect.garmin.com/oauth2Confirm');
     authUrl.searchParams.append('client_id', clientId);
     authUrl.searchParams.append('response_type', 'code');
     authUrl.searchParams.append('redirect_uri', parsedRedirectUri.toString());

@@ -1,18 +1,14 @@
 /**
  * Platform-aware GPS bridge.
  *
- * On iOS native (Capacitor) we use @capacitor-community/background-geolocation,
- * which wraps CLLocationManager with allowsBackgroundLocationUpdates = true and
- * keeps delivering updates when the WKWebView JS is suspended (screen locked,
- * app backgrounded). The iOS UIBackgroundModes=location declared in Info.plist
- * is what makes this possible.
+ * On iOS native (Capacitor) we use @capacitor/geolocation, which wraps
+ * CLLocationManager and delivers foreground location updates. UIBackgroundModes=location
+ * in Info.plist allows continued delivery when the screen is on and the app is active.
  *
- * On web (PWA) we fall back to the standard navigator.geolocation API, which
- * is suspended by the browser when hidden but is the best available option.
+ * On web (PWA) we fall back to the standard navigator.geolocation API.
  */
 
 import { isIOSNativeApp } from '@/lib/capacitor-platform'
-import { Geolocation } from '@capacitor/geolocation'
 
 export type GeoPoint = {
   latitude: number
@@ -26,8 +22,7 @@ export type GeoError = {
   code: string | number
   message: string
   /**
-   * True when the failure is a permission denial. Callers should surface a
-   * settings prompt (iOS: BackgroundGeolocation.openSettings()).
+   * True when the failure is a permission denial.
    */
   notAuthorized?: boolean
 }
@@ -38,9 +33,9 @@ export type WatchOptions = {
   maximumAge?: number
   /** Metres between updates on native. Ignored on web. */
   distanceFilter?: number
-  /** iOS foreground service notification title. Ignored on web. */
+  /** Unused – kept for API compatibility. */
   backgroundTitle?: string
-  /** iOS foreground service notification body. Ignored on web. */
+  /** Unused – kept for API compatibility. */
   backgroundMessage?: string
 }
 
@@ -49,89 +44,29 @@ export type WatchCallbacks = {
   onError: (error: GeoError) => void
 }
 
-type NativeLocation = {
-  latitude: number
-  longitude: number
-  accuracy: number
-  altitude: number | null
-  altitudeAccuracy: number | null
-  bearing: number | null
-  simulated: boolean
-  speed: number | null
-  time: number
-}
-
-type NativePluginError = {
-  code?: string
-  message?: string
-}
-
-type BackgroundGeolocationPlugin = {
-  addWatcher(
-    options: {
-      backgroundTitle?: string
-      backgroundMessage?: string
-      requestPermissions?: boolean
-      stale?: boolean
-      distanceFilter?: number
-    },
-    callback: (location: NativeLocation | null, error?: NativePluginError) => void
-  ): Promise<string>
-  removeWatcher(options: { id: string }): Promise<void>
-  openSettings(): Promise<void>
-}
-
-let pluginPromise: Promise<BackgroundGeolocationPlugin> | null = null
-function getPlugin(): Promise<BackgroundGeolocationPlugin> {
-  if (!pluginPromise) {
-    pluginPromise = import('@capacitor/core').then(({ registerPlugin }) =>
-      registerPlugin<BackgroundGeolocationPlugin>('BackgroundGeolocation')
-    )
-  }
-  return pluginPromise
-}
-
 const webWatchMap = new Map<string, number>()
 let webWatchCounter = 0
-const capacitorWatchIds = new Set<string>()
-const backgroundWatchIds = new Set<string>()
 
-function toGeoPointFromCapacitor(position: {
-  timestamp: number
-  coords: {
-    latitude: number
-    longitude: number
-    accuracy?: number | null
-    speed?: number | null
-  }
-}): GeoPoint {
-  return {
-    latitude: position.coords.latitude,
-    longitude: position.coords.longitude,
-    timestamp: Number.isFinite(position.timestamp) ? position.timestamp : Date.now(),
-    ...(typeof position.coords.accuracy === 'number' ? { accuracy: position.coords.accuracy } : {}),
-    ...(typeof position.coords.speed === 'number' && position.coords.speed !== null
-      ? { speed: position.coords.speed }
-      : {}),
-  }
-}
-
-async function watchCapacitorGeolocation(
+export async function watchGeoPosition(
   options: WatchOptions,
   callbacks: WatchCallbacks
 ): Promise<string> {
-  try {
-    const permissions = await Geolocation.checkPermissions().catch(() => null)
-    if (!permissions || permissions.location !== 'granted') {
-      const requested = await Geolocation.requestPermissions({ permissions: ['location'] })
+  if (isIOSNativeApp()) {
+    const { Geolocation } = await import('@capacitor/geolocation')
+
+    // Ensure permissions before starting the watch
+    let permStatus = await Geolocation.checkPermissions()
+    if (permStatus.location !== 'granted') {
+      const requested = await Geolocation.requestPermissions()
       if (requested.location !== 'granted') {
         callbacks.onError({
-          code: 'NOT_AUTHORIZED',
-          message: 'Location permission was not granted',
+          code: 1,
+          message: 'Location permission denied',
           notAuthorized: true,
         })
         return ''
       }
+      permStatus = await Geolocation.checkPermissions()
     }
 
     const id = await Geolocation.watchPosition(
@@ -140,84 +75,31 @@ async function watchCapacitorGeolocation(
         ...(typeof options.timeout === 'number' ? { timeout: options.timeout } : {}),
         ...(typeof options.maximumAge === 'number' ? { maximumAge: options.maximumAge } : {}),
       },
-      (position, error) => {
-        if (error) {
+      (position, err) => {
+        if (err) {
           callbacks.onError({
-            code: typeof error.code === 'string' || typeof error.code === 'number' ? error.code : 'UNKNOWN',
-            message: error.message ?? 'Unknown geolocation error',
-            notAuthorized: error.code === 'OS-PLUG-GLOC-0003' || error.message?.toLowerCase().includes('permission'),
+            code: (err as GeolocationPositionError).code ?? 2,
+            message: (err as GeolocationPositionError).message ?? 'Unknown geolocation error',
+            notAuthorized: (err as GeolocationPositionError).code === 1,
           })
           return
         }
-
         if (!position) return
-        callbacks.onPoint(toGeoPointFromCapacitor(position))
+        callbacks.onPoint({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          timestamp: Number.isFinite(position.timestamp) ? position.timestamp : Date.now(),
+          ...(typeof position.coords.accuracy === 'number'
+            ? { accuracy: position.coords.accuracy }
+            : {}),
+          ...(typeof position.coords.speed === 'number' && position.coords.speed !== null
+            ? { speed: position.coords.speed }
+            : {}),
+        })
       }
     )
 
-    capacitorWatchIds.add(id)
     return id
-  } catch (error) {
-    callbacks.onError({
-      code: 'CAPACITOR_GEOLOCATION_ERROR',
-      message: error instanceof Error ? error.message : 'Unable to start native geolocation',
-      notAuthorized: error instanceof Error && error.message.toLowerCase().includes('permission'),
-    })
-    return ''
-  }
-}
-
-export async function watchGeoPosition(
-  options: WatchOptions,
-  callbacks: WatchCallbacks
-): Promise<string> {
-  if (isIOSNativeApp()) {
-    const capacitorId = await watchCapacitorGeolocation(options, callbacks)
-    if (capacitorId) return capacitorId
-
-    try {
-      const plugin = await getPlugin()
-      const id = await plugin.addWatcher(
-        {
-          requestPermissions: true,
-          stale: false,
-          ...(typeof options.distanceFilter === 'number'
-            ? { distanceFilter: options.distanceFilter }
-            : {}),
-          ...(options.backgroundTitle ? { backgroundTitle: options.backgroundTitle } : {}),
-          ...(options.backgroundMessage ? { backgroundMessage: options.backgroundMessage } : {}),
-        },
-        (location, error) => {
-          if (error) {
-            callbacks.onError({
-              code: error.code ?? 'UNKNOWN',
-              message: error.message ?? 'Unknown geolocation error',
-              notAuthorized: error.code === 'NOT_AUTHORIZED',
-            })
-            return
-          }
-          if (!location) return
-          callbacks.onPoint({
-            latitude: location.latitude,
-            longitude: location.longitude,
-            timestamp: Number.isFinite(location.time) ? location.time : Date.now(),
-            ...(typeof location.accuracy === 'number' ? { accuracy: location.accuracy } : {}),
-            ...(typeof location.speed === 'number' && location.speed !== null
-              ? { speed: location.speed }
-              : {}),
-          })
-        }
-      )
-      backgroundWatchIds.add(id)
-      return id
-    } catch (error) {
-      callbacks.onError({
-        code: 'BACKGROUND_GEOLOCATION_ERROR',
-        message: error instanceof Error ? error.message : 'Unable to start background geolocation',
-        notAuthorized: error instanceof Error && error.message.toLowerCase().includes('permission'),
-      })
-      return ''
-    }
   }
 
   if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -261,26 +143,11 @@ export async function clearGeoWatch(id: string): Promise<void> {
   if (!id) return
 
   if (isIOSNativeApp()) {
-    if (capacitorWatchIds.has(id)) {
-      try {
-        await Geolocation.clearWatch({ id })
-      } catch (e) {
-        console.warn('[GPS native] Geolocation.clearWatch failed:', e)
-      } finally {
-        capacitorWatchIds.delete(id)
-      }
-      return
-    }
-
-    if (backgroundWatchIds.has(id)) {
-      const plugin = await getPlugin()
-      try {
-        await plugin.removeWatcher({ id })
-      } catch (e) {
-        console.warn('[GPS native] BackgroundGeolocation.removeWatcher failed:', e)
-      } finally {
-        backgroundWatchIds.delete(id)
-      }
+    const { Geolocation } = await import('@capacitor/geolocation')
+    try {
+      await Geolocation.clearWatch({ id })
+    } catch (e) {
+      console.warn('[GPS native] clearWatch failed:', e)
     }
     return
   }
@@ -292,16 +159,5 @@ export async function clearGeoWatch(id: string): Promise<void> {
   }
 }
 
-/**
- * Open the native iOS Settings app so the user can grant "Always" location
- * permission. No-op on web.
- */
-export async function openLocationSettings(): Promise<void> {
-  if (!isIOSNativeApp()) return
-  const plugin = await getPlugin()
-  try {
-    await plugin.openSettings()
-  } catch (e) {
-    console.warn('[GPS native] openSettings failed:', e)
-  }
-}
+/** No-op – retained for API compatibility. */
+export async function openLocationSettings(): Promise<void> {}

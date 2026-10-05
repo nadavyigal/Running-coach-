@@ -26,6 +26,3 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
-
-# Eval run artifacts (regenerated each run)
-evals/**/report.json

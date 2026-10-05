@@ -1,13 +1,14 @@
 import 'server-only'
 
 import { getGarminOAuthState, getValidGarminAccessToken, markGarminAuthError } from '@/lib/server/garmin-oauth-store'
-import { GARMIN_HEALTH_API_BASE_URL } from '@/lib/server/garmin-endpoints'
 import type {
   GarminDatasetKey,
   GarminNormalizedActivity,
   GarminOAuthConnection,
   GarminServiceError,
 } from '@/lib/integrations/garmin/types'
+
+const GARMIN_API_BASE = 'https://apis.garmin.com'
 const GARMIN_MAX_WINDOW_SECONDS = 86400
 const DEFAULT_BACKOFF_MS = 750
 const MAX_ATTEMPTS = 3
@@ -227,7 +228,6 @@ export function mapGarminPayloadToNormalizedActivity(
     polyline: getString(payload.polyline),
     lapSummaries,
     splitSummaries,
-    deviceName: getString(payload.deviceName),
     raw: payload,
   }
 }
@@ -297,7 +297,7 @@ export class GarminClient {
     const accessToken = await this.getAccessToken()
     const payload = await garminFetchJson<unknown>({
       accessToken,
-      url: `${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/permissions`,
+      url: `${GARMIN_API_BASE}/wellness-api/rest/user/permissions`,
     })
 
     if (Array.isArray(payload)) {
@@ -316,7 +316,7 @@ export class GarminClient {
     const accessToken = await this.getAccessToken()
     const payload = await garminFetchJson<Record<string, unknown>>({
       accessToken,
-      url: `${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/id`,
+      url: `${GARMIN_API_BASE}/wellness-api/rest/user/id`,
     })
 
     return getString(payload.userId) ?? getString(payload.id)
@@ -337,7 +337,7 @@ export class GarminClient {
       const path = params.mode === 'upload'
         ? '/wellness-api/rest/activities'
         : '/wellness-api/rest/backfill/activities'
-      const url = new URL(`${GARMIN_HEALTH_API_BASE_URL}${path}`)
+      const url = new URL(`${GARMIN_API_BASE}${path}`)
 
       if (params.mode === 'upload') {
         url.searchParams.set('uploadStartTimeInSeconds', String(cursor))

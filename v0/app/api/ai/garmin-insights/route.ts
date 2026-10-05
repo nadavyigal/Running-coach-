@@ -9,8 +9,6 @@ import {
   fetchLatestInsight,
   type GenerateGarminInsightRequest,
 } from "@/lib/server/garmin-insights-service"
-import { captureAIGeneration } from "@/lib/ai-observability"
-import { requireApiUser } from "@/lib/api-auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -80,11 +78,6 @@ export async function GET(req: Request): Promise<Response> {
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const auth = await requireApiUser(req)
-  if (auth.response) return auth.response
-  const requestId = `garmin_insight_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-  const startedAt = Date.now()
-
   if (!process.env.OPENAI_API_KEY?.trim()) {
     return NextResponse.json({ error: "OpenAI API key not configured", fallback: true }, { status: 503 })
   }
@@ -126,31 +119,6 @@ export async function POST(req: Request): Promise<Response> {
       ],
       maxOutputTokens: 220,
       temperature: 0.35,
-    })
-
-    void Promise.allSettled([
-      Promise.resolve((result as any).text ?? ""),
-      Promise.resolve((result as any).usage),
-    ]).then(([textResult, usageResult]) => {
-      const output = textResult.status === "fulfilled" ? textResult.value : ""
-      const usage = usageResult.status === "fulfilled" ? usageResult.value : undefined
-      return captureAIGeneration({
-        traceName: "garmin-insights",
-        distinctId: userId,
-        model: OPENAI_MODEL,
-        input: [
-          { role: "system", content: prompts.systemPrompt },
-          { role: "user", content: prompts.userPrompt },
-        ],
-        output,
-        usage,
-        latencyMs: Date.now() - startedAt,
-        properties: {
-          request_id: requestId,
-          streaming: true,
-          insight_type: insightType,
-        },
-      })
     })
 
     const streamResult = result as unknown as {

@@ -34,7 +34,6 @@ export type GarminDatasetKey =
   | 'hrv'
   | 'bloodPressures'
   | 'skinTemp'
-  | 'activityFiles'
 
 export interface GarminOAuthConnection {
   userId: number
@@ -112,7 +111,6 @@ export interface GarminNormalizedActivity {
   polyline: string | null
   lapSummaries: Array<Record<string, unknown>>
   splitSummaries: Array<Record<string, unknown>>
-  deviceName: string | null
   raw: Record<string, unknown>
 }
 

@@ -3,7 +3,6 @@ import { openai } from "@ai-sdk/openai"
 import { generateObject } from "ai"
 import { logger } from "@/lib/logger"
 import { z } from "zod"
-import { requireApiUser } from "@/lib/api-auth"
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
@@ -19,8 +18,6 @@ function isValidImageBuffer(buf: Buffer): boolean {
 }
 
 export async function POST(req: Request) {
-  const auth = await requireApiUser(req)
-  if (auth.response) return auth.response
   try {
     const apiKey = process.env.OPENAI_API_KEY
 

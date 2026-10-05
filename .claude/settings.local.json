@@ -38,7 +38,22 @@
       "mcp__playwright__browser_take_screenshot",
       "mcp__playwright__browser_evaluate",
       "mcp__playwright__browser_console_messages",
-      "Bash(echo \"exit:$?\")"
+      "Bash(echo \"exit:$?\")",
+      "WebFetch(domain:api.anthropic.com)",
+      "Read(//tmp/**)",
+      "Bash(mkdir -p /tmp/runsmart-design)",
+      "Bash(tar -xzf /tmp/runsmart-design.html)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(echo \"PID=$!\")",
+      "Bash(disown)",
+      "Read(//private/tmp/**)",
+      "Bash(kill 20287)",
+      "Bash(echo \"PID: $!\")",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__browser_batch",
+      "mcp__Claude_in_Chrome__computer",
+      "Bash(node_modules/.bin/next build *)"
     ],
     "deny": []
   },

@@ -2,7 +2,7 @@ import '@testing-library/jest-dom'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import ShareWeeklyClient from '@/app/(share)/weekly/[week]/share-weekly-client'
+import ShareWeeklyPage from '@/app/(share)/weekly/[week]/page'
 import { trackAnalyticsEvent } from '@/lib/analytics'
 import { useToast } from '@/hooks/use-toast'
 
@@ -58,10 +58,7 @@ describe('weekly share page', () => {
       writable: true,
     })
 
-    // Explicitly reset window.location in case a prior test replaced it with a plain object
-    // (device-connection-screen.test does `delete window.location` which persists in singleFork)
-    delete (window as any).location;
-    (window as any).location = { href: 'http://localhost:3000/weekly/2026-W12?userId=42', origin: 'http://localhost:3000' }
+    window.history.replaceState({}, '', 'http://localhost:3000/weekly/2026-W12?userId=42')
     ;(global.fetch as unknown as vi.Mock).mockImplementation((url: string | URL) => {
       const urlString = typeof url === 'string' ? url : url.toString()
       if (urlString.includes('/api/garmin/reports/weekly?userId=42')) {
@@ -91,14 +88,14 @@ describe('weekly share page', () => {
   })
 
   it('renders the shared weekly report and acquisition CTA', async () => {
-    render(<ShareWeeklyClient week="2026-W12" />)
+    render(<ShareWeeklyPage params={{ week: '2026-W12' }} />)
 
     expect(screen.getByTestId('weekly-share-signup-cta')).toHaveAttribute('href', '/')
     expect(await screen.findByText(/stable volume and strong consistency/i)).toBeInTheDocument()
   })
 
   it('tracks signup CTA clicks from the public share page', async () => {
-    render(<ShareWeeklyClient week="2026-W12" />)
+    render(<ShareWeeklyPage params={{ week: '2026-W12' }} />)
 
     fireEvent.click(screen.getByTestId('weekly-share-signup-cta'))
 
@@ -112,7 +109,7 @@ describe('weekly share page', () => {
   })
 
   it('copies the public share link when secondary share is clicked', async () => {
-    render(<ShareWeeklyClient week="2026-W12" />)
+    render(<ShareWeeklyPage params={{ week: '2026-W12' }} />)
 
     await screen.findByText(/stable volume and strong consistency/i)
     fireEvent.click(screen.getByTestId('weekly-share-copy-link'))

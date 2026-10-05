@@ -153,4 +153,18 @@ test.describe('Authentication - Signup Flow', () => {
       }
     }
   })
+
+  test('debug environment variables endpoint', async ({ page }) => {
+    // Test the debug endpoint
+    const response = await page.goto('/api/debug-env')
+
+    if (response) {
+      const data = await response.json()
+      console.log('Environment check:', JSON.stringify(data, null, 2))
+
+      expect(data.environment).toBeDefined()
+      expect(data.environment.supabaseUrl).not.toContain('PLACEHOLDER')
+      expect(data.environment.nodeEnv).toBe('production')
+    }
+  })
 })

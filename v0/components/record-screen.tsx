@@ -21,8 +21,6 @@ import { getActiveChallenge, updateChallengeOnWorkoutComplete } from "@/lib/chal
 import { startChallengeAndSyncPlan } from "@/lib/challenge-plan-sync"
 import { ENABLE_AUTO_PAUSE, ENABLE_VIBRATION_COACH, ENABLE_AUDIO_COACH } from "@/lib/featureFlags"
 import { recordRunWithSideEffects, retryPostRunAdaptation } from "@/lib/run-recording"
-import { detectAchievement, type AchievementContext } from "@/lib/achievementDetector"
-import { AchievementMoment } from "@/components/achievement-moment"
 import {
   getCoachingCueState,
   initializeCoachingCues,
@@ -372,8 +370,6 @@ export function RecordScreen() {
   const [challengeCompletionData, setChallengeCompletionData] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate } | null>(null)
   const [pendingRpeRunId, setPendingRpeRunId] = useState<number | null>(null)
   const [showPostRunRpeModal, setShowPostRunRpeModal] = useState(false)
-  const [achievementContext, setAchievementContext] = useState<AchievementContext | null>(null)
-  const savedRunIdRef = useRef<number | null>(null)
   const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate } | null>(null)
   const [currentWorkout, setCurrentWorkout] = useState<Workout | null>(null)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
@@ -543,9 +539,9 @@ export function RecordScreen() {
 
   useEffect(() => {
     if (!pendingRpeRunId) return
-    if (completionModalData || challengeCompletionData || achievementContext) return
+    if (completionModalData || challengeCompletionData) return
     setShowPostRunRpeModal(true)
-  }, [pendingRpeRunId, completionModalData, challengeCompletionData, achievementContext])
+  }, [pendingRpeRunId, completionModalData, challengeCompletionData])
 
   const logGps = (payload: Record<string, unknown>) => {
     if (!gpsDebugEnabled) return
@@ -2530,16 +2526,6 @@ export function RecordScreen() {
         }
       }
 
-      savedRunIdRef.current = runId
-      try {
-        const achievement = await detectAchievement(user.id, runId, distance)
-        if (achievement) {
-          setAchievementContext(achievement)
-        }
-      } catch {
-        // Non-critical — fall through to normal post-run flow
-      }
-
       setPendingRpeRunId(runId)
     } catch (error) {
       console.error('Error saving run:', error)
@@ -3618,14 +3604,6 @@ export function RecordScreen() {
           }}
           initialStep="upload"
           {...(currentWorkout?.id ? { workoutId: currentWorkout.id } : {})}
-        />
-      )}
-      {achievementContext && savedRunIdRef.current && (
-        <AchievementMoment
-          context={achievementContext}
-          onDismiss={() => {
-            setAchievementContext(null)
-          }}
         />
       )}
       {pendingRpeRunId !== null && (

@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { extractBodyBatteryDailySummary } from '@/lib/garmin/bodyBatteryTimeSeries'
 import type { GarminDatasetKey } from '@/lib/server/garmin-export-store'
 import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -25,7 +24,6 @@ interface GarminSyncActivity {
   splitSummaries?: Record<string, unknown>[]
   intervalSummaries?: Record<string, unknown>[]
   telemetry?: Record<string, unknown>
-  deviceName?: string | null
 }
 
 interface GarminSyncSleepRecord {
@@ -59,9 +57,6 @@ interface DailyMetricAccumulator {
   restingHr: number | null
   stress: number | null
   bodyBattery: number | null
-  bodyBatteryStart: number | null
-  bodyBatteryPeak: number | null
-  bodyBatteryEnd: number | null
   bodyBatteryCharged: number | null
   bodyBatteryDrained: number | null
   bodyBatteryBalance: number | null
@@ -163,9 +158,6 @@ function getOrCreateDailyMetric(map: Map<string, DailyMetricAccumulator>, date: 
     restingHr: null,
     stress: null,
     bodyBattery: null,
-    bodyBatteryStart: null,
-    bodyBatteryPeak: null,
-    bodyBatteryEnd: null,
     bodyBatteryCharged: null,
     bodyBatteryDrained: null,
     bodyBatteryBalance: null,
@@ -292,7 +284,7 @@ function buildDailyMetricsRows(input: {
     if (!date) continue
 
     const metric = getOrCreateDailyMetric(byDate, date)
-    metric.hrv = pickNumber(hrv, ['lastNight', 'weeklyAvg', 'lastNightAvg', 'dailyAvg', 'hrvValue', 'value']) ?? metric.hrv
+    metric.hrv = pickNumber(hrv, ['hrvValue', 'value', 'dailyAvg', 'lastNightAvg']) ?? metric.hrv
     addRawDataset(metric, 'hrv', hrv)
   }
 
@@ -306,30 +298,6 @@ function buildDailyMetricsRows(input: {
     const metric = getOrCreateDailyMetric(byDate, date)
     metric.stress =
       pickNumber(stressDetail, ['stressLevel', 'averageStressLevel', 'stressLevelValue']) ?? metric.stress
-
-    // A day can have multiple stressDetails entries (e.g. multiple sync segments); merge
-    // extremes across all of them instead of letting the last-processed entry win.
-    const bodyBatterySummary = extractBodyBatteryDailySummary(stressDetail.timeOffsetBodyBatteryValues)
-    if (bodyBatterySummary.start != null) {
-      metric.bodyBatteryStart =
-        metric.bodyBatteryStart == null
-          ? bodyBatterySummary.start
-          : Math.min(metric.bodyBatteryStart, bodyBatterySummary.start)
-    }
-    if (bodyBatterySummary.peak != null) {
-      metric.bodyBatteryPeak =
-        metric.bodyBatteryPeak == null
-          ? bodyBatterySummary.peak
-          : Math.max(metric.bodyBatteryPeak, bodyBatterySummary.peak)
-    }
-    if (bodyBatterySummary.end != null) {
-      metric.bodyBatteryEnd =
-        metric.bodyBatteryEnd == null
-          ? bodyBatterySummary.end
-          : Math.max(metric.bodyBatteryEnd, bodyBatterySummary.end)
-      metric.bodyBattery = metric.bodyBatteryEnd
-    }
-
     addRawDataset(metric, 'stressDetails', stressDetail)
   }
 
@@ -467,7 +435,6 @@ export async function persistGarminSyncSnapshot(input: PersistGarminSyncInput): 
       interval_summaries: asRecordArray(activity.intervalSummaries),
       calories: activity.calories,
       source: 'garmin_sync',
-      device_name: activity.deviceName ?? null,
       raw_json: activity,
       telemetry_json: asRecord(activity.telemetry),
       updated_at: nowIso,
@@ -487,9 +454,6 @@ export async function persistGarminSyncSnapshot(input: PersistGarminSyncInput): 
       resting_hr: row.restingHr,
       stress: row.stress,
       body_battery: row.bodyBattery,
-      body_battery_start: row.bodyBatteryStart,
-      body_battery_peak: row.bodyBatteryPeak,
-      body_battery_end: row.bodyBatteryEnd,
       body_battery_charged: row.bodyBatteryCharged,
       body_battery_drained: row.bodyBatteryDrained,
       body_battery_balance: row.bodyBatteryBalance,
@@ -514,25 +478,6 @@ export async function persistGarminSyncSnapshot(input: PersistGarminSyncInput): 
       .upsert(activityChunk, { onConflict: 'user_id,activity_id' })
     if (error) {
       throw new Error(`Failed to upsert garmin_activities: ${error.message}`)
-    }
-  }
-
-  // Garmin only reports device identity on activity records, never on daily/wellness
-  // summaries - cache the most recently seen device name on the connection row so Recovery
-  // dashboard and Garmin Wellness can attribute to a specific device, not just "Garmin".
-  const latestDeviceName = activityRows
-    .slice()
-    .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''))
-    .reverse()
-    .find((row) => row.device_name)?.device_name
-
-  if (latestDeviceName) {
-    const { error: deviceNameError } = await supabase
-      .from('garmin_connections')
-      .update({ device_name: latestDeviceName })
-      .eq('user_id', userId)
-    if (deviceNameError) {
-      throw new Error(`Failed to update garmin_connections.device_name: ${deviceNameError.message}`)
     }
   }
 

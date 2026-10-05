@@ -2,8 +2,7 @@
 
 import { db, type Run } from '@/lib/db'
 import { updateRun } from '@/lib/dbUtils'
-
-const GARMIN_RUN_MIRROR_LIMIT = 200
+import { createClient } from '@/lib/supabase/client'
 
 function asDate(value: string | null | undefined): Date {
   const parsed = value ? new Date(value) : new Date()
@@ -34,69 +33,24 @@ function mapSupabaseRunToDexie(userId: number, row: Record<string, unknown>): Om
 }
 
 export async function mirrorRecentGarminRunsToDexie(userId: number): Promise<number> {
-  // 200-row window so reconciliation can detect server-side deletions
-  const response = await fetch(`/api/devices/garmin/runs?userId=${encodeURIComponent(String(userId))}&limit=${GARMIN_RUN_MIRROR_LIMIT}`, {
-    method: 'GET',
-    headers: { 'x-user-id': String(userId) },
-    credentials: 'include',
-  })
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('runs')
+    .select('*')
+    .eq('source_provider', 'garmin')
+    .order('completed_at', { ascending: false })
+    .limit(10)
 
-  const payload = (await response.json().catch(() => ({}))) as {
-    success?: boolean
-    runs?: Array<Record<string, unknown>>
-    error?: string
-  }
-
-  if (!response.ok || payload.success === false) {
-    throw new Error(payload.error ?? 'Failed to load Garmin runs from RunSmart')
-  }
-
-  const remoteRows = (payload.runs ?? []).filter(
-    (row) => typeof row.source_activity_id === 'string'
-  )
-  const remoteIds = new Set(remoteRows.map((row) => row.source_activity_id as string))
-  const remoteWindowIsComplete = remoteRows.length < GARMIN_RUN_MIRROR_LIMIT
-  const oldestRemoteCompletedAtMs = remoteRows.reduce<number | null>((oldest, row) => {
-    const completedAt = typeof row.completed_at === 'string' ? Date.parse(row.completed_at) : NaN
-    if (!Number.isFinite(completedAt)) return oldest
-    return oldest == null ? completedAt : Math.min(oldest, completedAt)
-  }, null)
-
-  // Reconcile deletions: any local Garmin-sourced run whose source_activity_id
-  // is no longer in Supabase within the fetched remote window has been removed
-  // server-side and must be removed locally too. If the API returns a full page,
-  // older local Garmin runs may still exist server-side outside this bounded
-  // window, so keep them until a later page or smaller result proves deletion.
-  const localGarminRuns = await db.runs
-    .where('userId')
-    .equals(userId)
-    .filter((run) => run.importSource === 'garmin' && typeof run.importRequestId === 'string')
-    .toArray()
-
-  const isInsideFetchedRemoteWindow = (run: Run): boolean => {
-    if (remoteWindowIsComplete) return true
-    if (oldestRemoteCompletedAtMs == null) return false
-
-    const completedAtMs = run.completedAt instanceof Date
-      ? run.completedAt.getTime()
-      : Date.parse(String(run.completedAt))
-    return Number.isFinite(completedAtMs) && completedAtMs >= oldestRemoteCompletedAtMs
-  }
-
-  const stale = localGarminRuns.filter(
-    (run) => run.importRequestId && !remoteIds.has(run.importRequestId) && isInsideFetchedRemoteWindow(run)
-  )
-  if (stale.length > 0) {
-    const ids = stale.map((run) => run.id).filter((id): id is number => typeof id === 'number')
-    if (ids.length > 0) {
-      await db.runs.bulkDelete(ids)
-    }
+  if (error) {
+    throw error
   }
 
   let imported = 0
 
-  for (const row of remoteRows) {
-    const importRequestId = row.source_activity_id as string
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const importRequestId = typeof row.source_activity_id === 'string' ? row.source_activity_id : null
+    if (!importRequestId) continue
+
     const mappedRun = mapSupabaseRunToDexie(userId, row)
     const existing = await db.runs
       .where('[userId+importRequestId]' as never)
@@ -165,12 +119,7 @@ export async function triggerRunReportsForNewGarminRuns(userId: number): Promise
 
 export async function syncGarminRunsToClient(userId: number): Promise<{ imported: number }> {
   const imported = await mirrorRecentGarminRunsToDexie(userId)
-  window.dispatchEvent(new CustomEvent('garmin-sync-complete', { detail: { userId, imported } }))
   window.dispatchEvent(new Event('garmin-run-synced'))
-  window.dispatchEvent(new Event('garmin-dashboard-refresh'))
-  window.dispatchEvent(new Event('garmin-readiness-refresh'))
-  window.dispatchEvent(new Event('today-refresh'))
-  window.dispatchEvent(new Event('recovery-refresh'))
   window.dispatchEvent(new Event('plan-updated'))
   void triggerRunReportsForNewGarminRuns(userId)
   return { imported }
