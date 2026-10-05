@@ -13,11 +13,7 @@ function getPosthogConfig(): { apiKey: string; host: string } | null {
 
   if (!apiKey) return null
 
-  const host = (
-    process.env.POSTHOG_HOST?.trim() ||
-    process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim() ||
-    DEFAULT_POSTHOG_HOST
-  ).replace(/\/$/, "")
+  const host = (process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim() || DEFAULT_POSTHOG_HOST).replace(/\/$/, "")
   return { apiKey, host }
 }
 

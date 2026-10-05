@@ -2,7 +2,6 @@ import { generateText, streamText } from 'ai'
 import type { CoreMessage } from 'ai'
 import { openai } from '@ai-sdk/openai'
 import { dbUtils } from '@/lib/dbUtils'
-import { captureAIGeneration } from '@/lib/ai-observability'
 
 // ============================================================================
 // TYPES AND INTERFACES
@@ -25,7 +24,6 @@ export interface ChatRequest {
    */
   maxOutputTokens?: number
   model?: string
-  traceName?: string
 }
 
 export interface ChatResponse {
@@ -411,9 +409,6 @@ export class ChatDriver {
 
     const requestId = generateRequestId()
     const startTime = Date.now()
-    const traceName = request.traceName || 'chat'
-    let aiMessages: CoreMessage[] = []
-    const aiModelName = request.model || config.defaultModel
 
     console.log(`[chat:ask] requestId=${requestId} Starting chat request`)
     console.log(
@@ -449,7 +444,6 @@ export class ChatDriver {
       }
 
       const { messages, metrics } = await this.preparePayload(request, requestId)
-      aiMessages = messages
 
       const monthKey = getUserMonthKey(userKey)
       const alreadyUsed = this.getTokensUsed(monthKey)
@@ -467,7 +461,7 @@ export class ChatDriver {
 
       this.addTokens(monthKey, metrics.tokensIn)
 
-      const modelName = aiModelName
+      const modelName = request.model || config.defaultModel
       const maxOutputTokens = request.maxOutputTokens ?? request.maxTokens ?? config.maxOutputTokens
       const model = openai(modelName)
 
@@ -480,36 +474,18 @@ export class ChatDriver {
             messages,
             maxOutputTokens,
             abortSignal: controller.signal,
-            // Runs as part of stream consumption, so the AI SDK keeps the
-            // response stream open until this resolves — unlike a bare
-            // fire-and-forget call, it can't be dropped by an early
-            // serverless function teardown once bytes are flushed.
-            onFinish: async ({ text, totalUsage }) => {
-              const promptTokens =
-                typeof totalUsage?.inputTokens === 'number' ? totalUsage.inputTokens : metrics.tokensIn
-              const completionTokens =
-                typeof totalUsage?.outputTokens === 'number' ? totalUsage.outputTokens : 0
-              this.addTokens(monthKey, Math.max(0, promptTokens - metrics.tokensIn) + completionTokens)
-
-              await captureAIGeneration({
-                traceName,
-                distinctId: request.userId,
-                model: modelName,
-                input: messages,
-                output: text,
-                usage: totalUsage,
-                latencyMs: Date.now() - startTime,
-                properties: {
-                  request_id: requestId,
-                  streaming: true,
-                  current_phase: request.currentPhase,
-                },
-              })
-            },
           }),
           config.timeoutMs,
           () => controller.abort()
         )
+
+        void Promise.resolve((result as any).usage)
+          .then((usage: any) => {
+            const promptTokens = typeof usage?.promptTokens === 'number' ? usage.promptTokens : metrics.tokensIn
+            const completionTokens = typeof usage?.completionTokens === 'number' ? usage.completionTokens : 0
+            this.addTokens(monthKey, Math.max(0, promptTokens - metrics.tokensIn) + completionTokens)
+          })
+          .catch(() => {})
 
         const response = (result as any).toDataStreamResponse?.() ?? (result as any).toTextStreamResponse?.()
         return { success: true, stream: response?.body }
@@ -534,21 +510,6 @@ export class ChatDriver {
 
       this.addTokens(monthKey, Math.max(0, promptTokens - metrics.tokensIn) + completionTokens)
 
-      await captureAIGeneration({
-        traceName,
-        distinctId: request.userId,
-        model: modelName,
-        input: messages,
-        output: (result as any).text ?? '',
-        usage,
-        latencyMs: duration,
-        properties: {
-          request_id: requestId,
-          streaming: false,
-          current_phase: request.currentPhase,
-        },
-      })
-
       return {
         success: true,
         data: {
@@ -561,19 +522,6 @@ export class ChatDriver {
         },
       }
     } catch (error) {
-      await captureAIGeneration({
-        traceName,
-        distinctId: request.userId,
-        model: aiModelName,
-        input: aiMessages.length > 0 ? aiMessages : request.messages,
-        latencyMs: Date.now() - startTime,
-        error,
-        properties: {
-          request_id: requestId,
-          streaming: Boolean(request.streaming),
-          current_phase: request.currentPhase,
-        },
-      })
       return { success: false, error: mapAiError(error, requestId) }
     }
   }

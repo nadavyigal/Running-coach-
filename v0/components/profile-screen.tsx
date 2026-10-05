@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
@@ -22,10 +22,6 @@ import {
   Target,
   GitMerge,
   Star,
-  LogIn,
-  UserPlus,
-  LogOut,
-  Mail,
 } from "lucide-react"
 import { AddShoesModal } from "@/components/add-shoes-modal"
 import { CoachingPreferencesSettings } from "@/components/coaching-preferences-settings";
@@ -40,7 +36,6 @@ import { CoachingProfilePanel } from "@/components/profile/CoachingProfilePanel"
 import { PerformanceAnalyticsSection } from "@/components/profile/PerformanceAnalyticsSection";
 import { AchievementsSection } from "@/components/profile/AchievementsSection";
 import { GarminReadinessCard } from "@/components/garmin-readiness-card";
-import { GARMIN_CONNECT_DISABLED_MESSAGE } from "@/lib/server/garmin-connect-gate";
 import { IntegrationsListCard, type IntegrationRow } from "@/components/profile/IntegrationsListCard";
 import { SettingsListCard, type SettingsRow } from "@/components/profile/SettingsListCard";
 import { DeveloperToolsAccordion } from "@/components/profile/DeveloperToolsAccordion";
@@ -67,19 +62,15 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/use-toast";
 import { UserDataSettings } from "@/components/user-data-settings";
 import { useData } from "@/contexts/DataContext";
-import { trackAnalyticsEvent, trackFeatureUsed, trackScreenViewed } from "@/lib/analytics";
+import { trackFeatureUsed, trackScreenViewed } from "@/lib/analytics";
 import { getChallengeHistory, getActiveChallenge, type DailyChallengeData } from "@/lib/challengeEngine";
 import { getActiveChallengeTemplates } from "@/lib/challengeTemplates";
 import { DATABASE } from "@/lib/constants";
 import { type Goal, type Run, db } from "@/lib/db";
 import type { ChallengeProgress, ChallengeTemplate } from "@/lib/db";
 import { dbUtils } from "@/lib/dbUtils";
-import { syncGarminEnabledData } from "@/lib/garminSync";
-import { useGarminConnectionStatus } from "@/lib/hooks/useGarminConnectionStatus";
 import { GoalProgressEngine, type GoalProgress } from "@/lib/goalProgressEngine";
 import { isSafeRedirect } from "@/lib/validateRedirect"
-import { useAuth } from "@/lib/auth-context"
-import { AuthModal } from "@/components/auth/auth-modal"
 
 type ChallengeTemplateSeed = ReturnType<typeof getActiveChallengeTemplates>[number]
 
@@ -124,13 +115,8 @@ export function ProfileScreen() {
   const [mergeSourceGoal, setMergeSourceGoal] = useState<Goal | null>(null)
   const [isSwitchingPrimary, setIsSwitchingPrimary] = useState(false)
   const [joiningChallengeSlug, setJoiningChallengeSlug] = useState<string | null>(null)
-  const [garminAction, setGarminAction] = useState<"connect" | "sync" | "backfill" | "disconnect" | null>(null)
-  const [showAuthModal, setShowAuthModal] = useState(false)
-  const [authModalTab, setAuthModalTab] = useState<'signup' | 'login'>('signup')
-  const { user: authUser, profileId, signOut: authSignOut, loading: authLoading } = useAuth()
-  const garminConnection = useGarminConnectionStatus(userId)
-  const garminConnected = garminConnection.connected
-  const garminSyncState = garminConnection.syncState
+  const [garminConnected, setGarminConnected] = useState(false)
+  const [garminSyncState, setGarminSyncState] = useState<string | null>(null)
   const hasGarminRuns = recentRuns.some((run) => run.importSource === "garmin")
   const showGarminInsights = garminConnected || hasGarminRuns
 
@@ -158,6 +144,35 @@ export function ProfileScreen() {
     if (activeGoals.length > 0) setGoals(activeGoals)
     setRecentRuns(filterRunsToRecentWindow(contextRecentRuns))
   }, [contextUserId, contextPrimaryGoal, activeGoals, contextRecentRuns, filterRunsToRecentWindow])
+
+  // Load Garmin connection status
+  useEffect(() => {
+    if (!userId) return
+    let mounted = true
+    void fetch(`/api/garmin/status?userId=${encodeURIComponent(String(userId))}`, {
+      headers: { 'x-user-id': String(userId) },
+    })
+      .then((response) => response.json())
+      .then((status: { connected?: boolean; syncState?: string }) => {
+        if (!mounted) return
+        setGarminConnected(Boolean(status.connected))
+        setGarminSyncState(status.syncState ?? null)
+      })
+      .catch(() => {
+        void db.wearableDevices
+          .where('[userId+type]' as any)
+          .equals([userId, 'garmin'])
+          .first()
+          .then((device) => {
+            if (mounted) {
+              setGarminConnected(!!device && device.connectionStatus !== 'disconnected')
+              setGarminSyncState(device?.connectionStatus ?? null)
+            }
+          })
+          .catch(() => { /* ignore */ })
+      })
+    return () => { mounted = false }
+  }, [userId])
 
   // Load goal progress using GoalProgressEngine for consistency with GoalProgressDashboard
   useEffect(() => {
@@ -236,17 +251,11 @@ export function ProfileScreen() {
 
   const handleGarminConnect = async () => {
     if (!userId) return
-    setGarminAction("connect")
     try {
       const response = await fetch('/api/devices/garmin/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-user-id': String(userId) },
-        body: JSON.stringify({
-          userId,
-          authUserId: authUser?.id ?? null,
-          profileId,
-          redirectUri: `${window.location.origin}/garmin/callback`,
-        }),
+        body: JSON.stringify({ userId, redirectUri: `${window.location.origin}/garmin/callback` }),
       })
       const data = await response.json()
       if (!response.ok || !data?.success || !data?.authUrl) {
@@ -255,166 +264,10 @@ export function ProfileScreen() {
       if (!isSafeRedirect(data.authUrl)) {
         throw new Error('Blocked unsafe redirect URL')
       }
-      void trackAnalyticsEvent('garmin_connect_started', {
-        userId,
-        surface: 'profile',
-        redirectUri: `${window.location.origin}/garmin/callback`,
-      })
       window.location.href = data.authUrl
     } catch (err) {
       console.error('Garmin connect failed:', err)
-      const message = err instanceof Error ? err.message : 'Could not start Garmin connection. Please try again.'
-      const isPlannedPause = message === GARMIN_CONNECT_DISABLED_MESSAGE
-      toast({
-        title: isPlannedPause ? 'Garmin sync paused' : 'Connection failed',
-        description: message,
-        variant: isPlannedPause ? 'default' : 'destructive',
-      })
-      setGarminAction(null)
-    }
-  }
-
-  const handleGarminSync = async () => {
-    if (!userId) return
-    setGarminAction("sync")
-    try {
-      const result = await syncGarminEnabledData(userId)
-      await garminConnection.refresh({ source: 'manual_sync' })
-
-      if (result.needsReauth) {
-        toast({
-          title: 'Reconnect Garmin',
-          description: 'Garmin needs you to reconnect before data can sync.',
-          variant: 'destructive',
-        })
-        return
-      }
-
-      if (result.errors.length > 0) {
-        void trackAnalyticsEvent('garmin_sync_partial', {
-          userId,
-          source: 'manual_sync',
-          error: result.errors[0] ?? null,
-        })
-        toast({
-          title: 'Garmin sync failed',
-          description: result.errors[0] ?? 'Please try syncing again.',
-          variant: 'destructive',
-        })
-        return
-      }
-
-      await refreshContext()
-      toast({
-        title: 'Garmin synced',
-        description: 'Your latest Garmin data is now available.',
-      })
-    } catch (err) {
-      console.error('Garmin sync failed:', err)
-      toast({
-        title: 'Garmin sync failed',
-        description: 'Please try syncing again.',
-        variant: 'destructive',
-      })
-    } finally {
-      setGarminAction(null)
-    }
-  }
-
-  const handleGarminBackfill = async () => {
-    if (!userId) return
-    setGarminAction("backfill")
-    try {
-      const result = await syncGarminEnabledData(userId, { trigger: 'backfill' })
-      await garminConnection.refresh({ source: 'manual_backfill' })
-
-      if (result.needsReauth) {
-        toast({
-          title: 'Reconnect Garmin',
-          description: 'Garmin needs you to reconnect before data can sync.',
-          variant: 'destructive',
-        })
-        return
-      }
-
-      if (result.errors.length > 0) {
-        void trackAnalyticsEvent('garmin_sync_partial', {
-          userId,
-          source: 'manual_backfill',
-          error: result.errors[0] ?? null,
-        })
-        toast({
-          title: 'Garmin re-sync failed',
-          description: result.errors[0] ?? 'Please try syncing again.',
-          variant: 'destructive',
-        })
-        return
-      }
-
-      await refreshContext()
-      toast({
-        title: 'Garmin re-sync started',
-        description: result.activitiesImported > 0
-          ? `Imported ${result.activitiesImported} Garmin activities.`
-          : 'RunSmart is draining queued Garmin data.',
-      })
-    } catch (err) {
-      console.error('Garmin backfill failed:', err)
-      toast({
-        title: 'Garmin re-sync failed',
-        description: 'Please try syncing again.',
-        variant: 'destructive',
-      })
-    } finally {
-      setGarminAction(null)
-    }
-  }
-
-  const handleGarminDisconnect = async () => {
-    if (!userId) return
-    setGarminAction("disconnect")
-    try {
-      const response = await fetch('/api/devices/garmin/disconnect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': String(userId) },
-        body: JSON.stringify({ userId }),
-      })
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok || data?.success === false) {
-        throw new Error(data?.error || 'Failed to disconnect Garmin')
-      }
-
-      try {
-        const device = await db.wearableDevices
-          .where('[userId+type]' as any)
-          .equals([userId, 'garmin'])
-          .first()
-        if (device?.id) {
-          await db.wearableDevices.update(device.id, {
-            connectionStatus: 'disconnected',
-            authTokens: null,
-            lastSync: null,
-            updatedAt: new Date(),
-          })
-        }
-      } catch {
-        // Server disconnect is the source of truth; local cleanup is best effort.
-      }
-
-      await garminConnection.refresh({ source: 'disconnect' })
-      toast({
-        title: 'Garmin disconnected',
-        description: 'You can reconnect Garmin from this profile card anytime.',
-      })
-    } catch (err) {
-      console.error('Garmin disconnect failed:', err)
-      toast({
-        title: 'Disconnect failed',
-        description: 'Could not disconnect Garmin. Please try again.',
-        variant: 'destructive',
-      })
-    } finally {
-      setGarminAction(null)
+      toast({ title: 'Connection failed', description: 'Could not start Garmin connection. Please try again.', variant: 'destructive' })
     }
   }
 
@@ -974,32 +827,6 @@ export function ProfileScreen() {
       description: 'Get troubleshooting and support.',
       onClick: () => notifyComingSoon('Help center'),
     },
-    ...(authUser
-      ? [
-          {
-            icon: LogOut,
-            name: 'Sign Out',
-            description: `Signed in as ${authUser.email ?? 'your account'}.`,
-            onClick: async () => {
-              try {
-                await authSignOut()
-              } catch {
-                toast({ title: 'Error', description: 'Failed to sign out. Please try again.', variant: 'destructive' })
-              }
-            },
-          },
-        ]
-      : [
-          {
-            icon: LogIn,
-            name: 'Sign In',
-            description: 'Log in to sync your data across devices.',
-            onClick: () => {
-              setAuthModalTab('login')
-              setShowAuthModal(true)
-            },
-          },
-        ]),
   ]
 
   const secondaryGoals = goals.filter((goal) => !primaryGoal || goal.id !== primaryGoal.id)
@@ -1072,67 +899,6 @@ export function ProfileScreen() {
 
       {!isLoading && !error ? (
         <>
-          {/* ── Account / Auth card ── */}
-          {!authLoading && (
-            <Card className={authUser ? "border-green-200 bg-green-50/50" : "border-primary/30 bg-primary/5"}>
-              <CardContent className="p-4">
-                {authUser ? (
-                  <div className="flex items-center gap-3">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-green-100">
-                      <Mail className="h-5 w-5 text-green-600" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-green-800">Signed in</p>
-                      <p className="truncate text-xs text-green-700">{authUser.email}</p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="shrink-0 text-xs"
-                      onClick={async () => {
-                        try { await authSignOut() } catch { /* ignore */ }
-                      }}
-                    >
-                      <LogOut className="mr-1 h-3 w-3" />
-                      Sign Out
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm font-semibold">Create an Account or Sign In</p>
-                      <p className="text-xs text-muted-foreground">Save your progress and access RunSmart from any device.</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => {
-                          setAuthModalTab('signup')
-                          setShowAuthModal(true)
-                        }}
-                      >
-                        <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-                        Create Account
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1"
-                        onClick={() => {
-                          setAuthModalTab('login')
-                          setShowAuthModal(true)
-                        }}
-                      >
-                        <LogIn className="mr-1.5 h-3.5 w-3.5" />
-                        Sign In
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
           <div className="sticky top-2 z-20 -mx-1 overflow-x-auto rounded-xl border bg-background/95 p-2 shadow-sm backdrop-blur">
             <div className="flex min-w-max gap-2">
               <Button
@@ -1529,11 +1295,7 @@ export function ProfileScreen() {
           <IntegrationsListCard
             garminConnected={garminConnected}
             garminStatusLabel={
-              garminSyncState === 'reauth_required'
-                ? 'Reconnect Garmin to resume data sync'
-                : garminSyncState === 'disconnected'
-                  ? 'Disconnected - reconnect Garmin to sync data'
-                  : garminConnected
+              garminConnected
                 ? garminSyncState === 'waiting_for_first_activity'
                   ? 'Waiting for first Garmin activity'
                   : garminSyncState === 'syncing'
@@ -1542,15 +1304,11 @@ export function ProfileScreen() {
                       ? 'Delayed sync from Garmin Connect'
                       : garminSyncState === 'reauth_required'
                         ? 'Reconnect Garmin'
-                    : 'Connected to Garmin Connect'
-                  : 'Not connected'
+                        : 'Connected to Garmin Connect'
+                : 'Not connected'
             }
-            garminStatusTone={garminSyncState === 'delayed' || garminSyncState === 'reauth_required' ? 'warning' : garminConnected ? 'connected' : 'available'}
-            garminAction={garminAction}
+            garminStatusTone={garminSyncState === 'delayed' || garminSyncState === 'reauth_required' ? 'warning' : 'connected'}
             onGarminConnect={() => void handleGarminConnect()}
-            onGarminSync={() => void handleGarminSync()}
-            onGarminBackfill={() => void handleGarminBackfill()}
-            onGarminDisconnect={() => void handleGarminDisconnect()}
             onGarminDetails={() => router.push('/garmin/details')}
             rows={integrationRows}
           />
@@ -1578,12 +1336,6 @@ export function ProfileScreen() {
           }}
         />
       ) : null}
-
-      <AuthModal
-        open={showAuthModal}
-        onOpenChange={setShowAuthModal}
-        defaultTab={authModalTab}
-      />
 
       {userId ? (
         <PlanTemplateFlow
@@ -1695,3 +1447,4 @@ export function ProfileScreen() {
     </div>
   )
 }
+

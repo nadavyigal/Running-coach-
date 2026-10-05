@@ -140,18 +140,10 @@ export function GarminWellnessDashboard({ userId }: GarminWellnessDashboardProps
       }
     }
 
-    const handleGarminRefresh = () => {
-      void run()
-    }
-
     void run()
-    window.addEventListener("garmin-dashboard-refresh", handleGarminRefresh)
-    window.addEventListener("garmin-readiness-refresh", handleGarminRefresh)
 
     return () => {
       cancelled = true
-      window.removeEventListener("garmin-dashboard-refresh", handleGarminRefresh)
-      window.removeEventListener("garmin-readiness-refresh", handleGarminRefresh)
     }
   }, [loadWeeklyInsight, userId])
 
@@ -210,9 +202,6 @@ export function GarminWellnessDashboard({ userId }: GarminWellnessDashboardProps
 
   const lastDate = formatShortDate(data.endDateIso)
   const bodyBatteryToday = data.bodyBatteryToday
-  const bodyBatteryTodayStart = data.bodyBatteryTodayStart
-  const bodyBatteryTodayPeak = data.bodyBatteryTodayPeak
-  const bodyBatteryTodayEnd = data.bodyBatteryTodayEnd
   const bodyBatteryTodaySource = data.bodyBatteryTodaySource
   const bodyBatteryTodayBalance = data.bodyBatteryTodayBalance
   const spo2LastNight = windowed.spo2.at(-1)?.value ?? null
@@ -276,9 +265,6 @@ export function GarminWellnessDashboard({ userId }: GarminWellnessDashboardProps
         <TabsContent value="body-battery" className="mt-3">
           <GarminBodyBatteryCard
             todayValue={bodyBatteryToday}
-            todayStart={bodyBatteryTodayStart}
-            todayPeak={bodyBatteryTodayPeak}
-            todayEnd={bodyBatteryTodayEnd}
             todaySource={bodyBatteryTodaySource}
             fallbackBalance={bodyBatteryTodayBalance}
             trend7d={windowed.bodyBattery}

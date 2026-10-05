@@ -66,7 +66,6 @@ export interface GarminEnabledSyncResult extends GarminSyncCatalogResult {
   sleepSkipped: number
   additionalSummaryImported: number
   additionalSummarySkipped: number
-  fitFilesProcessed: number
   datasetImports: Record<string, GarminDatasetImportStat>
   notices: string[]
 }
@@ -91,26 +90,15 @@ interface GarminSyncApiResponse {
 interface GarminManualSyncApiResponse {
   success?: boolean
   connected?: boolean
-  connectionStatus?: string
-  syncState?: string
   lastSyncAt?: string | null
-  lastSuccessfulSyncAt?: string | null
-  lastDataReceivedAt?: string | null
-  pendingJobs?: unknown
-  datasetCounts?: unknown
-  datasetCompleteness?: unknown
-  persistence?: unknown
   activitiesUpserted?: unknown
   dailyMetricsUpserted?: unknown
   duplicateActivitiesSkipped?: unknown
-  activityFilesProcessed?: unknown
-  notices?: unknown
   warnings?: unknown
   error?: string
   needsReauth?: boolean
   reason?: string | null
   retryAfterSeconds?: unknown
-  detail?: unknown
   details?: unknown
 }
 
@@ -308,22 +296,16 @@ function getManualSyncErrorMessage(payload: GarminManualSyncApiResponse): string
   const directError = getString(payload.error)
   if (directError) return directError
 
-  const detailRecord = asRecord(payload.detail)
-  const detailError = getString(detailRecord.error)
-  if (detailError) {
-    return detailError
-  }
-
   const details = asRecord(payload.details)
-  const legacyDetailError = getString(details.error)
-  if (legacyDetailError) {
+  const detailError = getString(details.error)
+  if (detailError) {
     if (payload.reason === 'hourly_limit') {
       const retryAfterSeconds = getNumber(payload.retryAfterSeconds)
       if (retryAfterSeconds != null) {
-        return `${legacyDetailError} Try again in ${retryAfterSeconds} seconds.`
+        return `${detailError} Try again in ${retryAfterSeconds} seconds.`
       }
     }
-    return legacyDetailError
+    return detailError
   }
 
   return 'Garmin sync request failed'
@@ -431,7 +413,7 @@ export async function syncGarminEnabledData(
       params.set('trigger', 'backfill')
     }
 
-    const response = await fetch(`/api/devices/garmin/sync/manual?${params.toString()}`, {
+    const response = await fetch(`/api/garmin/sync?${params.toString()}`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -461,7 +443,7 @@ export async function syncGarminEnabledData(
         sleepSkipped: 0,
         additionalSummaryImported: 0,
         additionalSummarySkipped: 0,
-        fitFilesProcessed: 0,
+  
         datasetImports: {},
         notices: [],
         needsReauth: true,
@@ -482,9 +464,9 @@ export async function syncGarminEnabledData(
         sleepSkipped: 0,
         additionalSummaryImported: 0,
         additionalSummarySkipped: 0,
-        fitFilesProcessed: 0,
+  
         datasetImports: {},
-        notices: parseNotices(payload.notices ?? payload.warnings),
+        notices: parseNotices(payload.warnings),
         needsReauth: false,
         errors: [getManualSyncErrorMessage(payload)],
       }
@@ -507,7 +489,6 @@ export async function syncGarminEnabledData(
     const activitiesImported = getNumber(payload.activitiesUpserted) ?? 0
     const activitiesSkipped = getNumber(payload.duplicateActivitiesSkipped) ?? 0
     const additionalSummaryImported = getNumber(payload.dailyMetricsUpserted) ?? 0
-    const fitFilesProcessed = getNumber(payload.activityFilesProcessed) ?? 0
 
     return {
       syncName: catalog.syncName,
@@ -522,12 +503,10 @@ export async function syncGarminEnabledData(
       sleepSkipped: 0,
       additionalSummaryImported,
       additionalSummarySkipped: 0,
-      fitFilesProcessed,
       datasetImports: {
         dailyMetrics: { imported: additionalSummaryImported, skipped: 0 },
-        activityFiles: { imported: fitFilesProcessed, skipped: 0 },
       },
-      notices: parseNotices(payload.notices ?? payload.warnings),
+      notices: parseNotices(payload.warnings),
       needsReauth: false,
       errors: [],
     }
@@ -544,7 +523,7 @@ export async function syncGarminEnabledData(
       sleepSkipped: 0,
       additionalSummaryImported: 0,
       additionalSummarySkipped: 0,
-      fitFilesProcessed: 0,
+
       datasetImports: {},
       notices: [],
       needsReauth: false,

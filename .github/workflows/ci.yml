@@ -20,7 +20,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '18'
           cache: 'npm'
           cache-dependency-path: './v0/package-lock.json'
 
@@ -37,18 +37,19 @@ jobs:
         run: npx audit-ci --moderate --config .audit-ci.jsonc
 
       - name: Run tests
-        run: |
-          for shard in $(seq 1 10); do
-            echo "Running Vitest shard ${shard}/10"
-            npm run test -- --run --shard=${shard}/10
-          done
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
+        run: npm run test -- --run --coverage
 
       - name: Build application
         run: npm run build
         env:
           NODE_ENV: production
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./v0/coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
 
       - name: Check build size
         run: |
@@ -68,7 +69,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '18'
           cache: 'npm'
           cache-dependency-path: './v0/package-lock.json'
 
@@ -98,7 +99,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '18'
           cache: 'npm'
           cache-dependency-path: './v0/package-lock.json'
 
@@ -124,16 +125,80 @@ jobs:
             echo "Build directory not found"
           fi
 
+  deploy-staging:
+    needs: [quality-gates, security-scan, performance-check]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    defaults:
+      run:
+        working-directory: ./v0
 
-# NOTE (2026-08-08, WP-72 Story 4): the `deploy-staging` and `deploy-production`
-# jobs were removed. They never deployed anything -- each ended in an `echo`
-# saying deployment "would happen here". Their presence implied a red pipeline
-# could hold a release, which was false and actively misleading: Vercel is wired
-# to this repository and deploys `main` on push regardless of this workflow's
-# result. On 2026-08-07 both commits whose CI failed were live in production
-# within the hour.
-#
-# This workflow is a quality signal, NOT a deployment gate. Pushing to `main` IS
-# deploying to production. If a real deployment gate is ever wanted, it has to be
-# configured on the Vercel side (or Vercel's Git integration disabled and a real
-# deploy step added here) -- not by re-adding a stub job.
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './v0/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for staging
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          echo "Staging deployment would happen here"
+
+      - name: Run health checks
+        run: |
+          echo "Running staging health checks..."
+          echo "Health checks would run here"
+
+  deploy-production:
+    needs: [quality-gates, security-scan, performance-check]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: ./v0
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './v0/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for production
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production environment..."
+          echo "Production deployment would happen here"
+
+      - name: Run production health checks
+        run: |
+          echo "Running production health checks..."
+          echo "Production health checks would run here"
+
+      - name: Notify deployment success
+        run: |
+          echo "Production deployment completed successfully"

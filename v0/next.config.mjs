@@ -23,13 +23,11 @@ const nextConfig = {
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 
-  // Treat as external (server-only). Moved out of `experimental` in Next 15;
-  // `experimental.serverComponentsExternalPackages` is rejected by Next 16.
-  serverExternalPackages: ['sharp', 'exifr', 'isomorphic-dompurify'],
-
   // Disable critters optimization to fix dependency issue
+  // Fixed: sharp and exifr externalization for Vercel deployment
   experimental: {
     optimizeCss: false, // Disable CSS optimization that uses critters
+    serverComponentsExternalPackages: ['sharp', 'exifr', 'isomorphic-dompurify'], // Treat as external (server-only)
     optimizePackageImports: [
       '@radix-ui/react-icons',
       'date-fns',
@@ -75,8 +73,8 @@ const nextConfig = {
           {
             key: 'Content-Security-Policy',
             value: process.env.NODE_ENV === 'development'
-              ? "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://us-assets.i.posthog.com https://vercel.live https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openai.com https://api.posthog.com https://us.i.posthog.com https://us-assets.i.posthog.com https://api.maptiler.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://vercel.live https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com https://connect.garmin.com https://*.garmin.com; frame-src https://vercel.live; object-src 'none'; base-uri 'self'; form-action 'self'; worker-src 'self' blob:;"
-              : "default-src 'self'; script-src 'self' 'unsafe-inline' https://us-assets.i.posthog.com https://vercel.live https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openai.com https://api.posthog.com https://us.i.posthog.com https://us-assets.i.posthog.com https://api.maptiler.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://vercel.live https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com https://connect.garmin.com https://*.garmin.com; frame-src https://vercel.live; object-src 'none'; base-uri 'self'; form-action 'self'; worker-src 'self' blob:;",
+              ? "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://us-assets.i.posthog.com https://vercel.live https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openai.com https://api.posthog.com https://us.i.posthog.com https://us-assets.i.posthog.com https://api.maptiler.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://vercel.live https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com; frame-src https://vercel.live; object-src 'none'; base-uri 'self'; form-action 'self'; worker-src 'self' blob:;"
+              : "default-src 'self'; script-src 'self' 'unsafe-inline' https://us-assets.i.posthog.com https://vercel.live https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openai.com https://api.posthog.com https://us.i.posthog.com https://us-assets.i.posthog.com https://api.maptiler.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://vercel.live https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com; frame-src https://vercel.live; object-src 'none'; base-uri 'self'; form-action 'self'; worker-src 'self' blob:;",
           },
           {
             key: 'Permissions-Policy',
@@ -98,15 +96,6 @@ const nextConfig = {
           {
             key: 'Cache-Control',
             value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-      {
-        source: '/.well-known/apple-app-site-association',
-        headers: [
-          {
-            key: 'Content-Type',
-            value: 'application/json',
           },
         ],
       },

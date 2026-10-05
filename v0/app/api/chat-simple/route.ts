@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server';
-import { requireApiUser } from '@/lib/api-auth';
 
 // Ultra-simple chat endpoint for diagnostics
 export async function POST(request: Request) {
-  const auth = await requireApiUser(request);
-  if (auth.response) return auth.response;
   try {
     const body = await request.json();
 
@@ -23,9 +20,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
-  const auth = await requireApiUser(request);
-  if (auth.response) return auth.response;
+export async function GET() {
   return NextResponse.json({
     status: 'ok',
     endpoint: 'chat-simple',

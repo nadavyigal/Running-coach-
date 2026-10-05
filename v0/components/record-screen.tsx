@@ -21,8 +21,6 @@ import { getActiveChallenge, updateChallengeOnWorkoutComplete } from "@/lib/chal
 import { startChallengeAndSyncPlan } from "@/lib/challenge-plan-sync"
 import { ENABLE_AUTO_PAUSE, ENABLE_VIBRATION_COACH, ENABLE_AUDIO_COACH } from "@/lib/featureFlags"
 import { recordRunWithSideEffects, retryPostRunAdaptation } from "@/lib/run-recording"
-import { detectAchievement, type AchievementContext } from "@/lib/achievementDetector"
-import { AchievementMoment } from "@/components/achievement-moment"
 import {
   getCoachingCueState,
   initializeCoachingCues,
@@ -45,8 +43,6 @@ import { useGpsTracking, type GPSPoint } from "@/hooks/use-gps-tracking"
 import { RunSmartBrandMark } from "@/components/run-smart-brand-mark"
 import { useWakeLock } from "@/hooks/use-wake-lock"
 import { RecordingCheckpointService, type RecordingCheckpoint } from "@/lib/recording-checkpoint"
-import { App as CapacitorApp, type AppState } from "@capacitor/app"
-import { isIOSNativeApp } from "@/lib/capacitor-platform"
 
 type GPSCoordinate = GPSPoint
 
@@ -372,8 +368,6 @@ export function RecordScreen() {
   const [challengeCompletionData, setChallengeCompletionData] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate } | null>(null)
   const [pendingRpeRunId, setPendingRpeRunId] = useState<number | null>(null)
   const [showPostRunRpeModal, setShowPostRunRpeModal] = useState(false)
-  const [achievementContext, setAchievementContext] = useState<AchievementContext | null>(null)
-  const savedRunIdRef = useRef<number | null>(null)
   const [activeChallenge, setActiveChallenge] = useState<{ progress: ChallengeProgress; template: ChallengeTemplate } | null>(null)
   const [currentWorkout, setCurrentWorkout] = useState<Workout | null>(null)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
@@ -399,7 +393,6 @@ export function RecordScreen() {
   const gpsWarmupTimerRef = useRef<NodeJS.Timeout | null>(null)
   const gpsWarmupPointsRef = useRef<GPSCoordinate[]>([])
   const gpsWarmupQualityRef = useRef(gpsWarmupQuality)
-  const isGpsWarmingUpRef = useRef(false)
   const currentGPSAccuracyRef = useRef<GPSAccuracyData | null>(null)
   const lastGpsQualityRef = useRef<GPSAccuracyData['locationQuality'] | null>(null)
   const GPS_WARMUP_DURATION_SECONDS = 10
@@ -497,10 +490,6 @@ export function RecordScreen() {
   }, [isRunning, isPaused])
 
   useEffect(() => {
-    isGpsWarmingUpRef.current = isGpsWarmingUp
-  }, [isGpsWarmingUp])
-
-  useEffect(() => {
     if (!ENABLE_VIBRATION_COACH && !ENABLE_AUDIO_COACH) {
       return
     }
@@ -543,9 +532,9 @@ export function RecordScreen() {
 
   useEffect(() => {
     if (!pendingRpeRunId) return
-    if (completionModalData || challengeCompletionData || achievementContext) return
+    if (completionModalData || challengeCompletionData) return
     setShowPostRunRpeModal(true)
-  }, [pendingRpeRunId, completionModalData, challengeCompletionData, achievementContext])
+  }, [pendingRpeRunId, completionModalData, challengeCompletionData])
 
   const logGps = (payload: Record<string, unknown>) => {
     if (!gpsDebugEnabled) return
@@ -966,40 +955,6 @@ export function RecordScreen() {
     }
   }, [currentUser, isRunning])
 
-  // On iOS native, `visibilitychange` is less reliable than Capacitor's App
-  // lifecycle events. Subscribe to appStateChange so we always flush the
-  // checkpoint when the app backgrounds while a run is active.
-  useEffect(() => {
-    if (!isIOSNativeApp()) return
-    if (!currentUser) return
-
-    let listener: { remove: () => void } | null = null
-    let cancelled = false
-    void CapacitorApp.addListener('appStateChange', (state: AppState) => {
-      if (!state.isActive && isRunningRef.current && checkpointServiceRef.current) {
-        console.log('[RecordScreen] Capacitor app backgrounded — flushing checkpoint')
-        checkpointServiceRef.current.flushToDatabase().catch(err => {
-          console.error('[RecordScreen] Capacitor background flush failed:', err)
-        })
-      } else if (state.isActive && isRunningRef.current) {
-        console.log('[RecordScreen] Capacitor app foregrounded during active run')
-      }
-    }).then(handle => {
-      if (cancelled) {
-        handle.remove()
-      } else {
-        listener = handle
-      }
-    }).catch(err => {
-      console.warn('[RecordScreen] Capacitor App listener failed:', err)
-    })
-
-    return () => {
-      cancelled = true
-      listener?.remove()
-    }
-  }, [currentUser])
-
   useEffect(() => {
     if (!ENABLE_VIBRATION_COACH && !ENABLE_AUDIO_COACH) {
       setIntervalPhases([])
@@ -1213,16 +1168,6 @@ export function RecordScreen() {
   }
 
   const checkGpsSupport = async () => {
-    // On iOS native, GPS is handled by the native Capacitor plugin (CLLocationManager).
-    // navigator.permissions reflects WKWebView web-level permission — a completely
-    // separate permission from native iOS location. Checking it here would incorrectly
-    // disable the Start Run button even when native location permission is granted.
-    // The native plugin manages permissions itself via requestPermissions: true in addWatcher.
-    if (isIOSNativeApp()) {
-      setGpsPermission('prompt')
-      return
-    }
-
     // Check if running on HTTPS (required for GPS in production)
     const isSecure = IS_TEST_ENV || (typeof window !== 'undefined' &&
       (window.location.protocol === 'https:' || window.location.hostname === 'localhost'));
@@ -1688,11 +1633,8 @@ export function RecordScreen() {
       speed: typeof point.speed === 'number' ? point.speed : null,
     })
 
-    // If we're in GPS warmup mode, collect points and update quality assessment.
-    // Use a ref here (not state) to avoid stale closure: the GPS watch callback is
-    // registered before React re-renders with isGpsWarmingUp=true, so reading state
-    // directly would always yield false.
-    if (isGpsWarmingUpRef.current) {
+    // If we're in GPS warmup mode, collect points and update quality assessment
+    if (isGpsWarmingUp) {
       gpsWarmupPointsRef.current.push(point)
 
       const currentAccuracy = point.accuracy ?? 999
@@ -1744,12 +1686,6 @@ export function RecordScreen() {
     enableHighAccuracy: true,
     timeout: 20_000,
     maximumAge: 0,
-    // iOS native only: when the WebView is suspended, the background-geolocation
-    // plugin continues to emit points. These options tune the native CLLocationManager
-    // and the foreground-service notification text. Ignored on web.
-    distanceFilter: 5,
-    backgroundTitle: "RunSmart is tracking your run",
-    backgroundMessage: "Distance and pace are being recorded.",
   }
 
   const loadGoldenRun = async () => {
@@ -2528,16 +2464,6 @@ export function RecordScreen() {
         } catch (err) {
           console.error('[RecordScreen] Failed to clear checkpoint:', err)
         }
-      }
-
-      savedRunIdRef.current = runId
-      try {
-        const achievement = await detectAchievement(user.id, runId, distance)
-        if (achievement) {
-          setAchievementContext(achievement)
-        }
-      } catch {
-        // Non-critical — fall through to normal post-run flow
       }
 
       setPendingRpeRunId(runId)
@@ -3618,14 +3544,6 @@ export function RecordScreen() {
           }}
           initialStep="upload"
           {...(currentWorkout?.id ? { workoutId: currentWorkout.id } : {})}
-        />
-      )}
-      {achievementContext && savedRunIdRef.current && (
-        <AchievementMoment
-          context={achievementContext}
-          onDismiss={() => {
-            setAchievementContext(null)
-          }}
         />
       )}
       {pendingRpeRunId !== null && (

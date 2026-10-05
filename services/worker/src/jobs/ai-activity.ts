@@ -5,7 +5,6 @@ import sharp from 'sharp';
 import { z } from 'zod';
 import type { AiActivityJobData, AiActivityResult } from '../../shared/types/jobs';
 import { logger } from '../utils/logger';
-import { captureAIGeneration } from '../utils/ai-observability';
 
 const activitySchema = z.object({
   type: z.string().optional(),
@@ -42,35 +41,16 @@ export async function processAiActivity(job: Job<AiActivityJobData>): Promise<Ai
     // Step 2: GPT-4o Vision analysis
     const imageUrl = `data:image/jpeg;base64,${processedImage.toString('base64')}`;
 
-    const prompt = 'Extract running activity data from this image';
-    const generationStartedAt = Date.now();
-    const generation = await generateObject({
+    const { object: extracted } = await generateObject({
       model: openai('gpt-4o'),
-      schema: activitySchema as any,
+      schema: activitySchema,
       messages: [{
         role: 'user',
         content: [
-          { type: 'text', text: prompt },
+          { type: 'text', text: 'Extract running activity data from this image' },
           { type: 'image', image: imageUrl }
         ]
       }]
-    });
-    const { object: extracted } = generation;
-
-    await captureAIGeneration({
-      traceName: 'ai-activity',
-      distinctId: userId,
-      model: 'gpt-4o',
-      input: prompt,
-      output: extracted,
-      usage: (generation as any).usage,
-      latencyMs: Date.now() - generationStartedAt,
-      properties: {
-        request_id: requestId,
-        job_id: job.id,
-        worker: true,
-        streaming: false
-      }
     });
 
     await job.updateProgress(90);
@@ -98,20 +78,6 @@ export async function processAiActivity(job: Job<AiActivityJobData>): Promise<Ai
     return result;
 
   } catch (error) {
-    await captureAIGeneration({
-      traceName: 'ai-activity',
-      distinctId: userId,
-      model: 'gpt-4o',
-      input: 'Extract running activity data from this image',
-      latencyMs: Date.now() - startTime,
-      error,
-      properties: {
-        request_id: requestId,
-        job_id: job.id,
-        worker: true,
-        streaming: false
-      }
-    });
     logger.error('AI activity failed', { jobId: job.id, error });
     throw error;
   }

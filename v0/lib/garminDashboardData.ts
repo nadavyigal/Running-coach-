@@ -60,9 +60,6 @@ export interface GarminDashboardData {
   hrvTrend7d: DailyValuePoint[]
   hrvBaseline28: number | null
   bodyBatteryToday: number | null
-  bodyBatteryTodayStart: number | null
-  bodyBatteryTodayPeak: number | null
-  bodyBatteryTodayEnd: number | null
   bodyBatteryTodaySource: "direct" | "balance" | "none"
   bodyBatteryTodayBalance: number | null
   bodyBattery7d: DailyValuePoint[]
@@ -76,9 +73,6 @@ export interface GarminDashboardData {
 interface MergedDay {
   date: string
   bodyBattery: number | null
-  bodyBatteryStart: number | null
-  bodyBatteryPeak: number | null
-  bodyBatteryEnd: number | null
   bodyBatterySource: "direct" | "balance" | "none"
   bodyBatteryBalance: number | null
   spo2: number | null
@@ -272,9 +266,6 @@ function buildMergedDays(params: {
   const createEmptyDay = (date: string): MergedDay => ({
     date,
     bodyBattery: null,
-    bodyBatteryStart: null,
-    bodyBatteryPeak: null,
-    bodyBatteryEnd: null,
     bodyBatterySource: "none",
     bodyBatteryBalance: null,
     spo2: null,
@@ -293,9 +284,6 @@ function buildMergedDays(params: {
     merged.set(day.date, {
       ...createEmptyDay(day.date),
       bodyBattery: day.bodyBattery,
-      bodyBatteryStart: day.bodyBatteryStart,
-      bodyBatteryPeak: day.bodyBatteryPeak,
-      bodyBatteryEnd: day.bodyBatteryEnd,
       bodyBatterySource: day.bodyBatterySource,
       bodyBatteryBalance: day.bodyBatteryBalance,
       spo2: day.spo2,
@@ -489,10 +477,6 @@ export async function loadGarminDashboardData(userId: number): Promise<GarminDas
   const bodyBatteryToday = bodyBattery7d.at(-1)?.value ?? null
   const bodyBatteryTodaySource = bodyBattery7d.at(-1)?.source ?? "none"
   const bodyBatteryTodayBalance = bodyBattery7d.at(-1)?.fallbackBalance ?? null
-  const latestMergedDay = mergedDays.get(endDateIso)
-  const bodyBatteryTodayStart = latestMergedDay?.bodyBatteryStart ?? null
-  const bodyBatteryTodayPeak = latestMergedDay?.bodyBatteryPeak ?? null
-  const bodyBatteryTodayEnd = latestMergedDay?.bodyBatteryEnd ?? bodyBatteryToday
 
   const sleepStages7d: GarminSleepStagePoint[] = dates7.map((date) => {
     const day = mergedDays.get(date)
@@ -577,9 +561,6 @@ export async function loadGarminDashboardData(userId: number): Promise<GarminDas
     hrvTrend7d: hrvTrend7d.map((point) => ({ ...point, value: roundOrNull(point.value, 2) })),
     hrvBaseline28,
     bodyBatteryToday,
-    bodyBatteryTodayStart,
-    bodyBatteryTodayPeak,
-    bodyBatteryTodayEnd,
     bodyBatteryTodaySource,
     bodyBatteryTodayBalance,
     bodyBattery7d,

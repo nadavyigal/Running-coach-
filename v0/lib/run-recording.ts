@@ -1,4 +1,4 @@
-import { trackActivationOnce, trackAnalyticsEvent } from "@/lib/analytics"
+import { trackAnalyticsEvent } from "@/lib/analytics"
 import type { Goal, Run, Workout } from "@/lib/db"
 import { dbUtils } from "@/lib/dbUtils"
 import { ENABLE_COMPLETION_LOOP } from "@/lib/featureFlags"
@@ -854,17 +854,6 @@ export async function recordRunWithSideEffects(
     source: input.importSource ?? "gps",
     workout_id: resolvedWorkoutId ?? null,
   }).catch(() => undefined)
-  // Activation (first completed run). Fire-and-forget: analytics never blocks a save.
-  void (async () => {
-    const runsForUser = await dbUtils.getRunsByUser(input.userId)
-    await trackActivationOnce(input.userId, runsForUser.length, {
-      run_id: runId,
-      distanceKm,
-      durationSeconds,
-      paceMinKm: paceSecondsPerKm / 60,
-      source: input.importSource ?? "gps",
-    })
-  })().catch(() => undefined)
 
   const runRecord: Run = {
     ...runData,

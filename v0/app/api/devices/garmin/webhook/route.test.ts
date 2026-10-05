@@ -2,12 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const recordGarminWebhookDeliveryMock = vi.hoisted(() => vi.fn())
 const enqueueGarminImportJobsForEventMock = vi.hoisted(() => vi.fn())
-const handleGarminUserDeregistrationsMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/integrations/garmin/service', () => ({
   recordGarminWebhookDelivery: recordGarminWebhookDeliveryMock,
   enqueueGarminImportJobsForEvent: enqueueGarminImportJobsForEventMock,
-  handleGarminUserDeregistrations: handleGarminUserDeregistrationsMock,
 }))
 
 async function loadRoute() {
@@ -19,7 +17,6 @@ describe('/api/devices/garmin/webhook', () => {
     vi.restoreAllMocks()
     recordGarminWebhookDeliveryMock.mockReset()
     enqueueGarminImportJobsForEventMock.mockReset()
-    handleGarminUserDeregistrationsMock.mockReset()
     delete process.env.GARMIN_WEBHOOK_SECRET
   })
 
@@ -33,12 +30,17 @@ describe('/api/devices/garmin/webhook', () => {
     expect(body.ok).toBe(false)
   })
 
-  it('returns 200 immediately and starts async event persistence', async () => {
+  it('returns 200 fast and persists event without inline processing', async () => {
     process.env.GARMIN_WEBHOOK_SECRET = 'secret-123'
-    recordGarminWebhookDeliveryMock.mockReturnValue(new Promise(() => {}))
-    handleGarminUserDeregistrationsMock.mockResolvedValue({
-      deregistrations: 0,
-      affectedUsers: 0,
+    recordGarminWebhookDeliveryMock.mockResolvedValue({
+      duplicate: false,
+      event: {
+        id: 'evt-1',
+      },
+    })
+    enqueueGarminImportJobsForEventMock.mockResolvedValue({
+      queuedJobs: 1,
+      jobs: [{ id: 'job-1' }],
     })
 
     const req = new Request('http://localhost/api/devices/garmin/webhook?secret=secret-123', {
@@ -54,9 +56,14 @@ describe('/api/devices/garmin/webhook', () => {
     const body = await res.json()
 
     expect(res.status).toBe(200)
-    expect(body).toEqual({ status: 'ok' })
+    expect(body).toMatchObject({
+      ok: true,
+      duplicate: false,
+      queuedJobs: 1,
+      webhookEventId: 'evt-1',
+    })
     expect(recordGarminWebhookDeliveryMock).toHaveBeenCalledTimes(1)
-    expect(enqueueGarminImportJobsForEventMock).not.toHaveBeenCalled()
+    expect(enqueueGarminImportJobsForEventMock).toHaveBeenCalledTimes(1)
   })
 
   it('ignores duplicate webhook deliveries', async () => {
@@ -79,43 +86,14 @@ describe('/api/devices/garmin/webhook', () => {
     const { POST } = await loadRoute()
     const res = await POST(req)
     const body = await res.json()
-    await Promise.resolve()
 
     expect(res.status).toBe(200)
-    expect(body).toEqual({ status: 'ok' })
-    expect(enqueueGarminImportJobsForEventMock).not.toHaveBeenCalled()
-  })
-
-  it('handles Garmin user deregistration payloads asynchronously', async () => {
-    process.env.GARMIN_WEBHOOK_SECRET = 'secret-123'
-    recordGarminWebhookDeliveryMock.mockResolvedValue({
-      duplicate: false,
-      event: {
-        id: 'evt-2',
-      },
+    expect(body).toMatchObject({
+      ok: true,
+      duplicate: true,
+      queuedJobs: 0,
+      webhookEventId: 'evt-1',
     })
-    handleGarminUserDeregistrationsMock.mockResolvedValue({
-      deregistrations: 1,
-      affectedUsers: 1,
-    })
-
-    const payload = {
-      deregistrations: [{ userId: 'garmin-user-1', uploadStartTimeInSeconds: 1781520000 }],
-    }
-    const req = new Request('http://localhost/api/devices/garmin/webhook?secret=secret-123', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-
-    const { POST } = await loadRoute()
-    const res = await POST(req)
-    const body = await res.json()
-    await Promise.resolve()
-
-    expect(res.status).toBe(200)
-    expect(body).toEqual({ status: 'ok' })
-    expect(handleGarminUserDeregistrationsMock).toHaveBeenCalledWith(payload)
     expect(enqueueGarminImportJobsForEventMock).not.toHaveBeenCalled()
   })
 

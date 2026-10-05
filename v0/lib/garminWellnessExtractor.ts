@@ -1,14 +1,6 @@
-import {
-  clampBodyBattery,
-  extractBodyBatterySummaryFromStressEntries,
-} from '@/lib/garmin/bodyBatteryTimeSeries'
-
 export interface GarminDailyMetricsRow {
   date: string
   body_battery?: number | null
-  body_battery_start?: number | null
-  body_battery_peak?: number | null
-  body_battery_end?: number | null
   body_battery_balance?: number | null
   body_battery_charged?: number | null
   body_battery_drained?: number | null
@@ -27,9 +19,6 @@ export interface GarminDailyMetricsRow {
 export interface GarminWellnessDay {
   date: string
   bodyBattery: number | null
-  bodyBatteryStart: number | null
-  bodyBatteryPeak: number | null
-  bodyBatteryEnd: number | null
   bodyBatterySource: 'direct' | 'balance' | 'none'
   bodyBatteryBalance: number | null
   bodyBatteryCharged: number | null
@@ -95,15 +84,10 @@ export function extractGarminWellnessDays(rows: GarminDailyMetricsRow[]): Garmin
       const hrvEntries = asArray(raw.hrv)
       const pulseOxEntries = asArray(raw.pulseox)
       const stressEntries = asArray(raw.stressDetails)
-      const stressSummary = extractBodyBatterySummaryFromStressEntries(stressEntries)
 
-      const bodyBatteryEndRaw =
-        toNumber(row.body_battery_end) ??
+      const bodyBatteryRaw =
         toNumber(row.body_battery) ??
-        stressSummary?.end ??
         firstNumberFromDatasetEntries(dailiesEntries, ['bodyBattery', 'bodyBatteryMostRecentValue', 'bodyBatteryValue'])
-      const bodyBatteryStartRaw = toNumber(row.body_battery_start) ?? stressSummary?.start ?? null
-      const bodyBatteryPeakRaw = toNumber(row.body_battery_peak) ?? stressSummary?.peak ?? null
       const bodyBatteryChargedRaw =
         toNumber(row.body_battery_charged) ??
         firstNumberFromDatasetEntries(dailiesEntries, ['bodyBatteryChargedValue'])
@@ -171,11 +155,8 @@ export function extractGarminWellnessDays(rows: GarminDailyMetricsRow[]): Garmin
 
       return {
         date: row.date,
-        bodyBattery: bodyBatteryEndRaw != null ? clampBodyBattery(bodyBatteryEndRaw) : null,
-        bodyBatteryStart: bodyBatteryStartRaw != null ? clampBodyBattery(bodyBatteryStartRaw) : null,
-        bodyBatteryPeak: bodyBatteryPeakRaw != null ? clampBodyBattery(bodyBatteryPeakRaw) : null,
-        bodyBatteryEnd: bodyBatteryEndRaw != null ? clampBodyBattery(bodyBatteryEndRaw) : null,
-        bodyBatterySource: bodyBatteryEndRaw != null ? 'direct' : bodyBatteryBalanceRaw != null ? 'balance' : 'none',
+        bodyBattery: bodyBatteryRaw != null ? Math.max(0, Math.min(100, Math.round(bodyBatteryRaw))) : null,
+        bodyBatterySource: bodyBatteryRaw != null ? 'direct' : bodyBatteryBalanceRaw != null ? 'balance' : 'none',
         bodyBatteryBalance:
           bodyBatteryBalanceRaw != null ? Number(bodyBatteryBalanceRaw.toFixed(2)) : null,
         bodyBatteryCharged:

@@ -33,14 +33,6 @@ import { UserPrivacySettings } from "@/components/privacy-dashboard"
 import { cn } from "@/lib/utils"
 import { getChallengeTemplateBySlug, type ChallengeTemplateSeed } from "@/lib/challengeTemplates"
 import { syncPlanWithChallenge } from "@/lib/challenge-plan-sync"
-import {
-  getRunningIdentity,
-  projectGoalTimeline,
-  type RunnerIdentity,
-  type GoalTimeline,
-} from '@/lib/userInsightService'
-import { RunnerIdentityMoment } from '@/components/runner-identity-moment'
-import { GoalTimelineMoment } from '@/components/goal-timeline-moment'
 
 type Weekday = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
 
@@ -433,12 +425,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     push: false,
   })
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
-  type AhaMomentStage = 'identity' | 'timeline' | null
-  const [ahaMomentStage, setAhaMomentStage] = useState<AhaMomentStage>(null)
-  const [ahaMomentData, setAhaMomentData] = useState<{
-    identity: RunnerIdentity
-    timeline: GoalTimeline
-  } | null>(null)
   const [privacyAccepted, setPrivacyAccepted] = useState(false)
   const [privacySettings] = useState<UserPrivacySettings>({
     dataCollection: {
@@ -897,23 +883,14 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           description: "Your personalized running journey begins now!",
         })
 
-        // Show aha moments before navigating
+        // Call the parent's onComplete callback to trigger navigation
         try {
-          const paceMinPerKm = referenceRaceTimeSeconds > 0 && referenceRaceDistance > 0
-            ? (referenceRaceTimeSeconds / 60) / referenceRaceDistance
-            : 7.0
-          const identity = getRunningIdentity(selectedGoal, selectedExperience, paceMinPerKm)
-          const timeline = projectGoalTimeline(selectedGoal, selectedExperience)
-          setAhaMomentData({ identity, timeline })
-          setAhaMomentStage('identity')
-          console.log('✅ [OnboardingScreen] Aha moments queued')
-        } catch (momentError) {
-          console.error('❌ [OnboardingScreen] Aha moment setup failed, skipping to app:', momentError)
-          try {
-            onComplete()
-          } catch {
-            setIsGeneratingPlan(false)
-          }
+          onComplete()
+          console.log('✅ [OnboardingScreen] onComplete() called successfully')
+        } catch (error) {
+          console.error('❌ [OnboardingScreen] Error calling onComplete():', error)
+          // Force navigation even if callback fails
+          setIsGeneratingPlan(false)
         }
 
       } else {
@@ -1390,30 +1367,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           </Button>
         </div>
       </div>
-      {ahaMomentStage === 'identity' && ahaMomentData && (
-        <RunnerIdentityMoment
-          identity={ahaMomentData.identity}
-          onCTA={() => setAhaMomentStage('timeline')}
-          onSkip={() => {
-            setAhaMomentStage(null)
-            onComplete()
-          }}
-        />
-      )}
-      {ahaMomentStage === 'timeline' && ahaMomentData && (
-        <GoalTimelineMoment
-          goal={selectedGoal}
-          timeline={ahaMomentData.timeline}
-          onCTA={() => {
-            setAhaMomentStage(null)
-            onComplete()
-          }}
-          onSkip={() => {
-            setAhaMomentStage(null)
-            onComplete()
-          }}
-        />
-      )}
     </OnboardingErrorBoundary>
   )
 }

@@ -2,9 +2,10 @@ import 'server-only'
 
 import { decryptToken, encryptToken } from '@/app/api/devices/garmin/token-crypto'
 import { logger } from '@/lib/logger'
-import { resolveGarminOAuthClientCredentials } from '@/lib/server/garmin-credentials'
-import { GARMIN_OAUTH_REVOKE_URL, GARMIN_OAUTH_TOKEN_URL } from '@/lib/server/garmin-endpoints'
 import { createAdminClient } from '@/lib/supabase/admin'
+
+const GARMIN_TOKEN_URL = 'https://diauth.garmin.com/di-oauth2-service/oauth/token'
+const GARMIN_REVOKE_URL = 'https://diauth.garmin.com/di-oauth2-service/oauth/revoke'
 const TOKEN_REFRESH_SKEW_SECONDS = 5 * 60
 const MAX_REFRESH_RETRIES = 3
 
@@ -34,13 +35,6 @@ interface GarminTokenRow {
   access_token_encrypted: string
   refresh_token_encrypted: string | null
   expires_at: string
-}
-
-interface GarminConnectionLookupRow {
-  user_id: number
-  profile_id: string | null
-  status: GarminConnectionStatus
-  last_webhook_received_at: string | null
 }
 
 export interface GarminOAuthState {
@@ -126,16 +120,18 @@ async function sleep(ms: number): Promise<void> {
 async function executeTokenRefresh(params: {
   refreshToken: string
 }): Promise<GarminRefreshResponse> {
-  const { clientId, clientSecret, mode } = resolveGarminOAuthClientCredentials()
-  logger.info('Garmin token refresh: OAuth credential mode resolved', {
-    credentialMode: mode,
-  })
+  const clientId = process.env.GARMIN_CLIENT_ID
+  const clientSecret = process.env.GARMIN_CLIENT_SECRET
+
+  if (!clientId || !clientSecret) {
+    throw new Error('Garmin OAuth client credentials are not configured')
+  }
 
   let lastError: Error | null = null
 
   for (let attempt = 1; attempt <= MAX_REFRESH_RETRIES; attempt += 1) {
     try {
-      const response = await fetch(GARMIN_OAUTH_TOKEN_URL, {
+      const response = await fetch(GARMIN_TOKEN_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -197,29 +193,6 @@ function parseIsoToMs(value: string | null | undefined): number | null {
   if (!value) return null
   const parsed = Date.parse(value)
   return Number.isFinite(parsed) ? parsed : null
-}
-
-function hasProfileContext(row: GarminConnectionLookupRow): boolean {
-  return typeof row.profile_id === 'string' && row.profile_id.trim().length > 0
-}
-
-function compareConnectionLookupRows(
-  left: GarminConnectionLookupRow,
-  right: GarminConnectionLookupRow
-): number {
-  const leftProfileRank = hasProfileContext(left) ? 0 : 1
-  const rightProfileRank = hasProfileContext(right) ? 0 : 1
-  if (leftProfileRank !== rightProfileRank) return leftProfileRank - rightProfileRank
-
-  const leftStatusRank = left.status === 'connected' ? 0 : 1
-  const rightStatusRank = right.status === 'connected' ? 0 : 1
-  if (leftStatusRank !== rightStatusRank) return leftStatusRank - rightStatusRank
-
-  const leftWebhookMs = parseIsoToMs(left.last_webhook_received_at) ?? 0
-  const rightWebhookMs = parseIsoToMs(right.last_webhook_received_at) ?? 0
-  if (leftWebhookMs !== rightWebhookMs) return rightWebhookMs - leftWebhookMs
-
-  return left.user_id - right.user_id
 }
 
 function selectMonotonicCursor(params: {
@@ -337,23 +310,10 @@ export async function getGarminOAuthState(userId: number): Promise<GarminOAuthSt
     accessToken = decryptToken(token.access_token_encrypted)
     refreshToken = token.refresh_token_encrypted ? decryptToken(token.refresh_token_encrypted) : null
   } catch (error) {
-    logger.error(`Garmin token decryption failed for user ${userId}`, {
-      hasAccessToken: Boolean(token.access_token_encrypted),
-      accessTokenLen: token.access_token_encrypted?.length ?? 0,
-      hasRefreshToken: Boolean(token.refresh_token_encrypted),
-      error: error instanceof Error ? error.message : 'unknown',
-    })
     throw new Error(
-      `Garmin token is corrupted for user ${userId}. Please reconnect Garmin.`
-    )
-  }
-
-  if (!accessToken || accessToken.trim().length < 10) {
-    logger.error(`Garmin access token is empty or too short for user ${userId}`, {
-      tokenLength: accessToken?.length ?? 0,
-    })
-    throw new Error(
-      `Garmin access token is corrupted for user ${userId}. Please reconnect Garmin.`
+      `Failed to decrypt Garmin token for user ${userId}: ${
+        error instanceof Error ? error.message : 'unknown error'
+      }`
     )
   }
 
@@ -385,33 +345,10 @@ export async function refreshGarminAccessToken(userId: number): Promise<{
 }> {
   const state = await getGarminOAuthState(userId)
   if (!state?.refreshToken) {
-    logger.error(`Garmin refresh token unavailable for user ${userId}`)
-    await markGarminAuthError(userId, 'Garmin refresh token is unavailable')
     throw new Error('Garmin refresh token is unavailable. Reconnect Garmin.')
   }
 
-  let refreshed: GarminRefreshResponse
-  try {
-    refreshed = await executeTokenRefresh({ refreshToken: state.refreshToken })
-  } catch (error) {
-    logger.error(`Garmin token refresh failed for user ${userId}`, {
-      error: error instanceof Error ? error.message : 'unknown',
-    })
-    await markGarminAuthError(
-      userId,
-      error instanceof Error ? error.message : 'Garmin token refresh failed'
-    )
-    throw error
-  }
-
-  if (!refreshed.access_token || refreshed.access_token.trim().length < 10) {
-    logger.error(`Garmin refresh returned invalid access token for user ${userId}`, {
-      tokenLength: refreshed.access_token?.length ?? 0,
-    })
-    await markGarminAuthError(userId, 'Garmin refresh returned an invalid access token')
-    throw new Error('Garmin refresh token returned an invalid access token. Please reconnect Garmin.')
-  }
-
+  const refreshed = await executeTokenRefresh({ refreshToken: state.refreshToken })
   const nextRefreshToken = refreshed.refresh_token ?? state.refreshToken
   const expiresAt = toIsoFromExpiresIn(refreshed.expires_in)
   const rotatedAt = new Date().toISOString()
@@ -433,11 +370,6 @@ export async function refreshGarminAccessToken(userId: number): Promise<{
     errorState: null,
   })
 
-  logger.info(`Garmin token refreshed successfully for user ${userId}`, {
-    newTokenLength: refreshed.access_token.length,
-    expiresAt,
-  })
-
   return {
     accessToken: refreshed.access_token,
     refreshToken: nextRefreshToken ?? null,
@@ -455,18 +387,10 @@ export async function getValidGarminAccessToken(userId: number): Promise<string>
     throw new Error('Garmin connection is not active. Reconnect Garmin.')
   }
 
-  if (state.status === 'reauth_required') {
-    throw new Error('Garmin connection requires re-authentication. Please reconnect Garmin.')
-  }
-
   if (!shouldRefreshToken(state.expiresAt)) {
     return state.accessToken
   }
 
-  logger.info(`Garmin token expired for user ${userId}, refreshing`, {
-    expiresAt: state.expiresAt,
-    hasRefreshToken: Boolean(state.refreshToken),
-  })
   const refreshed = await refreshGarminAccessToken(userId)
   return refreshed.accessToken
 }
@@ -474,7 +398,6 @@ export async function getValidGarminAccessToken(userId: number): Promise<string>
 export async function markGarminSyncState(params: {
   userId: number
   lastSyncAt?: string
-  lastSuccessfulSyncAt?: string | null
   lastSyncCursor?: string | null
   errorState?: Record<string, unknown> | null
 }): Promise<void> {
@@ -490,7 +413,6 @@ export async function markGarminSyncState(params: {
   await upsertGarminConnection({
     userId: params.userId,
     ...(params.lastSyncAt !== undefined ? { lastSyncAt: params.lastSyncAt } : {}),
-    ...(params.lastSuccessfulSyncAt !== undefined ? { lastSuccessfulSyncAt: params.lastSuccessfulSyncAt } : {}),
     ...(params.lastSyncCursor !== undefined ? { lastSyncCursor: monotonicCursor ?? null } : {}),
     ...(params.errorState !== undefined ? { errorState: params.errorState } : {}),
   })
@@ -565,48 +487,30 @@ export async function getGarminConnectionByProviderUserId(providerUserId: string
   if (!normalized) return null
 
   const supabase = createAdminClient()
-  // Prefer connections with profile_id set (so importGarminActivity can succeed),
-  // then connected status, then most-recently-used. The previous limit(1) was
-  // non-deterministic and frequently picked an orphaned re-connect row whose
-  // profile_id was NULL, causing every webhook for that user to fail.
   const { data, error } = await supabase
     .from('garmin_connections')
-    .select('user_id, profile_id, status, last_webhook_received_at')
+    .select('user_id')
     .or(`provider_user_id.eq.${normalized},garmin_user_id.eq.${normalized}`)
-    .limit(50)
+    .limit(1)
+    .maybeSingle()
 
   if (error) {
     throw new Error(`Failed to read garmin_connections by provider user id: ${error.message}`)
   }
 
-  const rows = ((data ?? []) as GarminConnectionLookupRow[])
-    .filter((row) => typeof row.user_id === 'number')
-    .sort(compareConnectionLookupRows)
-
-  const selected = rows[0]
-  if (!selected) {
+  if (!data?.user_id || typeof data.user_id !== 'number') {
     return null
   }
 
-  return getGarminOAuthState(selected.user_id)
+  return getGarminOAuthState(data.user_id)
 }
 
 async function revokeTokenUpstream(token: string): Promise<void> {
-  let clientId: string
-  let clientSecret: string
+  const clientId = process.env.GARMIN_CLIENT_ID
+  const clientSecret = process.env.GARMIN_CLIENT_SECRET
+  if (!clientId || !clientSecret) return
 
-  try {
-    const credentials = resolveGarminOAuthClientCredentials()
-    clientId = credentials.clientId
-    clientSecret = credentials.clientSecret
-  } catch (error) {
-    logger.warn('Garmin revoke skipped because OAuth credentials are unavailable or not allowed', {
-      error: error instanceof Error ? error.message : 'unknown',
-    })
-    return
-  }
-
-  const response = await fetch(GARMIN_OAUTH_REVOKE_URL, {
+  const response = await fetch(GARMIN_REVOKE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({

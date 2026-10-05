@@ -1,0 +1,107 @@
+require "shellwords"
+
+default_platform(:ios)
+
+PROJECT = "App/App.xcodeproj"
+SCHEME = "App"
+UI_TESTS_SCHEME = ENV["IOS_UI_TESTS_SCHEME"] || SCHEME
+APP_IDENTIFIER = "com.runsmart.coach"
+SIMULATOR_SELECTOR = File.expand_path("scripts/select-simulator.rb", __dir__)
+
+def app_store_connect_api_key_if_configured
+  return nil unless ENV["APP_STORE_CONNECT_API_KEY_ID"] && ENV["APP_STORE_CONNECT_API_ISSUER_ID"] && ENV["APP_STORE_CONNECT_API_KEY"]
+
+  app_store_connect_api_key(
+    key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+    issuer_id: ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+    key_content: ENV["APP_STORE_CONNECT_API_KEY"],
+    is_key_content_base64: true
+  )
+end
+
+def selected_simulator(kind, env_key)
+  override = ENV[env_key].to_s.strip
+  return override unless override.empty?
+
+  sh("ruby #{Shellwords.escape(SIMULATOR_SELECTOR)} #{kind}").strip
+end
+
+platform :ios do
+  desc "Run tests"
+  lane :test do
+    run_tests(
+      project: PROJECT,
+      scheme: SCHEME,
+      devices: [selected_simulator("iphone", "IOS_SIMULATOR_NAME")],
+      clean: true
+    )
+  end
+
+  desc "Build and upload to TestFlight"
+  lane :beta do
+    api_key = app_store_connect_api_key_if_configured
+
+    build_app(
+      project: PROJECT,
+      scheme: SCHEME,
+      export_method: "app-store",
+      clean: true,
+      output_directory: "build",
+      output_name: "RunSmart.ipa",
+      archive_path: "build/RunSmart.xcarchive"
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      skip_waiting_for_build_processing: true,
+      skip_submission: true,
+      distribute_external: false,
+      notify_external_testers: false,
+      changelog: "New build from CI/CD"
+    )
+  end
+
+  desc "Build and upload to App Store"
+  lane :release do
+    api_key = app_store_connect_api_key_if_configured
+
+    build_app(
+      project: PROJECT,
+      scheme: SCHEME,
+      export_method: "app-store",
+      clean: true,
+      output_directory: "build",
+      output_name: "RunSmart.ipa",
+      archive_path: "build/RunSmart.xcarchive"
+    )
+
+    upload_to_app_store(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      skip_metadata: false,
+      skip_screenshots: false,
+      submit_for_review: false,
+      automatic_release: false,
+      force: true
+    )
+  end
+
+  desc "Take screenshots for App Store"
+  lane :screenshots do
+    capture_screenshots(
+      project: PROJECT,
+      scheme: UI_TESTS_SCHEME,
+      devices: [
+        selected_simulator("iphone", "IOS_SCREENSHOT_IPHONE"),
+        selected_simulator("ipad", "IOS_SCREENSHOT_IPAD")
+      ]
+    )
+  end
+
+  desc "Clean build artifacts"
+  lane :clean do
+    clean_build_artifacts
+    clear_derived_data
+  end
+end

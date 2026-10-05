@@ -28,7 +28,7 @@ export default defineConfig({
     pool: 'forks',
     poolOptions: {
       forks: {
-        maxForks: 2
+        singleFork: true
       }
     },
     maxConcurrency: 1,

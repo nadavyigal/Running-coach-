@@ -14,9 +14,8 @@ const gradients: Record<string, { from: string; to: string }> = {
   performance: { from: '#f97316', to: '#facc15' },
 };
 
-export default async function OpenGraphImage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const template = getChallengeTemplateBySlug(slug);
+export default function OpenGraphImage({ params }: { params: { slug: string } }) {
+  const template = getChallengeTemplateBySlug(params.slug);
   const fallback = {
     name: 'RunSmart Challenge',
     tagline: '21 days to build momentum',

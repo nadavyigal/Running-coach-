@@ -1,12 +1,6 @@
 import { ImageResponse } from 'next/og'
 
-// Node runtime, not edge. Under Next 16 the bundled `next/og` (satori + resvg)
-// pushes this function to 1.06 MB, over Vercel's 1 MB edge limit, which fails the
-// deploy after an otherwise successful build. There is no request-specific logic
-// here - it renders a fixed image - so the edge runtime bought nothing, and the
-// sibling generator at app/challenges/[slug]/opengraph-image.tsx already runs on
-// Node. Output is CDN-cached, so the cold-start difference is not user-visible.
-export const runtime = 'nodejs'
+export const runtime = 'edge'
 
 export async function GET() {
   return new ImageResponse(

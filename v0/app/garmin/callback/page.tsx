@@ -4,8 +4,6 @@ import { Suspense, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { db, type WearableDevice } from "@/lib/db"
-import { trackAnalyticsEvent } from "@/lib/analytics"
-import { hasSeenGarminFirstAha } from "@/lib/garminFirstAhaStorage"
 
 type CallbackStatus = "processing" | "success" | "error"
 
@@ -108,31 +106,15 @@ function GarminCallbackContent() {
           }
         }
 
-        void trackAnalyticsEvent("garmin_callback_completed", {
-          userId: typeof data.userId === "number" ? data.userId : undefined,
-          context: typeof window !== "undefined" ? window.navigator.userAgent : "unknown",
-          hadDevicePayload: Boolean(data.device),
-        })
-        window.dispatchEvent(new CustomEvent("garmin-callback-completed", { detail: data }))
         setStatus("success")
         setMessage("Garmin connected. Redirecting...")
 
         setTimeout(() => {
-          const callbackUserId = typeof data.userId === "number" ? data.userId : null
-          const destination =
-            callbackUserId != null && hasSeenGarminFirstAha(callbackUserId)
-              ? "/?screen=profile"
-              : "/garmin/first-aha"
-          router.replace(destination)
+          router.replace("/?screen=profile")
         }, 1200)
       } catch (error) {
         setStatus("error")
         setMessage(error instanceof Error ? error.message : "Garmin connection failed")
-        // Auto-return to profile so the user is never stranded; the status endpoint
-        // will reflect the real connection state once the home page loads.
-        setTimeout(() => {
-          router.replace("/?screen=profile")
-        }, 4000)
       }
     }
 

@@ -4,7 +4,6 @@ import { verifyAndParseState } from '../oauth-state'
 import { logger } from '@/lib/logger'
 import { getCurrentProfile, getCurrentUser } from '@/lib/supabase/server'
 import { enqueueGarminBackfillJob } from '@/lib/integrations/garmin/service'
-import { resolveGarminOAuthClientCredentials } from '@/lib/server/garmin-credentials'
 import {
   upsertGarminConnection,
   upsertGarminTokens,
@@ -79,7 +78,7 @@ async function handleGarminCallback(req: ApiRequest) {
       )
     }
 
-    const { userId, authUserId, profileId, redirectUri, codeVerifier } = storedState
+    const { userId, redirectUri, codeVerifier } = storedState
     if (!codeVerifier) {
       logger.error('Missing codeVerifier in OAuth state - state may be from an outdated flow')
       return NextResponse.json(
@@ -91,19 +90,10 @@ async function handleGarminCallback(req: ApiRequest) {
       )
     }
 
-    let clientId: string
-    let clientSecret: string
-    try {
-      const credentials = resolveGarminOAuthClientCredentials()
-      clientId = credentials.clientId
-      clientSecret = credentials.clientSecret
-      logger.info('Garmin callback: OAuth credential mode resolved', {
-        credentialMode: credentials.mode,
-      })
-    } catch (credentialError) {
-      logger.error('Garmin API credentials not configured or not allowed', {
-        error: credentialError instanceof Error ? credentialError.message : 'unknown',
-      })
+    const clientId = process.env.GARMIN_CLIENT_ID
+    const clientSecret = process.env.GARMIN_CLIENT_SECRET
+    if (!clientId || !clientSecret) {
+      logger.error('Garmin API credentials not configured')
       return NextResponse.json(
         {
           success: false,
@@ -112,12 +102,6 @@ async function handleGarminCallback(req: ApiRequest) {
         { status: 503 }
       )
     }
-
-    logger.info('Garmin token exchange starting', {
-      redirectUri,
-      codeLength: code.length,
-      codeVerifierLength: codeVerifier.length,
-    })
 
     const tokenResponse = await fetch(GARMIN_TOKEN_URL, {
       method: 'POST',
@@ -136,11 +120,7 @@ async function handleGarminCallback(req: ApiRequest) {
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text()
-      logger.error('Garmin token exchange failed', {
-        status: tokenResponse.status,
-        body: errorText.slice(0, 500),
-        redirectUri,
-      })
+      logger.error('Garmin token exchange failed:', tokenResponse.status, errorText)
       return NextResponse.json(
         {
           success: false,
@@ -156,25 +136,15 @@ async function handleGarminCallback(req: ApiRequest) {
       expires_in?: number
     }
 
-    if (!tokenData.access_token || tokenData.access_token.trim().length < 10) {
-      logger.error('Garmin token exchange returned invalid access token', {
-        hasToken: Boolean(tokenData.access_token),
-        tokenLength: tokenData.access_token?.length ?? 0,
-      })
+    if (!tokenData.access_token) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Garmin returned an invalid access token',
+          error: 'No access token in Garmin response',
         },
         { status: 502 }
       )
     }
-
-    logger.info('Garmin token exchange successful', {
-      tokenLength: tokenData.access_token.length,
-      hasRefreshToken: Boolean(tokenData.refresh_token),
-      expiresIn: tokenData.expires_in,
-    })
 
     const [profileResponse, permissionsResponse] = await Promise.all([
       fetch(GARMIN_PROFILE_URL, {
@@ -191,17 +161,6 @@ async function handleGarminCallback(req: ApiRequest) {
       }),
     ])
 
-    const warnings: string[] = []
-
-    if (!profileResponse.ok) {
-      const profileErrorText = await profileResponse.text()
-      logger.warn('Garmin profile fetch failed during callback', {
-        status: profileResponse.status,
-        body: profileErrorText.slice(0, 500),
-      })
-      warnings.push(`Profile fetch failed (${profileResponse.status})`)
-    }
-
     const userProfile = profileResponse.ok ? await profileResponse.json() : null
     const profileUserId =
       (typeof userProfile === 'object' &&
@@ -216,28 +175,19 @@ async function handleGarminCallback(req: ApiRequest) {
       if (Array.isArray(permissionsPayload)) {
         scopes = permissionsPayload.filter((scope): scope is string => typeof scope === 'string')
       }
-    } else {
-      const permErrorText = await permissionsResponse.text()
-      logger.warn('Garmin permissions fetch failed during callback', {
-        status: permissionsResponse.status,
-        body: permErrorText.slice(0, 500),
-      })
-      warnings.push(`Permissions fetch failed (${permissionsResponse.status})`)
     }
 
     const [authUserIdFromSession, profileIdFromSession] = await Promise.all([
       resolveAuthUserId(),
       resolveCurrentProfileId(),
     ])
-    const resolvedAuthUserId = authUserIdFromSession ?? authUserId ?? null
-    const resolvedProfileId = profileIdFromSession ?? profileId ?? null
     const nowIso = new Date().toISOString()
     const expiresAtIso = new Date(Date.now() + (tokenData.expires_in ?? 7776000) * 1000).toISOString()
 
     await upsertGarminConnection({
       userId,
-      authUserId: resolvedAuthUserId,
-      profileId: resolvedProfileId,
+      authUserId: authUserIdFromSession,
+      profileId: profileIdFromSession,
       garminUserId: profileUserId != null ? String(profileUserId) : null,
       providerUserId: profileUserId != null ? String(profileUserId) : null,
       scopes,
@@ -250,27 +200,18 @@ async function handleGarminCallback(req: ApiRequest) {
 
     await upsertGarminTokens({
       userId,
-      authUserId: resolvedAuthUserId,
+      authUserId: authUserIdFromSession,
       accessToken: tokenData.access_token,
       refreshToken: tokenData.refresh_token ?? null,
       expiresAt: expiresAtIso,
       rotatedAt: nowIso,
     })
 
-    try {
-      await enqueueGarminBackfillJob({
-        userId,
-        profileId: resolvedProfileId,
-        providerUserId: profileUserId != null ? String(profileUserId) : null,
-      })
-    } catch (backfillError) {
-      // Non-fatal: the OAuth connection is established. Log and continue.
-      warnings.push('Garmin connected. Initial sync queue was unavailable; use Sync Garmin to import data now.')
-      logger.warn('Failed to enqueue Garmin backfill job after connect (non-fatal)', {
-        userId,
-        error: backfillError instanceof Error ? backfillError.message : 'unknown',
-      })
-    }
+    await enqueueGarminBackfillJob({
+      userId,
+      profileId: profileIdFromSession,
+      providerUserId: profileUserId != null ? String(profileUserId) : null,
+    })
 
     const deviceData = {
       userId,
@@ -298,7 +239,6 @@ async function handleGarminCallback(req: ApiRequest) {
       userId,
       device: deviceData,
       message: 'Garmin authorized successfully',
-      ...(warnings.length > 0 ? { warnings } : {}),
     })
   } catch (error) {
     logger.error('Garmin callback error:', error)

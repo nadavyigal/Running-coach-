@@ -27,7 +27,6 @@ import {
 interface GarminSyncPanelProps {
   userId: number
   onReconnect?: () => void
-  onDisconnect?: () => void
 }
 
 interface DeviceInfo {
@@ -89,7 +88,7 @@ function capabilityStatus(capability: GarminDatasetCapability): string {
   return "Permission missing"
 }
 
-export function GarminSyncPanel({ userId, onReconnect, onDisconnect }: GarminSyncPanelProps) {
+export function GarminSyncPanel({ userId, onReconnect }: GarminSyncPanelProps) {
   const [device, setDevice] = useState<DeviceInfo | null>(null)
   const [isSyncing, _setIsSyncing] = useState(false)
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false)
@@ -303,11 +302,6 @@ export function GarminSyncPanel({ userId, onReconnect, onDisconnect }: GarminSyn
                 <div className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700 break-all">
                   <span className="font-medium">Error: </span>
                   {syncError}
-                  <div className="mt-2">
-                    <a href="/support/garmin" className="text-xs text-blue-600 underline" target="_blank" rel="noopener noreferrer">
-                      Garmin sync help
-                    </a>
-                  </div>
                 </div>
               )}
 
@@ -408,11 +402,6 @@ export function GarminSyncPanel({ userId, onReconnect, onDisconnect }: GarminSyn
                 <div className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700 break-all">
                   <span className="font-medium">Error: </span>
                   {catalogError}
-                  <div className="mt-2">
-                    <a href="/support/garmin" className="text-xs text-blue-600 underline" target="_blank" rel="noopener noreferrer">
-                      Garmin sync help
-                    </a>
-                  </div>
                 </div>
               ) : catalog?.capabilities.length ? (
                 <div className="space-y-2">
@@ -455,16 +444,6 @@ export function GarminSyncPanel({ userId, onReconnect, onDisconnect }: GarminSyn
                 </div>
               )}
             </div>
-
-            {onDisconnect && (
-              <Button
-                variant="outline"
-                className="w-full border-red-200 text-red-700 hover:bg-red-50"
-                onClick={onDisconnect}
-              >
-                Disconnect Garmin
-              </Button>
-            )}
 
             <div className="space-y-2 border-t pt-2">
               <Button

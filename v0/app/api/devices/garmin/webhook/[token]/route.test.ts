@@ -1,5 +1,3 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
 const webhookGetMock = vi.hoisted(() => vi.fn())
 const webhookPostMock = vi.hoisted(() => vi.fn())
 
@@ -24,7 +22,7 @@ describe('/api/devices/garmin/webhook/[token]', () => {
     vi.restoreAllMocks()
   })
 
-  it('forwards GET requests with token secret injected as header auth', async () => {
+  it('forwards GET requests with token secret injected as query parameter', async () => {
     const { GET } = await loadRoute()
     const req = new Request('http://localhost/api/devices/garmin/webhook/secret-123')
 
@@ -32,10 +30,11 @@ describe('/api/devices/garmin/webhook/[token]', () => {
 
     expect(webhookGetMock).toHaveBeenCalledTimes(1)
     const forwardedReq = webhookGetMock.mock.calls[0]?.[0] as Request
-    expect(forwardedReq.headers.get('x-garmin-webhook-secret')).toBe('secret-123')
+    const forwardedUrl = new URL(forwardedReq.url)
+    expect(forwardedUrl.searchParams.get('secret')).toBe('secret-123')
   })
 
-  it('forwards POST requests with token secret injected as header auth', async () => {
+  it('forwards POST requests with token secret injected as query parameter', async () => {
     const { POST } = await loadRoute()
     const req = new Request('http://localhost/api/devices/garmin/webhook/secret-123', {
       method: 'POST',
@@ -47,6 +46,7 @@ describe('/api/devices/garmin/webhook/[token]', () => {
 
     expect(webhookPostMock).toHaveBeenCalledTimes(1)
     const forwardedReq = webhookPostMock.mock.calls[0]?.[0] as Request
-    expect(forwardedReq.headers.get('x-garmin-webhook-secret')).toBe('secret-123')
+    const forwardedUrl = new URL(forwardedReq.url)
+    expect(forwardedUrl.searchParams.get('secret')).toBe('secret-123')
   })
 })

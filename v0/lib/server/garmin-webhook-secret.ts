@@ -1,6 +1,7 @@
 const GARMIN_WEBHOOK_SECRET_KEYS = [
   'GARMIN_WEBHOOK_SECRET',
   'GARMIN_WEBHOOK_TOKEN',
+  'NEXT_PUBLIC_GARMIN_WEBHOOK_SECRET',
 ] as const
 
 function normalizeSecret(rawValue: string | undefined): string | null {

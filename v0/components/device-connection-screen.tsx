@@ -16,8 +16,6 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { db } from "@/lib/db"
-import { trackAnalyticsEvent } from "@/lib/analytics"
-import { useAuth } from "@/lib/auth-context"
 
 interface WearableDevice {
   id?: number;
@@ -50,7 +48,6 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
   const [isSyncing, setIsSyncing] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
-  const { user: authUser, profileId } = useAuth()
 
   const supportedDevices = [
     {
@@ -77,6 +74,7 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
 
   const loadConnectedDevices = async () => {
     try {
+      // Always read from client-side Dexie.js (IndexedDB) — this is a PWA with local storage
       const devices = await db.wearableDevices.where('userId').equals(userId).toArray()
       await Promise.all(
         devices
@@ -157,8 +155,6 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
         },
         body: JSON.stringify({
           userId,
-          authUserId: authUser?.id ?? null,
-          profileId,
           redirectUri: `${window.location.origin}/garmin/callback`
         })
       })
@@ -170,11 +166,6 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
         if (!isSafeRedirect(data.authUrl)) {
           throw new Error('Blocked unsafe redirect URL')
         }
-        void trackAnalyticsEvent('garmin_connect_started', {
-          userId,
-          surface: 'device_connection',
-          redirectUri: `${window.location.origin}/garmin/callback`,
-        })
         window.location.href = data.authUrl
       } else {
         throw new Error(data.error)
@@ -183,7 +174,7 @@ export function DeviceConnectionScreen({ userId, onDeviceConnected }: DeviceConn
       console.error('Garmin connection error:', error)
       toast({
         title: "Connection Failed",
-        description: error instanceof Error ? error.message : "Failed to initiate Garmin connection. Please try again.",
+        description: "Failed to initiate Garmin connection. Please try again.",
         variant: "destructive",
       })
       setIsConnecting(null)

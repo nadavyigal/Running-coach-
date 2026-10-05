@@ -8,8 +8,6 @@ import { ENABLE_AUTO_PAUSE, ENABLE_PACE_CHART } from '@/lib/featureFlags'
 import { calculateGPSQualityScore, getGPSQualityLevel, type GPSAccuracyData } from '@/lib/gps-monitoring'
 import { logger } from '@/lib/logger'
 import { withApiSecurity, type ApiRequest } from '@/lib/security.middleware'
-import { captureAIGeneration } from '@/lib/ai-observability'
-import { requireApiUser } from '@/lib/api-auth'
 
 const RUN_TYPES = ['easy', 'tempo', 'intervals', 'long', 'time-trial', 'hill', 'other'] as const
 type RunType = (typeof RUN_TYPES)[number]
@@ -1070,8 +1068,6 @@ function normalizeInsight(insight: RunInsight, fallback: RunInsight): RunInsight
 }
 
 const handler = async (req: ApiRequest) => {
-  const auth = await requireApiUser(req)
-  if (auth.response) return auth.response
   const requestStartedAt = Date.now()
   let rawBody: unknown = null
 
@@ -1129,11 +1125,15 @@ const handler = async (req: ApiRequest) => {
     model: RUN_REPORT_MODEL,
   })
 
-  const promptMessages = [
-    {
-      role: 'system' as const,
-      content:
-        `You are Run-Smart, an elite evidence-based running coach providing premium post-run analysis. Be supportive, specific, and practical. No medical diagnosis. If pain or dizziness is noted, advise stopping and consulting a professional.
+  const aiResult = await withSecureOpenAI(async () => {
+    const { object } = await generateObject({
+      model: openai(RUN_REPORT_MODEL),
+      schema: InsightSchema,
+      prompt: [
+        {
+          role: 'system',
+          content:
+            `You are Run-Smart, an elite evidence-based running coach providing premium post-run analysis. Be supportive, specific, and practical. No medical diagnosis. If pain or dizziness is noted, advise stopping and consulting a professional.
 
 CORE FIELDS (always fill):
 - summary[0]: Headline with key stats (distance, duration, avg pace)
@@ -1162,35 +1162,29 @@ SCORING GUIDE:
 - 75-89: Good run with minor areas for improvement
 - 60-74: Decent but notable issues (erratic pacing, wrong effort level)
 - Below 60: Significant concerns (injury signals, major pacing issues)`,
-    },
-    {
-      role: 'user' as const,
-      content: `Skill: run-insights-recovery\nInput:\n${JSON.stringify(
-        skillInput,
-        null,
-        2
-      )}\n${
-        paceStats
-          ? `\nPacing Analysis:\n- Was the pace consistent, fading (positive split), or negative split?\n- Average pace: ${formatPace(
-              paceStats.avgPaceMinPerKm * 60
-            )}, pace range: ${formatPace(paceStats.minPaceMinPerKm * 60)}-${formatPace(
-              paceStats.maxPaceMinPerKm * 60
-            )}\n- Pace variability: ${Math.round(
-              paceStats.variabilityMinPerKm * 60
-            )}s (low = consistent, high = erratic)\n- Provide 1-2 sentence pacing assessment\n- If pacing was poor, suggest a specific improvement\n- Include pacingAnalysis (1-2 sentences), paceConsistency, and paceVariability (seconds per km as number)\n- Current paceConsistency suggestion: ${paceConsistency ?? 'unknown'}`
-          : '\nPacing Analysis: Pace data unavailable; omit pacingAnalysis, paceConsistency, paceVariability.'
-      }\nReturn JSON that matches the provided schema.`,
-    },
-  ]
-
-  const aiResult = await withSecureOpenAI(async () => {
-    const result = await generateObject({
-      model: openai(RUN_REPORT_MODEL),
-      schema: InsightSchema,
-      prompt: promptMessages,
+        },
+        {
+          role: 'user',
+          content: `Skill: run-insights-recovery\nInput:\n${JSON.stringify(
+            skillInput,
+            null,
+            2
+          )}\n${
+            paceStats
+              ? `\nPacing Analysis:\n- Was the pace consistent, fading (positive split), or negative split?\n- Average pace: ${formatPace(
+                  paceStats.avgPaceMinPerKm * 60
+                )}, pace range: ${formatPace(paceStats.minPaceMinPerKm * 60)}-${formatPace(
+                  paceStats.maxPaceMinPerKm * 60
+                )}\n- Pace variability: ${Math.round(
+                  paceStats.variabilityMinPerKm * 60
+                )}s (low = consistent, high = erratic)\n- Provide 1-2 sentence pacing assessment\n- If pacing was poor, suggest a specific improvement\n- Include pacingAnalysis (1-2 sentences), paceConsistency, and paceVariability (seconds per km as number)\n- Current paceConsistency suggestion: ${paceConsistency ?? 'unknown'}`
+              : '\nPacing Analysis: Pace data unavailable; omit pacingAnalysis, paceConsistency, paceVariability.'
+          }\nReturn JSON that matches the provided schema.`,
+        },
+      ],
     })
 
-    return result
+    return object
   }, fallbackInsight)
 
   if (!aiResult.success && aiResult.error) {
@@ -1198,25 +1192,9 @@ SCORING GUIDE:
     logError('run-report.ai', aiResult.error, { runId: normalized.runId })
   }
 
-  const generation = aiResult.success ? (aiResult.data as any) : null
-  const report = normalizeInsight(generation?.object ?? aiResult.data ?? fallbackInsight, fallbackInsight)
+  const report = normalizeInsight(aiResult.data ?? fallbackInsight, fallbackInsight)
   const reportWithGpsQuality = gpsQuality ? { ...report, gpsQuality } : report
   const source = aiResult.success ? ('ai' as const) : ('fallback' as const)
-
-  await captureAIGeneration({
-    traceName: 'run-report',
-    model: RUN_REPORT_MODEL,
-    input: promptMessages,
-    output: report,
-    usage: generation?.usage,
-    latencyMs: Date.now() - requestStartedAt,
-    error: aiResult.success ? undefined : aiResult.error,
-    properties: {
-      run_id: normalized.runId,
-      source,
-      streaming: false,
-    },
-  })
 
   logger.info('ai_insight_created', {
     run_id: report.runId,

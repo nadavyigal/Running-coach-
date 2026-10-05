@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronRight, Link2, RefreshCw, RotateCcw, Watch } from "lucide-react"
+import { CheckCircle2, ChevronRight, Link2, Watch } from "lucide-react"
 import { rowItemVariants, profileCardVariants, statusChipVariants } from "@/components/profile/variants"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -16,11 +16,7 @@ interface IntegrationsListCardProps {
   garminConnected: boolean
   garminStatusLabel?: string
   garminStatusTone?: "connected" | "available" | "warning"
-  garminAction?: "connect" | "sync" | "backfill" | "disconnect" | null
   onGarminConnect: () => void
-  onGarminSync: () => void
-  onGarminBackfill: () => void
-  onGarminDisconnect: () => void
   onGarminDetails: () => void
   rows: IntegrationRow[]
 }
@@ -29,16 +25,10 @@ export function IntegrationsListCard({
   garminConnected,
   garminStatusLabel,
   garminStatusTone = "connected",
-  garminAction = null,
   onGarminConnect,
-  onGarminSync,
-  onGarminBackfill,
-  onGarminDisconnect,
   onGarminDetails,
   rows,
 }: IntegrationsListCardProps) {
-  const showGarminAttention = garminStatusTone === "warning"
-
   return (
     <section aria-labelledby="integrations-heading" className="space-y-3">
       <div>
@@ -62,59 +52,19 @@ export function IntegrationsListCard({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {garminConnected || showGarminAttention ? (
-              <span className={statusChipVariants({ tone: showGarminAttention ? "warning" : "connected" })}>
-                {showGarminAttention ? "Attention" : "Connected"}
+          <div className="flex items-center gap-2">
+            {garminConnected ? (
+              <span className={statusChipVariants({ tone: garminStatusTone === "warning" ? "warning" : "connected" })}>
+                {garminStatusTone === "warning" ? "Attention" : "Connected"}
               </span>
             ) : null}
             {garminConnected ? (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8"
-                  onClick={onGarminSync}
-                  disabled={garminAction != null}
-                >
-                  <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", garminAction === "sync" && "animate-spin")} />
-                  {garminAction === "sync" ? "Syncing..." : "Sync"}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8"
-                  onClick={onGarminBackfill}
-                  disabled={garminAction != null}
-                >
-                  <RotateCcw className={cn("mr-1.5 h-3.5 w-3.5", garminAction === "backfill" && "animate-spin")} />
-                  {garminAction === "backfill" ? "Syncing..." : "Re-sync all"}
-                </Button>
-                <Button
-                  variant={showGarminAttention ? "default" : "outline"}
-                  size="sm"
-                  className="h-8"
-                  onClick={onGarminConnect}
-                  disabled={garminAction != null}
-                >
-                  {garminAction === "connect" ? "Opening..." : "Reconnect"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8"
-                  onClick={onGarminDisconnect}
-                  disabled={garminAction != null}
-                >
-                  {garminAction === "disconnect" ? "Disconnecting..." : "Disconnect"}
-                </Button>
-                <Button variant="ghost" size="sm" className="h-8" onClick={onGarminDetails}>
-                  Details
-                </Button>
-              </>
+              <Button variant="ghost" size="sm" className="h-8" onClick={onGarminDetails}>
+                Details
+              </Button>
             ) : (
-              <Button size="sm" className="h-8" onClick={onGarminConnect} disabled={garminAction != null}>
-                {garminAction === "connect" ? "Opening..." : showGarminAttention ? "Reconnect" : "Connect"}
+              <Button size="sm" className="h-8" onClick={onGarminConnect}>
+                Connect
               </Button>
             )}
           </div>

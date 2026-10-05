@@ -441,10 +441,7 @@ export default function RunSmartApp() {
               }
               localStorage.setItem(migrationKey, 'true');
             } catch (migrationError) {
-              const msg = migrationError instanceof Error ? migrationError.message : String(migrationError);
-              logger.warn('[app:init:migration] ⚠️ Failed to fix multiple active plans:', msg);
-              // Mark as attempted so we don't retry every startup
-              localStorage.setItem(migrationKey, 'failed');
+              logger.warn('[app:init:migration] ⚠️ Failed to fix multiple active plans:', migrationError);
             }
           }
 
