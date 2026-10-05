@@ -20,7 +20,6 @@ import {
   computeMaxOutputTokens,
 } from '@/lib/plan/plan-core';
 import { captureAIGeneration } from '@/lib/ai-observability';
-import { requireApiUser } from '@/lib/api-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,8 +39,6 @@ function getClientIP(request: Request): string {
 
 
 export async function POST(req: Request) {
-  const auth = await requireApiUser(req);
-  if (auth.response) return auth.response;
   const requestId = `plan_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const startedAt = Date.now();
 

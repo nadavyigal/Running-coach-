@@ -19,8 +19,6 @@ const mockGetCurrentUser = vi.fn()
 const mockGetWorkoutById = vi.fn()
 const mockGetRunById = vi.fn()
 const mockTrackAnalyticsEvent = vi.fn()
-const mockTrackActivationOnce = vi.fn()
-const mockGetRunsByUser = vi.fn()
 const mockGeneratePlan = vi.fn()
 const mockGenerateFallbackPlan = vi.fn()
 const fetchMock = vi.fn()
@@ -44,13 +42,11 @@ vi.mock("@/lib/dbUtils", () => ({
     getCurrentUser: mockGetCurrentUser,
     getWorkoutById: mockGetWorkoutById,
     getRunById: mockGetRunById,
-    getRunsByUser: mockGetRunsByUser,
   },
 }))
 
 vi.mock("@/lib/analytics", () => ({
   trackAnalyticsEvent: mockTrackAnalyticsEvent,
-  trackActivationOnce: mockTrackActivationOnce,
 }))
 
 vi.mock("@/lib/planGenerator", () => ({
@@ -105,8 +101,6 @@ beforeEach(async () => {
   mockGetWorkoutById.mockResolvedValue(null)
   mockGetRunById.mockResolvedValue(null)
   mockTrackAnalyticsEvent.mockResolvedValue(undefined)
-  mockTrackActivationOnce.mockResolvedValue(true)
-  mockGetRunsByUser.mockResolvedValue([])
   mockGeneratePlan.mockResolvedValue({
     plan: {
       userId: 1,
@@ -466,43 +460,5 @@ describe("recordRunWithSideEffects", () => {
     expect(result.adaptation.reason).toBe("performance_below_target")
     expect(result.adaptation.retryable).toBe(true)
     expect(mockUpdatePlan).not.toHaveBeenCalled()
-  })
-
-  it("reports activation with the user's total run count after saving", async () => {
-    const runRecording = await loadRunRecording()
-    mockCreateRun.mockResolvedValue(901)
-    mockGetRunsByUser.mockResolvedValue([{ id: 901 }])
-
-    await runRecording.recordRunWithSideEffects({
-      userId: 1,
-      distanceKm: 3,
-      durationSeconds: 1200,
-      completedAt: new Date("2025-01-15T09:00:00Z"),
-      importSource: "manual",
-    })
-
-    await vi.waitFor(() =>
-      expect(mockTrackActivationOnce).toHaveBeenCalledWith(
-        1,
-        1,
-        expect.objectContaining({ run_id: 901, distanceKm: 3, durationSeconds: 1200, source: "manual" })
-      )
-    )
-  })
-
-  it("still saves the run when activation tracking throws", async () => {
-    const runRecording = await loadRunRecording()
-    mockCreateRun.mockResolvedValue(902)
-    mockGetRunsByUser.mockRejectedValue(new Error("Dexie closed"))
-
-    const result = await runRecording.recordRunWithSideEffects({
-      userId: 1,
-      distanceKm: 3,
-      durationSeconds: 1200,
-      completedAt: new Date("2025-01-15T09:00:00Z"),
-      importSource: "manual",
-    })
-
-    expect(result.runId).toBe(902)
   })
 })

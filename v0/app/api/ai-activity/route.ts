@@ -11,7 +11,6 @@ import {
   parsePaceToSecondsPerKm,
 } from "@/lib/activityParsing"
 import { captureAIGeneration } from "@/lib/ai-observability"
-import { requireApiUser } from "@/lib/api-auth"
 
 // Use Node.js runtime for sharp image processing
 export const runtime = 'nodejs'
@@ -225,8 +224,6 @@ const validateAndNormalizeExtracted = (extracted: {
 }
 
 export async function POST(req: Request) {
-  const auth = await requireApiUser(req)
-  if (auth.response) return auth.response
   const requestId = crypto.randomUUID()
   const startedAt = Date.now()
 

@@ -1,12 +1,6 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/chat/route';
-
-// Signed-in: these tests cover the route behind the session gate. The gate itself is
-// covered by lib/api-auth.test.ts and __tests__/openai-routes-auth-gate.api.test.ts.
-vi.mock('@/lib/api-auth', () => ({
-  requireApiUser: async () => ({ user: { id: 'test-user' } }),
-}));
 
 describe('Chat API Fallback', () => {
   const originalKey = process.env.OPENAI_API_KEY;

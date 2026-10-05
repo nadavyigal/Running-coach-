@@ -1,10 +1,9 @@
 'use client'
 
-import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
-import { identifyUser, resetIdentity } from '@/lib/analytics-identity'
 
 type AuthContextType = {
   user: User | null
@@ -20,23 +19,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profileId, setProfileId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const identifiedUserIdRef = useRef<string | null>(null)
-
-  // Identify in PostHog whenever the signed-in user changes: initial session
-  // restore, the server-cookie fallback, SIGNED_IN, and refreshSession all land
-  // here. Without it a returning user has no person profile and retention is
-  // not computable. Reset only when a signed-in user signs out.
-  useEffect(() => {
-    const userId = user?.id ?? null
-    if (userId === identifiedUserIdRef.current) return
-
-    if (userId) {
-      identifyUser(userId)
-    } else {
-      resetIdentity()
-    }
-    identifiedUserIdRef.current = userId
-  }, [user?.id])
 
   useEffect(() => {
     const supabase = createClient()

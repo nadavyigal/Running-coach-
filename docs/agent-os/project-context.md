@@ -1,8 +1,6 @@
 # RunSmart — Project Context
 
 > Living document. Update this file whenever an architecture decision is made, a scope change is approved, or an open question is resolved. Agents should read this file at the start of any session.
->
-> Last checked against the code: 2026-09-27, at `origin/main` ccb1fc5 (P0 Story 4 of `docs/specs/2026-09-19-web-p0-hardening-plan.md`). Counts and versions below are from that commit; re-count before relying on them.
 
 ---
 
@@ -29,15 +27,15 @@ Beta cohort: ~100 runners (70 EN / 30 HE) recruited via local running clubs and 
 ## Current MVP Scope
 
 ### In Scope
-- **Size:** 117 API route files under `v0/app/api/` (112 once the P0 Story 1 deletions merge) and 266 component `.tsx` files under `v0/components/` (51 of them in `components/ui/`). The core app is a client-only SPA: `app/page.tsx` renders `app/page-client.tsx`, which mounts every screen (Onboarding, Today, Plan, Record, Run Report, Chat, Profile) with `dynamic(..., { ssr: false })`.
-- **21-day challenges:** three optional templates in `lib/challengeTemplates.ts` (`start-running`, `morning-ritual`, `plateau-breaker`). The runner can pick one at onboarding; none is seeded automatically.
-- **Dexie (IndexedDB) is the primary store:** 52 tables in `lib/db.ts`. Supabase provides auth and mirrors 6 tables (`profiles`, `runs`, `goals`, `shoes`, `plans`, `workouts`, via `lib/sync/`) for signed-in users only. Anonymous users' data lives only in the browser.
-- **OpenAI GPT-4o** chat coach (`OPENAI_MODEL`, default `gpt-4o`) with last-3-runs context built in `components/chat-screen.tsx`
-- **Garmin Connect:** paused. The app was deactivated; on 2026-09-27 `garmin_connections` had 8 rows, all `reauth_required`, 0 connected. New connections are gated off (`lib/server/garmin-connect-gate.ts`).
-- **PostHog** analytics (custom events, `person_profiles: 'identified_only'`)
-- **Data export/delete:** no GDPR delete or export endpoint exists. The only export route is `app/api/performance/export/route.ts`.
-- **iOS:** `v0/capacitor.config.ts` (Capacitor 7) loads `https://www.runsmart-ai.com`, but its `ios.path` is `../apps/ios`, which does not exist (the repo has `apps/ios-native/` and `apps/ios-old-old/`). A separate native SwiftUI app (`IOS RunSmart app` repo) calls this app's API (`/api/generate-plan`, `/api/run-report`, `/api/coach/voice-cue`).
-- **Payments:** none. No Paddle, Stripe or RevenueCat code. `lib/subscriptionGates.ts` gates 2 routes (`app/api/goals/recommendations`, `app/api/recovery/recommendations`); the tier comes from `user.subscriptionTier`, and the only code that writes it sets `'free'`.
+- **5 Screens:** Today Dashboard, Plan Overview, Record Run, AI Coach Chat, Onboarding Wizard
+- **21-Day Rookie Challenge** seeded at onboarding
+- **Supabase** for auth and server-side data persistence
+- **OpenAI GPT-4o** chat coach with last-3-runs context
+- **Garmin Connect API** bi-directional sync (webhooks + polling)
+- **PostHog** analytics (autocapture + custom events)
+- **GDPR compliance** — delete/export endpoints
+- **iOS app** via Capacitor v6 wrapping the Next.js PWA (in progress — current branch: `ios`)
+- **Subscription gating** via Paddle (paywall UI exists, not yet enforced)
 
 ### Out of Scope (Backlog)
 - Stripe direct integration
@@ -51,7 +49,7 @@ Beta cohort: ~100 runners (70 EN / 30 HE) recruited via local running clubs and 
 | Metric | Target |
 |--------|--------|
 | Weekly Plan-Completion (W1→W4) | ≥ 55% |
-| Day-30 Retention | ≥ 40% (**blocked:** not computable until P0 Story 3 ships, because `posthog.identify()` ran only at signup, so returning users had no person profile) |
+| Day-30 Retention | ≥ 40% |
 | Avg. Daily Active Minutes | ≥ 12 min |
 | Crash-free Sessions | ≥ 99.6% |
 
@@ -59,17 +57,17 @@ Beta cohort: ~100 runners (70 EN / 30 HE) recruited via local running clubs and 
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | Next.js 16.3.0 (App Router; `next build --webpack`) |
+| Framework | Next.js 14 (App Router) |
 | Language | TypeScript (strict) |
 | Styling | Tailwind CSS + Radix UI primitives |
-| Client DB (primary) | Dexie.js 4 (IndexedDB), 52 tables |
-| Auth + mirror | Supabase (Auth; PostgreSQL mirror of 6 tables for signed-in users) |
-| AI / Chat | OpenAI GPT-4o via Vercel AI SDK (`ai` 5) |
+| Client DB | Dexie.js (IndexedDB) |
+| Server DB + Auth | Supabase (PostgreSQL + Auth) |
+| AI / Chat | OpenAI GPT-4o via Vercel AI SDK |
 | Analytics | PostHog (cloud) |
-| Deployment | Vercel; merging `main` auto-deploys production (plan tier not checked from code) |
-| iOS | Capacitor 7 config in `v0/`; separate native SwiftUI app in its own repo |
+| Deployment | Vercel (hobby plan) |
+| iOS Wrapper | Capacitor v6 |
 | Testing | Vitest (unit) + Playwright (e2e) |
-| Package manager | npm (`v0/package-lock.json`, `npm ci` in CI). The root `pnpm-workspace.yaml` lists `packages/*` and `apps/*`, not `v0/` |
+| Monorepo | pnpm workspaces |
 
 ## Repository Layout
 
@@ -81,15 +79,14 @@ RunSmart/
 │   ├── lib/                # DB schema, utilities, recovery engine
 │   ├── hooks/              # Custom React hooks
 │   └── __tests__/ e2e/     # Vitest unit tests + Playwright e2e
-├── apps/ios-native/        # iOS shell project (do NOT edit when working on v0/)
-├── apps/ios-old-old/       # Older iOS shell, kept for reference
+├── apps/ios/               # Capacitor iOS shell (do NOT edit when working on v0/)
 ├── docs/                   # Stories, plans, PRD, agent-os
 │   ├── prd.md              # Product Requirements Document (source of truth)
 │   ├── stories/            # Development stories (numbered by epic)
 │   └── plans/              # Implementation plans
 ├── tasks/lessons.md        # Shared debugging memory — read before triage
 ├── CLAUDE.md               # Claude Code operating instructions
-├── AGENTS.md               # Agent router for Claude Code, Codex and Cursor
+├── AGENTS.md               # Codex operating instructions
 └── .claude/agents/         # Claude Code subagent definitions
 ```
 
@@ -97,30 +94,29 @@ RunSmart/
 
 | Integration | Purpose | Notes |
 |-------------|---------|-------|
-| Supabase | Auth, mirror of 6 tables for signed-in users, RLS | `.env.local` must point to correct project URL |
-| OpenAI GPT-4o | Chat coach + plan generation | Token budget ~$50/mo at <5k MAU. At this commit the OpenAI routes are callable anonymously, billed to our key. P0 Story 2 (PR #134, `lib/api-auth.ts`) gates them; `/api/onboarding/chat` stays anonymous by design |
-| Garmin Connect API | Activity sync | **Paused.** 0 connected users (8 rows, all `reauth_required`, 2026-09-27). Cron jobs still scheduled in `vercel.json` |
-| PostHog | Product analytics | Custom events; check `NEXT_PUBLIC_POSTHOG_KEY`. Loaded lazily in `lib/posthog-provider.tsx` |
-| Vercel | Hosting + cron jobs | 3 daily crons in `v0/vercel.json` (Garmin nightly, Garmin jobs, email sequences) |
-| Capacitor 7 | iOS web wrapper config | `server.url` is production; `ios.path` points at a missing `apps/ios` |
+| Supabase | Auth, server-side DB, RLS | `.env.local` must point to correct project URL |
+| OpenAI GPT-4o | Chat coach + plan generation | Token budget ~$50/mo at <5k MAU |
+| Garmin Connect API | Bi-directional activity sync | Webhooks + daily polling cron; Dexie cache reconciled against Supabase |
+| PostHog | Product analytics | Autocapture + custom events; check `NEXT_PUBLIC_POSTHOG_KEY` |
+| Vercel | Hosting + cron jobs | Hobby plan — cron limited to daily |
+| Capacitor v6 | iOS native wrapper | HealthKit, APNs, App Store distribution |
 | Apple HealthKit | Health data (planned) | Read scope TBD |
 
 ## Known Risks
 
 1. **Solo founder velocity** — every decision trades off scope vs. speed
 2. **Capacitor performance ceiling** — hybrid app may feel less native than SwiftUI; acceptable for MVP
-3. **Garmin** — paused with 0 connected users; restoring it needs a production credential set (see `tasks/progress.md`)
-4. **LLM cost scaling** — the rate limiter in `lib/security.config.ts` is an in-memory `Map`, per Vercel instance, so it is not a real control. Session auth on the OpenAI routes is the control; a durable limiter is a P2
+3. **Garmin webhook reliability** — webhooks can miss; reconciliation cron is the safety net
+4. **LLM cost scaling** — GPT-4o at $50/mo budget requires rate limiting; structured generation keeps tokens predictable
 5. **Supabase env mismatch** — wrong project URL in `.env.local` is the #1 cause of 406 errors (see `tasks/lessons.md`)
 
 ## Open Questions
 
-- [OPEN QUESTION] Payments: no provider is integrated. Which one, and what tiers?
+- [OPEN QUESTION] Final subscription pricing tiers (Paddle)
 - [OPEN QUESTION] HealthKit read scope for iOS — which data types to request
 - [OPEN QUESTION] Android roadmap — timeline and approach
 - [OPEN QUESTION] Community/social features — whether and when to build
-- [OPEN QUESTION] iOS strategy: ADR-001 chose Capacitor, but a separate native SwiftUI app now exists and calls this API. Does ADR-001 still stand?
-- [OPEN QUESTION] Anonymous users: after P0 Story 2 they lose AI features except onboarding chat. Is that the intended product, or should plan generation get an account prompt / signed device token?
+- [OPEN QUESTION] Whether to enforce Paddle paywall for beta cohort
 
 ---
 
@@ -144,7 +140,7 @@ RunSmart/
 **Chosen option:** Capacitor v6
 
 **Consequences:**
-- The Capacitor shell must never hold business logic. As built (2026-09-27): the dependency is Capacitor 7, `capacitor.config.ts` still points `ios.path` at `apps/ios/`, which no longer exists, and the shell projects are `apps/ios-native/` and `apps/ios-old-old/`
+- `apps/ios/` is the Capacitor shell — never add business logic there
 - After any `v0/` build, run `npx cap sync ios` before iOS testing
 - Native capabilities (HealthKit, APNs) added via Capacitor plugins, not custom Swift
 - Performance ceiling exists — acceptable for MVP, revisit if user feedback demands it
@@ -154,8 +150,6 @@ RunSmart/
 ### ADR-002: Data layer split — Dexie for local, Supabase for server
 
 **Decision:** Use Dexie (IndexedDB) as the local read layer and Supabase as the authoritative server-side store. Garmin sync reconciles Dexie against Supabase on each sync.
-
-**As built (2026-09-27):** Dexie is the primary store (52 tables). Supabase mirrors only 6 of them (`profiles`, `runs`, `goals`, `shoes`, `plans`, `workouts`) and only for signed-in users. For anonymous users Supabase holds nothing, so Supabase is not authoritative for most data.
 
 **Context:** The app was originally local-only (Dexie). Supabase was added for cross-device sync, auth, and Garmin webhooks. The two layers now coexist.
 

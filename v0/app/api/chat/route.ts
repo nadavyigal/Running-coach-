@@ -7,7 +7,6 @@ import { logger } from "@/lib/logger"
 import { rateLimiter, securityConfig } from "@/lib/security.config"
 import { securityMonitor } from "@/lib/security.monitoring"
 import { captureAIGeneration } from "@/lib/ai-observability"
-import { requireApiUser } from "@/lib/api-auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -65,8 +64,6 @@ function toChatMessage(input: { role?: unknown; content?: unknown }): ChatInputM
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const auth = await requireApiUser(req)
-  if (auth.response) return auth.response
   const requestId = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   const startedAt = Date.now()
 
