@@ -12,6 +12,7 @@ import { MAP_CONFIG, getTileUrl, hasMapTilerToken } from '@/lib/mapConfig';
 import { parseGpsPath, getRouteBounds } from '@/lib/routeUtils';
 import { MapFallback } from './MapFallback';
 import { trackMapLoaded, trackMapLoadFailed, trackRouteSelectedFromMap } from '@/lib/analytics';
+import { loadMapLibre } from '@/lib/maplibreClient';
 
 // Dynamic import types for MapLibre
 type MapLibreMap = any;
@@ -75,11 +76,11 @@ export function RouteMap({
   useEffect(() => {
     let mounted = true;
 
-    const loadMapLibre = async () => {
+    const initializeMapLibre = async () => {
       try {
-        const maplibregl = await import('maplibre-gl');
+        const maplibregl = await loadMapLibre();
         if (mounted) {
-          setMapLibre(maplibregl.default);
+          setMapLibre(maplibregl);
         }
       } catch (error) {
         console.error('Failed to load MapLibre GL JS:', error);
@@ -91,7 +92,7 @@ export function RouteMap({
       }
     };
 
-    loadMapLibre();
+    initializeMapLibre();
 
     return () => {
       mounted = false;
