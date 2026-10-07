@@ -53,13 +53,18 @@ export function validateOpenAIKey(): ApiKeyValidationResult {
   };
 }
 
+import {
+  isValidPosthogKeyFormat,
+  resolvePublicPosthogKey,
+} from '@/lib/posthog-config';
+
 /**
  * Securely validate PostHog API key
  */
 export function validatePostHogKey(): ApiKeyValidationResult {
-  const key = process.env.NEXT_PUBLIC_POSTHOG_KEY || process.env.NEXT_PUBLIC_POSTHOG_API_KEY;
+  const key = resolvePublicPosthogKey();
   
-  if (!key || key === 'your_posthog_api_key_here') {
+  if (!key) {
     return {
       isValid: false,
       service: 'posthog',
@@ -68,7 +73,7 @@ export function validatePostHogKey(): ApiKeyValidationResult {
   }
   
   // PostHog keys start with 'phc_'
-  if (!key.startsWith('phc_')) {
+  if (!isValidPosthogKeyFormat(key)) {
     return {
       isValid: false,
       service: 'posthog',
