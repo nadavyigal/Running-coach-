@@ -100,9 +100,9 @@ async function testResend() {
 async function testPostHog() {
   console.log('\n📊 Testing PostHog API Key...');
 
-  const apiKey = process.env.NEXT_PUBLIC_POSTHOG_API_KEY;
+  const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY || process.env.NEXT_PUBLIC_POSTHOG_API_KEY;
   if (!apiKey) {
-    console.error('❌ NEXT_PUBLIC_POSTHOG_API_KEY not found in .env.local');
+    console.error('❌ NEXT_PUBLIC_POSTHOG_KEY not found in .env.local (legacy NEXT_PUBLIC_POSTHOG_API_KEY also accepted)');
     return false;
   }
 

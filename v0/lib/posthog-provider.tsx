@@ -1,11 +1,15 @@
 'use client'
 
 import { useEffect } from 'react'
-import { logger } from '@/lib/logger'
 import { onPosthogLoaded } from '@/lib/analytics-identity'
+import { logger } from '@/lib/logger'
+import {
+  resolvePosthogHost,
+  resolvePublicPosthogKey,
+  warnMissingPosthogKey,
+} from '@/lib/posthog-config'
 
-const DEFAULT_POSTHOG_HOST = 'https://us.i.posthog.com'
-const API_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || DEFAULT_POSTHOG_HOST
+const API_HOST = resolvePosthogHost()
 
 type PosthogInstance = NonNullable<Window['posthog']>
 
@@ -51,12 +55,9 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
 
       if (posthogInitialized) return
 
-      const apiKey =
-        process.env.NEXT_PUBLIC_POSTHOG_KEY || process.env.NEXT_PUBLIC_POSTHOG_API_KEY
-      if (!apiKey || apiKey.trim() === '') {
-        if (process.env.NODE_ENV === 'development') {
-          logger.info('PostHog API key not provided - analytics disabled')
-        }
+      const apiKey = resolvePublicPosthogKey()
+      if (!apiKey) {
+        warnMissingPosthogKey('client')
         return
       }
 
