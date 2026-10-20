@@ -865,7 +865,7 @@
             "entity": "vercel.app"
           },
           {
-            "url": "https://us-assets.i.posthog.com/array/phc_BdluF5l3lZckIkEeQoIGjZpKvaYk69PbPWWgCgyau1D/config.js",
+            "url": "https://us-assets.i.posthog.com/array/phc_REDACTED/config.js",
             "sessionTargetType": "page",
             "protocol": "h2",
             "rendererStartTime": 915.4720000177622,
@@ -1580,7 +1580,7 @@
                   "tbtImpact": 0
                 },
                 {
-                  "url": "https://us-assets.i.posthog.com/array/phc_BdluF5l3lZckIkEeQoIGjZpKvaYk69PbPWWgCgyau1D/config.js",
+                  "url": "https://us-assets.i.posthog.com/array/phc_REDACTED/config.js",
                   "mainThreadTime": 0.22700000000000004,
                   "blockingTime": 0,
                   "transferSize": 1531,
@@ -2408,7 +2408,7 @@
             ]
           },
           {
-            "name": "https://us-assets.i.posthog.com/array/phc_BdluF5l3lZckIkEeQoIGjZpKvaYk69PbPWWgCgyau1D/config.js",
+            "name": "https://us-assets.i.posthog.com/array/phc_REDACTED/config.js",
             "resourceBytes": 776,
             "encodedBytes": 0,
             "unusedBytes": 0
@@ -2473,7 +2473,7 @@
             "wastedBytes": 3979.9583333333335
           },
           {
-            "url": "https://us-assets.i.posthog.com/array/phc_BdluF5l3lZckIkEeQoIGjZpKvaYk69PbPWWgCgyau1D/config.js",
+            "url": "https://us-assets.i.posthog.com/array/phc_REDACTED/config.js",
             "debugData": {
               "type": "debugdata",
               "max-age": 300
@@ -3414,7 +3414,7 @@
             "wastedBytes": 3772.64
           },
           {
-            "url": "https://us-assets.i.posthog.com/array/phc_BdluF5l3lZckIkEeQoIGjZpKvaYk69PbPWWgCgyau1D/config.js",
+            "url": "https://us-assets.i.posthog.com/array/phc_REDACTED/config.js",
             "cacheLifetimeMs": 300000,
             "totalBytes": 1531,
             "wastedBytes": 1467.2083333333335
@@ -4332,7 +4332,7 @@
                   "transferSize": 5548
                 },
                 {
-                  "url": "https://us-assets.i.posthog.com/array/phc_BdluF5l3lZckIkEeQoIGjZpKvaYk69PbPWWgCgyau1D/config.js",
+                  "url": "https://us-assets.i.posthog.com/array/phc_REDACTED/config.js",
                   "mainThreadTime": 0.1510000079870224,
                   "transferSize": 1531
                 },
