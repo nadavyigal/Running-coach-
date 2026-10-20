@@ -7,6 +7,9 @@
 
 const PRODUCTION_URL = 'https://www.runsmart-ai.com'
 const POSTHOG_API_URL = 'https://us.i.posthog.com/decide'
+// Same lookup order as lib/posthog-provider.tsx. No fallback key: a hardcoded
+// key would test whichever project it names, not the one production uses.
+const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY || process.env.NEXT_PUBLIC_POSTHOG_API_KEY
 
 console.log('🔍 PostHog Production Verification\n')
 console.log('=' .repeat(60))
@@ -19,7 +22,7 @@ async function checkPostHogEndpoint() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        api_key: process.env.NEXT_PUBLIC_POSTHOG_API_KEY || 'phc_2RcjPhReYKSisINOVVehHusghrUtyyiR6sN87SzJLZ6',
+        api_key: POSTHOG_KEY,
         distinct_id: 'test-user',
       })
     })
@@ -69,7 +72,7 @@ async function testEventSending() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        api_key: process.env.NEXT_PUBLIC_POSTHOG_API_KEY || 'phc_2RcjPhReYKSisINOVVehHusghrUtyyiR6sN87SzJLZ6',
+        api_key: POSTHOG_KEY,
         event: 'test_production_verification',
         properties: {
           distinct_id: 'test-script',
@@ -140,6 +143,12 @@ async function checkDashboard() {
 }
 
 async function main() {
+  if (!POSTHOG_KEY) {
+    console.error('❌ Set NEXT_PUBLIC_POSTHOG_KEY (or NEXT_PUBLIC_POSTHOG_API_KEY) to the production project key first.')
+    process.exitCode = 1
+    return
+  }
+
   const results = {
     posthogApi: await checkPostHogEndpoint(),
     productionEnv: await checkProductionEnvVars(),
