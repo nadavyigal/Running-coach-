@@ -7,18 +7,12 @@ vi.mock('@/lib/email/sequences', () => ({ processEmailSequences }))
 
 import { GET, POST } from './route'
 
-const cronRequest = (method: 'GET' | 'POST') =>
-  new Request('http://localhost/api/cron/email-sequences', {
-    method,
-    headers: { authorization: 'Bearer any-secret' },
-  })
-
 describe('/api/cron/email-sequences (disabled)', () => {
   it.each([
     ['GET', GET],
     ['POST', POST],
-  ] as const)('%s returns 503 disabled without processing sequences', async (method, handler) => {
-    const response = await handler(cronRequest(method))
+  ] as const)('%s returns 503 disabled without processing sequences', async (_method, handler) => {
+    const response = await handler()
     const body = await response.json()
 
     expect(response.status).toBe(503)
