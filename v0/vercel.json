@@ -7,10 +7,6 @@
     {
       "path": "/api/internal/jobs/garmin?limit=50",
       "schedule": "15 3 * * *"
-    },
-    {
-      "path": "/api/cron/email-sequences",
-      "schedule": "0 6 * * *"
     }
   ]
 }

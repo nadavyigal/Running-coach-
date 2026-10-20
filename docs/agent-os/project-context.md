@@ -101,7 +101,7 @@ RunSmart/
 | OpenAI GPT-4o | Chat coach + plan generation | Token budget ~$50/mo at <5k MAU. At this commit the OpenAI routes are callable anonymously, billed to our key. P0 Story 2 (PR #134, `lib/api-auth.ts`) gates them; `/api/onboarding/chat` stays anonymous by design |
 | Garmin Connect API | Activity sync | **Paused.** 0 connected users (8 rows, all `reauth_required`, 2026-09-27). Cron jobs still scheduled in `vercel.json` |
 | PostHog | Product analytics | Custom events; check `NEXT_PUBLIC_POSTHOG_KEY`. Loaded lazily in `lib/posthog-provider.tsx` |
-| Vercel | Hosting + cron jobs | 3 daily crons in `v0/vercel.json` (Garmin nightly, Garmin jobs, email sequences) |
+| Vercel | Hosting + cron jobs | 2 daily crons in `v0/vercel.json` (Garmin nightly, Garmin jobs). The email-sequence cron was unscheduled 2026-10-20 (route returns 503 disabled; rewrite parked in #140) |
 | Capacitor 7 | iOS web wrapper config | `server.url` is production; `ios.path` points at a missing `apps/ios` |
 | Apple HealthKit | Health data (planned) | Read scope TBD |
 
