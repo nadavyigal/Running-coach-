@@ -1,5 +1,7 @@
 # Quick Wins Deployment Guide
 
+> **Email sequences disabled (2026-10-20).** `/api/cron/email-sequences` is no longer scheduled in `vercel.json` and returns 503 `email_sequences_disabled` for every request. Skip the email-sequence test, monitoring and checklist steps below: a 503 there is expected, not a failed deployment. The server-side rewrite is parked in PR #140.
+
 ## ✅ Status: Code Pushed to Main (commit `0fa46e5`)
 
 All Quick Wins features are now in production! Follow these steps to complete the deployment.

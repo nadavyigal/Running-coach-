@@ -1,138 +1,35 @@
 /**
- * Email Sequence Cron Job
+ * Email Sequence Cron Job: DISABLED (2026-10-20)
  *
- * This API route processes all automated email sequences on a daily schedule.
- * Configure in vercel.json with:
+ * The daily schedule is removed from vercel.json and both handlers return 503
+ * without doing any work. processEmailSequences() in lib/email/sequences.ts
+ * reads the browser-only Dexie store, so every server run failed with
+ * "Database not available".
  *
- * {
- *   "crons": [{
- *     "path": "/api/cron/email-sequences",
- *     "schedule": "0 6 * * *"
- *   }]
- * }
- *
- * Schedule format: "0 6 * * *" = Daily at 6:00 AM UTC
- *
- * @see https://vercel.com/docs/cron-jobs
- * @see V0/lib/email/sequences.ts for sequence logic
+ * The server-side rewrite is parked in PR #140. Before it ships it needs:
+ * fail-closed cron auth, RLS/grants on email_sends, idempotent delivery, and an
+ * eligibility upper bound so existing users are not emailed their whole history.
  */
 
 import { NextResponse } from 'next/server'
-import { processEmailSequences } from '@/lib/email/sequences'
-import { logger } from '@/lib/logger'
 
-function isDatabaseUnavailableError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false
-  return error.message.includes('Database not available')
+function disabledResponse() {
+  return NextResponse.json(
+    {
+      success: false,
+      disabled: true,
+      reason: 'email_sequences_disabled',
+      message: 'Email sequences are disabled until server-side processing ships (PR #140).',
+      timestamp: new Date().toISOString(),
+    },
+    { status: 503 }
+  )
 }
 
-/**
- * GET handler for cron job execution
- * Vercel Cron Jobs call this endpoint on schedule
- */
-export async function GET(request: Request) {
-  // Verify the request is from Vercel Cron (optional but recommended)
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    logger.warn('Unauthorized cron job attempt')
-    return new NextResponse('Unauthorized', { status: 401 })
-  }
-
-  try {
-    logger.info('Starting email sequence cron job')
-
-    const stats = await processEmailSequences()
-
-    logger.info('Email sequence cron job completed:', stats)
-
-    return NextResponse.json({
-      success: true,
-      timestamp: new Date().toISOString(),
-      stats,
-    })
-  } catch (error) {
-    // Server-side cron runs can hit Dexie/IndexedDB unavailability; do not fail cron health in that case.
-    if (isDatabaseUnavailableError(error)) {
-      logger.warn('Email sequence cron skipped: database unavailable in server runtime')
-      return NextResponse.json(
-        {
-          success: true,
-          skipped: true,
-          reason: 'database_unavailable',
-          timestamp: new Date().toISOString(),
-        },
-        { status: 200 }
-      )
-    }
-
-    logger.error('Email sequence cron job failed:', error)
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-      },
-      { status: 500 }
-    )
-  }
+export async function GET() {
+  return disabledResponse()
 }
 
-/**
- * POST handler for manual execution (testing)
- * Call this endpoint to manually trigger email sequence processing
- *
- * Example:
- * curl -X POST http://localhost:3000/api/cron/email-sequences \
- *   -H "Content-Type: application/json"
- */
-export async function POST(request: Request) {
-  // In development, allow manual triggering without auth
-  if (process.env.NODE_ENV !== 'development') {
-    const authHeader = request.headers.get('authorization')
-    const cronSecret = process.env.CRON_SECRET
-
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-      return new NextResponse('Unauthorized', { status: 401 })
-    }
-  }
-
-  try {
-    logger.info('Manual email sequence execution triggered')
-
-    const stats = await processEmailSequences()
-
-    return NextResponse.json({
-      success: true,
-      manual: true,
-      timestamp: new Date().toISOString(),
-      stats,
-    })
-  } catch (error) {
-    if (isDatabaseUnavailableError(error)) {
-      logger.warn('Manual email sequence execution skipped: database unavailable in server runtime')
-      return NextResponse.json(
-        {
-          success: true,
-          skipped: true,
-          reason: 'database_unavailable',
-          timestamp: new Date().toISOString(),
-        },
-        { status: 200 }
-      )
-    }
-
-    logger.error('Manual email sequence execution failed:', error)
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-      },
-      { status: 500 }
-    )
-  }
+export async function POST() {
+  return disabledResponse()
 }
