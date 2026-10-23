@@ -1,3 +1,7 @@
+## 2026-10-23 — Native record-a-run privacy correction
+
+Founder deferred Strava; no Strava setup or public feature promise. Correct the shared privacy page for native storage, account-linked analytics, optional Health writes/weight and privacy-trimmed sharing. Preserve the web storage distinction. Verify policy tests, lint/types, preview, then publish only to the verified RunSmart production project without unrelated code.
+
 # Agent Task Board
 
 ## Current Task

@@ -1,3 +1,9 @@
+## 2026-10-23 — Native privacy policy correction, Strava deferred
+
+Corrected /privacy for native Supabase storage, account-linked PostHog analytics, optional Health weight and workout route/pause/calorie writes, and opt-in map sharing with trimming limits. Removed inaccurate browser-only/anonymous claims. Strava remains deferred and is not advertised. No data flow, database or environment changes.
+
+Validation: privacy tests 5/5, TypeScript passed, ESLint zero errors (1,657 existing warnings). Browser preview /privacy rendered correctly at desktop width; dedicated mobile viewport check not run (browser tool has no resize capability). Production publication pending verified deployment. Based on production commit 1397da4; no unrelated application changes.
+
 # Project Progress
 
 Project: RunSmart Web
