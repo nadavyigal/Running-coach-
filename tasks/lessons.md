@@ -71,3 +71,7 @@ Reusable lessons for Claude Code, Codex, Cursor, and other agents.
 
 ## Lesson Template
 Use `.agent-os/templates/lesson-template.md` for new entries.
+
+### Lesson: Match privacy copy to each shipping client
+- Trigger: Native account sync and identified analytics contradicted browser-only privacy text.
+- Future Rule: Verify native persistence, Health access and analytics identity separately from web behavior before publishing shared policy copy. Keep deferred integrations out of shipping claims.
