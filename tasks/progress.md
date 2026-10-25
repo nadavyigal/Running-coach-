@@ -1,6 +1,6 @@
 # Garmin readiness preparation — 25 October 2026
 
-Limited server patch prepared on codex/garmin-commercial-readiness-2026-10-25: promised Next 16 webhook params, Next after() processing lifecycle, and permission-aware initial history enqueue. Focused tests: 15/15; type-check passes; full lint: 0 errors, 1657 warnings. Independent QA found no actionable regressions. Draft PR pending publication. No deployment/credential/privacy change or application submission. Full Activity-only readiness is not achieved; see dated spec and QA report for open gates. Private application/correspondence/legal evidence retained outside this public repository.
+Limited server patch prepared on codex/garmin-commercial-readiness-2026-10-25: promised Next 16 webhook params, Next after() processing lifecycle, and permission-aware initial history enqueue. Focused tests: 15/15; type-check passes; full lint: 0 errors, 1657 warnings. Independent QA found no actionable regressions. Draft PR #148: https://github.com/nadavyigal/Running-coach-/pull/148 . No deployment/credential/privacy change or application submission. Full Activity-only readiness is not achieved; see dated spec and QA report for open gates. Private application/correspondence/legal evidence retained outside this public repository.
 
 ---
 

@@ -7,7 +7,7 @@ Approved scope source: current founder restart handoff; technical contract in do
 - [x] Red-first tests; implement promised params and tracked post-response work.
 - [x] Red-first callback permission matrix; skip unauthorized initial history.
 - [x] Prepare private application answers, reply, evidence matrix and separate privacy proposal outside this public repository.
-- [x] Complete focused tests, type-check, lint and independent QA; draft PR pending publication.
+- [x] Complete focused tests, type-check, lint and independent QA; draft PR #148 opened: https://github.com/nadavyigal/Running-coach-/pull/148 .
 - [ ] Complete separate Activity-only/entitlement/lifecycle/hosting gates before launch.
 
 No privacy source edits, credential/environment changes, deployment, application submission or email send authorized by this preparation pass. Historical task state follows unchanged.
