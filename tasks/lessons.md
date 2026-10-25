@@ -71,3 +71,7 @@ Reusable lessons for Claude Code, Codex, Cursor, and other agents.
 
 ## Lesson Template
 Use `.agent-os/templates/lesson-template.md` for new entries.
+
+### Lesson: Keep Garmin evidence and private business records separate
+- Trigger: Renewing a commercial integration from old plans and correspondence.
+- Future Rule: Reconcile current published/deployed behavior, source and case-specific approvals separately; preserve old agreements without treating old limits as current entitlements. Keep certificates, private address and case correspondence outside the public repository. Run app commands from v0 using paths relative to v0; root-level scripts and duplicated v0 paths do not verify the app.

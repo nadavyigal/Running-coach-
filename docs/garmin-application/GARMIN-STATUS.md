@@ -5,7 +5,15 @@
 
 ---
 
-## Current Phase: PHASE 3 — Application Deactivated, Filing Two New Applications
+## Current phase — 25 October 2026: Activity-only commercial preparation restarted
+
+The current founder request reopens preparation now. Internal Test approval is recorded for July 2; current portal state has not been verified. RunSmart still needs its first commercial application and applicable review. New commercial scope is completed-run Activity import; Health wellness must be gated, Training/Courses deferred. Old workout-push evidence expectations do not apply when those APIs are unused.
+
+The readiness patch in this branch awaits review: Next 16 promised webhook params, tracked post-response processing, and initial OAuth history only with explicit HISTORICAL_DATA_EXPORT. See `docs/specs/2026-10-25-garmin-commercial-readiness.md` for validation and remaining gates. Full Activity-only ingestion/exposure/AI gates, all historical-request paths, permission-change lifecycle, payload hosting limits, portal and real-device evidence remain open. No launch, credential change or policy edit is included.
+
+Current public Starter has limited users, push only and no historical data; map existing access/agreements to the current business process before filing. Preserve previously confirmed RunSmart commercial terms; old historical allowances are not current Starter entitlements. Keep private legal/case preparation outside this public repository. Any Garmin-related privacy correction requires Garmin written approval before implementation. Published policy/source provenance and its approval history require reconciliation.
+
+## Historical phase recorded July 1 — Application deactivated, filing two applications
 
 **URGENT (2026-07-01):** Marc Lussi is deactivating RunSmart's current Garmin Developer Portal application. Reason: it is Evaluation tier, and Evaluation tier does not permit connecting external (real) users under Garmin's Terms — a violation that predates this whole brand-compliance saga. He's asked for **two new applications**: one for internal testing/verification, one for commercial use after Production review passes. See Agentic OS **WP-24** (rewritten 2026-07-01) for the full plan. Root cause confirmed by code read: no environment separation has ever existed between test and production Garmin credentials — every route reads the same `GARMIN_CLIENT_ID`/`GARMIN_CLIENT_SECRET` pair.
 

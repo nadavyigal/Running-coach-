@@ -30,12 +30,12 @@ function injectSecretAsQueryParam(req: Request, token: string): Request {
   })
 }
 
-export async function GET(req: Request, { params }: { params: Params }) {
-  const { token } = params
+export async function GET(req: Request, { params }: { params: Promise<Params> }) {
+  const { token } = await params
   return webhookGET(injectSecretAsQueryParam(req, token))
 }
 
-export async function POST(req: Request, { params }: { params: Params }) {
-  const { token } = params
+export async function POST(req: Request, { params }: { params: Promise<Params> }) {
+  const { token } = await params
   return webhookPOST(injectSecretAsQueryParam(req, token))
 }

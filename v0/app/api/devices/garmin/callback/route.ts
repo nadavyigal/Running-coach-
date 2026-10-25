@@ -257,19 +257,22 @@ async function handleGarminCallback(req: ApiRequest) {
       rotatedAt: nowIso,
     })
 
-    try {
-      await enqueueGarminBackfillJob({
-        userId,
-        profileId: resolvedProfileId,
-        providerUserId: profileUserId != null ? String(profileUserId) : null,
-      })
-    } catch (backfillError) {
-      // Non-fatal: the OAuth connection is established. Log and continue.
-      warnings.push('Garmin connected. Initial sync queue was unavailable; use Sync Garmin to import data now.')
-      logger.warn('Failed to enqueue Garmin backfill job after connect (non-fatal)', {
-        userId,
-        error: backfillError instanceof Error ? backfillError.message : 'unknown',
-      })
+    // Starter access has no history. Only queue backfill when Garmin explicitly grants it.
+    if (scopes.includes('HISTORICAL_DATA_EXPORT')) {
+      try {
+        await enqueueGarminBackfillJob({
+          userId,
+          profileId: resolvedProfileId,
+          providerUserId: profileUserId != null ? String(profileUserId) : null,
+        })
+      } catch (backfillError) {
+        // Non-fatal: the OAuth connection is established. Log and continue.
+        warnings.push('Garmin connected. Initial sync queue was unavailable; use Sync Garmin to import data now.')
+        logger.warn('Failed to enqueue Garmin backfill job after connect (non-fatal)', {
+          userId,
+          error: backfillError instanceof Error ? backfillError.message : 'unknown',
+        })
+      }
     }
 
     const deviceData = {

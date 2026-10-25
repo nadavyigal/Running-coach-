@@ -86,7 +86,11 @@ describe('/api/devices/garmin/callback', () => {
     })
   })
 
-  it('exchanges token, stores the connection, and queues the initial backfill', async () => {
+  it.each([
+    { scopes: ['ACTIVITY_EXPORT'], queuesHistory: false },
+    { scopes: ['ACTIVITY_EXPORT', 'HEALTH_EXPORT'], queuesHistory: false },
+    { scopes: ['ACTIVITY_EXPORT', 'HISTORICAL_DATA_EXPORT'], queuesHistory: true },
+  ])('stores connection with $scopes; historical backfill=$queuesHistory', async ({ scopes, queuesHistory }) => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -101,7 +105,7 @@ describe('/api/devices/garmin/callback', () => {
       )
       .mockResolvedValueOnce(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
       .mockResolvedValueOnce(
-        new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HEALTH_EXPORT']), { status: 200 })
+        new Response(JSON.stringify(scopes), { status: 200 })
       )
 
     vi.stubGlobal('fetch', fetchMock)
@@ -130,13 +134,17 @@ describe('/api/devices/garmin/callback', () => {
       })
     )
     expect(upsertGarminTokensMock).toHaveBeenCalledTimes(1)
-    expect(enqueueGarminBackfillJobMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: 42,
-        profileId: 'profile-1',
-        providerUserId: 'garmin-user-1',
-      })
-    )
+    if (queuesHistory) {
+      expect(enqueueGarminBackfillJobMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 42,
+          profileId: 'profile-1',
+          providerUserId: 'garmin-user-1',
+        })
+      )
+    } else {
+      expect(enqueueGarminBackfillJobMock).not.toHaveBeenCalled()
+    }
   })
 
   it('keeps the Garmin connection successful when the optional backfill queue is unavailable', async () => {
@@ -156,7 +164,7 @@ describe('/api/devices/garmin/callback', () => {
       )
       .mockResolvedValueOnce(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
       .mockResolvedValueOnce(
-        new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HEALTH_EXPORT']), { status: 200 })
+        new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HISTORICAL_DATA_EXPORT']), { status: 200 })
       )
 
     vi.stubGlobal('fetch', fetchMock)
@@ -203,7 +211,7 @@ describe('/api/devices/garmin/callback', () => {
       )
       .mockResolvedValueOnce(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
       .mockResolvedValueOnce(
-        new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HEALTH_EXPORT']), { status: 200 })
+        new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HISTORICAL_DATA_EXPORT']), { status: 200 })
       )
 
     vi.stubGlobal('fetch', fetchMock)
