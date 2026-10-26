@@ -1,3 +1,11 @@
+# Garmin readiness continuation — 26 October 2026
+
+PR148 continuation on codex/garmin-commercial-readiness-2026-10-25: current OAuth contract/parser, Starter delivery/history policy, Activity-only ingress, permission notifications, registration deletion and safe dependency patches. Dedicated suite: 106 tests in16files PASS. Slim type-check and CI-equivalent tsc PASS; full lint PASS with0errors/1657warnings. Next16.4.3 production build and final incremental build PASS; configured audit-ci correctly FAILS the two unresolved migration advisories. Updated PR head/check refresh pending push. No merge/deploy, credentials/env changes, portal edits or privacy publication. Public1.2.0 is current device baseline.
+
+Audit is still blocked: Zod<4.6.6 (GHSA-mrhx-c7xc-m3w5) and Vitest mocker<4.1.12 (GHSA-qxg6-89mg-rqv8) require broader migrations. Safe patches reduce raw findings to0critical/1high/2moderate. No new allowlist or gate suppression. PR148 stays draft. Reconcile manually deployed privacy source from PR147 before any production deployment; full Health/AI/native and ingress gates remain open. Private current portal/application/founder-test precheck is stored outside this public repository.
+
+---
+
 # Garmin readiness preparation — 25 October 2026
 
 Limited server patch prepared on codex/garmin-commercial-readiness-2026-10-25: promised Next 16 webhook params, Next after() processing lifecycle, and permission-aware initial history enqueue. Focused tests: 15/15; type-check passes; full lint: 0 errors, 1657 warnings. Independent QA found no actionable regressions. Draft PR #148: https://github.com/nadavyigal/Running-coach-/pull/148 . No deployment/credential/privacy change or application submission. Full Activity-only readiness is not achieved; see dated spec and QA report for open gates. Private application/correspondence/legal evidence retained outside this public repository.

@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+const permissionChangesMock = vi.hoisted(() => vi.fn(async () => ({ permissionChanges: 0, affectedUsers: 0, ignored: 0 })))
+vi.mock('@/lib/integrations/garmin/permission-changes', () => ({ handleGarminUserPermissionChanges: permissionChangesMock }))
+
 const afterCallbacks = vi.hoisted(() => [] as Array<() => Promise<void>>)
 
 vi.mock('next/server', async (importOriginal) => ({
@@ -24,11 +27,37 @@ async function loadRoute() {
 describe('/api/devices/garmin/webhook', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    permissionChangesMock.mockClear()
     afterCallbacks.length = 0
     recordGarminWebhookDeliveryMock.mockReset()
     enqueueGarminImportJobsForEventMock.mockReset()
     handleGarminUserDeregistrationsMock.mockReset()
     delete process.env.GARMIN_WEBHOOK_SECRET
+  })
+
+  it('handles permission-only notifications after acknowledgement without an activity job', async () => {
+    process.env.GARMIN_WEBHOOK_SECRET = 'secret-123'
+    const payload = { userPermissionsChange: [{ userId: 'g1', permissions: [], changeTimeInSeconds: 123 }] }
+    recordGarminWebhookDeliveryMock.mockResolvedValue({ event: { id: 'evt-permission' }, duplicate: false })
+    handleGarminUserDeregistrationsMock.mockResolvedValue({ deregistrations: 0, affectedUsers: 0 })
+    const { POST } = await loadRoute()
+    const response = await POST(new Request('http://localhost/api/devices/garmin/webhook?secret=secret-123', { method: 'POST', body: JSON.stringify(payload) }))
+    expect(response.status).toBe(200)
+    expect(permissionChangesMock).not.toHaveBeenCalled()
+    await afterCallbacks[0]!()
+    expect(permissionChangesMock).toHaveBeenCalledWith(payload)
+    expect(enqueueGarminImportJobsForEventMock).not.toHaveBeenCalled()
+  })
+
+  it('does not enqueue an activity error for a filtered Health-only notification', async () => {
+    process.env.GARMIN_WEBHOOK_SECRET = 'secret-123'
+    const payload = { sleeps: [{ userId: 'g1' }] }
+    recordGarminWebhookDeliveryMock.mockResolvedValue({ event: { id: 'evt-health', raw_payload: {} }, duplicate: false })
+    handleGarminUserDeregistrationsMock.mockResolvedValue({ deregistrations: 0, affectedUsers: 0 })
+    const { processGarminWebhookPayload } = await loadRoute()
+    const result = await processGarminWebhookPayload(JSON.stringify(payload), payload)
+    expect(result.queuedJobs).toBe(0)
+    expect(enqueueGarminImportJobsForEventMock).not.toHaveBeenCalled()
   })
 
   it('requires webhook secret configuration', async () => {

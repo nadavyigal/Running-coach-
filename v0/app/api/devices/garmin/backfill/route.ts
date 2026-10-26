@@ -1,3 +1,5 @@
+import { isGarminHistoryAllowed } from '@/lib/garmin/access-policy'
+import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
 import { NextResponse } from 'next/server'
 import { syncGarminUser } from '@/lib/garmin/sync/syncUser'
 import { logger } from '@/lib/logger'
@@ -5,8 +7,8 @@ import { enqueueGarminSyncJob } from '@/lib/server/garmin-sync-queue'
 
 export const dynamic = 'force-dynamic'
 
-const BACKFILL_DAILY_DAYS = 90
-const BACKFILL_ACTIVITY_DAYS = 90
+const BACKFILL_DAILY_DAYS = 30
+const BACKFILL_ACTIVITY_DAYS = 30
 
 function parseUserId(req: Request): number | null {
   const headerValue = req.headers.get('x-user-id')?.trim() ?? ''
@@ -30,6 +32,11 @@ export async function POST(req: Request) {
       { success: false, error: 'Valid userId is required', needsReauth: true },
       { status: 401 }
     )
+  }
+
+  const state = await getGarminOAuthState(userId)
+  if (!state || !isGarminHistoryAllowed(state.scopes)) {
+    return NextResponse.json({ success: false, error: 'Historical data requires authorized Enterprise access and HISTORICAL_DATA_EXPORT.' }, { status: 403 })
   }
 
   const enqueued = await enqueueGarminSyncJob({

@@ -1,3 +1,12 @@
+# Continuation — 26 October 2026
+
+- [x] Founder forecast confirmed: 0–100 users in 12 months (private application only).
+- [x] Current portal inspected read-only; Internal Test Evaluation approved, legacy app has no valid credentials.
+- [x] Add fail-closed Starter delivery/history and Activity-only ingress boundaries from dated spec.
+- [x] Revalidate safe dependency patches; record remaining Zod/Vitest migration blockers without weakening gates.
+- [x] Refresh private founder-test/application precheck against public1.2.0 and current portal/contracts.
+- [x] Final 106 targeted tests, full TypeScript, lint, production build and configured audit precheck; code QA complete. Push/current-head CI refresh follows.
+
 # Active Garmin readiness slice — 25 October 2026
 
 Approved scope source: current founder restart handoff; technical contract in docs/specs/2026-10-25-garmin-commercial-readiness.md. The prior workout-push scope is deferred for this Activity-only track.

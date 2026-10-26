@@ -61,6 +61,7 @@ async function loadRoute() {
 
 describe('/api/devices/garmin/callback', () => {
   beforeEach(() => {
+    vi.stubEnv('GARMIN_ACCESS_TIER', 'enterprise')
     resolveGarminOAuthClientCredentialsMock.mockReturnValue({
       clientId: 'garmin-client-id',
       clientSecret: 'garmin-client-secret',
@@ -70,6 +71,7 @@ describe('/api/devices/garmin/callback', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllEnvs()
     upsertGarminConnectionMock.mockReset()
     upsertGarminTokensMock.mockReset()
     enqueueGarminBackfillJobMock.mockReset()
@@ -87,10 +89,15 @@ describe('/api/devices/garmin/callback', () => {
   })
 
   it.each([
-    { scopes: ['ACTIVITY_EXPORT'], queuesHistory: false },
-    { scopes: ['ACTIVITY_EXPORT', 'HEALTH_EXPORT'], queuesHistory: false },
-    { scopes: ['ACTIVITY_EXPORT', 'HISTORICAL_DATA_EXPORT'], queuesHistory: true },
-  ])('stores connection with $scopes; historical backfill=$queuesHistory', async ({ scopes, queuesHistory }) => {
+    { scopes: ['ACTIVITY_EXPORT'], queuesHistory: false, tier: 'starter' },
+    { scopes: ['ACTIVITY_EXPORT', 'HEALTH_EXPORT'], queuesHistory: false, tier: 'starter' },
+    { scopes: ['ACTIVITY_EXPORT', 'HISTORICAL_DATA_EXPORT'], queuesHistory: true, tier: 'enterprise' },
+    { scopes: ['ACTIVITY_EXPORT', 'HISTORICAL_DATA_EXPORT'], queuesHistory: false, tier: 'starter', wrapped: false },
+    { scopes: ['ACTIVITY_EXPORT', 'HISTORICAL_DATA_EXPORT'], queuesHistory: true, tier: 'enterprise', wrapped: true },
+    { scopes: ['ACTIVITY_EXPORT'], queuesHistory: false, tier: 'starter', wrapped: true },
+    { scopes: [], queuesHistory: false, tier: 'enterprise', wrapped: true },
+  ])('stores connection with $scopes; historical backfill=$queuesHistory', async ({ scopes, queuesHistory, tier, wrapped }) => {
+    vi.stubEnv('GARMIN_ACCESS_TIER', tier)
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -105,7 +112,7 @@ describe('/api/devices/garmin/callback', () => {
       )
       .mockResolvedValueOnce(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
       .mockResolvedValueOnce(
-        new Response(JSON.stringify(scopes), { status: 200 })
+        new Response(JSON.stringify(wrapped ? { permissions: scopes } : scopes), { status: 200 })
       )
 
     vi.stubGlobal('fetch', fetchMock)
@@ -124,12 +131,15 @@ describe('/api/devices/garmin/callback', () => {
     expect(body.success).toBe(true)
     expect(body.device.connectionStatus).toBe('syncing')
     expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock).toHaveBeenCalledWith('https://apis.garmin.com/partner-gateway/rest/user/id', expect.any(Object))
+    expect(fetchMock).toHaveBeenCalledWith('https://apis.garmin.com/partner-gateway/rest/user/permissions', expect.any(Object))
     expect(upsertGarminConnectionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 42,
         authUserId: 'auth-user-1',
         profileId: 'profile-1',
         providerUserId: 'garmin-user-1',
+        scopes,
         status: 'connected',
       })
     )

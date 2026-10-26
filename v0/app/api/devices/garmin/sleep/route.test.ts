@@ -18,12 +18,24 @@ async function callGet(req: Request) {
 }
 
 describe("/api/devices/garmin/sleep", () => {
+  it('rejects Starter range requests without requesting tokens or upstream data', async () => {
+    vi.stubEnv('GARMIN_ACCESS_TIER', 'starter')
+    const upstream = vi.fn()
+    vi.stubGlobal('fetch', upstream)
+    const result = await callGet(new Request('http://localhost/api/devices/garmin/sleep?userId=42'))
+    expect(result.status).toBe(403)
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
   beforeEach(() => {
+    vi.stubEnv('GARMIN_ACCESS_TIER', 'enterprise')
+    vi.stubEnv('GARMIN_HEALTH_ENABLED', 'true')
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-02-18T12:00:00.000Z"));
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs()
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -233,7 +245,7 @@ describe("/api/devices/garmin/sleep", () => {
     const fetchMock = vi.fn((url: RequestInfo | URL) => {
       const parsed = new URL(String(url));
 
-      if (parsed.pathname.endsWith("/wellness-api/rest/user/permissions")) {
+      if (parsed.pathname.endsWith("/partner-gateway/rest/user/permissions")) {
         return Promise.resolve(
           new Response(
             JSON.stringify(["HEALTH_EXPORT", "HISTORICAL_DATA_EXPORT"]),

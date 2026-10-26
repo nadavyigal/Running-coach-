@@ -1,7 +1,8 @@
+import { isGarminHealthEnabled, isGarminHistoryAllowed, isGarminPullEnabled, isGarminDatasetAllowed } from '@/lib/garmin/access-policy'
 import { NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
 import { persistGarminSyncSnapshot } from '@/lib/server/garmin-analytics-store'
-import { GARMIN_HEALTH_API_BASE_URL } from '@/lib/server/garmin-endpoints'
+import { GARMIN_HEALTH_API_BASE_URL, GARMIN_PERMISSIONS_URL, GARMIN_PROFILE_URL } from '@/lib/server/garmin-endpoints'
 import { runGarminDeriveForPayload } from '@/lib/server/garmin-derive-worker'
 import {
   GARMIN_HISTORY_DAYS,
@@ -602,7 +603,7 @@ async function fetchRecentGarminActivities(
         isMissingTimeRange(uploadError.body) ||
         isFallbackWorthyWellnessStatus(uploadError.status))
     ) {
-      if (!permissions.includes('HISTORICAL_DATA_EXPORT')) {
+      if (!isGarminHistoryAllowed(permissions)) {
         throw uploadError
       }
 
@@ -642,7 +643,7 @@ async function fetchRecentGarminSleep(
         isMissingTimeRange(uploadError.body) ||
         isFallbackWorthyWellnessStatus(uploadError.status))
     ) {
-      if (!permissions.includes('HISTORICAL_DATA_EXPORT')) {
+      if (!isGarminHistoryAllowed(permissions)) {
         throw uploadError
       }
 
@@ -684,7 +685,7 @@ async function fetchRecentGarminDailies(
         isMissingTimeRange(uploadError.body) ||
         isFallbackWorthyWellnessStatus(uploadError.status))
     ) {
-      if (!permissions.includes('HISTORICAL_DATA_EXPORT')) {
+      if (!isGarminHistoryAllowed(permissions)) {
         throw uploadError
       }
 
@@ -1017,7 +1018,7 @@ function toRunSmartSleepRecord(entry: Record<string, unknown>): RunSmartSleepRec
 }
 
 async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
-  const response = await fetch(`${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/permissions`, {
+  const response = await fetch(GARMIN_PERMISSIONS_URL, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -1047,7 +1048,7 @@ async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
 }
 
 async function fetchGarminUserId(accessToken: string): Promise<string> {
-  const response = await fetch(`${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/id`, {
+  const response = await fetch(GARMIN_PROFILE_URL, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -1078,11 +1079,14 @@ function buildCapabilities(params: {
   const { permissions, datasetCounts, storeAvailable, storeError, lookbackDays } = params
 
   const capabilities: GarminDatasetCapability[] = DATASET_CONFIGS.map((config): GarminDatasetCapability => {
-    const permissionGranted = permissions.includes(config.permission)
+    const productEnabled = config.permission !== 'HEALTH_EXPORT' || isGarminHealthEnabled()
+    const permissionGranted = productEnabled && permissions.includes(config.permission)
     const rowCount = datasetCounts[config.key] ?? 0
 
     let reason: string | undefined
-    if (!permissionGranted) {
+    if (!productEnabled) {
+      reason = 'Health datasets are disabled for the current Activity-only integration.'
+    } else if (!permissionGranted) {
       reason = `Missing ${config.permission} permission.`
     } else if (!storeAvailable) {
       reason = storeError ?? 'RunSmart Garmin webhook storage is not configured.'
@@ -1096,7 +1100,7 @@ function buildCapabilities(params: {
       permissionGranted,
       endpointReachable: permissionGranted && storeAvailable,
       enabledForSync: permissionGranted && storeAvailable,
-      supportedByRunSmart: true,
+      supportedByRunSmart: productEnabled,
       ...(reason ? { reason } : {}),
     }
   })
@@ -1133,12 +1137,14 @@ async function computeCatalog(params: {
     sinceIso,
   })
 
-  const datasets = groupRowsByDataset(readResult.rows)
+  const permittedRows = readResult.rows.filter((row) => isGarminDatasetAllowed(row.datasetKey) &&
+    permissions.includes(DATASET_CONFIGS.find((config) => config.key === row.datasetKey)?.permission ?? ''))
+  const datasets = groupRowsByDataset(permittedRows)
   const datasetCounts = Object.fromEntries(
     DATASET_CONFIGS.map((dataset) => [dataset.key, datasets[dataset.key].length])
   ) as Record<GarminDatasetKey, number>
 
-  const latestReceivedAt = readResult.rows.reduce<string | null>((latest, row) => {
+  const latestReceivedAt = permittedRows.reduce<string | null>((latest, row) => {
     if (!latest) return row.receivedAt
     return row.receivedAt > latest ? row.receivedAt : latest
   }, null)
@@ -1158,7 +1164,7 @@ async function computeCatalog(params: {
       lookbackDays,
       storeAvailable: readResult.storeAvailable,
       ...(readResult.storeError ? { storeError: readResult.storeError } : {}),
-      recordsInWindow: readResult.rows.length,
+      recordsInWindow: permittedRows.length,
       latestReceivedAt,
     },
   }
@@ -1401,6 +1407,9 @@ export async function runGarminSyncForUser(params: {
       lookbackDays: syncWindow.lookbackDays,
     })
     const permissions = catalog.permissions
+    if (options.trigger === 'backfill' && !isGarminHistoryAllowed(permissions)) {
+      return { status: 403, body: { success: false, error: 'Historical data is not enabled for this Garmin access tier and permission set.' } }
+    }
     let capabilities = catalog.capabilities
     const datasets = catalog.datasets
     const datasetCounts = { ...catalog.datasetCounts }
@@ -1423,7 +1432,7 @@ export async function runGarminSyncForUser(params: {
       notices.push('Activity datasets skipped: Missing ACTIVITY_EXPORT permission.')
     }
 
-    if (!permissions.includes('HEALTH_EXPORT')) {
+    if (isGarminHealthEnabled() && !permissions.includes('HEALTH_EXPORT')) {
       notices.push('Health datasets skipped: Missing HEALTH_EXPORT permission.')
     }
 
@@ -1458,7 +1467,7 @@ export async function runGarminSyncForUser(params: {
     const hasWebhookActivityRows = filteredActivities.length > 0
     let fallbackFailureNotice: string | null = null
 
-    if (activitiesForSync.length === 0 && !hasWebhookActivityRows && permissions.includes('ACTIVITY_EXPORT')) {
+    if (isGarminPullEnabled() && activitiesForSync.length === 0 && !hasWebhookActivityRows && permissions.includes('ACTIVITY_EXPORT')) {
       try {
         const fallbackAccessToken = await getValidGarminAccessToken(userId)
         const fallbackResult = await fetchRecentGarminActivities(
@@ -1509,7 +1518,7 @@ export async function runGarminSyncForUser(params: {
       }
     }
 
-    if (activitiesForSync.length === 0) {
+    if (activitiesForSync.length === 0 && permissions.includes('ACTIVITY_EXPORT')) {
       try {
         const cachedLookbackDays = Math.max(options.activityLookbackDays, 30)
         const cachedActivities = await fetchRecentStoredGarminActivities(userId, cachedLookbackDays)
@@ -1547,7 +1556,7 @@ export async function runGarminSyncForUser(params: {
     let dailies = datasets.dailies
     if (dailies.length > 0) {
       missingDatasetsSet.delete('dailies')
-    } else if (permissions.includes('HEALTH_EXPORT')) {
+    } else if (isGarminPullEnabled() && isGarminHealthEnabled() && permissions.includes('HEALTH_EXPORT')) {
       try {
         const fallbackAccessToken = await getValidGarminAccessToken(userId)
         const fallbackDailies = await fetchRecentGarminDailies(
@@ -1607,7 +1616,7 @@ export async function runGarminSyncForUser(params: {
 
     if (sleep.length > 0) {
       missingDatasetsSet.delete('sleeps')
-    } else if (permissions.includes('HEALTH_EXPORT')) {
+    } else if (isGarminPullEnabled() && isGarminHealthEnabled() && permissions.includes('HEALTH_EXPORT')) {
       try {
         const fallbackAccessToken = await getValidGarminAccessToken(userId)
         const fallbackSleep = await fetchRecentGarminSleep(

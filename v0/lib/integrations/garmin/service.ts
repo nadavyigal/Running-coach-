@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { filterGarminWebhookPayload, isGarminHistoryAllowed, isGarminPullEnabled } from '@/lib/garmin/access-policy'
+
 import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
@@ -188,12 +190,13 @@ export async function recordGarminWebhookDelivery(params: {
   eventType?: string
 }): Promise<{ event: GarminWebhookEventRecord | null; duplicate: boolean }> {
   const supabase = createAdminClient()
+  const payload = filterGarminWebhookPayload(params.payload)
   const deliveryKey = computeDeliveryKey(params.rawBody)
-  const providerUserId = extractProviderUserId(params.payload)
+  const providerUserId = extractProviderUserId(payload)
   const eventType = params.eventType ?? 'garmin_delivery'
 
   const exportPersistence = await storeGarminWebhookPayload({
-    payload: params.payload,
+    payload,
     fallbackGarminUserId: providerUserId,
   })
   if (!exportPersistence.ok) {
@@ -229,7 +232,7 @@ export async function recordGarminWebhookDelivery(params: {
       delivery_key: deliveryKey,
       event_type: eventType,
       provider_user_id: providerUserId,
-      raw_payload: params.payload,
+      raw_payload: payload,
       status: 'received',
     })
     .select('*')
@@ -335,6 +338,7 @@ export async function enqueueGarminImportJobsForEvent(event: GarminWebhookEventR
     }
 
     if (row.datasetKey === 'activityFiles') {
+      if (!connection?.scopes.includes('ACTIVITY_EXPORT')) continue
       const summaryId = extractSummaryId(row.payload)
       if (connection?.userId == null || !summaryId || !row.activityId || !row.callbackUrl) {
         continue
@@ -462,6 +466,9 @@ export async function enqueueGarminBackfillJob(params: {
   providerUserId?: string | null
   runAfter?: string | null
 }): Promise<GarminImportJobRecord | null> {
+  if (!isGarminPullEnabled()) return null
+  const state = await getGarminOAuthState(params.userId)
+  if (!state || !isGarminHistoryAllowed(state.scopes)) return null
   const supabase = createAdminClient()
   const dedupeSourceActivityId = `backfill:${params.userId}`
 
@@ -715,6 +722,8 @@ async function processActivityImportJob(job: GarminImportJobRecord, connection: 
 }
 
 async function processBackfillJob(job: GarminImportJobRecord, connection: GarminOAuthConnection) {
+  // Old queued jobs cannot bypass a tier change or a recorded permission revocation.
+  if (!isGarminHistoryAllowed(connection.scopes)) return { imported: 0, duplicates: 0 }
   const payload = asRecord(job.payload)
   const lookbackDays = getNumber(payload.lookbackDays) ?? BACKFILL_LOOKBACK_DAYS
   const sinceIso = getString(payload.sinceIso)
@@ -758,6 +767,8 @@ export async function processGarminImportJob(job: GarminImportJobRecord): Promis
       message: 'Garmin connection requires reauthentication',
     })
   }
+
+  if (!connection.scopes.includes('ACTIVITY_EXPORT')) return { imported: 0, duplicates: 0 }
 
   const result = job.job_type === 'backfill'
     ? await processBackfillJob(job, connection)

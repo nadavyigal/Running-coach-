@@ -75,3 +75,7 @@ Use `.agent-os/templates/lesson-template.md` for new entries.
 ### Lesson: Keep Garmin evidence and private business records separate
 - Trigger: Renewing a commercial integration from old plans and correspondence.
 - Future Rule: Reconcile current published/deployed behavior, source and case-specific approvals separately; preserve old agreements without treating old limits as current entitlements. Keep certificates, private address and case correspondence outside the public repository. Run app commands from v0 using paths relative to v0; root-level scripts and duplicated v0 paths do not verify the app.
+
+### Lesson: Verify current vendor contracts and real gate outputs
+- Trigger: Garmin continuation found a new OAuth response shape and tier rules; a redirected lint command initially hid its failing exit code behind tail.
+- Future Rule: Check the current authenticated contract before repairing legacy integrations. Require both product/tier policy and current user grants. Run CI-equivalent TypeScript as well as slim type-check; preserve the actual command exit status when logging. Review imports after scripted edits and do not reuse a clean review from an older head.

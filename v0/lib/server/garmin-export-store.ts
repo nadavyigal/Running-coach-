@@ -1,3 +1,4 @@
+import { isGarminDatasetAllowed } from '@/lib/garmin/access-policy'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GARMIN_EXPORT_DATASET_KEYS } from '@/lib/garmin/datasets'
 
@@ -175,6 +176,10 @@ export async function storeGarminExportRows(params: {
   fallbackGarminUserId?: string | null
 }): Promise<GarminStoreOperationResult> {
   const { datasetKey, rows, source, fallbackGarminUserId } = params
+
+  if (!isGarminDatasetAllowed(datasetKey)) {
+    return { ok: true, storeAvailable: true, storedRows: 0, droppedRows: rows.length }
+  }
 
   let supabase
   try {
@@ -398,7 +403,7 @@ export async function readGarminExportRows(params: {
       continue
     }
 
-    if (rowUserId !== garminUserId) continue
+    if (rowUserId !== garminUserId || !isGarminDatasetAllowed(datasetKey)) continue
 
     rows.push({
       garminUserId: rowUserId,

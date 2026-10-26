@@ -58,7 +58,21 @@ async function loadRoute() {
 }
 
 describe('/api/devices/garmin/status', () => {
+  afterEach(() => vi.unstubAllEnvs())
+  it('does not request Health permission or expose Health counts for Activity-only access', async () => {
+    vi.stubEnv('GARMIN_HEALTH_ENABLED', 'false')
+    fetchPermissionsMock.mockResolvedValue(['ACTIVITY_EXPORT'])
+    getGarminOAuthStateMock.mockResolvedValue({ userId: 42, garminUserId: 'garmin-user-1', scopes: ['ACTIVITY_EXPORT'] })
+    const { GET } = await loadRoute()
+    const response = await GET(new Request('http://localhost/api/devices/garmin/status?userId=42'))
+    const body = await response.json()
+    expect(body.datasetCounts.dailies).toBe(0)
+    expect(body.notices).not.toContain('Missing HEALTH_EXPORT permission.')
+    expect(body.datasetCompleteness.missingDatasets).not.toContain('sleeps')
+  })
+
   beforeEach(() => {
+    vi.stubEnv('GARMIN_HEALTH_ENABLED', 'true')
     getGarminOAuthStateMock.mockReset()
     getGarminSyncStateMock.mockReset()
     readGarminExportRowsMock.mockReset()

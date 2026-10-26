@@ -1,53 +1,34 @@
-# Garmin commercial readiness — 25 October 2026
+# Garmin readiness spec — 25–26 October 2026
 
-## Product brief and scope
+## Product brief
 
-Prepare a completed-run Activity-only integration with a reliable webhook and permission-aware connection flow. Keep Health wellness, Training and Courses out of the proposed commercial scope. This is an engineering readiness slice, not approval to launch, change credentials, submit applications or edit published policy. Native wearable work remains independent.
+Prepare a reliable Activity-only completed-run integration and a concrete Internal Test path while leaving customer connection starts disabled. Public1.2.0 is the current founder-reported device baseline. Backend preparation does not establish commercial approval or authorize credential, endpoint, production or privacy changes.
 
-## Story 1 — Preserve webhook processing after acknowledgement
+## Scope and acceptance stories
 
-As a runner, I want Garmin pushes processed after acknowledgement so imported runs are not lost merely because the request returned.
+1. **Webhook reliability:** await Next16 route params, preserve path-secret/body forwarding, return HTTP200 before persistence, track post-response work with Next after, preserve auth/duplicate/lifecycle behavior and log processing failures. after is not durable delivery.
+2. **Current OAuth contract:** shared documented user profile/permission endpoints; accept object-wrapped permissions plus compatible bare arrays and empty grants.
+3. **Least-privileged delivery:** default/unknown tiers use push only. Explicit Enterprise configuration plus history grant is required for initial, manual and queued backfill. Recheck permission before client history calls; skip queued Activity import after recorded grant removal. Starter Activity File callbacks remain supported as distinct one-time downloads. Configuration is not approval evidence.
+4. **Activity-only ingress:** drop Health/unknown payload keys before raw-event persistence and export-store writes, gate Health export reads, retain lifecycle events, and do not demand Health in default status/diagnostics. Filtered Health-only notifications must not produce spurious activity errors.
+5. **Permission lifecycle:** handle documented permission-change events, including removal of every grant, without deleting valid tokens or overwriting connection status. Reject malformed events and sequential stale timestamps; do not claim atomic ordering across concurrent writers.
+6. **Disconnect lifecycle:** remove user registration before revoking the current token pair, account for refresh-token rotation, preserve local cleanup after upstream failures and report partial upstream failure honestly.
 
-Acceptance criteria:
-- Next 16 path-token GET/POST await promised route params and preserve secret/body forwarding.
-- Authorized valid requests return HTTP 200 before persistence completes.
-- Next `after()` tracks subsequent persistence, deregistration handling and activity enqueueing.
-- Unauthorized requests never schedule work; processing errors are logged.
-- Existing duplicate handling and secret checks remain intact.
+## Plan and verification
 
-Validation: red-first route tests with promised params; manually execute registered post-response callbacks in tests to assert processing and error behavior. Post-response tracking is not a durable queue or a payload-size compliance claim.
-
-## Story 2 — Respect historical-export permission during connection
-
-As an Activity-only user, I want my connection to succeed without attempting history my Garmin access does not permit.
-
-Acceptance criteria:
-- Initial backfill is queued only if returned permissions include HISTORICAL_DATA_EXPORT.
-- ACTIVITY_EXPORT alone, or ACTIVITY_EXPORT plus HEALTH_EXPORT, stores the connection without queuing backfill.
-- Entitled backfill still queues and queue failure remains nonfatal to connection.
-
-Validation: red-first callback tests for all three permission combinations plus existing token/session/credential regression coverage. This guard applies to initial OAuth backfill only, not every historical request path.
-
-## Implementation and verification
-
-These stories change only server routes/tests plus a focused Node Vitest configuration. No UI, schema, privacy policy, iOS or environment changes. Run from v0:
+Use independent, red-first server contracts for each story; keep legacy Enterprise scenarios explicitly opted in. A dedicated Node Vitest config avoids unrelated browser/IndexedDB setup for server tests. Run from v0:
 
 ```sh
 npm run test -- --run --config vitest.garmin-readiness.config.ts
 npm run type-check
+npx tsc --noEmit
 npm run lint
+npm run build
 ```
 
-The focused configuration avoids loading browser/IndexedDB test setup for server contracts. The reused local dependency install lacks the global setup's @testing-library/dom peer; no package or lockfile changes are needed for these Node tests.
+The refreshed QA report records results and residual audit failures. Include safe same-major dependency patches only; no major Zod/Vitest migration or audit exception in this slice. No schema migration, UI, native source, published policy or live environment changes. Access-policy examples document defaults without activating them.
 
-## Remaining launch gates — not implemented by these stories
+## Remaining gates
 
-- Complete Activity-only gate across raw ingestion, data fetches, stored Health data exposure, wellness derivation, AI context and UI; portal permissions/UI hiding alone are insufficient.
-- Align diagnostic/status requirements with Activity-only permission.
-- Guard manual and lower-level historical request paths against absent entitlement; Starter must not request backfill.
-- Implement/verify permission-change lifecycle using the authenticated API contract; deregistration exists but needs portal evidence.
-- Prove host acceptance of required large Activity payloads and acknowledgement timing end-to-end. Neither small route tests nor after() prove delivery durability or 100 MB ingress.
-- Reconcile deployed privacy/source provenance. Garmin-related policy changes require written Garmin approval before implementation.
-- Verify internal app status, separate credentials, two authorized test users, Data Generator/Partner Verification, brand assets and real-device full UX evidence. Training/Courses transfer evidence is irrelevant when unused.
+Full legacy Health read/use/derived/AI/native/UI suppression and Activity File processing are not complete. New-ingress filtering alone is insufficient for commercial Activity-only readiness. Large-payload ingress/durable receipt, portal tier mapping, endpoint configuration, two internal users, Data Generator/Partner Verification, current-device UX/brand evidence and privacy approval remain open. Training/Courses transfers are outside the requested scope.
 
-Acceptance scenarios for the next Activity-only gate: mixed Activity/Health pushes persist only approved datasets while preserving deregistration events; direct wellness routes and stored/AI contexts reveal no gated data; Activity import/dedup/plan completion still works; direct historical requests with no entitlement cause no Garmin calls. Keep old stored history separate from authorized new collection/use decisions.
+Before any production deployment, reconcile PR147's manually published privacy baseline with main. Main retains older policy text and a normal deployment could restore it. The Garmin-specific OpenAI disclosure finding remains valid against current code; proposed changes stay private until written Garmin approval. No commercial activation follows from Internal Test approval.

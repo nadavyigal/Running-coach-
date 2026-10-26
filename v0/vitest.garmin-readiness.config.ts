@@ -5,7 +5,21 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     environment: 'node',
+    globals: true,
     include: [
+      'lib/garmin/access-policy.test.ts',
+      'lib/integrations/garmin/client-access.test.ts',
+      'lib/server/garmin-endpoints.test.ts',
+      'lib/server/garmin-oauth-store.test.ts',
+      'app/api/devices/garmin/disconnect/route.test.ts',
+      'app/api/devices/garmin/backfill/route.test.ts',
+      'app/api/devices/garmin/activities/route.test.ts',
+      'app/api/devices/garmin/sleep/route.test.ts',
+      'app/api/devices/garmin/status/route.test.ts',
+      'app/api/devices/garmin/sync/route.test.ts',
+      'lib/integrations/garmin/service.test.ts',
+      'lib/integrations/garmin/permission-changes.test.ts',
+      'lib/server/garmin-export-store.test.ts',
       'app/api/devices/garmin/callback/route.test.ts',
       'app/api/devices/garmin/webhook/**/*.test.ts',
     ],

@@ -1,3 +1,4 @@
+import { isGarminPullEnabled, isGarminHistoryAllowed } from '@/lib/garmin/access-policy'
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import {
@@ -9,7 +10,7 @@ import {
   summarizeUpstreamBody,
 } from '@/lib/server/garmin-error-utils';
 import { getValidGarminAccessToken, markGarminAuthError } from '@/lib/server/garmin-oauth-store';
-import { GARMIN_HEALTH_API_BASE_URL } from '@/lib/server/garmin-endpoints';
+import { GARMIN_HEALTH_API_BASE_URL, GARMIN_PERMISSIONS_URL } from '@/lib/server/garmin-endpoints';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,7 +71,7 @@ function dedupeActivities(rawActivities: any[]): any[] {
 }
 
 async function fetchGarminPermissions(accessToken: string): Promise<string[]> {
-  const response = await fetch(`${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/permissions`, {
+  const response = await fetch(GARMIN_PERMISSIONS_URL, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -180,6 +181,9 @@ function toRunSmartActivity(activity: any) {
 
 // GET - Fetch Garmin activities via officially supported Wellness API endpoints.
 export async function GET(req: Request) {
+  if (!isGarminPullEnabled()) {
+    return NextResponse.json({ success: false, error: 'Direct Garmin range data is disabled; Activity-only Starter uses push delivery.' }, { status: 403 })
+  }
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
@@ -204,7 +208,7 @@ export async function GET(req: Request) {
     }
     const permissions = await fetchGarminPermissions(accessToken);
     const hasActivityExport = permissions.includes('ACTIVITY_EXPORT');
-    const hasHistoricalExport = permissions.includes('HISTORICAL_DATA_EXPORT');
+    const hasHistoricalExport = isGarminHistoryAllowed(permissions);
 
     if (!hasActivityExport) {
       return NextResponse.json(

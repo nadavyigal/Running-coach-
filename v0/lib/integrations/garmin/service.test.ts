@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals() })
 
 const createAdminClientMock = vi.hoisted(() => vi.fn())
 const importGarminActivityMock = vi.hoisted(() => vi.fn())
@@ -182,6 +184,15 @@ describe('processPendingGarminJobs', () => {
     expect(importGarminActivityMock).toHaveBeenCalledTimes(2)
   })
 
+  it('does not import queued Activity work after permission removal', async () => {
+    getGarminOAuthStateMock.mockResolvedValue({ userId: 42, scopes: [], status: 'connected' })
+    importGarminActivityMock.mockClear()
+    const { processPendingGarminJobs } = await import('./service')
+    const result = await processPendingGarminJobs({ limit: 1, workerId: 'permission-test' })
+    expect(result.imported).toBe(0)
+    expect(importGarminActivityMock).not.toHaveBeenCalled()
+  })
+
   it('marks the connection reauth_required when Garmin auth fails', async () => {
     importGarminActivityMock.mockReset()
     importGarminActivityMock.mockRejectedValueOnce({
@@ -245,5 +256,46 @@ describe('enqueueGarminImportJobsForEvent', () => {
     expect(result).toEqual({ queuedJobs: 0, jobs: [], activityFilesQueued: 0 })
     expect(getGarminConnectionByProviderUserIdMock).not.toHaveBeenCalled()
     expect(upsertGarminConnectionMock).not.toHaveBeenCalled()
+  })
+})
+
+// Test the persistence boundary, not just an allow-list helper.
+describe('Activity-only raw webhook persistence', () => {
+  it('never stores Health or unknown payloads in raw events', async () => {
+    const inserted: Record<string, unknown>[] = []
+    const upsert = vi.fn(async () => ({ error: null }))
+    createAdminClientMock.mockImplementation(() => ({
+      from: (table: string) => table === 'user_memory_snapshots' ? { upsert } : {
+        select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
+        insert: (row: Record<string, unknown>) => {
+          inserted.push(row)
+          return { select: () => ({ single: async () => ({ data: { id: 'evt-new', ...row }, error: null }) }) }
+        },
+      },
+    }))
+    const { recordGarminWebhookDelivery } = await import('./service')
+    const payload = { activities: [{ userId: 'g1', activityId: 'run1' }], sleeps: [{ userId: 'g1', private: 'health' }], unknown: 'private', deregistrations: [{ userId: 'g1' }] }
+    await recordGarminWebhookDelivery({ payload, rawBody: JSON.stringify(payload) })
+    expect(inserted[0]?.raw_payload).toEqual({ activities: payload.activities, deregistrations: payload.deregistrations })
+    expect(JSON.stringify(inserted)).not.toContain('private')
+    expect(upsert).toHaveBeenCalledTimes(1)
+  })
+  it('drains a legacy queued backfill without making a range request on Starter', async () => {
+    vi.stubEnv('GARMIN_ACCESS_TIER', 'starter')
+    getGarminOAuthStateMock.mockResolvedValue({ userId: 42, scopes: ['ACTIVITY_EXPORT', 'HISTORICAL_DATA_EXPORT'], status: 'connected' })
+    const upstream = vi.fn(); vi.stubGlobal('fetch', upstream)
+    importGarminActivityMock.mockClear()
+    const { processGarminImportJob } = await import('./service')
+    const result = await processGarminImportJob({ user_id: 42, job_type: 'backfill', payload: { lookbackDays: 30 } } as never)
+    expect(result).toEqual({ imported: 0, duplicates: 0 })
+    expect(upstream).not.toHaveBeenCalled()
+    expect(importGarminActivityMock).not.toHaveBeenCalled()
+  })
+
+  it('does not enqueue historical work on Starter before touching the store', async () => {
+    createAdminClientMock.mockClear()
+    const { enqueueGarminBackfillJob } = await import('./service')
+    expect(await enqueueGarminBackfillJob({ userId: 42 })).toBeNull()
+    expect(createAdminClientMock).not.toHaveBeenCalled()
   })
 })

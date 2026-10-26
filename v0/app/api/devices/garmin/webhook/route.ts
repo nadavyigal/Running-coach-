@@ -1,3 +1,5 @@
+import { filterGarminWebhookPayload } from '@/lib/garmin/access-policy'
+import { handleGarminUserPermissionChanges } from '@/lib/integrations/garmin/permission-changes'
 import { after, NextResponse } from 'next/server'
 
 import { GARMIN_WEBHOOK_DATASET_KEYS } from '@/lib/garmin/datasets'
@@ -76,8 +78,9 @@ export async function processGarminWebhookPayload(rawBody: string, payload: Reco
   }
 
   await handleGarminUserDeregistrations(payload)
+  await handleGarminUserPermissionChanges(payload)
 
-  if (duplicate || !payloadContainsSupportedDatasets(payload)) {
+  if (duplicate || !payloadContainsSupportedDatasets(filterGarminWebhookPayload(payload))) {
     return {
       duplicate,
       queuedJobs: 0,

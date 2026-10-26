@@ -1,6 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const createAdminClientMock = vi.hoisted(() => vi.fn())
+const credentialsMock = vi.hoisted(() => vi.fn(() => ({ clientId: 'test-client', clientSecret: 'test-secret', mode: 'commercial' })))
+
+vi.mock('@/lib/server/garmin-credentials', () => ({ resolveGarminOAuthClientCredentials: credentialsMock }))
+
 const decryptTokenMock = vi.hoisted(() => vi.fn((token: string) => `decrypted-${token}`))
 
 vi.mock('server-only', () => ({}))
@@ -139,5 +143,106 @@ describe('getGarminConnectionByProviderUserId', () => {
     expect(state?.userId).toBe(1)
     expect(state?.status).toBe('connected')
     expect(state?.profileId).toBe('aaaa-profile')
+  })
+})
+
+
+describe('revokeGarminConnection', () => {
+  const deletedUserIds: number[] = []
+  const connectionUpdates: Record<string, unknown>[] = []
+  let storedTokens: Record<string, unknown>
+
+  beforeEach(() => {
+    storedTokens = { access_token_encrypted: 'access-token', refresh_token_encrypted: 'refresh-token', expires_at: '2099-01-01T00:00:00Z' }
+    decryptTokenMock.mockImplementation((token: string) => token.startsWith('encrypted-') ? token.slice('encrypted-'.length) : `decrypted-${token}`)
+    deletedUserIds.length = 0
+    connectionUpdates.length = 0
+    credentialsMock.mockReset()
+    credentialsMock.mockReturnValue({ clientId: 'test-client', clientSecret: 'test-secret', mode: 'commercial' })
+    createAdminClientMock.mockImplementation(() => ({
+      from: (table: string) => ({
+        select: () => ({ eq: () => ({ maybeSingle: async () => ({
+          data: table === 'garmin_connections' ? {
+            user_id: 42, auth_user_id: 'auth-42', status: 'connected', scopes: ['ACTIVITY_EXPORT'],
+            garmin_user_id: 'garmin-42', connected_at: '2026-01-01T00:00:00Z', error_state: null,
+          } : storedTokens, error: null,
+        }) }) }),
+        delete: () => ({ eq: async (_field: string, userId: number) => {
+          deletedUserIds.push(userId); return { error: null }
+        } }),
+        upsert: async (row: Record<string, unknown>) => {
+          if (table === 'garmin_tokens') storedTokens = row
+          else connectionUpdates.push(row)
+          return { error: null }
+        },
+      }),
+    }))
+  })
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
+
+  it('deletes Garmin registration with Bearer access before revoking either token', async () => {
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { revokeGarminConnection } = await import('./garmin-oauth-store')
+    expect(await revokeGarminConnection(42)).toEqual({ revokedUpstream: true, hadStoredTokens: true })
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'https://apis.garmin.com/partner-gateway/rest/user/registration',
+      'https://diauth.garmin.com/di-oauth2-service/oauth/revoke',
+      'https://diauth.garmin.com/di-oauth2-service/oauth/revoke',
+    ])
+    expect(fetchMock).toHaveBeenNthCalledWith(1,
+      'https://apis.garmin.com/partner-gateway/rest/user/registration',
+      expect.objectContaining({ method: 'DELETE', headers: { Authorization: 'Bearer decrypted-access-token' } }),
+    )
+    expect(deletedUserIds).toEqual([42])
+    expect(connectionUpdates).toEqual([expect.objectContaining({ user_id: 42, status: 'revoked' })])
+  })
+
+  it('uses the rotated refresh token after refreshing expired access before registration removal', async () => {
+    storedTokens.expires_at = '2020-01-01T00:00:00Z'
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      access_token: 'new-valid-access-token', refresh_token: 'new-rotated-refresh-token', expires_in: 3600,
+    }), { status: 200 })).mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { revokeGarminConnection } = await import('./garmin-oauth-store')
+    expect((await revokeGarminConnection(42)).revokedUpstream).toBe(true)
+    expect(fetchMock).toHaveBeenNthCalledWith(2,
+      'https://apis.garmin.com/partner-gateway/rest/user/registration',
+      expect.objectContaining({ headers: { Authorization: 'Bearer new-valid-access-token' } }),
+    )
+    const revoked = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/oauth/revoke'))
+      .map(([, init]) => (init.body as URLSearchParams).get('token'))
+    expect(revoked).toEqual(['new-valid-access-token', 'new-rotated-refresh-token'])
+    expect(deletedUserIds).toEqual([42])
+  })
+
+  it.each(['http', 'network'])('cleans locally and does not claim upstream success after registration %s failure', async (failure) => {
+    const fetchMock = vi.fn().mockImplementationOnce(async () => {
+      if (failure === 'network') throw new Error('Network unavailable')
+      return new Response('Not authorized', { status: 401 })
+    }).mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { revokeGarminConnection } = await import('./garmin-oauth-store')
+    expect(await revokeGarminConnection(42)).toEqual({ revokedUpstream: false, hadStoredTokens: true })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(deletedUserIds).toEqual([42])
+    expect(connectionUpdates).toEqual([expect.objectContaining({ user_id: 42, status: 'revoked' })])
+  })
+
+  it('does not claim upstream success when registration succeeds but token revocation fails', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValue(new Response('Unavailable', { status: 503 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { revokeGarminConnection } = await import('./garmin-oauth-store')
+    expect((await revokeGarminConnection(42)).revokedUpstream).toBe(false)
+    expect(deletedUserIds).toEqual([42])
+  })
+
+  it('does not claim upstream success when token revocation lacks allowed credentials', async () => {
+    credentialsMock.mockImplementation(() => { throw new Error('Credentials unavailable') })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 204 })))
+    const { revokeGarminConnection } = await import('./garmin-oauth-store')
+    expect((await revokeGarminConnection(42)).revokedUpstream).toBe(false)
+    expect(deletedUserIds).toEqual([42])
   })
 })
