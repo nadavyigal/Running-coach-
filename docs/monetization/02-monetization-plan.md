@@ -1,5 +1,7 @@
 # Phase 2 Monetization Plan (Freemium + Subscription)
 
+> **Superseded 2026-10-29** by `06-road-to-10k-plan.md`: iOS first, 3 free plan weeks, $12.99/month, gated rollout. Kept for history.
+
 ## Goals and principles
 - Fast to ship in 3-7 days, minimal ops burden.
 - Freemium with clear premium value drivers: wearables sync, unlimited AI coaching, periodized plans, GPS routes + analysis.
