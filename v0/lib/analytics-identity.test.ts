@@ -102,13 +102,17 @@ describe('whenPosthogReady', () => {
 
   it('falls back after the timeout when PostHog never loads', async () => {
     vi.useFakeTimers()
-    const { whenPosthogReady } = await loadIdentity()
+    const { whenPosthogReady, onPosthogLoaded } = await loadIdentity()
     const callback = vi.fn()
 
     whenPosthogReady(callback, 5000)
     vi.advanceTimersByTime(4999)
     expect(callback).not.toHaveBeenCalled()
     vi.advanceTimersByTime(1)
+    expect(callback).toHaveBeenCalledTimes(1)
+
+    // A late load must not run it again: the timeout removed it from the queue.
+    onPosthogLoaded(fakePosthog())
     expect(callback).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
   })

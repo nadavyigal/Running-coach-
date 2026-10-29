@@ -69,9 +69,26 @@ function Field({ id, label, error, children }: { id: string; label: string; erro
   );
 }
 
-function YesNo({ name, legend, value, onChange }: { name: string; legend: string; value: string; onChange: (v: string) => void }) {
+function YesNo({
+  name,
+  legend,
+  value,
+  error,
+  onChange,
+}: {
+  name: string;
+  legend: string;
+  value: string;
+  error?: string;
+  onChange: (v: string) => void;
+}) {
+  const errorId = `${name}-error`;
   return (
-    <fieldset className="space-y-1.5">
+    <fieldset
+      className="space-y-1.5"
+      aria-invalid={error ? true : undefined}
+      aria-describedby={error ? errorId : undefined}
+    >
       <legend className="text-sm font-medium">{legend}</legend>
       <div className="grid grid-cols-2 gap-2">
         {["yes", "no"].map((option) => (
@@ -94,6 +111,11 @@ function YesNo({ name, legend, value, onChange }: { name: string; legend: string
           </label>
         ))}
       </div>
+      {error ? (
+        <p id={errorId} className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
     </fieldset>
   );
 }
@@ -272,7 +294,13 @@ export default function BetaClient() {
                 <Input id="country" name="country" autoComplete="country-name" required maxLength={80} className="h-11" />
               </Field>
 
-              <YesNo name="hasIphone" legend="Do you have an iPhone?" value={hasIphone} onChange={setHasIphone} />
+              <YesNo
+                name="hasIphone"
+                legend="Do you have an iPhone?"
+                value={hasIphone}
+                error={errorFor("hasIphone")}
+                onChange={setHasIphone}
+              />
 
               <Field id="goal" label="What are you training for?" error={errorFor("goal")}>
                 <select
@@ -304,6 +332,7 @@ export default function BetaClient() {
                 name="returningAfterBreak"
                 legend="Are you coming back after a break?"
                 value={returningAfterBreak}
+                error={errorFor("returningAfterBreak")}
                 onChange={setReturningAfterBreak}
               />
 

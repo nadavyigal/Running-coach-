@@ -56,7 +56,11 @@ export function whenPosthogReady(callback: () => void, timeoutMs = 10000): void 
     callback()
   }
   readyCallbacks.push(runOnce)
-  setTimeout(runOnce, timeoutMs)
+  setTimeout(() => {
+    const index = readyCallbacks.indexOf(runOnce)
+    if (index !== -1) readyCallbacks.splice(index, 1)
+    runOnce()
+  }, timeoutMs)
 }
 
 export function onPosthogLoaded(loaded: IdentityClient): void {
