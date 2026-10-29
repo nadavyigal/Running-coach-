@@ -11,13 +11,14 @@
   //   vitest 4.1.11+ caused shard-isolation regressions in Radix/UI component
   //   tests; revisit when that upgrade can be validated across the full suite.
   //
-  // GHSA-vfj7-8cjw-p6xm (braces <=3.0.3, high): stack-exhaustion DoS in glob
-  //   pattern matching. No patched braces release exists yet (latest is 3.0.3).
-  //   Only pulled in by dev/build tooling (tailwindcss, eslint-config-next via
-  //   fast-glob/micromatch/chokidar). None of these ship to Vercel production.
-  //   Becomes reachable only if an attacker can supply malicious glob patterns to
-  //   those tools at build/lint time. Fix is tailwindcss 4.x or upstream braces
-  //   patch. Revisit when either lands.
+  // GHSA-qxg6-89mg-rqv8 (@vitest/mocker <4.1.12, moderate), added 2026-10-29:
+  //   code injection via unauthenticated manual mock registration on the vitest
+  //   dev server. Same dev-only reach as GHSA-82fw: vitest never ships to Vercel,
+  //   and CI runs vitest without exposing its server. The only fix is vitest
+  //   4.1.12+ (major bump from 3.2.7). Both vitest entries are due for removal
+  //   by 2026-11-30 via that upgrade in its own PR.
+  //
+  // GHSA-vfj7-8cjw-p6xm (braces) removed 2026-10-29: npm audit no longer reports it.
   "high": true,
-  "allowlist": ["GHSA-82fw-gwwq-j7x9", "GHSA-vfj7-8cjw-p6xm"]
+  "allowlist": ["GHSA-82fw-gwwq-j7x9", "GHSA-qxg6-89mg-rqv8"]
 }
