@@ -52,7 +52,10 @@ const CreateGoalSchema = z.object({
   baselineValue: z.number().optional(),
 });
 
+// zod 4 applies defaults inside .partial(), so drop the creation-time
+// priority default or omitted priorities would reset to 2 on update.
 const UpdateGoalSchema = CreateGoalSchema.partial().extend({
+  priority: z.number().min(1).max(3).optional(),
   goalId: z.number()
 });
 
