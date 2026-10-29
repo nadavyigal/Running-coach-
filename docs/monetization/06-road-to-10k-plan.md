@@ -7,7 +7,7 @@ Living page: https://claude.ai/artifact/HPAx4KiAc6XTTPJJ892f1r (private to the f
 
 Test the offer, do not forecast from it yet. The price and the staged approach hold. Not proven: that runners finish three weeks, pay, and keep paying, and that any channel brings them in cheaply. The next goal is 30 qualified runners, a clear week-4 result, then real payments and renewals.
 
-First blocker (PostHog 171597, iOS, last 30 days, read 2026-10-29): 13 people opened the app, 10 reached sign-in, 4 had sign-in fail (27 failures), 4 had plan generation fail (23 failures), 2 completed a run. Founder and test devices are still mixed in.
+Real numbers (Gate A root cause, 2026-10-29): of 13 iOS "people" in PostHog over 30 days, 5 were unit tests sending to live PostHog, 1 was the founder, 5 were Apple App Review, and 2 were real runners. Real runners had 0 sign-in failures and 1 plan failure, from a bare-domain redirect bug fixed on 18 Oct (iOS commit `c606eb9`). Recruiting, not reliability, is the bottleneck.
 
 ## The offer
 
@@ -78,7 +78,7 @@ Middle funnel: 30% of installs start a plan, 45% still training at week 4, 25% o
 
 ## Gates
 
-**Gate A, current truth.** Fix sign-in and plan-generation failures; exclude founder and test devices from PostHog; reconcile counts against Supabase. Pass: all three done.
+**Gate A, current truth.** Unit tests stop sending events to live PostHog; a "Build my plan" card for runners left with no plan (one real runner is stuck this way); a reason on every plan failure; a PostHog filter that excludes tests, TestFlight and App Review; counts reconciled against Supabase. Pass: all done.
 
 **Gate B, 30 runners.** Recruit 30 returning runners (beta club, LinkedIn outreach). Six-week intake window for manual outreach at 5-8 invites a day. Follow each for 28 days. Record invites, source, founder time, rebuilds followed by a run, drop-off reasons. Read 5 real plans and rebuilds for sense and safety.
 Engaged at week 4: a prescribed run in the first 7 days, runs in at least 2 of weeks 1-3, and a prescribed run in days 22-28.
@@ -95,7 +95,7 @@ Engaged at week 4: a prescribed run in the first 7 days, runs in at least 2 of w
 
 ## Build order (one story at a time)
 
-1. Gate A fixes: sign-in and plan-generation failures; exclude founder/test devices in PostHog.
+1. Gate A fixes: unit tests stop sending to live PostHog; "Build my plan" recovery card; plan-failure reasons; PostHog filter for tests, TestFlight and App Review.
 2. Tracking: plan started, plan week completed, prescribed run done, rebuild followed by a run, paywall seen, purchase, renewal, cancel, race completed; every event keeps the runner's source.
 3. Beta registration landing page with a Google Sheet registration table (App Store download + beta sign-up).
 4. Price at onboarding and free-window rules, before Gate B.
@@ -114,7 +114,7 @@ Partly: three money lines until revenue exists (charged, kept, left after market
 
 ## Risks
 
-- The app fails before runners can start (sign-in, plan generation).
+- Almost no real runners yet: 2 in the last 30 days. One is stuck with no plan after a bug that is now fixed.
 - Osek Patur yearly turnover cap counts Resumely and RunSmart together; confirm the 2026 limit with the accountant before the first payment.
 - VAT-inclusive storefronts keep less than the US table.
 - Short goals finish inside the free window; count as acquisition cost.
