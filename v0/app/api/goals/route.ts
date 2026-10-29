@@ -138,9 +138,9 @@ export async function GET(request: NextRequest) {
     logger.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     
     if (error instanceof z.ZodError) {
-      logger.error('❌ Validation error details:', error.errors);
+      logger.error('❌ Validation error details:', error.issues);
       return NextResponse.json(
-        { error: 'Invalid query parameters', details: error.errors },
+        { error: 'Invalid query parameters', details: error.issues },
         { status: 400 }
       );
     }
@@ -322,9 +322,9 @@ export async function POST(request: NextRequest) {
     logger.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
 
     if (error instanceof z.ZodError) {
-      logger.error('❌ Schema validation error details:', error.errors);
+      logger.error('❌ Schema validation error details:', error.issues);
       return NextResponse.json(
-        { error: 'Invalid goal data', details: error.errors },
+        { error: 'Invalid goal data', details: error.issues },
         { status: 400 }
       );
     }
@@ -443,7 +443,7 @@ export async function PUT(request: NextRequest) {
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid update data', details: error.errors },
+        { error: 'Invalid update data', details: error.issues },
         { status: 400 }
       );
     }
