@@ -95,8 +95,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Please check the form and try again.' }, { status: 400 })
   }
 
-  // Honeypot: real visitors never see the "website" field. Answer like a success so bots move on.
-  if (typeof (body as Record<string, unknown>).website === 'string' && (body as Record<string, string>).website.trim()) {
+  // Honeypot: real visitors never see the hpField input. Answer like a success so bots move on.
+  const honeypot = (body as Record<string, unknown>).hpField
+  if (typeof honeypot === 'string' && honeypot.trim()) {
     return NextResponse.json({ success: true })
   }
 

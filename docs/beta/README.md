@@ -16,6 +16,9 @@ form, limits each IP to 5 tries per 10 minutes, drops bot submissions (hidden ho
 then sends the row to a Google Apps Script web app with a shared secret. No Google
 credentials live in the repo or in Vercel.
 
+The rate limit is kept in memory per server instance, so on Vercel it is a speed bump, not a
+hard cap. If the sheet ever fills with junk rows, tell Claude and add a stronger limit.
+
 Until both env vars are set, the form answers "Registration is not open yet." The App Store
 button works either way.
 

@@ -16,7 +16,7 @@ const VALID_BODY = {
   source: 'LinkedIn',
   utmCampaign: 'beta_dm_oct',
   consent: true,
-  website: '',
+  hpField: '',
 }
 
 function makeRequest(body: unknown, ip = '203.0.113.7') {
@@ -123,7 +123,7 @@ describe('POST /api/beta/register', () => {
   it('answers success to a filled honeypot but drops the row', async () => {
     const fetchMock = mockWebhook(200, { ok: true })
 
-    const response = await POST(makeRequest({ ...VALID_BODY, website: 'https://spam.example' }))
+    const response = await POST(makeRequest({ ...VALID_BODY, hpField: 'https://spam.example' }))
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ success: true })

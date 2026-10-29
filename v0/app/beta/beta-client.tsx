@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { cloneElement, useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { CheckCircle2, Download, Loader2 } from "lucide-react";
@@ -43,14 +43,22 @@ function readAttribution() {
   };
 }
 
-function Field({ id, label, error, children }: { id: string; label: string; error?: string; children: ReactNode }) {
+type ControlProps = { "aria-invalid"?: boolean; "aria-describedby"?: string };
+
+// Links the server's error message to the control so screen readers announce it.
+function Field({ id, label, error, children }: { id: string; label: string; error?: string; children: ReactElement<ControlProps> }) {
+  const errorId = `${id}-error`;
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id} className="text-sm font-medium">
         {label}
       </Label>
-      {children}
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {cloneElement(children, error ? { "aria-invalid": true, "aria-describedby": errorId } : {})}
+      {error ? (
+        <p id={errorId} className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -145,7 +153,7 @@ export default function BetaClient() {
       source: attribution.current.source,
       utmCampaign: attribution.current.utmCampaign,
       consent: form.get("consent") === "on",
-      website: text("website"),
+      hpField: text("rs_hp_field"),
     };
 
     try {
@@ -306,15 +314,22 @@ export default function BetaClient() {
                 </select>
               </Field>
 
-              {/* Honeypot: hidden from people, filled by bots. */}
+              {/* Honeypot: hidden from people, filled by bots. The name matches no autofill heuristic. */}
               <div aria-hidden className="absolute -left-[9999px] h-px w-px overflow-hidden">
-                <label htmlFor="website">Website</label>
-                <input id="website" name="website" type="text" tabIndex={-1} autoComplete="off" />
+                <label htmlFor="rs_hp_field">Leave this empty</label>
+                <input id="rs_hp_field" name="rs_hp_field" type="text" tabIndex={-1} autoComplete="off" />
               </div>
 
               <div className="space-y-1.5">
                 <label className="flex items-start gap-3 text-sm leading-relaxed">
-                  <input type="checkbox" name="consent" required className="mt-1 h-5 w-5 shrink-0 accent-primary" />
+                  <input
+                    type="checkbox"
+                    name="consent"
+                    required
+                    aria-invalid={errorFor("consent") ? true : undefined}
+                    aria-describedby={errorFor("consent") ? "consent-error" : undefined}
+                    className="mt-1 h-5 w-5 shrink-0 accent-primary"
+                  />
                   <span>
                     I agree RunSmart can store these answers and email me about the beta.{" "}
                     <Link href="/privacy" className="underline underline-offset-2">
@@ -322,7 +337,11 @@ export default function BetaClient() {
                     </Link>
                   </span>
                 </label>
-                {errorFor("consent") ? <p className="text-sm text-destructive">{errorFor("consent")}</p> : null}
+                {errorFor("consent") ? (
+                  <p id="consent-error" className="text-sm text-destructive">
+                    {errorFor("consent")}
+                  </p>
+                ) : null}
               </div>
 
               {formError ? (

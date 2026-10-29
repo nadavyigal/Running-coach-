@@ -10,6 +10,8 @@
  * (group, invite_code, status, status_updated, notes) stay empty for the founder.
  */
 
+// Opened by id: web-app runs do not reliably have an "active" spreadsheet.
+var SPREADSHEET_ID = '10w2yrMINJvIWNGstlb5-doeySJFFoiNVv5JlVaxLhZc'; // "RunSmart Beta Registrations"
 var SHEET_NAME = ''; // Empty = first tab. Set a tab name if registrations live on another tab.
 
 function doPost(e) {
@@ -27,7 +29,7 @@ function doPost(e) {
     var lock = LockService.getScriptLock();
     lock.waitLock(10000);
     try {
-      var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
       var sheet = SHEET_NAME ? spreadsheet.getSheetByName(SHEET_NAME) : spreadsheet.getSheets()[0];
       var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
       var row = headers.map(function (header) {
