@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trackAnalyticsEvent } from "@/lib/analytics";
+import { whenPosthogReady } from "@/lib/analytics-identity";
 
 const APP_STORE_URL = "https://apps.apple.com/us/app/runsmart-ai-run-coaching/id6768297840";
 
@@ -34,6 +35,11 @@ type FieldErrors = Record<string, string[] | undefined>;
 
 const selectClassName =
   "flex h-11 w-full rounded-md border border-input bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+
+// PostHog loads after the page, so wait for it or a page-view event is dropped.
+function track(eventName: string, properties: Record<string, unknown>) {
+  whenPosthogReady(() => void trackAnalyticsEvent(eventName, properties));
+}
 
 function readAttribution() {
   const params = new URLSearchParams(window.location.search);
@@ -118,14 +124,14 @@ export default function BetaClient() {
 
   useEffect(() => {
     attribution.current = readAttribution();
-    void trackAnalyticsEvent("beta_page_viewed", {
+    track("beta_page_viewed", {
       source: attribution.current.source || "direct",
       utm_campaign: attribution.current.utmCampaign || undefined,
     });
   }, []);
 
   const trackAppStoreClick = (placement: string) => {
-    void trackAnalyticsEvent("beta_app_store_clicked", {
+    track("beta_app_store_clicked", {
       placement,
       source: attribution.current.source || "direct",
     });
@@ -164,7 +170,7 @@ export default function BetaClient() {
       });
       const result = await response.json().catch(() => ({}));
 
-      void trackAnalyticsEvent("beta_registration_submitted", {
+      track("beta_registration_submitted", {
         success: response.ok,
         status: response.status,
         goal: payload.goal,

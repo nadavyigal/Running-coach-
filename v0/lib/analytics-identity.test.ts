@@ -72,3 +72,44 @@ describe('analytics-identity', () => {
     expect(posthog.reset).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('whenPosthogReady', () => {
+  it('waits for PostHog to load, then runs the callback once', async () => {
+    vi.useFakeTimers()
+    const { whenPosthogReady, onPosthogLoaded } = await loadIdentity()
+    const callback = vi.fn()
+
+    whenPosthogReady(callback)
+    expect(callback).not.toHaveBeenCalled()
+
+    onPosthogLoaded(fakePosthog())
+    expect(callback).toHaveBeenCalledTimes(1)
+
+    vi.runAllTimers()
+    expect(callback).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
+  it('runs immediately once PostHog has loaded', async () => {
+    const { whenPosthogReady, onPosthogLoaded } = await loadIdentity()
+    onPosthogLoaded(fakePosthog())
+    const callback = vi.fn()
+
+    whenPosthogReady(callback)
+
+    expect(callback).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back after the timeout when PostHog never loads', async () => {
+    vi.useFakeTimers()
+    const { whenPosthogReady } = await loadIdentity()
+    const callback = vi.fn()
+
+    whenPosthogReady(callback, 5000)
+    vi.advanceTimersByTime(4999)
+    expect(callback).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(callback).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+})
