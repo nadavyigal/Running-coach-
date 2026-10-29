@@ -68,9 +68,9 @@ $12.99 needs 25% fewer payers than $9.99. If people do not buy, check the purcha
 
 | How long a payer stays | New payers / month | Installs / month | Left after $15 per payer |
 |---|---|---|---|
-| 2.0 months | 505 | 14,960 | $2,430 |
+| 2.0 months | 505 | 14,960 | $2,425 |
 | 2.5 months | 404 | 11,970 | $3,940 |
-| 3.0 months | 337 | 9,970 | $4,950 |
+| 3.0 months | 337 | 9,980 | $4,950 |
 | **3.5 months (middle)** | **289** | **8,550** | **$5,670** |
 | 5.0 months | 202 | 5,990 | $6,970 |
 
@@ -87,7 +87,7 @@ Engaged at week 4: a prescribed run in the first 7 days, runs in at least 2 of w
 - 0-4: stop. Look at value, reliability, and who was recruited.
 - Under 30 recruited: report as a recruiting failure; do not extend the window.
 
-**Gate C, pay and renew.** Simplest reliable monthly purchase. 30 real paywall views by runners who saw the price at onboarding. Track purchases, refunds, running after paying, second and third charges. Only "everyone else" runners at $12.99 count; beta club and early signers are reported separately. Friends buying to help do not count.
+**Gate C, pay and renew.** Simplest reliable monthly purchase. 30 real paywall views by runners who saw the price at onboarding. Track purchases, refunds, running after paying, second and third charges. Only "everyone else" runners at $12.99 count; beta club and early signers are reported separately. Gate B's runners are mostly the free beta club, so the 30 paywall views come from newly recruited runners outside it, not from Gate B graduates. Friends buying to help do not count.
 - Stop: zero purchases after 30 views (under ~10% would pay). One revision allowed, tied to the failure reason.
 - Pass: 10 real payers who keep running after paying.
 
