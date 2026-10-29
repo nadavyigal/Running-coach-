@@ -11,9 +11,8 @@ const ExportQuerySchema = z.object({
     if (!val || val === 'null') return 'json';
     if (['csv', 'json'].includes(val)) return val as 'csv' | 'json';
     throw new z.ZodError([{
-      code: 'invalid_enum_value',
-      received: val,
-      options: ['csv', 'json'],
+      code: 'invalid_value',
+      values: ['csv', 'json'],
       path: ['format'],
       message: `Invalid enum value. Expected 'csv' | 'json', received '${val}'`
     }]);
@@ -22,9 +21,8 @@ const ExportQuerySchema = z.object({
     if (!val || val === 'null') return 'all-time';
     if (['7d', '30d', '90d', '1y', 'all-time'].includes(val)) return val as '7d' | '30d' | '90d' | '1y' | 'all-time';
     throw new z.ZodError([{
-      code: 'invalid_enum_value',
-      received: val,
-      options: ['7d', '30d', '90d', '1y', 'all-time'],
+      code: 'invalid_value',
+      values: ['7d', '30d', '90d', '1y', 'all-time'],
       path: ['timeRange'],
       message: `Invalid enum value. Expected '7d' | '30d' | '90d' | '1y' | 'all-time', received '${val}'`
     }]);
@@ -223,7 +221,7 @@ export async function GET(request: NextRequest) {
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid query parameters', details: error.errors },
+        { error: 'Invalid query parameters', details: error.issues },
         { status: 400 }
       );
     }

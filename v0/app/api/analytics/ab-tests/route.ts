@@ -21,7 +21,7 @@ const CreateExperimentSchema = z.object({
     id: z.string(),
     name: z.string(),
     description: z.string().optional(),
-    features: z.record(z.unknown()),
+    features: z.record(z.string(), z.unknown()),
     trafficAllocation: z.number().min(0).max(1),
   })),
   primaryMetric: z.string(),
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid request body', details: error.errors },
+        { error: 'Invalid request body', details: error.issues },
         { status: 400 }
       )
     }

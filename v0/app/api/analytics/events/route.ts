@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 const EventSchema = z.object({
   eventName: z.string(),
   userId: z.union([z.string(), z.number()]).optional(),
-  properties: z.record(z.any()).optional(),
+  properties: z.record(z.string(), z.any()).optional(),
 })
 
 const QuerySchema = z.object({
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid event data', details: error.errors },
+        { error: 'Invalid event data', details: error.issues },
         { status: 400 }
       )
     }
@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid query parameters', details: error.errors },
+        { error: 'Invalid query parameters', details: error.issues },
         { status: 400 }
       )
     }

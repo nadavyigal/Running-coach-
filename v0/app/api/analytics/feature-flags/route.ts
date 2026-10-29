@@ -25,8 +25,8 @@ const CreateFlagSchema = z.object({
   rolloutPercentage: z.number().min(0).max(100).optional(),
   targetedUsers: z.array(z.number()).optional(),
   targetedCohorts: z.array(z.string()).optional(),
-  targetingRules: z.record(z.unknown()).optional(),
-  config: z.record(z.unknown()).optional(),
+  targetingRules: z.record(z.string(), z.unknown()).optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
   experimentId: z.string().optional(),
 })
 
@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid request body', details: error.errors },
+        { error: 'Invalid request body', details: error.issues },
         { status: 400 }
       )
     }

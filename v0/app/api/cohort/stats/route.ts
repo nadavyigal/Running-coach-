@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(stats, { status: 200 });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: 'Invalid request data', errors: error.errors }, { status: 400 });
+      return NextResponse.json({ message: 'Invalid request data', errors: error.issues }, { status: 400 });
     }
     logger.error('Error fetching cohort stats:', error);
     return NextResponse.json({
