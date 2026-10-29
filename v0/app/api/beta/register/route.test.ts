@@ -100,6 +100,7 @@ describe('POST /api/beta/register', () => {
     expect(response.status).toBe(400)
     const data = await response.json()
     expect(Object.keys(data.fields)).toEqual(expect.arrayContaining(['email', 'consent', 'linkedinUrl']))
+    expect(data.fields.consent).toEqual(['Please agree to continue'])
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

@@ -49,7 +49,7 @@ const registrationSchema = z.object({
   runsPerWeekNow: z.enum(['0', '1-2', '3-4', '5+']),
   source: z.string().optional(),
   utmCampaign: z.string().optional(),
-  consent: z.literal(true, { errorMap: () => ({ message: 'Please agree to continue' }) }),
+  consent: z.literal(true, { error: 'Please agree to continue' }),
 })
 
 type BetaRegistration = z.infer<typeof registrationSchema>
