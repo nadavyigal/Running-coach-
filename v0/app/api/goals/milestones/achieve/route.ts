@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid achievement data', details: error.errors },
+        { error: 'Invalid achievement data', details: error.issues },
         { status: 400 }
       );
     }

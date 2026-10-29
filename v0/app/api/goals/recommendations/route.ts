@@ -32,8 +32,8 @@ const CreateRecommendationSchema = z.object({
   confidenceScore: z.number().min(0).max(1),
   recommendationData: z.object({
     goalId: z.number().optional(),
-    suggestedChanges: z.record(z.any()).optional(),
-    newGoalTemplate: z.record(z.any()).optional(),
+    suggestedChanges: z.record(z.string(), z.any()).optional(),
+    newGoalTemplate: z.record(z.string(), z.any()).optional(),
     actionRequired: z.string().optional(),
     benefits: z.array(z.string()).optional(),
     risks: z.array(z.string()).optional()
@@ -45,7 +45,7 @@ const RespondToRecommendationSchema = z.object({
   recommendationId: z.number(),
   action: z.enum(['accepted', 'dismissed', 'modified']),
   feedback: z.string().optional(),
-  modifications: z.record(z.any()).optional()
+  modifications: z.record(z.string(), z.any()).optional()
 });
 
 export async function GET(request: NextRequest) {
@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid query parameters', details: error.errors },
+        { error: 'Invalid query parameters', details: error.issues },
         { status: 400 }
       );
     }
@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid recommendation data', details: error.errors },
+        { error: 'Invalid recommendation data', details: error.issues },
         { status: 400 }
       );
     }
@@ -222,7 +222,7 @@ export async function PUT(request: NextRequest) {
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid response data', details: error.errors },
+        { error: 'Invalid response data', details: error.issues },
         { status: 400 }
       );
     }
