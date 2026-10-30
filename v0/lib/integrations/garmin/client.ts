@@ -1,7 +1,9 @@
 import 'server-only'
 
+import { isGarminHistoryAllowed, isGarminPullEnabled } from '@/lib/garmin/access-policy'
+
 import { getGarminOAuthState, getValidGarminAccessToken, markGarminAuthError } from '@/lib/server/garmin-oauth-store'
-import { GARMIN_HEALTH_API_BASE_URL } from '@/lib/server/garmin-endpoints'
+import { GARMIN_HEALTH_API_BASE_URL, GARMIN_PERMISSIONS_URL, GARMIN_PROFILE_URL } from '@/lib/server/garmin-endpoints'
 import type {
   GarminDatasetKey,
   GarminNormalizedActivity,
@@ -297,7 +299,7 @@ export class GarminClient {
     const accessToken = await this.getAccessToken()
     const payload = await garminFetchJson<unknown>({
       accessToken,
-      url: `${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/permissions`,
+      url: GARMIN_PERMISSIONS_URL,
     })
 
     if (Array.isArray(payload)) {
@@ -316,7 +318,7 @@ export class GarminClient {
     const accessToken = await this.getAccessToken()
     const payload = await garminFetchJson<Record<string, unknown>>({
       accessToken,
-      url: `${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/id`,
+      url: GARMIN_PROFILE_URL,
     })
 
     return getString(payload.userId) ?? getString(payload.id)
@@ -328,6 +330,9 @@ export class GarminClient {
     mode: 'upload' | 'backfill'
     sourcePayloadRef?: string | null
   }): Promise<GarminNormalizedActivity[]> {
+    if (!isGarminPullEnabled() || (params.mode === 'backfill' && !isGarminHistoryAllowed(await this.fetchPermissions()))) {
+      throw buildGarminServiceError({ type: 'permanent_schema_issue', message: 'Garmin range/history access is not enabled for this tier and permission set', statusCode: 403 })
+    }
     const accessToken = await this.getAccessToken()
     const rawRows: Record<string, unknown>[] = []
     let cursor = params.startTimeInSeconds

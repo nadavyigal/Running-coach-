@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const createAdminClientMock = vi.hoisted(() => vi.fn())
 const upsertMock = vi.hoisted(() => vi.fn(async () => ({ error: null })))
@@ -13,6 +13,7 @@ async function loadModule() {
 
 describe('storeGarminWebhookPayload', () => {
   beforeEach(() => {
+    vi.stubEnv('GARMIN_HEALTH_ENABLED', 'true')
     upsertMock.mockClear()
     createAdminClientMock.mockReset()
     createAdminClientMock.mockReturnValue({
@@ -21,6 +22,8 @@ describe('storeGarminWebhookPayload', () => {
       })),
     })
   })
+
+  afterEach(() => vi.unstubAllEnvs())
 
   it('persists activity and wellness webhook datasets into the export store', async () => {
     const { storeGarminWebhookPayload } = await loadModule()
@@ -52,5 +55,18 @@ describe('storeGarminWebhookPayload', () => {
         expect.objectContaining({ datasetKey: 'sleeps', source: 'push' }),
       ])
     )
+  })
+})
+
+describe('Activity-only export store', () => {
+  afterEach(() => vi.unstubAllEnvs())
+  it('drops direct wellness writes even if called outside webhook filtering', async () => {
+    vi.stubEnv('GARMIN_HEALTH_ENABLED', 'false')
+    createAdminClientMock.mockClear()
+    const { storeGarminExportRows } = await loadModule()
+    const result = await storeGarminExportRows({ datasetKey: 'sleeps', rows: [{ userId: 'g1', private: 'health' }], source: 'push' })
+    expect(result.storedRows).toBe(0)
+    expect(result.droppedRows).toBe(1)
+    expect(createAdminClientMock).not.toHaveBeenCalled()
   })
 })

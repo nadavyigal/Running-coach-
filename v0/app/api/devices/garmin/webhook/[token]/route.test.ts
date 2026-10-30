@@ -28,7 +28,7 @@ describe('/api/devices/garmin/webhook/[token]', () => {
     const { GET } = await loadRoute()
     const req = new Request('http://localhost/api/devices/garmin/webhook/secret-123')
 
-    await GET(req, { params: { token: 'secret-123' } })
+    await GET(req, { params: Promise.resolve({ token: 'secret-123' }) })
 
     expect(webhookGetMock).toHaveBeenCalledTimes(1)
     const forwardedReq = webhookGetMock.mock.calls[0]?.[0] as Request
@@ -43,10 +43,11 @@ describe('/api/devices/garmin/webhook/[token]', () => {
       body: JSON.stringify({ activities: [] }),
     })
 
-    await POST(req, { params: { token: 'secret-123' } })
+    await POST(req, { params: Promise.resolve({ token: 'secret-123' }) })
 
     expect(webhookPostMock).toHaveBeenCalledTimes(1)
     const forwardedReq = webhookPostMock.mock.calls[0]?.[0] as Request
     expect(forwardedReq.headers.get('x-garmin-webhook-secret')).toBe('secret-123')
+    expect(await forwardedReq.json()).toEqual({ activities: [] })
   })
 })

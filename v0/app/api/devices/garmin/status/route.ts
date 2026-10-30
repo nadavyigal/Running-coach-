@@ -1,3 +1,4 @@
+import { isGarminHealthEnabled, isGarminDatasetAllowed } from '@/lib/garmin/access-policy'
 import { NextResponse } from 'next/server'
 
 import { GARMIN_EXPORT_DATASET_KEYS } from '@/lib/garmin/datasets'
@@ -144,6 +145,7 @@ export async function GET(req: Request) {
   if (readResult.storeAvailable) {
     const groupedRows = groupRowsByDataset(readResult.rows)
     for (const key of GARMIN_EXPORT_DATASET_KEYS) {
+      if (!isGarminDatasetAllowed(key)) continue
       datasetCounts[key] = groupedRows[key]?.length ?? 0
       if (
         datasetCounts[key] === 0 &&
@@ -162,6 +164,7 @@ export async function GET(req: Request) {
   } else {
     notices.push(readResult.storeError ?? 'Garmin export store is unavailable.')
     for (const key of GARMIN_EXPORT_DATASET_KEYS) {
+      if (!isGarminDatasetAllowed(key)) continue
       datasetCompleteness.missingDatasets.push(key)
     }
   }
@@ -169,7 +172,7 @@ export async function GET(req: Request) {
   if (!permissions.includes('ACTIVITY_EXPORT')) {
     notices.push('Missing ACTIVITY_EXPORT permission.')
   }
-  if (!permissions.includes('HEALTH_EXPORT')) {
+  if (isGarminHealthEnabled() && !permissions.includes('HEALTH_EXPORT')) {
     notices.push('Missing HEALTH_EXPORT permission.')
   }
 

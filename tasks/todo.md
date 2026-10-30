@@ -1,3 +1,28 @@
+# Continuation — 26 October 2026
+
+- [x] Founder business-volume forecast captured in the private application packet.
+- [x] Current portal inspected read-only; Internal Test Evaluation approved, legacy app has no valid credentials.
+- [x] Add fail-closed Starter delivery/history and Activity-only ingress boundaries from dated spec.
+- [x] Revalidate safe dependency patches; record remaining Zod/Vitest migration blockers without weakening gates.
+- [x] Refresh private founder-test/application precheck against public1.2.0 and current portal/contracts.
+- [x] Final 106 targeted tests, full TypeScript, lint, production build and configured audit precheck; code QA complete. Pushed to PR148; new-head remote checks refreshed. Audit migrations remain blocked.
+
+# Active Garmin readiness slice — 25 October 2026
+
+Approved scope source: current founder restart handoff; technical contract in docs/specs/2026-10-25-garmin-commercial-readiness.md. The prior workout-push scope is deferred for this Activity-only track.
+
+- [x] Read reviewed case history, existing work packet and current source.
+- [x] Define server-route reliability and initial history-permission stories.
+- [x] Red-first tests; implement promised params and tracked post-response work.
+- [x] Red-first callback permission matrix; skip unauthorized initial history.
+- [x] Prepare private application answers, reply, evidence matrix and separate privacy proposal outside this public repository.
+- [x] Complete focused tests, type-check, lint and independent QA; draft PR #148 opened: https://github.com/nadavyigal/Running-coach-/pull/148 .
+- [ ] Complete separate Activity-only/entitlement/lifecycle/hosting gates before launch.
+
+No privacy source edits, credential/environment changes, deployment, application submission or email send authorized by this preparation pass. Historical task state follows unchanged.
+
+---
+
 # Agent Task Board
 
 ## Current Task

@@ -1,4 +1,6 @@
-import { NextResponse } from 'next/server'
+import { filterGarminWebhookPayload } from '@/lib/garmin/access-policy'
+import { handleGarminUserPermissionChanges } from '@/lib/integrations/garmin/permission-changes'
+import { after, NextResponse } from 'next/server'
 
 import { GARMIN_WEBHOOK_DATASET_KEYS } from '@/lib/garmin/datasets'
 import { logger } from '@/lib/logger'
@@ -76,8 +78,9 @@ export async function processGarminWebhookPayload(rawBody: string, payload: Reco
   }
 
   await handleGarminUserDeregistrations(payload)
+  await handleGarminUserPermissionChanges(payload)
 
-  if (duplicate || !payloadContainsSupportedDatasets(payload)) {
+  if (duplicate || !payloadContainsSupportedDatasets(filterGarminWebhookPayload(payload))) {
     return {
       duplicate,
       queuedJobs: 0,
@@ -116,11 +119,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'Invalid Garmin webhook JSON payload' }, { status: 400 })
   }
 
-  const responsePromise = NextResponse.json({ status: 'ok' }, { status: 200 })
-
-  void processGarminWebhookPayload(rawBody, payload).catch((error) => {
-    logger.error('Garmin webhook processing error:', error)
+  // Keep post-response persistence alive for the serverless request lifetime.
+  after(async () => {
+    try {
+      await processGarminWebhookPayload(rawBody, payload)
+    } catch (error) {
+      logger.error('Garmin webhook processing error:', error)
+    }
   })
 
-  return responsePromise
+  return NextResponse.json({ status: 'ok' }, { status: 200 })
 }

@@ -1,4 +1,4 @@
-﻿import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const readRowsMock = vi.hoisted(() => vi.fn())
 const storeGarminExportRowsMock = vi.hoisted(() =>
@@ -113,6 +113,8 @@ async function loadRoute() {
 
 describe('/api/devices/garmin/sync', () => {
   beforeEach(() => {
+    vi.stubEnv('GARMIN_ACCESS_TIER', 'enterprise')
+    vi.stubEnv('GARMIN_HEALTH_ENABLED', 'true')
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-02-19T12:00:00.000Z'))
     readRowsMock.mockReset()
@@ -157,8 +159,41 @@ describe('/api/devices/garmin/sync', () => {
   })
 
   afterEach(() => {
+    vi.unstubAllEnvs()
     vi.useRealTimers()
     vi.restoreAllMocks()
+  })
+
+  it('keeps Starter manual sync push-only even with stale Health/history grants', async () => {
+    vi.stubEnv('GARMIN_ACCESS_TIER', 'starter')
+    vi.stubEnv('GARMIN_HEALTH_ENABLED', 'false')
+    readRowsMock.mockResolvedValue({ ok: true, storeAvailable: true, rows: [] })
+    const upstream = vi.fn((url: RequestInfo | URL) => {
+      const path = new URL(String(url)).pathname
+      if (path.endsWith('/user/permissions')) return Promise.resolve(new Response(JSON.stringify({ permissions: ['ACTIVITY_EXPORT', 'HEALTH_EXPORT', 'HISTORICAL_DATA_EXPORT'] })))
+      if (path.endsWith('/user/id')) return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' })))
+      throw new Error(`Unexpected data pull: ${path}`)
+    })
+    vi.stubGlobal('fetch', upstream)
+    const { POST } = await loadRoute()
+    const response = await POST(new Request('http://localhost/api/devices/garmin/sync', { method: 'POST', headers: { 'x-user-id': '42' } }))
+    expect(response.status).toBe(200)
+    expect(upstream).toHaveBeenCalledTimes(2)
+    expect(upstream.mock.calls.map(([url]) => new URL(String(url)).pathname).sort()).toEqual(['/partner-gateway/rest/user/id', '/partner-gateway/rest/user/permissions'])
+  })
+
+  it('does not reimport cached Activity rows after the user removes Activity permission', async () => {
+    vi.stubEnv('GARMIN_ACCESS_TIER', 'starter')
+    vi.stubEnv('GARMIN_HEALTH_ENABLED', 'false')
+    readRowsMock.mockResolvedValue({ ok: true, storeAvailable: true, rows: [] })
+    const chain = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), order: vi.fn().mockReturnThis(), limit: vi.fn(async () => ({ data: [], error: null })) }
+    const from = vi.fn(() => chain)
+    createAdminClientMock.mockReturnValue({ from })
+    vi.stubGlobal('fetch', vi.fn((url: RequestInfo | URL) => Promise.resolve(new Response(JSON.stringify(String(url).endsWith('/permissions') ? { permissions: [] } : { userId: 'garmin-user-1' })))))
+    const { POST } = await loadRoute()
+    const response = await POST(new Request('http://localhost/api/devices/garmin/sync', { method: 'POST', headers: { 'x-user-id': '42' } }))
+    expect(response.status).toBe(200)
+    expect(from).not.toHaveBeenCalledWith('garmin_activities')
   })
 
   it('returns catalog using Garmin permissions and stored export rows', async () => {
@@ -199,7 +234,7 @@ describe('/api/devices/garmin/sync', () => {
 
     const fetchMock = vi.fn((url: RequestInfo | URL) => {
       const parsed = new URL(String(url))
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/permissions')) {
         return Promise.resolve(
           new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HEALTH_EXPORT', 'WORKOUT_IMPORT']), {
             status: 200,
@@ -207,7 +242,7 @@ describe('/api/devices/garmin/sync', () => {
         )
       }
 
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/id')) {
         return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
       }
 
@@ -315,12 +350,12 @@ describe('/api/devices/garmin/sync', () => {
 
     const fetchMock = vi.fn((url: RequestInfo | URL) => {
       const parsed = new URL(String(url))
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/permissions')) {
         return Promise.resolve(
           new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HEALTH_EXPORT']), { status: 200 })
         )
       }
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/id')) {
         return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
       }
       return Promise.resolve(new Response('not-found', { status: 404 }))
@@ -375,10 +410,10 @@ describe('/api/devices/garmin/sync', () => {
 
     const fetchMock = vi.fn((url: RequestInfo | URL) => {
       const parsed = new URL(String(url))
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/permissions')) {
         return Promise.resolve(new Response(JSON.stringify(['ACTIVITY_EXPORT']), { status: 200 }))
       }
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/id')) {
         return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
       }
       return Promise.resolve(new Response('not-found', { status: 404 }))
@@ -417,10 +452,10 @@ describe('/api/devices/garmin/sync', () => {
 
     const fetchMock = vi.fn((url: RequestInfo | URL) => {
       const parsed = new URL(String(url))
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/permissions')) {
         return Promise.resolve(new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HEALTH_EXPORT']), { status: 200 }))
       }
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/id')) {
         return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
       }
       return Promise.resolve(new Response('not-found', { status: 404 }))
@@ -462,12 +497,12 @@ describe('/api/devices/garmin/sync', () => {
     const fetchMock = vi.fn((url: RequestInfo | URL) => {
       const parsed = new URL(String(url))
 
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/permissions')) {
         return Promise.resolve(
           new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HISTORICAL_DATA_EXPORT']), { status: 200 })
         )
       }
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/id')) {
         return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
       }
       if (parsed.pathname.endsWith('/wellness-api/rest/activities')) {
@@ -541,10 +576,10 @@ describe('/api/devices/garmin/sync', () => {
     const fetchMock = vi.fn((url: RequestInfo | URL) => {
       const parsed = new URL(String(url))
 
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/permissions')) {
         return Promise.resolve(new Response(JSON.stringify(['HEALTH_EXPORT']), { status: 200 }))
       }
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/id')) {
         return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
       }
       if (parsed.pathname.endsWith('/wellness-api/rest/sleeps')) {
@@ -612,10 +647,10 @@ describe('/api/devices/garmin/sync', () => {
     const fetchMock = vi.fn((url: RequestInfo | URL) => {
       const parsed = new URL(String(url))
 
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/permissions')) {
         return Promise.resolve(new Response(JSON.stringify(['HEALTH_EXPORT']), { status: 200 }))
       }
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/id')) {
         return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
       }
       if (parsed.pathname.endsWith('/wellness-api/rest/dailies')) {
@@ -716,12 +751,12 @@ describe('/api/devices/garmin/sync', () => {
     const fetchMock = vi.fn((url: RequestInfo | URL) => {
       const parsed = new URL(String(url))
 
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/permissions')) {
         return Promise.resolve(
           new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HISTORICAL_DATA_EXPORT']), { status: 200 })
         )
       }
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/id')) {
         return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
       }
       if (parsed.pathname.endsWith('/wellness-api/rest/activities')) {
@@ -818,10 +853,10 @@ describe('/api/devices/garmin/sync', () => {
 
     const fetchMock = vi.fn((url: RequestInfo | URL) => {
       const parsed = new URL(String(url))
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/permissions')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/permissions')) {
         return Promise.resolve(new Response(JSON.stringify(['ACTIVITY_EXPORT', 'HEALTH_EXPORT']), { status: 200 }))
       }
-      if (parsed.pathname.endsWith('/wellness-api/rest/user/id')) {
+      if (parsed.pathname.endsWith('/partner-gateway/rest/user/id')) {
         return Promise.resolve(new Response(JSON.stringify({ userId: 'garmin-user-1' }), { status: 200 }))
       }
       return Promise.resolve(new Response('not-found', { status: 404 }))

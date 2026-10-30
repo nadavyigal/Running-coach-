@@ -1,3 +1,4 @@
+import { isGarminHealthEnabled } from '@/lib/garmin/access-policy'
 import { NextResponse } from 'next/server'
 import {
   GARMIN_HISTORY_DAYS,
@@ -11,7 +12,7 @@ import {
   markGarminAuthError,
   refreshGarminAccessToken,
 } from '@/lib/server/garmin-oauth-store'
-import { GARMIN_HEALTH_API_BASE_URL } from '@/lib/server/garmin-endpoints'
+import { GARMIN_PERMISSIONS_URL, GARMIN_PROFILE_URL } from '@/lib/server/garmin-endpoints'
 import { getGarminWebhookSecret } from '@/lib/server/garmin-webhook-secret'
 import { GARMIN_EXPORT_DATASET_KEYS } from '@/lib/garmin/datasets'
 import { getGarminSyncState } from '@/lib/integrations/garmin/service'
@@ -116,8 +117,8 @@ function parseUserId(req: Request): number | null {
 
 async function runDiagnosticProbe(accessToken: string) {
   const [profile, permissionsResult] = await Promise.all([
-    testEndpoint(accessToken, `${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/id`),
-    testEndpoint(accessToken, `${GARMIN_HEALTH_API_BASE_URL}/wellness-api/rest/user/permissions`),
+    testEndpoint(accessToken, GARMIN_PROFILE_URL),
+    testEndpoint(accessToken, GARMIN_PERMISSIONS_URL),
   ])
   return { profile, permissionsResult }
 }
@@ -328,7 +329,7 @@ export async function GET(req: Request) {
   if (!includesPermission(permissions, 'ACTIVITY_EXPORT')) {
     blockers.push('Missing ACTIVITY_EXPORT permission.')
   }
-  if (!includesPermission(permissions, 'HEALTH_EXPORT')) {
+  if (isGarminHealthEnabled() && !includesPermission(permissions, 'HEALTH_EXPORT')) {
     blockers.push('Missing HEALTH_EXPORT permission.')
   }
   if (!exportRowsResult.storeAvailable) {

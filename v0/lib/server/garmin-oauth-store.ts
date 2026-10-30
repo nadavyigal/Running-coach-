@@ -3,7 +3,7 @@ import 'server-only'
 import { decryptToken, encryptToken } from '@/app/api/devices/garmin/token-crypto'
 import { logger } from '@/lib/logger'
 import { resolveGarminOAuthClientCredentials } from '@/lib/server/garmin-credentials'
-import { GARMIN_OAUTH_REVOKE_URL, GARMIN_OAUTH_TOKEN_URL } from '@/lib/server/garmin-endpoints'
+import { GARMIN_OAUTH_REVOKE_URL, GARMIN_OAUTH_TOKEN_URL, GARMIN_USER_REGISTRATION_URL } from '@/lib/server/garmin-endpoints'
 import { createAdminClient } from '@/lib/supabase/admin'
 const TOKEN_REFRESH_SKEW_SECONDS = 5 * 60
 const MAX_REFRESH_RETRIES = 3
@@ -591,7 +591,7 @@ export async function getGarminConnectionByProviderUserId(providerUserId: string
   return getGarminOAuthState(selected.user_id)
 }
 
-async function revokeTokenUpstream(token: string): Promise<void> {
+async function revokeTokenUpstream(token: string): Promise<boolean> {
   let clientId: string
   let clientSecret: string
 
@@ -603,7 +603,7 @@ async function revokeTokenUpstream(token: string): Promise<void> {
     logger.warn('Garmin revoke skipped because OAuth credentials are unavailable or not allowed', {
       error: error instanceof Error ? error.message : 'unknown',
     })
-    return
+    return false
   }
 
   const response = await fetch(GARMIN_OAUTH_REVOKE_URL, {
@@ -620,6 +620,7 @@ async function revokeTokenUpstream(token: string): Promise<void> {
     const detail = (await response.text()).slice(0, 300)
     throw new Error(`Garmin revoke request failed (${response.status}): ${detail}`)
   }
+  return true
 }
 
 export async function revokeGarminConnection(userId: number): Promise<{
@@ -642,17 +643,36 @@ export async function revokeGarminConnection(userId: number): Promise<{
     }
   }
 
-  let revokedUpstream = false
+  let registrationDeleted = false
+  let accessToken = state.accessToken
+  let refreshToken = state.refreshToken
 
   try {
-    await revokeTokenUpstream(state.accessToken)
-    if (state.refreshToken) {
-      await revokeTokenUpstream(state.refreshToken)
-    }
-    revokedUpstream = true
+    accessToken = await getValidGarminAccessToken(userId)
+    // Refresh may rotate the refresh token. Never revoke the stale snapshot afterward.
+    refreshToken = null
+    const currentState = await getGarminOAuthState(userId)
+    if (!currentState) throw new Error('Garmin connection disappeared before registration removal')
+    refreshToken = currentState.refreshToken
+    const response = await fetch(GARMIN_USER_REGISTRATION_URL, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!response.ok) throw new Error(`Garmin registration removal failed (${response.status})`)
+    registrationDeleted = true
+  } catch (error) {
+    logger.warn('Garmin registration removal warning:', error)
+  }
+
+  let tokensRevoked = false
+  try {
+    const accessRevoked = await revokeTokenUpstream(accessToken)
+    const refreshRevoked = refreshToken ? await revokeTokenUpstream(refreshToken) : true
+    tokensRevoked = accessRevoked && refreshRevoked
   } catch (error) {
     logger.warn('Garmin revoke upstream warning:', error)
   }
+  const revokedUpstream = registrationDeleted && tokensRevoked
 
   await deleteGarminTokens(userId)
   await upsertGarminConnection({

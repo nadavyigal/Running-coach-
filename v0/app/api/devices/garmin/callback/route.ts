@@ -1,3 +1,4 @@
+import { isGarminHistoryAllowed } from '@/lib/garmin/access-policy'
 import { NextResponse } from 'next/server'
 import { withApiSecurity, ApiRequest } from '@/lib/security.middleware'
 import { verifyAndParseState } from '../oauth-state'
@@ -10,9 +11,9 @@ import {
   upsertGarminTokens,
 } from '@/lib/server/garmin-oauth-store'
 
+import { GARMIN_PROFILE_URL, GARMIN_PERMISSIONS_URL } from '@/lib/server/garmin-endpoints'
+
 const GARMIN_TOKEN_URL = 'https://diauth.garmin.com/di-oauth2-service/oauth/token'
-const GARMIN_PROFILE_URL = 'https://apis.garmin.com/wellness-api/rest/user/id'
-const GARMIN_PERMISSIONS_URL = 'https://apis.garmin.com/wellness-api/rest/user/permissions'
 
 async function resolveAuthUserId(): Promise<string | null> {
   try {
@@ -213,8 +214,13 @@ async function handleGarminCallback(req: ApiRequest) {
     let scopes: string[] = []
     if (permissionsResponse.ok) {
       const permissionsPayload = (await permissionsResponse.json()) as unknown
-      if (Array.isArray(permissionsPayload)) {
-        scopes = permissionsPayload.filter((scope): scope is string => typeof scope === 'string')
+      const permissions = Array.isArray(permissionsPayload)
+        ? permissionsPayload
+        : permissionsPayload && typeof permissionsPayload === 'object'
+          ? (permissionsPayload as { permissions?: unknown }).permissions
+          : null
+      if (Array.isArray(permissions)) {
+        scopes = permissions.filter((scope): scope is string => typeof scope === 'string')
       }
     } else {
       const permErrorText = await permissionsResponse.text()
@@ -257,19 +263,22 @@ async function handleGarminCallback(req: ApiRequest) {
       rotatedAt: nowIso,
     })
 
-    try {
-      await enqueueGarminBackfillJob({
-        userId,
-        profileId: resolvedProfileId,
-        providerUserId: profileUserId != null ? String(profileUserId) : null,
-      })
-    } catch (backfillError) {
-      // Non-fatal: the OAuth connection is established. Log and continue.
-      warnings.push('Garmin connected. Initial sync queue was unavailable; use Sync Garmin to import data now.')
-      logger.warn('Failed to enqueue Garmin backfill job after connect (non-fatal)', {
-        userId,
-        error: backfillError instanceof Error ? backfillError.message : 'unknown',
-      })
+    // Starter access has no history. Only queue backfill when Garmin explicitly grants it.
+    if (isGarminHistoryAllowed(scopes)) {
+      try {
+        await enqueueGarminBackfillJob({
+          userId,
+          profileId: resolvedProfileId,
+          providerUserId: profileUserId != null ? String(profileUserId) : null,
+        })
+      } catch (backfillError) {
+        // Non-fatal: the OAuth connection is established. Log and continue.
+        warnings.push('Garmin connected. Initial sync queue was unavailable; use Sync Garmin to import data now.')
+        logger.warn('Failed to enqueue Garmin backfill job after connect (non-fatal)', {
+          userId,
+          error: backfillError instanceof Error ? backfillError.message : 'unknown',
+        })
+      }
     }
 
     const deviceData = {
