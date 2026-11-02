@@ -1,3 +1,13 @@
+## 2026-11-02 — Approval received for steps1–5
+
+Founder approved dependency install/repair, Vercel inspection, ordered147→149→150 release, Apps Script/Production settings and one fictional registration/readback/cleanup. Earlier local-only notes below describe the prior preparation stage. No billing, invitations, posts, T7 or PR152 work authorized.
+
+## 2026-11-02 — PR150 local readiness
+
+Story: prove the registration contract locally and prepare exact founder setup without external writes. No commit, push, merge, deployment, service configuration or sheet write is authorized.
+
+Acceptance: 13 registration fields match the live header; unknown/duplicate required headers fail closed; secret, formula safety and lock behavior tested; local browser check uses only a fictional registration and a local webhook; read-only connection limits and pending production proof documented in docs/beta/README.md. Preserve approved US English copy and Israel invite audience. No tester emails or account grants.
+
 # Agent Task Board
 
 ## Current Task

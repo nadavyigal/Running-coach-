@@ -12,7 +12,7 @@
 
 // Opened by id: web-app runs do not reliably have an "active" spreadsheet.
 var SPREADSHEET_ID = '10w2yrMINJvIWNGstlb5-doeySJFFoiNVv5JlVaxLhZc'; // "RunSmart Beta Registrations"
-var SHEET_NAME = ''; // Empty = first tab. Set a tab name if registrations live on another tab.
+var SHEET_NAME = 'Untitled'; // Empty = first tab. Set a tab name if registrations live on another tab.
 
 function doPost(e) {
   try {
@@ -31,7 +31,17 @@ function doPost(e) {
     try {
       var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
       var sheet = SHEET_NAME ? spreadsheet.getSheetByName(SHEET_NAME) : spreadsheet.getSheets()[0];
-      var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function (header) {
+        return String(header).trim();
+      });
+      var requiredHeaders = ['submitted_at', 'full_name', 'email_for_app', 'linkedin_url', 'country',
+        'has_iphone', 'goal', 'race_date', 'returning_after_break', 'runs_per_week_now', 'source',
+        'utm_campaign', 'consent'];
+      if (requiredHeaders.some(function (header) {
+        return headers.filter(function (value) { return value === header; }).length !== 1;
+      })) {
+        return json_({ ok: false, error: 'invalid sheet headers' });
+      }
       var row = headers.map(function (header) {
         var value = body.row[String(header).trim()];
         return value === undefined || value === null ? '' : asText_(String(value));
@@ -49,7 +59,7 @@ function doPost(e) {
 
 // Stops a value like "=HYPERLINK(...)" from running as a formula in the sheet.
 function asText_(value) {
-  return /^[=+\-@]/.test(value) ? "'" + value : value;
+  return /^[=+@-]/.test(value) ? "'" + value : value;
 }
 
 function json_(payload) {

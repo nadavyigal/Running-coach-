@@ -1,0 +1,15 @@
+{
+  "fullName": "TEST ONLY - Fictional Beta Runner",
+  "email": "runsmart-beta-qa-20261102@example.com",
+  "linkedinUrl": "",
+  "country": "Israel",
+  "hasIphone": "yes",
+  "goal": "return",
+  "raceDate": "",
+  "returningAfterBreak": "yes",
+  "runsPerWeekNow": "1-2",
+  "source": "qa_test",
+  "utmCampaign": "qa_20261102",
+  "consent": true,
+  "hpField": ""
+}

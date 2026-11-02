@@ -76,3 +76,10 @@ Reusable lessons for Claude Code, Codex, Cursor, and other agents.
 
 ## Lesson Template
 Use `.agent-os/templates/lesson-template.md` for new entries.
+
+### Lesson: A webhook acknowledgment must mean every required field was stored
+- Header mapping can silently drop a renamed column while still returning success. Validate every required header appears exactly once before appending; test missing and duplicate headers without a live sheet write.
+- Hosted checks are dated evidence. Re-run dependency audits before release; newer advisories can invalidate earlier green checks.
+
+### Lesson: Verify pasted deployment source
+- UI text transport can consume a backslash in a regular expression. Read back the whole saved script before deployment, prefer a trailing hyphen in this character class, and test ordinary numeric/date strings as well as formula prefixes.
