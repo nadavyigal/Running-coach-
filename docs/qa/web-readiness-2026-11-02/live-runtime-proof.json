@@ -1,0 +1,18 @@
+{
+  "testedAt": "2026-11-02T15:29:34.133Z",
+  "stagedDeployment": "dpl_6HTyBcvP5rucC4e9s5UvXi5gGJH8",
+  "scriptVersion": 2,
+  "preTestMatches": 0,
+  "postTestMatches": 1,
+  "row": 2,
+  "submittedFieldsMatch": true,
+  "nonemptyValuesAreStrings": true,
+  "runsPerWeekRawString": "1-2",
+  "founderFieldsBlank": true,
+  "secretAbsentFromEvidence": true,
+  "cleanupPending": false,
+  "publicRelease": "held for hosting-plan eligibility decision",
+  "attempts": 2,
+  "explanation": "First fictional row revealed date coercion and was removed; same fictional fixture passed after the literal-text fix.",
+  "cleanupVerified": true
+}

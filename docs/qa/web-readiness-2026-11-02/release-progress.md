@@ -1,3 +1,19 @@
+## Current result — 2 November, after live integration QA
+
+Google authorization is complete, with the founder's explicit at-screen approval of the single all-spreadsheets scope. The handler still opens only the fixed beta spreadsheet and checks the shared secret. Google deployment version2 is active at the same /exec URL; no additional Google scopes, sharing change or new credential was introduced for version2.
+
+Both Vercel values are Secret and Production only. A wrong-secret POST returned {ok:false,error:unauthorized}. Staged production deploymentdpl_6HTyBcvP5rucC4e9s5UvXi5gGJH8 is Ready using commitcc26d4f2 application source and the actual Production values. It is not assigned to www.runsmart-ai.com; public /beta still returns404 and the corrected native policy remains served. The staged URL is reachable without login; it must not be described as a private deployment or shared as a public launch.
+
+At375px, the staged form hydrated with no horizontal overflow, correct App Store ID6768297840 and Smart App Banner. Live form submission showed success and created exactly one matching fictional row. Raw CellData found that1-2 was initially a date serial. That row was removed. A red-first regression was added, literal-text handling fixed and Google version2 deployed with identical source readback. Reused the same fictional identity once after cleanup: all13 fields matched, every nonempty raw value was a string (including1-2), five founder fields stayed blank. Removed that record and verified0 remaining matches. Two QA submissions used one fictional identity, never overlapping stored rows. No emails sent or accounts/beta access granted. Evidence: live-runtime-proof.json, live-registration-success-v2.png and sheet-after-test-cleanup.png. Current script tests6/6 PASS; the web-app source is unchanged from the earlier1,498-pass/2-skip full suite.
+
+### Hosting eligibility gate — public release held
+
+Current connected Vercel account/team is nadavyigal-7990 / nadavyigal-gmailcoms-projects, Hobby; CLI teams list contains only that team. Projectprj_sAYkBPR6TteCU8uFHbkpMpUno4I3 / running-coach, rootv0, Node22.x. The initial deployment block was specifically author-email mapping, resolved using the verified owner identity from the successful main merge; it was not evidence of a missing paid seat. No paid collaborator, plan upgrade, trial, public repository conversion or access change was used to bypass that block.
+
+Official current Hobby policy restricts the plan to non-commercial personal use: https://vercel.com/docs/plans/hobby . RunSmart's business beta includes planned pricing, so commercial eligibility is not established. The founder's new plan/account preference requires a concrete decision before public promotion or merging150. Pending choices: verify existing commercial permission/another plan; review hosting options and exact costs; or hold the public beta. No paid action authorized or taken. Google consumer-account capabilities are supported by the published quotas: https://developers.google.com/apps-script/guides/services/quotas . No Workspace subscription was assumed.
+
+PR147 and149 remain merged/deployed. PR150 remains open and technically validated, with public merge/promotion held for hosting eligibility. The older handoff record below is superseded where it differs.
+
 ## Updated execution — Google and Vercel setup completed
 
 The founder explicitly confirmed the Sheets permission at Google's consent screen after being told it covers all spreadsheets. Project owner/container and the single spreadsheets scope were verified. Saved Google handler text matches the tested repository source exactly. Google authorization completed; web-app version1, execute as Me, access Anyone, deploymentAKfycbx8pxyZYvVNQvb0gvx6lXaEdoTa1zxTut4IsLy1cwz8jDKRjJUqm6Zrv6qRWBrgmtgpeg.

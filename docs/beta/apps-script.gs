@@ -57,9 +57,9 @@ function doPost(e) {
   }
 }
 
-// Stops a value like "=HYPERLINK(...)" from running as a formula in the sheet.
+// Preserve literal text, including ranges such as "1-2", dates, numbers and formula prefixes.
 function asText_(value) {
-  return /^[=+@-]/.test(value) ? "'" + value : value;
+  return value === '' ? '' : "'" + value;
 }
 
 function json_(payload) {

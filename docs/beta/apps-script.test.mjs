@@ -60,9 +60,12 @@ test('duplicate required sheet header fails without appending', () => {
   assert.equal(h.post().ok, false)
   assert.equal(h.writes.length, 0)
 })
-test('formula prefixes are stored as text', () => {
+test('all submitted values are preserved as literal text', () => {
   const h = harness()
   for (const prefix of ['=', '+', '-', '@']) assert.equal(h.context.asText_(prefix + 'test'), "'" + prefix + 'test')
-  assert.equal(h.context.asText_('plain text'), 'plain text')
-  assert.equal(h.context.asText_('2026-11-02'), '2026-11-02')
+  assert.equal(h.context.asText_('plain text'), "'plain text")
+  assert.equal(h.context.asText_('2026-11-02'), "'2026-11-02")
+  assert.equal(h.context.asText_('1-2'), "'1-2")
+  assert.equal(h.context.asText_('0'), "'0")
+  assert.equal(h.context.asText_(''), '')
 })

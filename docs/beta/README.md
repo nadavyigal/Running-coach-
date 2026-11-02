@@ -1,3 +1,17 @@
+## Current activation status — 2 November 2026
+
+Google authorization, web-app version2 (same /exec URL), and the two Vercel Production-only Secret values are configured. Staged end-to-end QA passes against the real sheet, including raw string values; both fictional QA attempts were cleaned up and0 matching test records remain. No real recruitment count is claimed. See docs/qa/web-readiness-2026-11-02/live-runtime-proof.json and release-progress.md.
+
+Public activation is held: the verified Vercel team is Hobby, whose current official policy restricts use to non-commercial personal projects (https://vercel.com/docs/plans/hobby). The founder must establish commercially permitted hosting before public promotion/merge150; no upgrade, trial, paid collaborator or spending is authorized. Existing public /beta is still404. The staged deployment has an anonymous-accessible unique URL and must not be called private or circulated as a public launch.
+
+Google grants this owner-run script the single spreadsheets scope, which covers all owner spreadsheets; the founder explicitly confirmed it. Reviewed code limits its writes to the beta sheet and requires the secret. Do not grant additional scopes or reveal/copy the secret elsewhere.
+
+The setup instructions and earlier preparation/approval notes below are retained for recovery/history and are superseded by this status.
+
+## Live QA storage correction
+
+The first staged test reached Google successfully, but CellData readback showed runs_per_week_now=1-2 had become a date serial. The fixture was removed. The handler now prefixes every nonempty submitted value as literal text, retaining blank optional/founder fields; numeric/date/range and formula-prefix tests cover this. Recheck the same fictional fixture after deploying the corrected script, then remove it. No real participants are involved.
+
 ## Approved execution update — 2 November
 
 Founder approved steps1–5, including dependency installation/repair, ordered147→149→150 release, Apps Script/Production setup and one fictional test/readback/cleanup. Historical “pending approval” notes below describe the earlier preparation stage. No invitations, billing, public posts or T7/PR152 work authorized.

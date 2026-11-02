@@ -94,3 +94,9 @@ Use `.agent-os/templates/lesson-template.md` for new entries.
 
 ### Lesson: Match staged deployment attribution to the verified Git owner
 - Vercel blocked a CLI stage whose commit author email was not mapped to a Git account. Check the successful merged main commit's author identity and use the verified owner identity for the next authorized commit; do not widen team access or add paid members to bypass the block.
+
+### Lesson: Inspect raw sheet values during registration QA
+- A displayed value of 1-2 was internally a date serial after appendRow. Preserve nonempty submitted values as literal text and verify userEnteredValue types in the real sheet, not only displayed text or a mock acknowledgment.
+
+### Lesson: Verify plan eligibility separately from deployment identity
+- Before a deployment, verify the account/team/project/environment and author mapping, then check current official plan capabilities and permitted use. A technically accepted Hobby build is not evidence of commercial eligibility. Do not upgrade, add paid members, change visibility or widen access to bypass a failure; get a concrete founder decision if the existing plan is unsuitable.

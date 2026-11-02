@@ -1,3 +1,9 @@
+## Current web release gate — 2 November
+
+147/149 merged and deployed.150 implementation and live staged pipeline validated. Fixed Google date coercion, deployed script version2, verified raw string fields with the same fictional identity and cleaned both QA attempts (0 matching rows remain). Source/evidence update ready for push.
+
+Public150 merge/promotion is held pending hosting eligibility: verified Vercel Hobby permits non-commercial personal use, while RunSmart has a business offer. Founder decision pending; no paid plan, trial, seat or spending authorized. Do not confuse the resolved author-email mapping error with a plan capability failure. Exact evidence and next actions: docs/qa/web-readiness-2026-11-02/release-progress.md.
+
 ## 2026-11-02 — Approval received for steps1–5
 
 Founder approved dependency install/repair, Vercel inspection, ordered147→149→150 release, Apps Script/Production settings and one fictional registration/readback/cleanup. Earlier local-only notes below describe the prior preparation stage. No billing, invitations, posts, T7 or PR152 work authorized.

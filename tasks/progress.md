@@ -2,7 +2,7 @@
 
 - PR147 merged at3dc61d74; production deployment3iDmg3VYqChdexrSdbeyo97x7qcb succeeded. Public /privacy verified200 with November2 native/Garmin/OpenAI policy and deletion contact.
 - PR149 monetization plan record merged atc789a102. It saves the approved v3 assumptions and gates, without activating billing. Gate A/iOS implementation remains in its separate session.
-- PR150 reconciled with both predecessors; preserve native privacy and add beta Google Sheets/removal disclosure. Full candidate suite1,498 passed/2 skipped;6 script tests passed; lint/types/build/audit-ci pass. Apps Script source saved, secret/deployment and Production variables not configured yet; live registration proof pending.
+- PR150 reconciled with both predecessors; preserve native privacy and add beta Google Sheets/removal disclosure. Full candidate suite1,498 passed/2 skipped;6 script tests passed; lint/types/build/audit-ci pass. Google version2 and Production-only secrets configured; live staged registration/readback/cleanup PASS, including literal text storage. Public merge/promotion held: existing Vercel Hobby commercial eligibility must be resolved under the founder's new plan-check preference. No paid upgrade/seat/trial authorized.
 - Founder approved steps1–5. No invitations, billing, public posts, T7 or PR152 changes. Historical entries below retain the earlier implementation record and are superseded where dated facts differ.
 
 # Project Progress
