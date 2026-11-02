@@ -1,3 +1,18 @@
+## 2026-11-02 — Founder approved steps 1–5
+
+Founder explicitly approved local dependency remediation/install, Vercel inspection, and release of #147 then #149 then #150, including Apps Script/Production values and one fictional registration/readback/cleanup. Earlier “local only” restrictions below describe the prior stage and are superseded for these named actions. No T7, PR152, invitations, public posts, billing or costs authorized.
+
+- Targeted overrides: minimatch11.0.1 and glob>=9→14.0.2. New isolated install, shared previous installs untouched.
+- Audit-ci moderate policy passed; only existing time-bounded Vitest exceptions remain.
+- Lint and types pass. Full suite1,483 passed/2 skipped; build passed before commit/push/release.
+- Vercel connector team consent still pending; default Apps Script inspected, no unrelated code.
+
+## 2026-11-02 — PR147 source reconciliation (local only)
+
+Story: preserve native privacy, restore explicit Garmin/OpenAI disclosure, and validate with main's already-merged dependency fixes (#151). No commit, push, merge or deployment authorized.
+
+Acceptance: Garmin section identifies OpenAI; native storage/analytics/Health/sharing remain; dependency snapshot matches origin/main 33dcbc4f; focused tests, lint, types, build and audit recorded in docs/qa/web-readiness-2026-11-02.md. Main security changes are copied into the working tree only, with no dependency install. Review and external actions remain pending.
+
 ## 2026-10-23 — Native record-a-run privacy correction
 
 **Complete:** policy published and verified live (production dpl_CDGcoK8VvKf87WYr6VdXjCw7m38Y, PR147 open). Founder deferred Strava; no Strava setup or public feature promise. Correct the shared privacy page for native storage, account-linked analytics, optional Health writes/weight and privacy-trimmed sharing. Preserve the web storage distinction. Verify policy tests, lint/types, preview, then publish only to the verified RunSmart production project without unrelated code.

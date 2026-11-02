@@ -10,3 +10,7 @@ Published to https://www.runsmart-ai.com/privacy. Vercel team `team_3x9sb1XpevPD
 - Rollback: redeploy/promote previous production `dpl_4ua4ehuaSGx1Rn6bVUsw2cJ7Eh5m` (`1397da4`) to the same project after verifying no newer production changes. No database or env changes.
 
 Strava is deferred. App Store Connect is signed out: the iOS repo contains prepared privacy reconciliation, but actual answers remain unverified. iOS PR164 stays open pending physical device checks; web PR147 preserves policy source for review. Neither PR was merged by this session.
+
+## 2 November 2026 superseding status
+
+The publication above is historical. A fresh public GET today returned HTTP 200 with “Last updated: February 2, 2026”; /beta returned 404. Main's older privacy page replaced the manually deployed policy. The PR147 source correction is still unmerged. Local reconciliation restores the explicit Garmin/OpenAI disclosure and carries main33dcbc4f's #151 dependency changes without a commit or merge. New glob/minimatch audit failures remain; do not reuse the old green-check claim or historical rollback target without checking current production. No deployment authorized in this session.

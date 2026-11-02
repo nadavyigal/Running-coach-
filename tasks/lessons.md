@@ -75,3 +75,7 @@ Use `.agent-os/templates/lesson-template.md` for new entries.
 ### Lesson: Match privacy copy to each shipping client
 - Trigger: Native account sync and identified analytics contradicted browser-only privacy text.
 - Future Rule: Verify native persistence, Health access and analytics identity separately from web behavior before publishing shared policy copy. Keep deferred integrations out of shipping claims.
+
+### Lesson: Reconcile served privacy with durable source
+- A manual policy deployment was later replaced by main's older policy. Preserve the native disclosure in main before treating publication as durable; inspect the served text after the approved release.
+- Run app checks from `v0/`; root package scripts are separate.

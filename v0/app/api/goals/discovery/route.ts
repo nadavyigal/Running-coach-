@@ -54,7 +54,7 @@ const GoalAnalysisContextSchema = z.object({
     role: z.enum(['user', 'assistant']),
     content: z.string()
   })).optional(),
-  userResponses: z.record(z.any()).optional(),
+  userResponses: z.record(z.string(), z.any()).optional(),
   behaviorPatterns: z.any().optional(),
   existingGoals: z.array(z.any()).optional()
 });
@@ -247,11 +247,11 @@ export async function POST(request: NextRequest) {
     logger.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     
     if (error instanceof z.ZodError) {
-      logger.error('❌ Validation error details:', error.errors);
+      logger.error('❌ Validation error details:', error.issues);
       return NextResponse.json(
         { 
           error: 'Invalid request data', 
-          details: error.errors.map(err => ({
+          details: error.issues.map(err => ({
             field: err.path.join('.'),
             message: err.message
           }))
@@ -301,7 +301,7 @@ export async function PUT(request: NextRequest) {
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid refinement data', details: error.errors },
+        { error: 'Invalid refinement data', details: error.issues },
         { status: 400 }
       );
     }

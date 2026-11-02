@@ -24,7 +24,7 @@ const CreateCohortSchema = z.object({
   type: z.enum(['date_based', 'attribute_based', 'custom']),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
-  attributes: z.record(z.unknown()).optional(),
+  attributes: z.record(z.string(), z.unknown()).optional(),
 })
 
 const ManageMemberSchema = z.object({
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid request body', details: error.errors },
+        { error: 'Invalid request body', details: error.issues },
         { status: 400 }
       )
     }

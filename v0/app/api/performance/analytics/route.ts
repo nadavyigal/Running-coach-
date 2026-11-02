@@ -10,9 +10,8 @@ const AnalyticsQuerySchema = z.object({
     if (!val || val === 'null') return '30d';
     if (['7d', '30d', '90d', '1y', 'all-time'].includes(val)) return val as '7d' | '30d' | '90d' | '1y' | 'all-time';
     throw new z.ZodError([{
-      code: 'invalid_enum_value',
-      received: val,
-      options: ['7d', '30d', '90d', '1y', 'all-time'],
+      code: 'invalid_value',
+      values: ['7d', '30d', '90d', '1y', 'all-time'],
       path: ['timeRange'],
       message: `Invalid enum value. Expected '7d' | '30d' | '90d' | '1y' | 'all-time', received '${val}'`
     }]);
@@ -138,7 +137,7 @@ export async function GET(request: NextRequest) {
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid query parameters', details: error.errors },
+        { error: 'Invalid query parameters', details: error.issues },
         { status: 400 }
       );
     }

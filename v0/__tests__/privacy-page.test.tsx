@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import PrivacyPolicy from '@/app/privacy/page'
 
 vi.mock('next/link', () => ({
@@ -41,6 +41,12 @@ describe('/privacy page', () => {
     expect(screen.getByText(/usage events can be linked to your RunSmart account/i)).toBeInTheDocument()
     expect(screen.getByText(/route, pause events and estimated active calories/i)).toBeInTheDocument()
     expect(screen.queryByText(/These tools do not access your personal health or activity data/i)).not.toBeInTheDocument()
+  })
+
+  it('explicitly discloses Garmin activity and wellness processing by OpenAI', () => {
+    render(<PrivacyPolicy />)
+    const section = screen.getByRole('heading', { name: 'Garmin Connect data' }).closest('section')!
+    expect(within(section).getByText(/Garmin activity and wellness data may be processed by OpenAI/i)).toBeInTheDocument()
   })
 
   it('includes a working back-to-app link', () => {

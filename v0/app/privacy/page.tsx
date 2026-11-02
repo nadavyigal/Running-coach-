@@ -10,7 +10,7 @@ export default function PrivacyPolicy() {
           <Link href="/"><ArrowLeft className="mr-2 h-4 w-4" />Back to App</Link>
         </Button>
         <h1 className="text-3xl font-bold tracking-tight mb-2">Privacy Policy</h1>
-        <p className="text-muted-foreground">Last updated: October 23, 2026</p>
+        <p className="text-muted-foreground">Last updated: November 2, 2026</p>
       </header>
 
       <div className="prose prose-slate dark:prose-invert max-w-none space-y-8">
@@ -50,6 +50,7 @@ export default function PrivacyPolicy() {
             in your RunSmart history. Depending on the device and permissions originally granted, that data can include
             timestamps, distance, duration, pace, elevation, GPS routes, heart rate, HRV, sleep, stress, body battery,
             steps and training metrics. RunSmart uses this history for coaching, progress and recovery information.
+            Garmin activity and wellness data may be processed by OpenAI when you request AI coaching or Garmin insights.
           </p>
           <p>
             Disconnecting an existing integration stops future synchronization; it does not by itself delete activity

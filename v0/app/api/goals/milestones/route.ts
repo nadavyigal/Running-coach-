@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid query parameters', details: error.errors },
+        { error: 'Invalid query parameters', details: error.issues },
         { status: 400 }
       );
     }
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid milestone data', details: error.errors },
+        { error: 'Invalid milestone data', details: error.issues },
         { status: 400 }
       );
     }
@@ -199,7 +199,7 @@ export async function PUT(request: NextRequest) {
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid update data', details: error.errors },
+        { error: 'Invalid update data', details: error.issues },
         { status: 400 }
       );
     }
