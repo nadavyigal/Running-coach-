@@ -64,6 +64,11 @@ Reusable lessons for Claude Code, Codex, Cursor, and other agents.
 - Problem: On 2026-09-27 `npm audit fix` moved `ai`/`@ai-sdk/openai` to the newest v5 line, whose `@ai-sdk/provider-utils@3.0.39` depends on `undici@^5.29.0` (high, GHSA-35p6-xmwp-9g52). Two low findings became one high, which fails the gate the fix was meant to pass.
 - Future Rule: Bump named packages (`npm install pkg@version`, `npm update <transitive>`) and re-run `npm audit` after each step. Never run a bare `npm audit fix` on this repo.
 
+### Lesson: tsc Does Not Check app/api, So Library Majors Break Silently
+- Trigger: A major bump of a library the API routes use (zod 3 -> 4 on 2026-10-29).
+- Problem: `v0/tsconfig.json` excludes `app/api/**` and several `lib/` files, so `npx tsc --noEmit` passed while 22 route files still called the removed `ZodError.errors` and single-arg `z.record`. The routes would have thrown at runtime on every validation error.
+- Future Rule: After a major bump, run tsc with a temporary tsconfig that extends `tsconfig.json` and includes only the files importing that library. Diff its errors against the same run on the old version, fix every new one, and delete the temporary file.
+
 ### Lesson: Back-To-Back Merges Can Leave Production On An Older Commit
 - Trigger: Merging several PRs to `main` within minutes of each other.
 - Problem: Each merge starts its own Vercel Production deployment, and they finish out of order. On 2026-09-27 the deployment for `b039ce4` finished five minutes after the one for the newer `eb3e641`, so production served code without the #133 endpoint deletions while CI and the merge both looked done.
