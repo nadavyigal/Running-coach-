@@ -91,3 +91,6 @@ Use `.agent-os/templates/lesson-template.md` for new entries.
 ### Lesson: Reconcile served privacy with durable source
 - A manual policy deployment was later replaced by main's older policy. Preserve the native disclosure in main before treating publication as durable; inspect the served text after the approved release.
 - Run app checks from `v0/`; root package scripts are separate.
+
+### Lesson: Match staged deployment attribution to the verified Git owner
+- Vercel blocked a CLI stage whose commit author email was not mapped to a Git account. Check the successful merged main commit's author identity and use the verified owner identity for the next authorized commit; do not widen team access or add paid members to bypass the block.
