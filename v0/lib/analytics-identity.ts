@@ -37,6 +37,32 @@ export function resetIdentity(): void {
   pendingReset = true
 }
 
+const readyCallbacks: Array<() => void> = []
+
+/**
+ * Runs `callback` once PostHog has loaded, so a capture made at mount is not
+ * dropped. Falls back after `timeoutMs` (no key, blocked script) so callers
+ * that also write to the analytics API still record the event.
+ */
+export function whenPosthogReady(callback: () => void, timeoutMs = 10000): void {
+  if (client) {
+    callback()
+    return
+  }
+  let done = false
+  const runOnce = () => {
+    if (done) return
+    done = true
+    callback()
+  }
+  readyCallbacks.push(runOnce)
+  setTimeout(() => {
+    const index = readyCallbacks.indexOf(runOnce)
+    if (index !== -1) readyCallbacks.splice(index, 1)
+    runOnce()
+  }, timeoutMs)
+}
+
 export function onPosthogLoaded(loaded: IdentityClient): void {
   client = loaded
   if (pendingReset) {
@@ -47,4 +73,5 @@ export function onPosthogLoaded(loaded: IdentityClient): void {
     loaded.identify?.(pendingUserId)
     pendingUserId = null
   }
+  readyCallbacks.splice(0).forEach((run) => run())
 }

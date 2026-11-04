@@ -111,6 +111,16 @@ export default function PrivacyPolicy() {
         </section>
 
         <section>
+          <h2 className="text-xl font-semibold mb-3">Beta registration</h2>
+          <p>
+            If you submit the beta registration form, RunSmart stores your name, email, optional LinkedIn profile,
+            country, running goals and answers, referral source and consent in a Google Sheet managed by the founder.
+            We use these answers to organize the beta and email you about participation. Registering does not create
+            an app account or automatically grant beta access. Contact support to request removal of your registration.
+          </p>
+        </section>
+
+        <section>
           <h2 className="text-xl font-semibold mb-3">Your controls and deletion</h2>
           <p>
             You can manage location and Health permissions through iOS, edit or remove local weight settings, and choose

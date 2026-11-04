@@ -77,6 +77,13 @@ Reusable lessons for Claude Code, Codex, Cursor, and other agents.
 ## Lesson Template
 Use `.agent-os/templates/lesson-template.md` for new entries.
 
+### Lesson: A webhook acknowledgment must mean every required field was stored
+- Header mapping can silently drop a renamed column while still returning success. Validate every required header appears exactly once before appending; test missing and duplicate headers without a live sheet write.
+- Hosted checks are dated evidence. Re-run dependency audits before release; newer advisories can invalidate earlier green checks.
+
+### Lesson: Verify pasted deployment source
+- UI text transport can consume a backslash in a regular expression. Read back the whole saved script before deployment, prefer a trailing hyphen in this character class, and test ordinary numeric/date strings as well as formula prefixes.
+
 ### Lesson: Match privacy copy to each shipping client
 - Trigger: Native account sync and identified analytics contradicted browser-only privacy text.
 - Future Rule: Verify native persistence, Health access and analytics identity separately from web behavior before publishing shared policy copy. Keep deferred integrations out of shipping claims.
@@ -84,3 +91,12 @@ Use `.agent-os/templates/lesson-template.md` for new entries.
 ### Lesson: Reconcile served privacy with durable source
 - A manual policy deployment was later replaced by main's older policy. Preserve the native disclosure in main before treating publication as durable; inspect the served text after the approved release.
 - Run app checks from `v0/`; root package scripts are separate.
+
+### Lesson: Match staged deployment attribution to the verified Git owner
+- Vercel blocked a CLI stage whose commit author email was not mapped to a Git account. Check the successful merged main commit's author identity and use the verified owner identity for the next authorized commit; do not widen team access or add paid members to bypass the block.
+
+### Lesson: Inspect raw sheet values during registration QA
+- A displayed value of 1-2 was internally a date serial after appendRow. Preserve nonempty submitted values as literal text and verify userEnteredValue types in the real sheet, not only displayed text or a mock acknowledgment.
+
+### Lesson: Verify plan eligibility separately from deployment identity
+- Before a deployment, verify the account/team/project/environment and author mapping, then check current official plan capabilities and permitted use. A technically accepted Hobby build is not evidence of commercial eligibility. Do not upgrade, add paid members, change visibility or widen access to bypass a failure; get a concrete founder decision if the existing plan is unsuitable.

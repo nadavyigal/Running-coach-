@@ -1,3 +1,19 @@
+## Current web release gate — 2 November
+
+147/149 merged and deployed.150 implementation and live staged pipeline validated. Fixed Google date coercion, deployed script version2, verified raw string fields with the same fictional identity and cleaned both QA attempts (0 matching rows remain). Source/evidence update ready for push.
+
+Public150 merge/promotion is held pending hosting eligibility: verified Vercel Hobby permits non-commercial personal use, while RunSmart has a business offer. Founder decision pending; no paid plan, trial, seat or spending authorized. Do not confuse the resolved author-email mapping error with a plan capability failure. Exact evidence and next actions: docs/qa/web-readiness-2026-11-02/release-progress.md.
+
+## 2026-11-02 — Approval received for steps1–5
+
+Founder approved dependency install/repair, Vercel inspection, ordered147→149→150 release, Apps Script/Production settings and one fictional registration/readback/cleanup. Earlier local-only notes below describe the prior preparation stage. No billing, invitations, posts, T7 or PR152 work authorized.
+
+## 2026-11-02 — PR150 local readiness
+
+Story: prove the registration contract locally and prepare exact founder setup without external writes. No commit, push, merge, deployment, service configuration or sheet write is authorized.
+
+Acceptance: 13 registration fields match the live header; unknown/duplicate required headers fail closed; secret, formula safety and lock behavior tested; local browser check uses only a fictional registration and a local webhook; read-only connection limits and pending production proof documented in docs/beta/README.md. Preserve approved US English copy and Israel invite audience. No tester emails or account grants.
+
 ## 2026-11-02 — Founder approved steps 1–5
 
 Founder explicitly approved local dependency remediation/install, Vercel inspection, and release of #147 then #149 then #150, including Apps Script/Production values and one fictional registration/readback/cleanup. Earlier “local only” restrictions below describe the prior stage and are superseded for these named actions. No T7, PR152, invitations, public posts, billing or costs authorized.

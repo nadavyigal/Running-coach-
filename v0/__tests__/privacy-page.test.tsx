@@ -49,6 +49,13 @@ describe('/privacy page', () => {
     expect(within(section).getByText(/Garmin activity and wellness data may be processed by OpenAI/i)).toBeInTheDocument()
   })
 
+  it('discloses beta registration storage and removal', () => {
+    render(<PrivacyPolicy />)
+    const section = screen.getByRole('heading', { name: 'Beta registration' }).closest('section')!
+    expect(within(section).getByText(/Google Sheet managed by the founder/i)).toBeInTheDocument()
+    expect(within(section).getByText(/request removal of your registration/i)).toBeInTheDocument()
+  })
+
   it('includes a working back-to-app link', () => {
     render(<PrivacyPolicy />)
     const backLink = screen.getByRole('link', { name: /back to app/i })
