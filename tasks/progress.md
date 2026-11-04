@@ -7,6 +7,8 @@
 
 # Project Progress
 
+2026-11-01 note: four read-only audits are in `docs/audits/2026-10-31/` (voice trace, web purpose, Watch test, Garmin packet). No product code changed. Tones do not reach any cue, and the Garmin Starter tier needs written confirmation before any real user connects.
+
 Project: RunSmart Web
 Status: Active
 Current Phase: **Active** (2026-09-23: all projects are equally important; the 2026-07-02 maintenance-only rule is retired). Next: fix the three live P0s, then a spin-off brainstorm (STORM + Red Team) on what RunSmart's engine can become. Garmin stays paused on its own evidence: the app was deactivated and all 9 connections read `reauth_required`.
@@ -30,4 +32,4 @@ Note found during seeding: v0/node_modules was inconsistent with package-lock.js
 (eslint-scope missing, lint crashed). Fixed with npm ci on 2026-06-12. If lint crashes
 with "Cannot find module", run npm ci in v0/ first.
 -->
-Last Updated: 2026-10-29
+Last Updated: 2026-11-01
