@@ -16,7 +16,7 @@ PR147 and149 remain merged/deployed. PR150 remains open and technically validate
 
 ## Updated execution — Google and Vercel setup completed
 
-The founder explicitly confirmed the Sheets permission at Google's consent screen after being told it covers all spreadsheets. Project owner/container and the single spreadsheets scope were verified. Saved Google handler text matches the tested repository source exactly. Google authorization completed; web-app version1, execute as Me, access Anyone, deploymentAKfycbx8pxyZYvVNQvb0gvx6lXaEdoTa1zxTut4IsLy1cwz8jDKRjJUqm6Zrv6qRWBrgmtgpeg.
+The founder explicitly confirmed the Sheets permission at Google's consent screen after being told it covers all spreadsheets. Project owner/container and the single spreadsheets scope were verified. Saved Google handler text matches the tested repository source exactly. Google authorization completed; web-app version1, execute as Me, access Anyone, deployment<deployment id redacted>.
 
 Copied the existing user-saved WEBHOOK_SECRET privately into Vercel. Both BETA_SHEET_WEBHOOK_URL and BETA_SHEET_WEBHOOK_SECRET are now saved as Secret, Production only. No secret value was printed or written to local files. The browser runtime copy was cleared. UI readback confirms both scopes/types. The source still rejects missing/wrong secrets.
 
@@ -59,7 +59,7 @@ registration/readback/cleanup. Billing, posts, invitations, T7 and PR152 remain 
 ## Required user secure step (question already pending)
 
 Apps Script settings open at:
-https://script.google.com/u/0/home/projects/1MwmE4xomIV2fyQ8ZCDjq51ZRcNC71KH_KirMLAMW4QXwWU3POONbwZ0I/settings
+the Apps Script project settings (link redacted)
 
 Property name WEBHOOK_SECRET is prepared, value blank. Browser security rules require
 user entry of the new credential and Google permission approval. User must save one
