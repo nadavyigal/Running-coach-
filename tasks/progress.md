@@ -1,3 +1,11 @@
+## Current web release — 4 November 2026
+
+- Vercel team upgraded from Hobby to Pro on 2026-11-04 (verified with `vercel api`: plan pro, status active). That cleared the only hold on PR150.
+- PR150 (beta registration page) merged on founder approval as a2b7f6e5 at checked head e54360b9. Production deployment running-coach-od7qdtamg reached READY.
+- Live checks 2026-11-04: `/beta` 200 and renders "Join the RunSmart beta"; `/api/beta/register` answers GET with 405 (POST only, route deployed); `/` and `/privacy` 200.
+- Not done: a live test sign-up (WP-80 S3) waits for the founder's OK, because it writes a row the founder then deletes. No invitations sent.
+- Seen on the beta page, not caused by PR150: `GET /api/devices/garmin/runs` and `PUT /api/user-memory` return 500 from the shared app shell. PR150 touched neither route; Garmin is paused (see Current Phase).
+
 ## Current web release — 2 November 2026
 
 - PR147 merged at3dc61d74; production deployment3iDmg3VYqChdexrSdbeyo97x7qcb succeeded. Public /privacy verified200 with November2 native/Garmin/OpenAI policy and deletion contact.
