@@ -20,6 +20,8 @@ PATTERNS=(
   'xox[baprs]-[0-9A-Za-z-]{10,}'              # Slack
   '(sk|rk)_live_[0-9A-Za-z]{24,}'             # Stripe live
   'ghp_[0-9A-Za-z]{36}'                       # GitHub PAT
+  'sbp_[0-9a-f]{40}'                          # Supabase personal access token
+  'sb_secret_[0-9A-Za-z_-]{20,}'              # Supabase secret API key
   '-----BEGIN [A-Z ]*PRIVATE KEY-----'        # private key
   'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}' # JWT (e.g. Supabase service_role)
 )

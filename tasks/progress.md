@@ -1,3 +1,12 @@
+# 2026-11-11: Repo audit, leaked keys removed, tracked node_modules dropped
+
+Current Phase: Active; repo hygiene pass on `claude/2026-11-11-runsmart-repo-audit`.
+Active Story: remove committed Supabase keys, tracked root node_modules, unimported v0 files, dead ios-old-old, root clutter.
+Next Recommended Story: founder rotates keys for project biilxiuhufkextvwqdob, then items 2-4 in docs/audits/2026-11-11-repo-audit.md.
+Blockers: key rotation is founder-only; leaked keys stay usable from git history until then.
+Last Validation: 2026-11-11 v0 lint 0 errors, type-check and tsc clean, Vitest 1498 passed, build passes, also without root node_modules.
+Last Updated: 2026-11-11
+
 # 2026-11-11: Vercel Claude plugin enabled per repo, off globally
 
 Current Phase: Active; web release record of 2 November 2026 below still current.
