@@ -1,3 +1,12 @@
+# 2026-11-11: Vercel Claude plugin enabled per repo, off globally
+
+Current Phase: Active; web release record of 2 November 2026 below still current.
+Active Story: Claude setup: Vercel plugin now enabled in this repo's .claude/settings.json, disabled at user scope.
+Next Recommended Story: unchanged, see the 2 November release notes below.
+Blockers: none. Sessions on branches cut before this merge have no Vercel plugin skills until rebased.
+Last Validation: 2026-11-11, claude plugin list shows vercel enabled on this branch, disabled in Agentic OS and iOS repos.
+Last Updated: 2026-11-11
+
 ## Current web release — 2 November 2026
 
 - PR147 merged at3dc61d74; production deployment3iDmg3VYqChdexrSdbeyo97x7qcb succeeded. Public /privacy verified200 with November2 native/Garmin/OpenAI policy and deletion contact.
