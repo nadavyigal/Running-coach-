@@ -4,6 +4,11 @@ Reusable lessons for Claude Code, Codex, Cursor, and other agents.
 
 ## Active Lessons
 
+### Lesson: An Ignored Path Can Still Be Tracked
+- Trigger: `.gitignore` lists a path (here `/node_modules/`) that was committed before the rule existed.
+- Problem: 3,757 dependency files rode along in every clone for 16 months, and Node resolution from `v0/` walks up into them, so a missing `v0` dependency could pass locally and in CI.
+- Rule: after adding an ignore rule, run `git ls-files -i -c --exclude-standard` and untrack what it lists; verify the app with the old copy moved away.
+
 ### Lesson: Mobile Auth Links Need One Verified Cross-Layer Contract
 - Trigger: A native Supabase PKCE flow uses a hosted HTTPS callback.
 - Problem: A wrong AASA bundle ID, a redirected association domain, or server-side code exchange can each strand the same user while every individual component appears configured.

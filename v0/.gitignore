@@ -32,3 +32,7 @@ evals/**/report.json
 
 # Copied from node_modules/maplibre-gl during predev/prebuild
 /public/maplibre/
+
+# test and audit output
+/vitest-*.json
+/vitest-*.txt

@@ -579,7 +579,7 @@ const fs = require('fs');
 const { createClient } = require('@supabase/supabase-js');
 
 const supabaseUrl = 'https://biilxiuhufkextvwqdob.supabase.co';
-const supabaseServiceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJpaWx4aXVodWZrZXh0dndxZG9iIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTEwMzU4MSwiZXhwIjoyMDcwNjc5NTgxfQ.WELaOUC7sYIoIUmpG0xyHRTPDcInoZZF73AyBLyOk4A';
+const supabaseServiceKey = '<redacted-supabase-key>';
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
