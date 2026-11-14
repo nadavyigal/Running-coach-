@@ -1,3 +1,12 @@
+# 2026-11-14: Flaky chat duration test made deterministic
+
+Current Phase: Active; CI hygiene follow-up from PR #158.
+Active Story: __tests__/chat-integration.test.ts controls Date.now instead of a real 200 ms sleep (CI measured 199 ms).
+Next Recommended Story: decide PR #158 audit items, then Profile records and export moved to the browser.
+Blockers: none; founder yes to merge.
+Last Validation: 2026-11-14 chat-integration.test.ts 12/12 passed in 5 consecutive runs; eslint clean.
+Last Updated: 2026-11-14
+
 # 2026-11-14: API routes type-checked in CI; 43 server-broken routes listed
 
 Current Phase: Active; audit follow-ups decided by the founder.
