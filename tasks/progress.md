@@ -7,6 +7,15 @@ Blockers: founder decisions: delete 33 routes, remove cohort feature, source of 
 Last Validation: 2026-11-14 all 43 handlers run in Node; 15 read-only prod GETs matched; iOS, crons, webhooks checked.
 Last Updated: 2026-11-14
 
+# 2026-11-14: Flaky chat duration test made deterministic
+
+Current Phase: Active; CI hygiene follow-up from PR #158.
+Active Story: __tests__/chat-integration.test.ts controls Date.now instead of a real 200 ms sleep (CI measured 199 ms).
+Next Recommended Story: decide PR #158 audit items, then Profile records and export moved to the browser.
+Blockers: none. PR #159 merged to main as 73483fbb; Codex review hit its usage limit.
+Last Validation: 2026-11-14 chat-integration.test.ts 12/12 in 8 consecutive runs; eslint clean; code-reviewer APPROVED.
+Last Updated: 2026-11-14
+
 # 2026-11-14: API routes type-checked in CI; 43 server-broken routes listed
 
 Current Phase: Active; audit follow-ups decided by the founder.
@@ -14,6 +23,14 @@ Active Story: include app/api in the strict typecheck (CI step added), fix 24 ty
 Next Recommended Story: decide the 43 routes (delete 19 uncalled; fix or drop 24 called), see docs/audits/2026-11-11-repo-audit.md addendum.
 Blockers: none. PR #156 code-reviewer APPROVED (NaN analytics id note fixed); founder yes to merge pending.
 Last Validation: 2026-11-14 v0 lint 0 errors, type-check and tsc 0 errors, Vitest 1498 passed 2 skipped, next build passes.
+
+# 2026-11-14: Unused Docker, BMAD and Python backend folders archived
+
+Current Phase: Active; audit follow-ups decided by the founder.
+Active Story: move docker-compose.yml, .dockerignore, README-DOCKER.md, .bmad-core/ and backend/ to docs/archive/old-folders/.
+Next Recommended Story: decide the 43 server-broken API routes (PR #156 audit addendum).
+Blockers: none.
+Last Validation: 2026-11-14 nothing in CI, Vercel config or code references the moved files.
 Last Updated: 2026-11-14
 
 # 2026-11-11: Repo audit, leaked keys removed, tracked node_modules dropped

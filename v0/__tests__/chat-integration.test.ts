@@ -243,22 +243,31 @@ describe('Chat Integration Tests', () => {
     it('should include request duration', async () => {
       process.env.OPENAI_API_KEY = 'sk-test-key';
       
-      const { generateText } = await import('ai');
-      vi.mocked(generateText).mockImplementation(async () => {
-        await new Promise(resolve => setTimeout(resolve, 200));
-        return {
-          text: 'Response',
-          usage: { promptTokens: 10, completionTokens: 15 },
-        };
-      });
+      // Control the clock instead of sleeping: a real 200 ms setTimeout can
+      // measure as 199 ms with Date.now(), which made this test flaky in CI.
+      let now = 1_000_000;
+      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
 
-      const response = await chatDriver.ask({
-        messages: [{ role: 'user', content: 'Hello' }],
-        streaming: false,
-      });
+      try {
+        const { generateText } = await import('ai');
+        vi.mocked(generateText).mockImplementation(async () => {
+          now += 200;
+          return {
+            text: 'Response',
+            usage: { promptTokens: 10, completionTokens: 15 },
+          };
+        });
 
-      expect(response.success).toBe(true);
-      expect(response.data?.duration).toBeGreaterThanOrEqual(200);
+        const response = await chatDriver.ask({
+          messages: [{ role: 'user', content: 'Hello' }],
+          streaming: false,
+        });
+
+        expect(response.success).toBe(true);
+        expect(response.data?.duration).toBe(200);
+      } finally {
+        nowSpy.mockRestore();
+      }
     });
 
     it('should provide unique request IDs for tracing', async () => {
