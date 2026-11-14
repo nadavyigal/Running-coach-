@@ -248,16 +248,16 @@ describe('Chat Integration Tests', () => {
       let now = 1_000_000;
       const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
 
-      const { generateText } = await import('ai');
-      vi.mocked(generateText).mockImplementation(async () => {
-        now += 200;
-        return {
-          text: 'Response',
-          usage: { promptTokens: 10, completionTokens: 15 },
-        };
-      });
-
       try {
+        const { generateText } = await import('ai');
+        vi.mocked(generateText).mockImplementation(async () => {
+          now += 200;
+          return {
+            text: 'Response',
+            usage: { promptTokens: 10, completionTokens: 15 },
+          };
+        });
+
         const response = await chatDriver.ask({
           messages: [{ role: 'user', content: 'Hello' }],
           streaming: false,
