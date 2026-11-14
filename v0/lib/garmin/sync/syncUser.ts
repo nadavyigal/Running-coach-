@@ -28,6 +28,8 @@ export interface GarminConnectionStatus {
 }
 
 export interface GarminSyncUserResult {
+  /** Always 0 today; kept in the response shape for older clients. */
+  activityFilesProcessed?: number
   status: number
   connected: boolean
   connectionStatus: string

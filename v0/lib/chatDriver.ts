@@ -475,7 +475,7 @@ export class ChatDriver {
 
       if (request.streaming) {
         const result = await withTimeout(
-          streamText({
+          Promise.resolve(streamText({
             model,
             messages,
             maxOutputTokens,
@@ -506,7 +506,7 @@ export class ChatDriver {
                 },
               })
             },
-          }),
+          })),
           config.timeoutMs,
           () => controller.abort()
         )

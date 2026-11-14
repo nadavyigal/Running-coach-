@@ -1191,7 +1191,7 @@ SCORING GUIDE:
     })
 
     return result
-  }, fallbackInsight)
+  })
 
   if (!aiResult.success && aiResult.error) {
     logger.warn('[run-report] AI insight generation failed; using fallback.', aiResult.error)

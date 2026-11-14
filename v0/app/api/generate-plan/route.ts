@@ -141,7 +141,7 @@ export async function POST(req: Request) {
     if (!result.success || !result.data) {
       await captureAIGeneration({
         traceName: 'generate-plan',
-        distinctId: typeof parsedUserId === 'number' ? parsedUserId : user.id,
+        distinctId: typeof parsedUserId === 'number' ? parsedUserId : (resolvedUserId ?? 'anonymous'),
         model: modelName,
         input: prompt,
         latencyMs: Date.now() - startedAt,
@@ -184,7 +184,7 @@ export async function POST(req: Request) {
 
     await captureAIGeneration({
       traceName: 'generate-plan',
-      distinctId: typeof parsedUserId === 'number' ? parsedUserId : user.id,
+      distinctId: typeof parsedUserId === 'number' ? parsedUserId : (resolvedUserId ?? 'anonymous'),
       model: modelName,
       input: prompt,
       output: generated.object,

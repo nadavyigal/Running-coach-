@@ -40,3 +40,42 @@ The code points at `dxqglotcyirxzyqaxqln` 20 times and `biilxiuhufkextvwqdob` 7 
 10. **Is `v0/lib/server/ai-insights-worker.ts` running anywhere?** The Garmin sync enqueues `ai-insights` jobs (`lib/server/garmin-sync-queue.ts`), but nothing in this repo starts the worker (`services/worker` consumes a different queue; no script, cron or CI step). If no host outside the repo runs it, those jobs pile up in Redis unprocessed. Recommend: check your worker host; if nothing runs it, either start it or stop enqueueing.
 11. **Stale doc pointers to deleted files:** `v0/docs/QUICK-WINS-DEPLOYMENT.md:280` (`lib/seo.ts`), `v0/docs/OPTIMIZATION_SUMMARY.md` and `v0/docs/IMPLEMENTATION_GUIDE.md` (`use-optimized-state`, `lib/debugging/`). No runtime effect.
 12. **`docker-compose.yml`, `.dockerignore`, `README-DOCKER.md`**: nothing in CI or Vercel uses Docker. Recommend: confirm and remove.
+
+## Addendum 2026-11-14: API routes that cannot run on the server
+
+43 routes in `v0/app/api/` use the browser-only Dexie database (`lib/db.ts` / `lib/dbUtils.ts`), directly or (for `onboarding/chat`) through `OnboardingSessionManager`. On the server there is no IndexedDB, so their database calls throw "Database not available". They are excluded by name from `tsconfig.typecheck.json`; every other API route is now type-checked in CI. The iOS app calls none of them.
+
+**Called by the website (24):** these are features that silently fail today.
+
+- `/api/coaching/feedback` (from `components/coaching-feedback-modal.tsx`, `vitest.setup.ts`)
+- `/api/coaching/profile` (from `components/coaching-preferences-settings.tsx`)
+- `/api/cohort/join` (from `components/join-cohort-modal.tsx`)
+- `/api/cohort/stats` (from `components/community-comparison.tsx`, `components/community-stats-widget.tsx`)
+- `/api/data-fusion/conflicts/[id]/resolve` (from `components/conflict-resolution-center.tsx`)
+- `/api/data-fusion/conflicts` (from `components/conflict-resolution-center.tsx`)
+- `/api/data-fusion/sources` (from `components/data-sources-manager.tsx`)
+- `/api/data-fusion/sync` (from `components/data-sources-manager.tsx`)
+- `/api/devices/connect` (from `components/device-connection-screen.tsx`)
+- `/api/devices` (from `app/garmin/callback/page.tsx`, `app/garmin/connect/route.ts`, `app/garmin/details/page.tsx` …)
+- `/api/goals/analytics` (from `components/goal-analytics-insights.tsx`)
+- `/api/goals/recommendations` (from `components/goal-recommendations.tsx`)
+- `/api/goals` (from `components/goal-analytics-insights.tsx`, `components/goal-recommendations.tsx`)
+- `/api/onboarding/chat` (from `hooks/use-ai-service-error-handling.ts`)
+- `/api/performance/export` (from `components/performance-analytics-dashboard.tsx`)
+- `/api/performance/records` (from `components/personal-records-card.tsx`)
+- `/api/recovery/wellness` (from `components/recovery-dashboard.tsx`, `vitest.setup.ts`)
+- `/api/share-run` (from `components/share-run-modal.tsx`)
+- `/api/sync/jobs` (from `components/background-sync-status.tsx`, `vitest.setup.ts`)
+- `/api/training-plan/customize/[workoutId]` (from `components/plan-customization-dashboard.tsx`)
+- `/api/training-plan/customize` (from `components/plan-customization-dashboard.tsx`)
+- `/api/training-plan/race-goal` (from `components/race-goal-modal.tsx`)
+- `/api/training-plan/workouts` (from `components/plan-customization-dashboard.tsx`)
+- `/api/user-data` (from `components/chat-screen.tsx`)
+
+**Called by nothing (19):** safe to delete.
+
+`/api/coaching/adaptive-recommendations`, `/api/data-fusion/quality`, `/api/data-fusion/rules`, `/api/engagement-optimization`, `/api/goals/milestones/achieve`, `/api/goals/milestones`, `/api/goals/progress`, `/api/heart-rate/[runId]`, `/api/heart-rate/zones/distribution`, `/api/heart-rate/zones`, `/api/metrics/advanced/[runId]`, `/api/metrics/running-dynamics/[runId]`, `/api/performance/analytics`, `/api/plan/adapt`, `/api/recovery/hrv`, `/api/recovery/sleep`, `/api/training-plan/generate-advanced`, `/api/training-plan/preview`, `/api/workouts/zone-based`
+
+Recommend: delete the uncalled ones; for each called one, either move its data to Supabase (server) or remove the screen that calls it.
+
+Also decided 2026-11-14: Capacitor stays (inert in browsers; removal would touch run recording). The AI-insights BullMQ worker question is closed: production has no `REDIS_URL`/`REDIS_HOST`, so `enqueueAiInsightsJob` returns `queued: false` and no jobs accumulate; the queue and worker code are unused in production.

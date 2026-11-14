@@ -223,7 +223,7 @@ export class PerformanceMonitor {
       const inputObserver = new PerformanceObserver((list) => {
         const entries = list.getEntries();
         entries.forEach((entry) => {
-          this.metrics.interactionTime = entry.processingStart - entry.startTime;
+          this.metrics.interactionTime = (entry as PerformanceEventTiming).processingStart - entry.startTime;
           this.reportMetric('first_input_delay', this.metrics.interactionTime);
           this.checkThreshold('interactionTime', this.metrics.interactionTime);
         });

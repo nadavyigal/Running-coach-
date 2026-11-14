@@ -33,6 +33,12 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      # Stricter config (tsconfig.typecheck.json). Covers the API routes since
+      # 2026-11-14; the routes that import the browser-only Dexie database are
+      # listed by name in its exclude block (they cannot run on the server).
+      - name: Type check (strict config, includes API routes)
+        run: npm run type-check
+
       - name: Security audit
         run: npx audit-ci --moderate --config .audit-ci.jsonc
 
