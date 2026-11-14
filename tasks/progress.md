@@ -1,3 +1,12 @@
+# 2026-11-14: Unused Docker, BMAD and Python backend folders archived
+
+Current Phase: Active; audit follow-ups decided by the founder.
+Active Story: move docker-compose.yml, .dockerignore, README-DOCKER.md, .bmad-core/ and backend/ to docs/archive/old-folders/.
+Next Recommended Story: decide the 43 server-broken API routes (PR #156 audit addendum).
+Blockers: none.
+Last Validation: 2026-11-14 nothing in CI, Vercel config or code references the moved files.
+Last Updated: 2026-11-14
+
 # 2026-11-11: Repo audit, leaked keys removed, tracked node_modules dropped
 
 Current Phase: Active; repo hygiene pass on `claude/2026-11-11-runsmart-repo-audit`.
