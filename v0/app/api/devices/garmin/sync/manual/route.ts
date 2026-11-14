@@ -135,7 +135,7 @@ export async function POST(req: Request) {
       activitiesUpserted: result.activitiesUpserted,
       dailyMetricsUpserted: result.dailyMetricsUpserted,
       duplicateActivitiesSkipped: result.duplicateActivitiesSkipped,
-      activityFilesProcessed: result.activityFilesProcessed,
+      activityFilesProcessed: result.activityFilesProcessed ?? 0,
       reason: result.reason ?? null,
       retryAfterSeconds: result.retryAfterSeconds ?? null,
       freshnessLabel,
