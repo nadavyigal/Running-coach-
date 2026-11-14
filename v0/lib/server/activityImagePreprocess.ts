@@ -36,7 +36,6 @@ export async function preprocessActivityImage(
     const tags: any = await exifr.parse(input, {
       exif: true,
       tiff: true,
-      ifd0: true,
       xmp: true,
     })
 
@@ -49,7 +48,7 @@ export async function preprocessActivityImage(
     // EXIF parsing is best-effort.
   }
 
-  let pipeline = sharp(input, { failOnError: false })
+  let pipeline = sharp(input, { failOn: "none" })
 
   // Rotate based on EXIF orientation.
   pipeline = pipeline.rotate()

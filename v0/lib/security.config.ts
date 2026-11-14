@@ -188,7 +188,16 @@ export interface RateLimitResult {
 class RateLimiter {
   private requests: Map<string, { count: number; resetTime: number }> = new Map();
 
-  async check(identifier: string, config = securityConfig.rateLimit): Promise<RateLimitResult> {
+  async check(
+    identifier: string,
+    config: {
+      windowMs: number
+      max: number
+      message?: string
+      standardHeaders?: boolean
+      legacyHeaders?: boolean
+    } = securityConfig.rateLimit
+  ): Promise<RateLimitResult> {
     const now = Date.now();
     const windowMs = config.windowMs;
     const maxRequests = config.max;

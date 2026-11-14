@@ -111,7 +111,8 @@ async function loadEnrollment(params: {
     throw new Error(`Failed to load challenge enrollment: ${response.error.message}`)
   }
 
-  return (response.data as ChallengeEnrollmentRow | null) ?? null
+  // The !inner join returns one challenge object at runtime; supabase-js types it as an array.
+  return (response.data as unknown as ChallengeEnrollmentRow | null) ?? null
 }
 
 async function loadGarminCompletionDays(params: {

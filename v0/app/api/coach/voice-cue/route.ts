@@ -91,7 +91,7 @@ export async function POST(request: Request): Promise<Response> {
       model: voiceOpenAI("gpt-4o-mini"),
       system: COACH_SYSTEM_PROMPT,
       prompt: userContext,
-      maxTokens: 60,
+      maxOutputTokens: 60,
     })
     cueText = result.text.trim()
   } catch {

@@ -138,7 +138,7 @@ export function withSecurity(
       // Rate limiting
       const rateLimitConfig = options.rateLimit || securityConfig.rateLimit;
       const rateLimitResult = await rateLimiter.check(clientIP, rateLimitConfig);
-      request.rateLimitResult = rateLimitResult;
+      apiRequest.rateLimitResult = rateLimitResult;
       
       if (!rateLimitResult.success) {
         securityMonitor.trackSecurityEvent({
@@ -196,7 +196,7 @@ export function withSecurity(
       }
       
       // Call the actual handler
-      const response = await handler(request);
+      const response = await handler(apiRequest);
       
       // Track performance if enabled
       if (options.enablePerformanceTracking !== false) {
@@ -237,7 +237,7 @@ export function withSecurity(
         data: {
           error: error instanceof Error ? error.message : 'Unknown error',
           url: request.url,
-          ip: request.clientIP,
+          ip: apiRequest.clientIP,
         },
       });
       

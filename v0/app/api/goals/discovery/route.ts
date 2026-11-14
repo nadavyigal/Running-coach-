@@ -466,7 +466,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const experience = searchParams.get('experience') as 'beginner' | 'intermediate' | 'advanced' | null;
 
-    const capabilities = {
+    const capabilities: Record<string, unknown> & { templates?: Record<string, unknown[]> } = {
       supportedExperienceLevels: ['beginner', 'intermediate', 'advanced'],
       availableGoalTypes: ['consistency', 'speed', 'endurance', 'health', 'strength'],
       maxGoalsPerUser: 5,
