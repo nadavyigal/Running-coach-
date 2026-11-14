@@ -3,7 +3,7 @@
 Current Phase: Active; audit follow-ups decided by the founder.
 Active Story: include app/api in the strict typecheck (CI step added), fix 24 type errors, exclude by name the 43 routes that import the browser-only Dexie DB.
 Next Recommended Story: decide the 43 routes (delete 19 uncalled; fix or drop 24 called), see docs/audits/2026-11-11-repo-audit.md addendum.
-Blockers: none.
+Blockers: none. PR #156 code-reviewer APPROVED (NaN analytics id note fixed); founder yes to merge pending.
 Last Validation: 2026-11-14 v0 lint 0 errors, type-check and tsc 0 errors, Vitest 1498 passed 2 skipped, next build passes.
 Last Updated: 2026-11-14
 
