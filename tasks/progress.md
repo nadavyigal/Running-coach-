@@ -1,3 +1,12 @@
+# 2026-11-14: Investigation of the 43 API routes that use the browser-only DB
+
+Current Phase: Active; audit follow-ups, investigation only, no app code changed.
+Active Story: docs/audits/2026-11-14-server-routes-browser-db.md: 10 live broken routes, 14 dead-UI, 19 uncalled; fix plan per route.
+Next Recommended Story: Profile records and export moved to the browser (option b, S), then chat save-to-profile and ratings.
+Blockers: founder decisions: delete 33 routes, remove cohort feature, source of Pro status for goal recommendations.
+Last Validation: 2026-11-14 all 43 handlers run in Node; 15 read-only prod GETs matched; iOS, crons, webhooks checked.
+Last Updated: 2026-11-14
+
 # 2026-11-14: API routes type-checked in CI; 43 server-broken routes listed
 
 Current Phase: Active; audit follow-ups decided by the founder.
