@@ -1,9 +1,18 @@
+# 2026-11-14: Investigation of the 43 API routes that use the browser-only DB
+
+Current Phase: Active; audit follow-ups, investigation only, no app code changed.
+Active Story: docs/audits/2026-11-14-server-routes-browser-db.md: 10 live broken routes, 14 dead-UI, 19 uncalled; fix plan per route.
+Next Recommended Story: Profile records and export moved to the browser (option b, S), then chat save-to-profile and ratings.
+Blockers: founder decisions: delete 33 routes, remove cohort feature, source of Pro status for goal recommendations.
+Last Validation: 2026-11-14 all 43 handlers run in Node; 15 read-only prod GETs matched; iOS, crons, webhooks checked.
+Last Updated: 2026-11-14
+
 # 2026-11-14: Flaky chat duration test made deterministic
 
 Current Phase: Active; CI hygiene follow-up from PR #158.
 Active Story: __tests__/chat-integration.test.ts controls Date.now instead of a real 200 ms sleep (CI measured 199 ms).
 Next Recommended Story: decide PR #158 audit items, then Profile records and export moved to the browser.
-Blockers: none; founder yes to merge PR #159. Codex review hit its usage limit.
+Blockers: none. PR #159 merged to main as 73483fbb; Codex review hit its usage limit.
 Last Validation: 2026-11-14 chat-integration.test.ts 12/12 in 8 consecutive runs; eslint clean; code-reviewer APPROVED.
 Last Updated: 2026-11-14
 
