@@ -26,5 +26,5 @@ The four SQL files are byte-for-byte copies from the source head. The previously
 - Account-deletion cleanup denies anon/authenticated execution and is service-role only.
 - Coach, athlete and run foreign keys cascade.
 - Current-head GitHub Actions SQL suites for leave_coach, coach_read and coach_feedback passed, including applying the target migrations twice on throwaway databases.
-- Security advisors returned no finding on the newly added feedback table or RPCs. Existing unrelated advisories remain outside this rollout.
+- Security advisors flagged the intentionally authenticated SECURITY DEFINER endpoints (add/edit feedback, active-coach lookup and leave-coach). These endpoints need elevated table access by design; explicit auth/ownership/link checks, empty search_path and revoked anon execution were verified. This warning is accepted for these RPCs. See [advisor guidance](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable). Unrelated pre-existing advisories remain outside this rollout.
 - This PR mirrors SQL and records rollout evidence. It does not require a web deployment or a new paid capability.
