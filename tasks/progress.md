@@ -1,3 +1,12 @@
+# 2026-11-18: Coach Mode migrations mirrored from the iOS repo
+
+Current Phase: Active; Coach Mode migrations live in production (applied 2026-11-18 via Supabase MCP).
+Active Story: Copy the 14 Coach Mode migrations already applied in production into v0/supabase/migrations, byte for byte from the iOS repo.
+Next Recommended Story: Founder merges this mirror PR; no apply needed, production already has them.
+Blockers: none.
+Last Validation: 2026-11-18 each file byte-identical to IOS-runsmart-light-app- main; production has every function and column.
+Last Updated: 2026-11-18
+
 # 2026-11-14: Flaky chat duration test made deterministic
 
 Current Phase: Active; CI hygiene follow-up from PR #158.
