@@ -1,3 +1,12 @@
+# 2026-11-19: Weekly log cleanup job (migration, not applied)
+
+Current Phase: Active; production DB cleanup follow-up (288 MB to 120 MB on 2026-11-19).
+Active Story: cleanup_old_logs() plus a Sunday 03:00 UTC pg_cron job deletes old Garmin job/event logs and cron history.
+Next Recommended Story: founder yes to apply the migration to production, then merge this PR.
+Blockers: applying needs founder yes; not applied to production yet.
+Last Validation: 2026-11-19 rollback-only dry run on production: function, schedule and grants correct, nothing kept.
+Last Updated: 2026-11-19
+
 # 2026-11-14: Flaky chat duration test made deterministic
 
 Current Phase: Active; CI hygiene follow-up from PR #158.
