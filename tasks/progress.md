@@ -1,3 +1,12 @@
+# 2026-11-19: Coach Mode migrations mirrored from iOS
+
+Current Phase: Active; Coach Mode repo bookkeeping after the iOS build (21 stories merged).
+Active Story: copy the 14 Coach Mode migrations (20261115 to 20261118) from the iOS repo into v0/supabase/migrations, byte-for-byte.
+Next Recommended Story: founder yes to merge this PR; no apply needed, all 14 are already live on production.
+Blockers: none. Repo has no migration check script or CI lint step to run.
+Last Validation: 2026-11-19 cmp shows all 17 Coach Mode files identical to iOS main; no db push run.
+Last Updated: 2026-11-19
+
 # 2026-11-14: Flaky chat duration test made deterministic
 
 Current Phase: Active; CI hygiene follow-up from PR #158.
