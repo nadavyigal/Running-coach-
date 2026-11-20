@@ -1,3 +1,12 @@
+# 2026-11-20: Mirror athlete_display_name migration from iOS
+
+Current Phase: Active; Coach Mode repo bookkeeping, keeping web migrations in step with iOS.
+Active Story: copy 20261120100000_athlete_display_name_placeholder.sql from iOS PR #229, byte-for-byte.
+Next Recommended Story: founder yes to merge; no apply needed, live on production since 2026-11-20 (remote 20261120094612).
+Blockers: none. Repo has no migration check script or CI lint step to run.
+Last Validation: 2026-11-20 cmp shows file identical to iOS branch fix/runner-display-name; no db push run.
+Last Updated: 2026-11-20
+
 # 2026-11-19: Coach Mode migrations mirrored from iOS
 
 Current Phase: Active; Coach Mode repo bookkeeping after the iOS build (21 stories merged).
