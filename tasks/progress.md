@@ -1,3 +1,12 @@
+# 2026-11-22: Coach v2 C7.3 run sharing migration mirrored from iOS
+
+Current Phase: Coach Experience v2, R1 wave 3, lane A. Web twin of the iOS C7.3 draft PR; mirror only.
+Active Story: C7.3 M1a 20261121120000_athlete_run_sharing.sql copied byte-for-byte; ledger M1a and M5a rows updated.
+Next Recommended Story: Overseer reviews the iOS C7.3 PR; merge this twin only after the iOS PR is approved.
+Blockers: Nadav applies Batch A (gate, M5a, M1a) after the Grok Bot audit and the 1.2.6 regression.
+Last Validation: 2026-11-22 drift script CLEAN, 20 files identical; SQL tests ran in the iOS repo; no db push.
+Last Updated: 2026-11-22
+
 # 2026-11-22: Coach v2 C7.8 consent migration mirrored from iOS
 
 Current Phase: Coach Experience v2, R1 wave 2, lane A. Web twin of the iOS C7.8 draft PR; mirror only.
