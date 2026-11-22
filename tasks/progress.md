@@ -1,3 +1,12 @@
+# 2026-11-22: Coach v2 C7.8 consent migration mirrored from iOS
+
+Current Phase: Coach Experience v2, R1 wave 2, lane A. Web twin of the iOS C7.8 draft PR; mirror only.
+Active Story: C7.8 M5a 20261121110000_coach_consent_v2.sql copied byte-for-byte; ledger M5a row set to written (draft PR).
+Next Recommended Story: Overseer reviews the iOS C7.8 PR; merge this twin only after the iOS PR is approved.
+Blockers: Nadav applies Batch A (gate, then M5a) after the Grok Bot audit and the 1.2.6 regression.
+Last Validation: 2026-11-22 drift script CLEAN, 19 files identical; SQL tests ran in the iOS repo; no db push.
+Last Updated: 2026-11-22
+
 # 2026-11-19: Coach Mode migrations mirrored from iOS
 
 Current Phase: Active; Coach Mode repo bookkeeping after the iOS build (21 stories merged).
