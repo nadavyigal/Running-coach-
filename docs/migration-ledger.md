@@ -62,7 +62,7 @@ Batch letters are from the v1.3 file map (section 0.0) and the refined plan (sec
 
 | Batch | Reserved file | M-number | Story | Status |
 |---|---|---|---|---|
-| A | `20261121100000_coach_v2_gate.sql` | M0 + M0b | C7.0 | not written |
+| A | `20261121100000_coach_v2_gate.sql` | M0 + M0b | C7.0 | merged (iOS #234, web #169); not applied |
 | A | `20261121110000_coach_consent_v2.sql` | M5a | C7.8 | not written |
 | A | `20261121120000_athlete_run_sharing.sql` | M1a | C7.3 | not written |
 | A | `20261121130000_coach_last_seen_and_events.sql` | M3 | C7.2 | not written |
