@@ -65,7 +65,7 @@ Batch letters are from the v1.3 file map (section 0.0) and the refined plan (sec
 | A | `20261121100000_coach_v2_gate.sql` | M0 + M0b | C7.0 | merged (iOS #234, web #169); not applied |
 | A | `20261121110000_coach_consent_v2.sql` | M5a | C7.8 | written (draft PR) |
 | A | `20261121120000_athlete_run_sharing.sql` | M1a | C7.3 | not written |
-| A | `20261121130000_coach_last_seen_and_events.sql` | M3 | C7.2 | not written |
+| A | `20261121130000_coach_last_seen_and_events.sql` | M3 | C7.2 | written (draft PR) |
 | A | `20261121140000_coach_feedback_replies.sql` | M4 | C7.7 | not written |
 | A | `20261121150000_athlete_run_flags.sql` | M1b | C7.4 | not written |
 | A | `20261121160000_coach_link_end.sql` | M5b | C7.11 | not written |
