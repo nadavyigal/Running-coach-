@@ -1,0 +1,107 @@
+# Migration ledger (Coach Experience v2)
+
+**Owner:** story C0.2. **Generated:** 2026-11-21. **Identical copy lives in both repos** (iOS `docs/migration-ledger.md` and web `Running-coach-/docs/migration-ledger.md`). Every migration PR updates its row in both.
+
+**Compared at `origin/main`:** iOS `4a016b4` (`supabase/migrations/`), web `7527b726` (`v0/supabase/migrations/`). Byte identity checked with `cmp` via `scripts/check-migration-drift.sh` (iOS repo).
+
+**Re-run the check (from the iOS repo root):**
+
+```bash
+sh scripts/check-migration-drift.sh /Users/nadavyigal/Developer/RunSmart
+```
+
+Exit 0 = clean, 1 = drift. The script is read-only.
+
+**"Applied in prod" is never checked by agents.** Agents do not query production. Every value is "unknown" until Nadav fills it in. The 6 files from `20261118100000` to `20261118180000` carry the one fact we have: `tasks/coach-mode-status.md` (last checked 2026-11-18) lists them as not applied. Nadav step N2 (refined plan section 4) confirms them before Batch A.
+
+---
+
+## 1. Existing migrations from `20261114120000`
+
+| Filename | In iOS | In web | Byte-identical | Applied in prod |
+|---|---|---|---|---|
+| `20261114120000_close_cross_user_rls_leaks.sql` | y | y | y | unknown |
+| `20261114130000_runs_workout_link.sql` | y | y | y | unknown |
+| `20261114210000_coach_role_and_invites.sql` | y | y | y | unknown |
+| `20261115091000_coach_athlete_links.sql` | y | y | y | unknown |
+| `20261115194500_leave_coach.sql` | y | y | y | unknown |
+| `20261117100000_coach_route_upload.sql` | y | y | y | unknown |
+| `20261117120000_complete_run_workout.sql` | y | y | y | unknown |
+| `20261117130000_coach_plan_mode_group_settings.sql` | y | y | y | unknown |
+| `20261117160000_lookup_invite_group_plan.sql` | y | y | y | unknown |
+| `20261117163000_replace_group_training_plan.sql` | y | y | y | unknown |
+| `20261117164500_coach_read_rpcs.sql` | y | y | y | unknown |
+| `20261118100000_coach_feedback.sql` | y | y | y | unknown: listed as not applied on 2026-11-18 (N2) |
+| `20261118120000_athlete_feedback_read.sql` | y | y | y | unknown: listed as not applied on 2026-11-18 (N2) |
+| `20261118140000_coach_run_route.sql` | y | y | y | unknown: listed as not applied on 2026-11-18 (N2) |
+| `20261118160000_get_my_coach.sql` | y | y | y | unknown: listed as not applied on 2026-11-18 (N2) |
+| `20261118170000_set_run_route_hidden.sql` | y | y | y | unknown: listed as not applied on 2026-11-18 (N2) |
+| `20261118180000_coach_welcome_note.sql` | y | y | y | unknown: listed as not applied on 2026-11-18 (N2) |
+
+17 files in each tree. The newest file on `main` is `20261118180000_coach_welcome_note.sql`.
+
+---
+
+## 2. Drift
+
+**None found on 2026-11-21.** All 17 files exist in both trees and are byte-identical. Nothing is changed or added to fix drift in this PR.
+
+When the script finds a mismatch, add one line per file here, in this form, and fix nothing in the same PR:
+
+- `<filename>`: only in iOS | only in web | contents differ (one-line description).
+
+---
+
+## 3. v2 batches
+
+Status values: `not written`, `written (draft PR)`, `merged`, `applied`. A file moves to `written` only when its draft PR is open. Every migration PR updates its row here, in both repos.
+
+Batch letters are from the v1.3 file map (section 0.0) and the refined plan (section 3.4). Batch A is applied after the Grok Bot audit and the 1.2.6 regression. Batch B is applied with webhooks, cron and deploys. Batch C is applied at a quiet time with the rollback file ready.
+
+### 3.1 Reserved files (refined plan section 3.4)
+
+| Batch | Reserved file | M-number | Story | Status |
+|---|---|---|---|---|
+| A | `20261121100000_coach_v2_gate.sql` | M0 + M0b | C7.0 | not written |
+| A | `20261121110000_coach_consent_v2.sql` | M5a | C7.8 | not written |
+| A | `20261121120000_athlete_run_sharing.sql` | M1a | C7.3 | not written |
+| A | `20261121130000_coach_last_seen_and_events.sql` | M3 | C7.2 | not written |
+| A | `20261121140000_coach_feedback_replies.sql` | M4 | C7.7 | not written |
+| A | `20261121150000_athlete_run_flags.sql` | M1b | C7.4 | not written |
+| A | `20261121160000_coach_link_end.sql` | M5b | C7.11 | not written |
+| A | `20261121170000_coach_milestones.sql` | M13 (only if needed) | C7.16 | not written |
+| B | `20261122100000_push_tokens_and_prefs.sql` | M2a | C7.10 | not written |
+| B | `20261122110000_notification_log_and_deferred.sql` | M2b | C7.5 | not written |
+| C | `20261201100000_coach_workout_locks.sql` | M6a | C8.1a | not written |
+| C | `20261201110000_coach_plan_locks.sql` | M6b | C8.1b | not written |
+
+M0 and M0b share one file because the refined plan folds C7.12 (kill switch) into C7.0 (S1). The per-coach allowlist table `coach_v2_pilot_coaches` and the RPC `coach_v2_pilot_access()` (decision N1 = B) also go in the M0 file.
+
+### 3.2 Later M-numbers (no file name reserved)
+
+These get a file name and timestamp only when Nadav picks the story after TF-2. The new file must sort after every file marked `written` above and after `20261118180000`.
+
+| Batch | M-number | Story | What it is | Status |
+|---|---|---|---|---|
+| C (v1.3), moved to R4+ | M10 | C8.13 | `coach_self_signup` | not reserved, picked after TF-2 |
+| D | M7 | C8.6 | `coach_plan_versions` + `end_coach_link` v3. Must also cover `coach_plan_versions` in `delete_account` and `purge_coach_data_for_deleted_account` (F3). | not reserved, picked after TF-2 |
+| E | M8 | C8.10 | templates | not reserved, picked after TF-2 |
+| E | M11 | C8.14 | groups | not reserved, picked after TF-2 |
+| E | M9 | C8.12 | broadcasts | not reserved, picked after TF-2 |
+| F | M14 | C9.1 | `coach_athlete_history` | not reserved, picked after TF-2 |
+| F | M15 | C9.2 | `coach_athlete_load` | not reserved, picked after TF-2 |
+| F | M12 | C9.3 | `coach_weekly_summaries` | not reserved, picked after TF-2 |
+| F | M16 | C9.4 | `coach_feedback_ai_assisted` (D12 label) | not reserved, picked after TF-2 |
+
+---
+
+## 4. Rules for every migration PR
+
+From v1.3 section 1.1 and refined plan section 3.3:
+
+- One new file per PR. Its timestamp sorts after `20261118180000` and after every file marked `written` in section 3.1.
+- A twin draft PR in the web repo adds the identical file under `v0/supabase/migrations/` and updates this ledger.
+- A story that needs a file not listed here adds a ledger row first, with a timestamp that sorts in the right place.
+- Renaming a file is allowed only while it is unapplied.
+- Each file ships a data-preserving rollback file in `supabase/rollback/` and a row in `docs/coach-v2-rollback.md`. Agents never run a rollback or apply a migration.
+- After a PR, run `scripts/check-migration-drift.sh` and paste the result into the PR. It must exit 0.
