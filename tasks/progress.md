@@ -1,3 +1,12 @@
+# 2026-11-22: Coach v2 C7.4 run flags migration mirrored from iOS
+
+Current Phase: Coach Experience v2, R1 wave 4, lane A. Web twin of the iOS C7.4 draft PR; mirror only.
+Active Story: C7.4 M1b 20261121150000_athlete_run_flags.sql copied byte-for-byte; ledger M1b row set to written (draft PR).
+Next Recommended Story: Overseer reviews the iOS C7.4 PR; merge this twin only after the iOS PR is approved.
+Blockers: Nadav applies Batch A (M0, M5a, M1a, M3, M1b) after the Grok Bot audit and the 1.2.6 regression.
+Last Validation: 2026-11-22 drift script CLEAN; SQL tests ran in the iOS repo; no db push.
+Last Updated: 2026-11-22
+
 # 2026-11-22: Coach v2 C7.3 run sharing migration mirrored from iOS
 
 Current Phase: Coach Experience v2, R1 wave 3, lane A. Web twin of the iOS C7.3 draft PR; mirror only.
