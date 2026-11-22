@@ -1,3 +1,12 @@
+# 2026-11-22: Pause garmin-worker-drain (mirror of iOS #243)
+
+Current Phase: founder chose to pause the Garmin worker cron instead of fixing its Supabase key now.
+Active Story: mirror migration 20261122180000_pause_garmin_worker_drain.sql; founder applies it.
+Next Recommended Story: fix running-coach SUPABASE_SERVICE_ROLE_KEY, then re-schedule the job.
+Blockers: founder applies the migration in production.
+Last Validation: 2026-11-22 file identical to iOS copy; migration checker 0 errors for this file.
+Last Updated: 2026-11-22
+
 # 2026-11-22: Coach v2 C7.3 run sharing migration mirrored from iOS
 
 Current Phase: Coach Experience v2, R1 wave 3, lane A. Web twin of the iOS C7.3 draft PR; mirror only.
