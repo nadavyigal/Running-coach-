@@ -69,7 +69,7 @@ Batch letters are from the v1.3 file map (section 0.0) and the refined plan (sec
 | A | `20261121150000_athlete_run_flags.sql` | M1b | C7.4 | merged (iOS #242, web #173); not applied |
 | A | `20261121160000_coach_link_end.sql` | M5b | C7.11 | merged (iOS #244, web #175); not applied |
 | A | `20261121170000_coach_milestones.sql` | M13 (only if needed) | C7.16 | not written |
-| A | `20261121180000_coach_feedback_replies.sql` (renamed from the reserved `20261121140000`, which sorts before M1b and would be overwritten by it) | M4 | C7.7 | written (draft PR) |
+| A | `20261121180000_coach_feedback_replies.sql` (renamed from the reserved `20261121140000`, which sorts before M1b and would be overwritten by it) | M4 | C7.7 | merged (iOS #245, web #176); not applied |
 | B | `20261122100000_push_tokens_and_prefs.sql` | M2a | C7.10 | not written |
 | B | `20261122110000_notification_log_and_deferred.sql` | M2b | C7.5 | not written |
 | C | `20261201100000_coach_workout_locks.sql` | M6a | C8.1a | not written |
