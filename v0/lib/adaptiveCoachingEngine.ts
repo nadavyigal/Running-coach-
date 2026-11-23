@@ -4,6 +4,10 @@ import { z } from 'zod';
 import { CoachingProfile, CoachingFeedback } from './db';
 import { dbUtils } from '@/lib/dbUtils';
 import { captureAIGeneration } from '@/lib/ai-observability';
+import { providerOptionsFor, selectModel } from '@/lib/ai/models';
+
+/** CHAT_COACHING_MODEL and CHAT_DEFAULT_MODEL keep priority over OPENAI_MODEL_WRITER. */
+const selectCoachingModel = () => selectModel('WRITER', { overrideEnv: ['CHAT_COACHING_MODEL', 'CHAT_DEFAULT_MODEL'] });
 
 // Context interfaces
 export interface UserContext {
@@ -55,7 +59,7 @@ export interface AdaptiveRecommendation {
 }
 
 // Response schema for structured generation
-const CoachingResponseSchema = z.object({
+export const CoachingResponseSchema = z.object({
   response: z.string().describe('The main coaching response'),
   confidence: z.number().min(0).max(1).describe('Confidence in the response (0-1)'),
   keyPoints: z.array(z.string()).describe('Key takeaways from the response'),
@@ -65,7 +69,7 @@ const CoachingResponseSchema = z.object({
   followUpQuestions: z.array(z.string()).optional().describe('Questions to engage the user further')
 });
 
-const RecommendationSchema = z.object({
+export const RecommendationSchema = z.object({
   recommendations: z.array(z.object({
     type: z.enum(['workout_modification', 'schedule_optimization', 'motivation', 'technique_improvement']),
     title: z.string(),
@@ -107,14 +111,13 @@ export class AdaptiveCoachingEngine {
       const adaptedPrompt = await this.adaptPromptToProfile(query, profile, context);
       const interactionId = this.generateInteractionId();
 
-      const modelName =
-        process.env.CHAT_COACHING_MODEL ||
-        process.env.CHAT_DEFAULT_MODEL ||
-        'gpt-4o';
+      const coachingModel = selectCoachingModel();
+      const modelName = coachingModel.model;
       
       // Generate structured response using AI
       const result = await generateObject({
         model: openai(modelName),
+        providerOptions: providerOptionsFor(coachingModel),
         schema: CoachingResponseSchema,
         prompt: adaptedPrompt,
         temperature: 0.7,
@@ -155,10 +158,7 @@ export class AdaptiveCoachingEngine {
       void captureAIGeneration({
         traceName: 'chat',
         distinctId: userId,
-        model:
-          process.env.CHAT_COACHING_MODEL ||
-          process.env.CHAT_DEFAULT_MODEL ||
-          'gpt-4o',
+        model: selectCoachingModel().model,
         input: { query, context },
         latencyMs: Date.now() - responseStartedAt,
         error,
@@ -196,10 +196,8 @@ export class AdaptiveCoachingEngine {
   ): Promise<AdaptiveRecommendation[]> {
     const recommendationStartedAt = Date.now();
     let recommendationPrompt = '';
-    const modelName =
-      process.env.CHAT_COACHING_MODEL ||
-      process.env.CHAT_DEFAULT_MODEL ||
-      'gpt-4o';
+    const coachingModel = selectCoachingModel();
+    const modelName = coachingModel.model;
 
     try {
       const profile = (await dbUtils.getCoachingProfile(userId)) ?? undefined;
@@ -210,6 +208,7 @@ export class AdaptiveCoachingEngine {
       
       const result = await generateObject({
         model: openai(modelName),
+        providerOptions: providerOptionsFor(coachingModel),
         schema: RecommendationSchema,
         prompt: recommendationPrompt,
         temperature: 0.6,

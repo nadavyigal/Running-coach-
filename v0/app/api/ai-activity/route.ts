@@ -12,6 +12,7 @@ import {
 } from "@/lib/activityParsing"
 import { captureAIGeneration } from "@/lib/ai-observability"
 import { requireApiUser } from "@/lib/api-auth"
+import { providerOptionsFor, selectModel } from "@/lib/ai/models"
 
 // Use Node.js runtime for sharp image processing
 export const runtime = 'nodejs'
@@ -21,8 +22,11 @@ const MAX_FILE_SIZE_BYTES = 6 * 1024 * 1024
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
 
 const PARSER_VERSION = "v2"
-const PRIMARY_MODEL = process.env.AI_ACTIVITY_MODEL || "gpt-4o"
-const OCR_FALLBACK_MODEL = process.env.AI_ACTIVITY_OCR_MODEL || "gpt-4o-mini"
+// AI_ACTIVITY_MODEL / AI_ACTIVITY_OCR_MODEL keep priority over the tier env vars.
+const PRIMARY_SELECTION = selectModel("VISION", { overrideEnv: ["AI_ACTIVITY_MODEL"] })
+const OCR_SELECTION = selectModel("VISION_OCR", { overrideEnv: ["AI_ACTIVITY_OCR_MODEL"] })
+const PRIMARY_MODEL = PRIMARY_SELECTION.model
+const OCR_FALLBACK_MODEL = OCR_SELECTION.model
 
 type ExtractionMethod = "vision_structured" | "vision_text_fallback"
 
@@ -356,6 +360,7 @@ export async function POST(req: Request) {
     try {
       const structured = await generateObject({
         model: openai(PRIMARY_MODEL),
+        providerOptions: providerOptionsFor(PRIMARY_SELECTION),
         schema: structuredSchema,
         prompt: [
           {
@@ -410,6 +415,7 @@ export async function POST(req: Request) {
 
       const ocrResult = await generateText({
         model: openai(OCR_FALLBACK_MODEL),
+        providerOptions: providerOptionsFor(OCR_SELECTION),
         messages: [
           {
             role: "user",

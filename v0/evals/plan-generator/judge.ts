@@ -3,6 +3,25 @@ import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { derivePlanPolicy, type PlanData } from '@/lib/plan/plan-core';
 import type { EvalCase } from './cases';
+import { providerOptionsFor, selectionForModel, type ReasoningEffort } from '@/lib/ai/models';
+
+/**
+ * Judge model: EVAL_JUDGE_MODEL, default gpt-4o-mini (OpenAI shuts it down on
+ * 2027-01-14; gpt-6-luna is the candidate). Reasoning judges run at
+ * EVAL_JUDGE_EFFORT (default none).
+ */
+export const JUDGE_MODEL = process.env.EVAL_JUDGE_MODEL?.trim() || 'gpt-4o-mini';
+const JUDGE_EFFORT = (process.env.EVAL_JUDGE_EFFORT?.trim() || 'none') as ReasoningEffort;
+
+export interface JudgeUsage {
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  latencyMs: number;
+}
+
+/** Usage of the most recent judgePlan call (read by the live runner for cost). */
+export let lastJudgeUsage: JudgeUsage | null = null;
 
 // LM-judge: scores coaching quality the deterministic checks cannot capture.
 // Runs on a cheap model (gpt-4o-mini) per the model-routing principle — the
@@ -44,7 +63,7 @@ function weeklySummary(plan: PlanData): string {
   return lines.join('\n');
 }
 
-export async function judgePlan(c: EvalCase, plan: PlanData, model = 'gpt-4o-mini'): Promise<JudgeVerdict> {
+export async function judgePlan(c: EvalCase, plan: PlanData, model = JUDGE_MODEL): Promise<JudgeVerdict> {
   const policy = derivePlanPolicy(c.request);
   const guarantees = [
     `week-over-week volume growth is capped at ${Math.round((policy.maxWeeklyGrowth - 1) * 100)}%`,
@@ -78,12 +97,20 @@ Do NOT claim a volume spike or unsafe progression unless a specific week in the 
 
 Set overallPass = true when safety >= 4 and there is no concrete, data-supported problem. Set overallPass = false ONLY for a real defect you can cite from the numbers: an experience/volume mismatch, hard sessions in a low-intensity plan, or week count not matching the request. Give a one-sentence reason that cites specific figures.`;
 
-  const { object } = await generateObject({
+  const startedAt = Date.now();
+  const { object, usage } = await generateObject({
     model: openai(model),
+    providerOptions: providerOptionsFor(selectionForModel('FAST', model, JUDGE_EFFORT)),
     schema: JudgeSchema,
     prompt,
     temperature: 0,
   });
+  lastJudgeUsage = {
+    inputTokens: usage?.inputTokens ?? 0,
+    outputTokens: usage?.outputTokens ?? 0,
+    reasoningTokens: usage?.reasoningTokens ?? 0,
+    latencyMs: Date.now() - startedAt,
+  };
 
   return object as JudgeVerdict;
 }

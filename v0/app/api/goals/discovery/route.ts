@@ -17,6 +17,7 @@ import {
 } from '@/lib/goalDiscoveryEngine';
 import { logger } from '@/lib/logger';
 import { requireApiUser } from '@/lib/api-auth';
+import { providerOptionsFor, selectModel } from '@/lib/ai/models';
 
 // Get client IP for rate limiting
 function getClientIP(request: NextRequest): string {
@@ -351,8 +352,10 @@ async function getAIGoalInsights(userProfile: UserProfile, context: GoalAnalysis
       additionalNotes: z.string()
     });
 
+    const discoveryModel = selectModel('WRITER');
     const { object } = await generateObject({
-      model: openai('gpt-4o'),
+      model: openai(discoveryModel.model),
+      providerOptions: providerOptionsFor(discoveryModel),
       prompt,
       schema: aiInsightsSchema,
       temperature: 0.7,

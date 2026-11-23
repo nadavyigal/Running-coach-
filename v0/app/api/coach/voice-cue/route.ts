@@ -4,6 +4,7 @@ import { createOpenAI } from "@ai-sdk/openai"
 import { captureServerEvent } from "@/lib/server/posthog"
 import { checkVoiceCueThrottle } from "@/lib/server/voice-cue-throttle"
 import { requireApiUser } from "@/lib/api-auth"
+import { providerOptionsFor, selectModel } from "@/lib/ai/models"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -87,8 +88,11 @@ export async function POST(request: Request): Promise<Response> {
 
   let cueText: string
   try {
+    // Text model only. tts-1 below is a separate decision (shuts down 2027-01-06).
+    const cueModel = selectModel("FAST")
     const result = await generateText({
-      model: voiceOpenAI("gpt-4o-mini"),
+      model: voiceOpenAI(cueModel.model),
+      providerOptions: providerOptionsFor(cueModel),
       system: COACH_SYSTEM_PROMPT,
       prompt: userContext,
       maxOutputTokens: 60,

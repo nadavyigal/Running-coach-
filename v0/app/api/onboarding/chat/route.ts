@@ -5,6 +5,7 @@ import { OnboardingPromptBuilder } from '@/lib/onboardingPromptBuilder'
 import { OnboardingSessionManager } from '@/lib/onboardingSessionManager'
 import { rateLimiter, securityConfig } from '@/lib/security.config'
 import { securityMonitor } from '@/lib/security.monitoring'
+import { providerOptionsFor, selectModel } from '@/lib/ai/models'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -127,8 +128,10 @@ export async function POST(req: Request) {
     let streamResult: any
 
     try {
+      const onboardingModel = selectModel('WRITER')
       streamResult = await streamText({
-        model: openai('gpt-4o'),
+        model: openai(onboardingModel.model),
+        providerOptions: providerOptionsFor(onboardingModel),
         messages: [
           { role: 'system' as const, content: onboardingPrompt },
           { role: 'user' as const, content: userMessage.content }

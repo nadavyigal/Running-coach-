@@ -4,6 +4,7 @@ import { generateObject } from "ai"
 import { logger } from "@/lib/logger"
 import { z } from "zod"
 import { requireApiUser } from "@/lib/api-auth"
+import { providerOptionsFor, selectModel } from "@/lib/ai/models"
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
@@ -62,8 +63,10 @@ export async function POST(req: Request) {
       })
       .strict()
 
+    const photoModel = selectModel("FAST")
     const result = await generateObject({
-      model: openai("gpt-4o-mini"),
+      model: openai(photoModel.model),
+      providerOptions: providerOptionsFor(photoModel),
       schema: extractedRunSchema,
       prompt: [
         {

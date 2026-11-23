@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { chatDriver, ChatRequest } from '@/lib/chatDriver';
 import { OnboardingPromptBuilder } from '@/lib/onboardingPromptBuilder';
 import { logger } from '@/lib/logger';
+import { selectModel } from "@/lib/ai/models";
 
 export async function POST(req: Request) {
   const requestId = `onboarding_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -107,7 +108,8 @@ export async function POST(req: Request) {
       currentPhase,
       streaming,
       maxTokens: 300, // Limit for onboarding responses
-      model: "gpt-4o",
+      model: selectModel("WRITER").model,
+      tier: "WRITER",
     };
     
     logger.log(`[onboarding:chat] requestId=${requestId} Sending to ChatDriver, streaming=${streaming}`);

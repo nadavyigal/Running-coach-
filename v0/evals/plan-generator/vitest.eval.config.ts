@@ -23,7 +23,7 @@ export default defineConfig({
     environment: 'node',
     include: ['evals/plan-generator/plan-eval.live.test.ts'],
     env: evalEnv,
-    testTimeout: 600_000,
+    testTimeout: 1_800_000,
     hookTimeout: 120_000,
   },
   resolve: {

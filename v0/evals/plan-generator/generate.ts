@@ -13,12 +13,16 @@ import {
   type PlanData,
   type PlanRequest,
 } from '@/lib/plan/plan-core';
+import { providerOptionsFor, selectModel, selectionForModel } from '@/lib/ai/models';
 
 export interface EvalGenerationResult {
   plan: PlanData;
   /** 'ai' when the model produced a valid plan; 'fallback' when generation failed and the deterministic plan was used. */
   source: 'ai' | 'fallback';
   error?: string;
+  model: string;
+  latencyMs: number;
+  usage: { inputTokens: number; outputTokens: number; reasoningTokens: number } | null;
 }
 
 // Generates a plan exactly as production does: the SAME prompt + schema + token
@@ -28,7 +32,8 @@ export interface EvalGenerationResult {
 // the user would actually receive, and records which path produced it.
 export async function generatePlanForEval(
   body: PlanRequest,
-  model = 'gpt-4o'
+  // Same tier as production (OPENAI_MODEL_PLAN, default gpt-4o).
+  model = selectModel('PLAN').model
 ): Promise<EvalGenerationResult> {
   const user = resolveUser(body);
   const totalWeeks = resolveTotalWeeks(body);
@@ -44,21 +49,36 @@ export async function generatePlanForEval(
     body.goals
   );
 
+  const startedAt = Date.now();
   try {
-    const { object } = await generateObject({
+    const { object, usage } = await generateObject({
       model: openai(model),
+      providerOptions: providerOptionsFor(selectionForModel('PLAN', model)),
       schema: PlanSchema,
       prompt,
       temperature: 0.7,
       maxOutputTokens: computeMaxOutputTokens(totalWeeks, user.daysPerWeek),
     });
     const safe = enforcePlanSafety(normalizePlan(object as PlanData), derivePlanPolicy(body));
-    return { plan: safe, source: 'ai' };
+    return {
+      plan: safe,
+      source: 'ai',
+      model,
+      latencyMs: Date.now() - startedAt,
+      usage: {
+        inputTokens: usage?.inputTokens ?? 0,
+        outputTokens: usage?.outputTokens ?? 0,
+        reasoningTokens: usage?.reasoningTokens ?? 0,
+      },
+    };
   } catch (err) {
     return {
       plan: generateFallbackPlan(user, totalWeeks, body.planPreferences, body.challenge),
       source: 'fallback',
       error: err instanceof Error ? err.message : String(err),
+      model,
+      latencyMs: Date.now() - startedAt,
+      usage: null,
     };
   }
 }

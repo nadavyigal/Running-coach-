@@ -7,6 +7,17 @@ import type { AiActivityJobData, AiActivityResult } from '../../shared/types/job
 import { logger } from '../utils/logger';
 import { captureAIGeneration } from '../utils/ai-observability';
 
+/**
+ * Vision model. Same env vars as v0/lib/ai/models.ts (this package cannot import
+ * it): OPENAI_MODEL_VISION, default gpt-4o; target gpt-6.1-terra. Reasoning ids
+ * run at OPENAI_REASONING_EFFORT_VISION (default none).
+ */
+const VISION_MODEL = process.env.OPENAI_MODEL_VISION?.trim() || 'gpt-4o';
+const VISION_EFFORT = process.env.OPENAI_REASONING_EFFORT_VISION?.trim() || 'none';
+const VISION_PROVIDER_OPTIONS = /^(o\d|gpt-5|gpt-6)/i.test(VISION_MODEL)
+  ? { openai: { reasoningEffort: VISION_EFFORT } }
+  : undefined;
+
 const activitySchema = z.object({
   type: z.string().optional(),
   distance_km: z.number().positive(),
@@ -45,7 +56,8 @@ export async function processAiActivity(job: Job<AiActivityJobData>): Promise<Ai
     const prompt = 'Extract running activity data from this image';
     const generationStartedAt = Date.now();
     const generation = await generateObject({
-      model: openai('gpt-4o'),
+      model: openai(VISION_MODEL),
+      providerOptions: VISION_PROVIDER_OPTIONS,
       schema: activitySchema as any,
       messages: [{
         role: 'user',
@@ -60,7 +72,7 @@ export async function processAiActivity(job: Job<AiActivityJobData>): Promise<Ai
     await captureAIGeneration({
       traceName: 'ai-activity',
       distinctId: userId,
-      model: 'gpt-4o',
+      model: VISION_MODEL,
       input: prompt,
       output: extracted,
       usage: (generation as any).usage,
@@ -101,7 +113,7 @@ export async function processAiActivity(job: Job<AiActivityJobData>): Promise<Ai
     await captureAIGeneration({
       traceName: 'ai-activity',
       distinctId: userId,
-      model: 'gpt-4o',
+      model: VISION_MODEL,
       input: 'Extract running activity data from this image',
       latencyMs: Date.now() - startTime,
       error,
