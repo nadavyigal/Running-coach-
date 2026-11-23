@@ -12,7 +12,7 @@ sh scripts/check-migration-drift.sh /Users/nadavyigal/Developer/RunSmart
 
 Exit 0 = clean, 1 = drift. The script is read-only.
 
-**"Applied in prod" is never checked by agents.** Agents do not query production. Every value is "unknown" until Nadav fills it in. The 6 files from `20261118100000` to `20261118180000` carry the one fact we have: `tasks/coach-mode-status.md` (last checked 2026-11-18) lists them as not applied. Nadav step N2 (refined plan section 4) confirms them before Batch A.
+**"Applied in prod" was checked read-only on 2026-11-23** (Supabase project Run-Smart, `supabase_migrations.schema_migrations`), when Batch A was applied on Nadav's explicit yes. "yes" below means a production row exists whose SQL equals the repo file with comments and whitespace ignored (md5 compared). The prod version is the timestamp Supabase stored at apply time, so it differs from the file name. Agents still never apply a migration without Nadav's yes in the same message.
 
 ---
 
@@ -20,23 +20,23 @@ Exit 0 = clean, 1 = drift. The script is read-only.
 
 | Filename | In iOS | In web | Byte-identical | Applied in prod |
 |---|---|---|---|---|
-| `20261114120000_close_cross_user_rls_leaks.sql` | y | y | y | unknown |
-| `20261114130000_runs_workout_link.sql` | y | y | y | unknown |
-| `20261114210000_coach_role_and_invites.sql` | y | y | y | unknown |
-| `20261115091000_coach_athlete_links.sql` | y | y | y | unknown |
-| `20261115194500_leave_coach.sql` | y | y | y | unknown |
-| `20261117100000_coach_route_upload.sql` | y | y | y | unknown |
-| `20261117120000_complete_run_workout.sql` | y | y | y | unknown |
-| `20261117130000_coach_plan_mode_group_settings.sql` | y | y | y | unknown |
-| `20261117160000_lookup_invite_group_plan.sql` | y | y | y | unknown |
-| `20261117163000_replace_group_training_plan.sql` | y | y | y | unknown |
-| `20261117164500_coach_read_rpcs.sql` | y | y | y | unknown |
-| `20261118100000_coach_feedback.sql` | y | y | y | unknown: listed as not applied on 2026-11-18 (N2) |
-| `20261118120000_athlete_feedback_read.sql` | y | y | y | unknown: listed as not applied on 2026-11-18 (N2) |
-| `20261118140000_coach_run_route.sql` | y | y | y | unknown: listed as not applied on 2026-11-18 (N2) |
-| `20261118160000_get_my_coach.sql` | y | y | y | unknown: listed as not applied on 2026-11-18 (N2) |
-| `20261118170000_set_run_route_hidden.sql` | y | y | y | unknown: listed as not applied on 2026-11-18 (N2) |
-| `20261118180000_coach_welcome_note.sql` | y | y | y | unknown: listed as not applied on 2026-11-18 (N2) |
+| `20261114120000_close_cross_user_rls_leaks.sql` | y | y | y | yes (prod 20261114191102; checked 2026-11-23) |
+| `20261114130000_runs_workout_link.sql` | y | y | y | yes (prod 20261115065606; checked 2026-11-23) |
+| `20261114210000_coach_role_and_invites.sql` | y | y | y | yes (prod 20261115065607; checked 2026-11-23) |
+| `20261115091000_coach_athlete_links.sql` | y | y | y | yes (prod 20261115173534; checked 2026-11-23) |
+| `20261115194500_leave_coach.sql` | y | y | y | yes (prod 20261118082006; checked 2026-11-23) |
+| `20261117100000_coach_route_upload.sql` | y | y | y | yes (prod 20261118185618; checked 2026-11-23) |
+| `20261117120000_complete_run_workout.sql` | y | y | y | yes (prod 20261118185634; checked 2026-11-23) |
+| `20261117130000_coach_plan_mode_group_settings.sql` | y | y | y | yes (prod 20261118185658; checked 2026-11-23) |
+| `20261117160000_lookup_invite_group_plan.sql` | y | y | y | yes (prod 20261118185710; checked 2026-11-23) |
+| `20261117163000_replace_group_training_plan.sql` | y | y | y | yes (prod 20261118185716; checked 2026-11-23) |
+| `20261117164500_coach_read_rpcs.sql` | y | y | y | yes (prod 20261118082019; checked 2026-11-23) |
+| `20261118100000_coach_feedback.sql` | y | y | y | yes (prod 20261118082029, current version re-applied as 20261118185740 `coach_feedback_current`; checked 2026-11-23) |
+| `20261118120000_athlete_feedback_read.sql` | y | y | y | yes (prod 20261118185753; checked 2026-11-23) |
+| `20261118140000_coach_run_route.sql` | y | y | y | yes (prod 20261118185757; checked 2026-11-23) |
+| `20261118160000_get_my_coach.sql` | y | y | y | yes (prod 20261118185809; checked 2026-11-23) |
+| `20261118170000_set_run_route_hidden.sql` | y | y | y | yes (prod 20261118185813; checked 2026-11-23) |
+| `20261118180000_coach_welcome_note.sql` | y | y | y | yes (prod 20261118185847; checked 2026-11-23) |
 
 17 files in each tree. The newest file on `main` is `20261118180000_coach_welcome_note.sql`.
 
@@ -44,7 +44,11 @@ Exit 0 = clean, 1 = drift. The script is read-only.
 
 ## 2. Drift
 
-**None found on 2026-11-21.** All 17 files exist in both trees and are byte-identical. Nothing is changed or added to fix drift in this PR.
+**Repo trees: none found on 2026-11-23.** Every migration file exists in both trees and is byte-identical (`scripts/check-migration-drift.sh` CLEAN).
+
+**Production only (found 2026-11-23):**
+
+- `20261120094612_athlete_display_name_placeholder` (prod version, no repo file): only in production. It replaces `public.athlete_display_name(uuid)` so the placeholder name "RunSmart Runner" from builds before 1.2.7 reads as no name ("Athlete"). Same signature and grants as `20261117164500_coach_read_rpcs.sql`. No Batch A file replaces this function. Not fixed here: a follow-up PR adds the file to both repos.
 
 When the script finds a mismatch, add one line per file here, in this form, and fix nothing in the same PR:
 
@@ -62,14 +66,14 @@ Batch letters are from the v1.3 file map (section 0.0) and the refined plan (sec
 
 | Batch | Reserved file | M-number | Story | Status |
 |---|---|---|---|---|
-| A | `20261121100000_coach_v2_gate.sql` | M0 + M0b | C7.0 | merged (iOS #234, web #169); not applied |
-| A | `20261121110000_coach_consent_v2.sql` | M5a | C7.8 | merged (iOS #235, web #170); not applied |
-| A | `20261121120000_athlete_run_sharing.sql` | M1a | C7.3 | merged (iOS #238, web #171); not applied |
-| A | `20261121130000_coach_last_seen_and_events.sql` | M3 | C7.2 | merged (iOS #239, web #172); not applied |
-| A | `20261121150000_athlete_run_flags.sql` | M1b | C7.4 | merged (iOS #242, web #173); not applied |
-| A | `20261121160000_coach_link_end.sql` | M5b | C7.11 | merged (iOS #244, web #175); not applied |
-| A | `20261121170000_coach_milestones.sql` | M13 (only if needed) | C7.16 | not written |
-| A | `20261121180000_coach_feedback_replies.sql` (renamed from the reserved `20261121140000`, which sorts before M1b and would be overwritten by it) | M4 | C7.7 | merged (iOS #245, web #176); not applied |
+| A | `20261121100000_coach_v2_gate.sql` | M0 + M0b | C7.0 | merged (iOS #234, web #169); applied 2026-11-23 (prod 20261123064450) |
+| A | `20261121110000_coach_consent_v2.sql` | M5a | C7.8 | merged (iOS #235, web #170); applied 2026-11-23 (prod 20261123064540) |
+| A | `20261121120000_athlete_run_sharing.sql` | M1a | C7.3 | merged (iOS #238, web #171); applied 2026-11-23 (prod 20261123064630) |
+| A | `20261121130000_coach_last_seen_and_events.sql` | M3 | C7.2 | merged (iOS #239, web #172); applied 2026-11-23 (prod 20261123064713) |
+| A | `20261121150000_athlete_run_flags.sql` | M1b | C7.4 | merged (iOS #242, web #173); applied 2026-11-23 (prod 20261123064817) |
+| A | `20261121160000_coach_link_end.sql` | M5b | C7.11 | merged (iOS #244, web #175); applied 2026-11-23 (prod 20261123064854) |
+| A | `20261121170000_coach_milestones.sql` | M13 (only if needed) | C7.16 | not needed: C7.16 used the existing RPCs (iOS #246) |
+| A | `20261121180000_coach_feedback_replies.sql` (renamed from the reserved `20261121140000`, which sorts before M1b and would be overwritten by it) | M4 | C7.7 | merged (iOS #245, web #176); applied 2026-11-23 (prod 20261123064953) |
 | B | `20261122100000_push_tokens_and_prefs.sql` | M2a | C7.10 | not written |
 | B | `20261122110000_notification_log_and_deferred.sql` | M2b | C7.5 | not written |
 | C | `20261201100000_coach_workout_locks.sql` | M6a | C8.1a | not written |
