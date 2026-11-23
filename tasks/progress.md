@@ -1,3 +1,12 @@
+# 2026-11-23: Coach v2 C7.10 push tokens and prefs migration mirrored from iOS
+
+Current Phase: Coach Experience v2, Batch B start. Web twin of the iOS C7.10 PR; mirror only.
+Active Story: C7.10 M2a 20261122100000_push_tokens_and_prefs.sql byte-identical to iOS; ledger M2a set to written (draft PR).
+Next Recommended Story: Merge this twin right after the iOS C7.10 PR merges.
+Blockers: Nadav applies M2a with Batch B, with the APNs secrets; nothing applied here.
+Last Validation: 2026-11-23 drift script CLEAN, 25 files identical; SQL suite ran in the iOS repo; no db push.
+Last Updated: 2026-11-23
+
 # 2026-11-23: Coach v2 C7.7 replies migration mirrored from iOS (C7.11 catch-up)
 
 Current Phase: Coach Experience v2, R1 Batch A, C7.7. Web twin of iOS #245; main merged after C7.11 (web #175); mirror only.
