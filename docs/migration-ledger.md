@@ -74,9 +74,9 @@ Batch letters are from the v1.3 file map (section 0.0) and the refined plan (sec
 | A | `20261121160000_coach_link_end.sql` | M5b | C7.11 | merged (iOS #244, web #175); applied 2026-11-23 (prod 20261123064854) |
 | A | `20261121170000_coach_milestones.sql` | M13 (only if needed) | C7.16 | not needed: C7.16 used the existing RPCs (iOS #246) |
 | A | `20261121180000_coach_feedback_replies.sql` (renamed from the reserved `20261121140000`, which sorts before M1b and would be overwritten by it) | M4 | C7.7 | merged (iOS #245, web #176); applied 2026-11-23 (prod 20261123064953) |
-| B | `20261122100000_push_tokens_and_prefs.sql` | M2a | C7.10 | merged (iOS #248, web #178); not applied |
-| B | `20261122110000_notification_log_and_deferred.sql` | M2b | C7.5 | merged (iOS #250, web #180); not applied |
-| B | `20261122120000_workout_adherence_state.sql` (not reserved: the plan said "Mig: none", but AC6's shared `workout_adherence_state` is a SQL function) | (C7.6) | C7.6 | written (draft PR) |
+| B | `20261122100000_push_tokens_and_prefs.sql` | M2a | C7.10 | merged (iOS #248, web #178); applied 2026-11-23 (prod 20261123192812) |
+| B | `20261122110000_notification_log_and_deferred.sql` | M2b | C7.5 | merged (iOS #250, web #180); applied 2026-11-23 (prod 20261123192907) |
+| B | `20261122120000_workout_adherence_state.sql` (not reserved: the plan said "Mig: none", but AC6's shared `workout_adherence_state` is a SQL function) | (C7.6) | C7.6 | merged (iOS #251, web #181); applied 2026-11-23 (prod 20261123193048) |
 | C | `20261201100000_coach_workout_locks.sql` | M6a | C8.1a | not written |
 | C | `20261201110000_coach_plan_locks.sql` | M6b | C8.1b | not written |
 
