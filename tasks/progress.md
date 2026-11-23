@@ -1,3 +1,12 @@
+# 2026-11-23: Coach v2 C7.7 replies migration mirrored from iOS (C7.11 catch-up)
+
+Current Phase: Coach Experience v2, R1 Batch A, C7.7. Web twin of iOS #245; main merged after C7.11 (web #175); mirror only.
+Active Story: C7.7 M4 20261121180000_coach_feedback_replies.sql byte-identical to iOS; ledger M5b set to merged, M4 written.
+Next Recommended Story: Merge this twin right after iOS #245 merges.
+Blockers: Nadav applies Batch A (M0, M5a, M1a, M3, M1b, M5b, M4) after the Grok Bot audit and the 1.2.6 regression.
+Last Validation: 2026-11-23 drift script CLEAN, 24 files identical; SQL suites ran in the iOS repo; no db push.
+Last Updated: 2026-11-23
+
 # 2026-11-22: Coach v2 C7.4 run flags migration mirrored from iOS
 
 Current Phase: Coach Experience v2, R1 wave 4, lane A. Web twin of the iOS C7.4 draft PR; mirror only.
