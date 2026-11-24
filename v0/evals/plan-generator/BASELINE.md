@@ -63,8 +63,9 @@ Candidate = the rewritten `buildPlanPrompt` (the same 12 plus 3 new cases). One 
   it put the full 42 km race in the last week with no taper. That one case explains the whole safety-average drop
   (the other 11 shared cases score safety 5 in both). Progression dropped one point on `high-volume-history`
   and `low-consistency-return`. One run each, so some of this is run-to-run variance.
-- A taper rule for race goals was drafted but not measured (the eval key ran out of credits), so it is not in
-  the prompt. See the PR body.
+- A taper rule for race goals was added afterwards at Nadav's request (2026-11-24) without a measurement (the
+  eval key ran out of credits). The numbers above are from before it. Re-run `npm run eval:plan` with
+  `EVAL_CASE_IDS=advanced-marathon,intermediate-half-marathon` and then the full set when credits exist.
 - New cases: `hebrew-beginner-5k` passes 5/5/5 with Hebrew title, description and notes (gender-neutral
   infinitives). `injury-return-intermediate` passes (safety 4); `injury-return-easy-start` passes: no hard
   sessions in weeks 1-2, week-1 longest run 4.5 km vs a recent max of 5 km, and the description says to stop and

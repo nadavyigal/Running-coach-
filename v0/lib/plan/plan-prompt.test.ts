@@ -51,6 +51,8 @@ describe('buildPlanPrompt', () => {
     expect(p).toContain('No single run is longer than 28 km.')
     expect(p).toContain('At most 2 quality session(s)')
     expect(p).toContain('keep the first two weeks easy and short')
+    expect(p).toContain('Race goals: the last one to two weeks are a taper with less volume.')
+    expect(p).toContain('keep every run shorter than the race distance')
     expect(p).toContain('stop and see a qualified professional if pain returns. Do not diagnose.')
   })
 
