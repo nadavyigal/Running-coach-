@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { sanitizeForPrompt } from '@/lib/security';
 import { formatPace } from '@/lib/userDataValidation';
 import type { PersonalizationContext } from '@/lib/personalizationContext';
+import { hebrewStyleLine, languageName, type AthleteLanguage } from '@/lib/ai/language';
 
 // Pure, deterministic plan-generation core.
 //
@@ -100,6 +101,8 @@ export type PlanRequest = {
   };
   planType?: string;
   targetDistance?: string;
+  /** Language for title, description and notes. Explicit only; default "en". */
+  language?: 'en' | 'he';
   rookie_challenge?: boolean;
   totalWeeks?: number;
   planPreferences?: {
@@ -149,6 +152,11 @@ export function resolveUser(body: PlanRequest) {
   const averageWeeklyKm =
     typeof source.averageWeeklyKm === 'number' ? source.averageWeeklyKm : historyWeeklyVolume;
 
+  const rawBarriers = 'barriers' in source ? source.barriers : undefined;
+  const barriers = Array.isArray(rawBarriers)
+    ? rawBarriers.filter((b): b is string => typeof b === 'string' && b.trim().length > 0).slice(0, 3)
+    : [];
+
   return {
     goal,
     experience,
@@ -156,6 +164,7 @@ export function resolveUser(body: PlanRequest) {
     preferredTimes,
     age: typeof source.age === 'number' ? source.age : undefined,
     averageWeeklyKm,
+    barriers,
   };
 }
 
@@ -456,7 +465,8 @@ function buildTrainingHistoryContext(trainingHistory?: PlanRequest['trainingHist
               : 'n/a';
           const pace = run.avgPace ? sanitizeForPrompt(run.avgPace, 20) : 'n/a';
           const rpe = typeof run.rpe === 'number' ? `RPE ${Math.round(run.rpe)}` : 'RPE n/a';
-          return `  - ${date}: ${distance}, ${duration}, ${pace}, ${rpe}`;
+          const note = run.notes ? sanitizeForPrompt(run.notes.replace(/\s+/g, ' '), 80) : '';
+          return `  - ${date}: ${distance}, ${duration}, ${pace}, ${rpe}${note ? `, note: "${note}"` : ''}`;
         })
         .join('\n')
     : '';
@@ -469,7 +479,7 @@ RECENT TRAINING HISTORY:
 ${weeklyVolumeLine}
 ${consistencyLine}
 ${runLines ? `- Last runs:\n${runLines}` : ''}
-- Respect recent load; avoid abrupt spikes in frequency or intensity.
+- Respect recent load; avoid sudden jumps in frequency or intensity.
 `;
 }
 
@@ -513,18 +523,18 @@ ${activeGoalLines ? `- Additional active goals:\n${activeGoalLines}` : ''}
 
 function buildWorkoutMixConstraint(challenge?: PlanRequest['challenge']) {
   if (challenge?.category === 'performance') {
-    return '- Include easy, tempo/interval, and long-run stimuli with progressive overload.';
+    return 'Include easy, tempo/interval, and long-run stimuli with progressive overload.';
   }
   if (challenge?.category === 'mindful') {
-    return '- Keep sessions mostly easy and mindful. Avoid hard intervals unless clearly justified.';
+    return 'Keep sessions mostly easy and mindful. Avoid hard intervals unless clearly justified.';
   }
   if (challenge?.category === 'recovery') {
-    return '- Keep intensity low and recovery-focused. Prefer easy or rest days; avoid hard workouts.';
+    return 'Keep intensity low and recovery-focused. Prefer easy or rest days; avoid hard workouts.';
   }
   if (challenge?.category === 'habit') {
-    return '- Prioritize consistency and confidence with mostly easy efforts. Keep intensity optional and conservative.';
+    return 'Prioritize consistency and confidence with mostly easy efforts. Keep intensity optional and conservative.';
   }
-  return '- Keep workout mix conservative: mostly easy runs with at most one quality workout each week.';
+  return 'Keep workout mix conservative: mostly easy runs with at most one quality workout each week.';
 }
 
 export function buildPlanPrompt(
@@ -536,7 +546,8 @@ export function buildPlanPrompt(
   challenge?: PlanRequest['challenge'],
   advancedMetrics?: PersonalizationContext['advancedMetrics'],
   trainingHistory?: PlanRequest['trainingHistory'],
-  goals?: PlanRequest['goals']
+  goals?: PlanRequest['goals'],
+  language: AthleteLanguage = 'en'
 ) {
   const sanitizedPlanType = planType ? sanitizeForPrompt(planType, 50) : '';
   const sanitizedTarget = targetDistance ? sanitizeForPrompt(targetDistance, 50) : '';
@@ -558,9 +569,6 @@ export function buildPlanPrompt(
     ? sanitizeForPrompt(challenge.targetAudience, 120)
     : '';
   const sanitizedChallengePromise = challenge?.promise ? sanitizeForPrompt(challenge.promise, 140) : '';
-  const weeklyKmContext = user.averageWeeklyKm
-    ? `- Current weekly volume: ${user.averageWeeklyKm}km/week (use as starting baseline)`
-    : '';
   const trainingHistoryContext = buildTrainingHistoryContext(trainingHistory);
   const goalsContext = buildGoalsContext(goals);
 
@@ -568,38 +576,26 @@ export function buildPlanPrompt(
 
   const policy = planPolicyFor(user.experience, user.goal, user.daysPerWeek, challenge?.category);
   const intensityRule = policy.lowIntensity
-    ? "- This runner needs a low-intensity plan. Use ONLY 'easy', 'long', and 'rest' workout types. Do NOT include any tempo, intervals, hill, or time-trial sessions."
-    : `- Include at most ${policy.maxHardPerWeek} quality session(s) (tempo, intervals, or hill) per week; keep every other run easy or long.`;
+    ? "- Low-intensity plan: use only easy, long and rest workouts. No tempo, intervals, hill or time-trial sessions."
+    : `- At most ${policy.maxHardPerWeek} quality session(s) (tempo, intervals or hill) per week; every other run is easy or long.`;
 
-  const advancedMetricsContext = advancedMetrics
-    ? `
-
-ADVANCED TRAINING METRICS:
-${advancedMetrics.vdot ? `- VDOT: ${advancedMetrics.vdot.toFixed(1)} (use Jack Daniels pace zones)` : ''}
-${advancedMetrics.vo2Max ? `- VO2 Max: ${advancedMetrics.vo2Max} ml/kg/min` : ''}
-${advancedMetrics.lactateThreshold ? `- Lactate Threshold: ${formatPace(advancedMetrics.lactateThreshold)}/km` : ''}
-${advancedMetrics.lactateThresholdHR ? `- LT Heart Rate: ${advancedMetrics.lactateThresholdHR} bpm` : ''}
-${advancedMetrics.maxHeartRate ? `- Max Heart Rate: ${advancedMetrics.maxHeartRate} bpm` : ''}
-${advancedMetrics.restingHeartRate ? `- Resting Heart Rate: ${advancedMetrics.restingHeartRate} bpm` : ''}
-
-CRITICAL INSTRUCTIONS FOR USING THESE METRICS:
-1. Tempo runs: set pace at or slightly below (5-10 sec/km slower) lactate threshold pace.
-2. Easy runs: keep 60-90 sec/km slower than LT pace for aerobic adaptation.
-3. Interval workouts: use VDOT to calculate interval pace from Jack Daniels tables.
-4. Long runs: keep 90-120 sec/km slower than LT pace.
-5. Heart rate guidance: if LT HR provided, include HR ranges in workout notes.
-6. Progressive overload: increase volume/intensity safely based on VDOT fitness level.
-
-PACE ZONE CALCULATIONS (if VDOT available):
-- E-pace: recovery runs and easy mileage
-- M-pace: marathon-specific workouts
-- T-pace: threshold/tempo runs
-- I-pace: VO2 max intervals (3-5 min efforts)
-- R-pace: short, fast intervals (200m-400m)
-
-Do not use generic paces when VDOT is available. Calculate specific paces.
-`
-    : '';
+  const metricLines = advancedMetrics
+    ? [
+        advancedMetrics.vdot ? `VDOT ${advancedMetrics.vdot.toFixed(1)}` : '',
+        advancedMetrics.vo2Max ? `VO2max ${advancedMetrics.vo2Max} ml/kg/min` : '',
+        advancedMetrics.lactateThreshold ? `LT pace ${formatPace(advancedMetrics.lactateThreshold)}/km` : '',
+        advancedMetrics.lactateThresholdHR ? `LT HR ${advancedMetrics.lactateThresholdHR} bpm` : '',
+        advancedMetrics.maxHeartRate ? `Max HR ${advancedMetrics.maxHeartRate} bpm` : '',
+        advancedMetrics.restingHeartRate ? `Resting HR ${advancedMetrics.restingHeartRate} bpm` : '',
+      ].filter(Boolean)
+    : [];
+  const hasPaceMetrics = Boolean(advancedMetrics?.vdot || advancedMetrics?.lactateThreshold);
+  const paceRule = hasPaceMetrics
+    ? `Use the metrics for paces: easy runs 60-90 s/km slower than LT pace, long runs 90-120 s/km slower, tempo at LT pace or up to 10 s/km slower, intervals at the VDOT interval (I) pace, short reps at R pace. If LT heart rate is given, add a heart-rate range to tempo and interval notes.
+Metrics: ${metricLines.join(' | ')}`
+    : `Describe effort by feel (easy = conversational, tempo = comfortably hard). Do not invent pace numbers.${
+        metricLines.length ? `\nMetrics: ${metricLines.join(' | ')}` : ''
+      }`;
 
   const challengeContext = sanitizedChallengeName
     ? `
@@ -621,40 +617,41 @@ INSTRUCTIONS:
 `
     : '';
 
-  return `Create a running training plan. Return JSON only with this shape:
-{
-  "title": "string",
-  "description": "string",
-  "totalWeeks": ${totalWeeks},
-  "workouts": [
-    {"week": 1, "day": "Mon", "type": "easy", "distance": 4, "duration": 24, "notes": "string"}
-  ]
-}
+  const barriers = user.barriers.map((b) => sanitizeForPrompt(b, 80)).filter(Boolean);
+  const runnerLines = [
+    `- Experience: ${user.experience}`,
+    `- Goal: ${user.goal}`,
+    `- Days per week: ${user.daysPerWeek}`,
+    `- Preferred times: ${user.preferredTimes.join(', ')}`,
+    typeof user.age === 'number' ? `- Age: ${user.age}` : '',
+    user.averageWeeklyKm ? `- Current weekly volume: ${user.averageWeeklyKm} km` : '',
+    barriers.length ? `- Says it gets in the way: ${barriers.join('; ')}` : '',
+    sanitizedPlanType ? `- Plan type: ${sanitizedPlanType}` : '',
+    sanitizedTarget ? `- Target distance: ${sanitizedTarget}` : '',
+    sanitizedVolume ? `- Training volume: ${sanitizedVolume}` : '',
+    sanitizedDifficulty ? `- Difficulty: ${sanitizedDifficulty}` : '',
+  ].filter(Boolean);
 
-Runner profile:
-- Experience: ${user.experience}
-- Goal: ${user.goal}
-- Days per week: ${user.daysPerWeek}
-- Preferred times: ${user.preferredTimes.join(', ')}
-${weeklyKmContext}
-${advancedMetricsContext}
-${trainingHistoryContext}
-${goalsContext}
-${sanitizedPlanType ? `- Plan type: ${sanitizedPlanType}` : ''}
-${sanitizedTarget ? `- Target distance: ${sanitizedTarget}` : ''}
-${sanitizedVolume ? `- Training volume: ${sanitizedVolume}` : ''}
-${sanitizedDifficulty ? `- Difficulty: ${sanitizedDifficulty}` : ''}
-${challengeContext}
+  return `Write a running training plan for the runner below. The plan is shown in the app as written: title, description and each workout's notes are read by the runner.
 
-Constraints:
-- totalWeeks must be ${totalWeeks}
-- Schedule workouts only on: ${trainingDays.join(', ')}
-- Long run day: ${longRunDay}
-- ${buildWorkoutMixConstraint(challenge)}
+Goal: a plan this runner can follow week by week that fits their experience, goal, available days and recent load, and builds gradually toward the goal.
+
+Hard rules:
+- totalWeeks is ${totalWeeks}; use weeks 1 to ${totalWeeks}.
+- Schedule workouts only on: ${trainingDays.join(', ')}. The long run is on ${longRunDay}.
 ${intensityRule}
-- Do NOT increase total weekly distance by more than 10% versus the previous week.
-- No single run may exceed ${policy.maxWorkoutKm} km.
-- Distances are in kilometers, durations in minutes.
-- Keep progression gradual and safe.
-- ${advancedMetrics?.vdot ? 'Use VDOT-based pace zones for all workout intensities.' : 'Use conservative pace progression.'}`;
+- Total weekly distance grows at most 10% over the previous week.
+- No single run is longer than ${policy.maxWorkoutKm} km.
+- Distances in kilometers, durations in minutes; rest days have distance 0.
+- If anything below mentions pain, injury, illness or a return after time off: keep the first two weeks easy and short, and say in the description to stop and see a qualified professional if pain returns. Do not diagnose.
+
+Workout mix: ${buildWorkoutMixConstraint(challenge)}
+
+Workout notes: one sentence per non-rest workout with its purpose and effort. ${paceRule}
+
+Language: write title, description and notes in ${languageName(language)}. Keep schema values in English: type (easy, tempo, intervals, long, time-trial, hill, rest) and day (Mon to Sun).${hebrewStyleLine(language)}
+
+Runner:
+${runnerLines.join('\n')}
+${trainingHistoryContext}${goalsContext}${challengeContext}`;
 }

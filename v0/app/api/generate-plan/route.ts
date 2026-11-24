@@ -22,6 +22,7 @@ import {
 import { captureAIGeneration } from '@/lib/ai-observability';
 import { requireApiUser } from '@/lib/api-auth';
 import { providerOptionsFor, selectModel } from '@/lib/ai/models';
+import { resolveAthleteLanguage } from '@/lib/ai/language';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -123,7 +124,8 @@ export async function POST(req: Request) {
       body.challenge,
       advancedMetrics,
       body.trainingHistory,
-      body.goals
+      body.goals,
+      resolveAthleteLanguage(body.language)
     );
 
     const planModel = selectModel('PLAN');

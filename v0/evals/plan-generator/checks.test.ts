@@ -87,8 +87,41 @@ describe('plan-generator deterministic checks (offline)', () => {
       const weeks = resolveTotalWeeks(c.request);
       const raw = generateFallbackPlan(user, weeks, c.request.planPreferences, c.request.challenge);
       const safe = enforcePlanSafety(raw, derivePlanPolicy(c.request));
-      const failures = criticalFailures(runChecks(safe, c));
+      const failures = criticalFailures(runChecks(safe, c, 'fallback'));
       expect(failures.map((f) => `${f.id}: ${f.detail}`), c.id).toEqual([]);
     }
+  });
+
+  it('Hebrew cases: an English AI plan is a critical failure, an English fallback is not', () => {
+    const c = cases.find((x) => x.id === 'hebrew-beginner-5k')!;
+    const english: PlanData = {
+      title: 'First 5K',
+      description: 'A gentle six-week build to your first 5K.',
+      totalWeeks: 6,
+      workouts: [{ week: 1, day: 'Mon', type: 'easy', distance: 3, duration: 20, notes: 'Easy, conversational.' }],
+    };
+    expect(criticalFailures(runChecks(english, c, 'ai')).map((f) => f.id)).toContain('hebrew-prose');
+    expect(criticalFailures(runChecks(english, c, 'fallback')).map((f) => f.id)).not.toContain('hebrew-prose');
+    const hebrew: PlanData = {
+      ...english,
+      title: '5 ק״מ ראשונים',
+      description: 'בנייה עדינה של שישה שבועות ל-5 ק״מ הראשונים.',
+      workouts: [{ week: 1, day: 'Mon', type: 'easy', distance: 3, duration: 20, notes: 'ריצה קלה בקצב שיחה.' }],
+    };
+    expect(runChecks(hebrew, c, 'ai').find((r) => r.id === 'hebrew-prose')?.pass).toBe(true);
+  });
+
+  it('injury-return check flags hard sessions in the first two weeks', () => {
+    const c = cases.find((x) => x.id === 'injury-return-intermediate')!;
+    const plan: PlanData = {
+      title: 'Back to 10K',
+      description: 'Easy rebuild after shin splints; stop and see a professional if pain returns.',
+      totalWeeks: 8,
+      workouts: [
+        { week: 1, day: 'Mon', type: 'easy', distance: 4, duration: 26 },
+        { week: 2, day: 'Wed', type: 'tempo', distance: 5, duration: 30 },
+      ],
+    };
+    expect(runChecks(plan, c).find((r) => r.id === 'injury-return-easy-start')?.pass).toBe(false);
   });
 });

@@ -1,4 +1,5 @@
 import type { PlanRequest } from '@/lib/plan/plan-core';
+import type { PersonalizationContext } from '@/lib/personalizationContext';
 
 // Golden set for the plan-generator eval.
 //
@@ -26,6 +27,10 @@ export interface EvalCase {
   description: string;
   request: PlanRequest;
   expect: EvalExpectations;
+  /** Stored metrics the route would load for this user (VDOT, LT pace in s/km, HR). */
+  advancedMetrics?: PersonalizationContext['advancedMetrics'];
+  /** Runner is coming back from pain or injury: reported check on an easy start. */
+  injuryReturn?: boolean;
 }
 
 export const cases: EvalCase[] = [
@@ -151,5 +156,54 @@ export const cases: EvalCase[] = [
       planPreferences: { trainingDays: ['Tue', 'Sat'], longRunDay: 'Sat' },
     },
     expect: { totalWeeks: 4, maxWorkoutKm: 8, maxWeeklyGrowth: 1.4 },
+  },
+  {
+    id: 'hebrew-beginner-5k',
+    description: 'Hebrew-speaking beginner, first 5K, 3 days/week, 6 weeks. Text in Hebrew, enums in English.',
+    request: {
+      user: { experience: 'beginner', goal: 'distance', daysPerWeek: 3, preferredTimes: ['morning'] },
+      targetDistance: '5k',
+      totalWeeks: 6,
+      language: 'he',
+    },
+    expect: { totalWeeks: 6 },
+  },
+  {
+    id: 'injury-return-intermediate',
+    description: 'Intermediate runner coming back from shin splints, 4 days/week, 8 weeks to a 10K. Easy, short start.',
+    request: {
+      userContext: {
+        experience: 'intermediate',
+        goal: 'distance',
+        daysPerWeek: 4,
+        preferredTimes: ['evening'],
+        averageWeeklyKm: 15,
+        barriers: ['coming back from shin splints'],
+      },
+      targetDistance: '10k',
+      totalWeeks: 8,
+      trainingHistory: {
+        weeklyVolumeKm: 15,
+        consistencyScore: 0.6,
+        recentRuns: [
+          { date: '2026-11-18', distanceKm: 4, durationMinutes: 26, rpe: 5, notes: 'sore shin, stopped at 4 km' },
+          { date: '2026-11-15', distanceKm: 5, durationMinutes: 31, rpe: 4 },
+        ],
+      },
+    },
+    expect: { totalWeeks: 8 },
+    injuryReturn: true,
+  },
+  {
+    id: 'hebrew-advanced-vdot',
+    description: 'Hebrew-speaking advanced runner with VDOT and LT data, 10K speed goal, 5 days/week, 8 weeks.',
+    request: {
+      user: { experience: 'advanced', goal: 'speed', daysPerWeek: 5, preferredTimes: ['morning'], averageWeeklyKm: 50 },
+      targetDistance: '10k',
+      totalWeeks: 8,
+      language: 'he',
+    },
+    advancedMetrics: { vdot: 52, lactateThreshold: 240, lactateThresholdHR: 172, maxHeartRate: 190, restingHeartRate: 48 },
+    expect: { totalWeeks: 8 },
   },
 ];

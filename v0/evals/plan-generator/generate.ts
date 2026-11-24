@@ -14,6 +14,8 @@ import {
   type PlanRequest,
 } from '@/lib/plan/plan-core';
 import { providerOptionsFor, selectModel, selectionForModel } from '@/lib/ai/models';
+import { resolveAthleteLanguage } from '@/lib/ai/language';
+import type { PersonalizationContext } from '@/lib/personalizationContext';
 
 export interface EvalGenerationResult {
   plan: PlanData;
@@ -33,7 +35,9 @@ export interface EvalGenerationResult {
 export async function generatePlanForEval(
   body: PlanRequest,
   // Same tier as production (OPENAI_MODEL_PLAN, default gpt-4o).
-  model = selectModel('PLAN').model
+  model = selectModel('PLAN').model,
+  // Production reads these from the user's stored metrics; eval cases supply them.
+  advancedMetrics?: PersonalizationContext['advancedMetrics']
 ): Promise<EvalGenerationResult> {
   const user = resolveUser(body);
   const totalWeeks = resolveTotalWeeks(body);
@@ -44,9 +48,10 @@ export async function generatePlanForEval(
     body.planType,
     body.targetDistance,
     body.challenge,
-    undefined,
+    advancedMetrics,
     body.trainingHistory,
-    body.goals
+    body.goals,
+    resolveAthleteLanguage(body.language)
   );
 
   const startedAt = Date.now();

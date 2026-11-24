@@ -64,8 +64,8 @@ describe.runIf(LIVE)('plan-generator live eval', () => {
       const report: Array<Record<string, unknown>> = [];
 
       for (const c of cases) {
-        const gen = await generatePlanForEval(c.request);
-        const checks = runChecks(gen.plan, c);
+        const gen = await generatePlanForEval(c.request, undefined, c.advancedMetrics);
+        const checks = runChecks(gen.plan, c, gen.source);
         const crit = criticalFailures(checks);
         const verdict = await judgePlan(c, gen.plan);
         const judgeUsage = lastJudgeUsage;
