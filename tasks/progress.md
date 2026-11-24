@@ -1,10 +1,10 @@
 # 2026-11-24: RunSmart web prompt upgrade and Hebrew safety (draft PR)
 
 Current Phase: OpenAI prompt upgrade on top of the merged model tiers (#183); Phase 2 approved by Nadav.
-Active Story: Race-taper rule reworded to Nadav's text (7449c996); plan, chat and run-report evals wait for the key Nadav names.
-Next Recommended Story: Run eval:plan (advanced-marathon, half first, then all 15) and the prompt-upgrade harness; gate per Nadav.
-Blockers: No OpenAI key named for evals yet; quality-gates audit red until #185 merges. RunSmart eval budget left: $4.50.
-Last Validation: vitest lib/plan + plan checks 23 passed; type-check 0; eslint 0 errors.
+Active Story: Taper rule measured: plan gate passed (15/15, safety 4.80, marathon 1 to 4); chat and run-report before/after run.
+Next Recommended Story: Nadav reviews #184; merge #185 first, then rebase #184 on main. Hebrew knee-pain chat reply lacks a stop verb.
+Blockers: Draft; founder yes needed. quality-gates audit red on #184 until #185 merges.
+Last Validation: eval:plan 15/15 0 critical; prompt eval chat 5/6 (was 6/6), run report 6/6 (was 4/6); spend about $0.27.
 Last Updated: 2026-11-24
 
 # 2026-11-23: OpenAI model tiers for RunSmart web (draft PR)
