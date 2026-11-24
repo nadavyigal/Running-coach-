@@ -4,7 +4,7 @@ Current Phase: OpenAI prompt upgrade on top of the merged model tiers (#183); Ph
 Active Story: Prompt upgrade done in a draft PR: Hebrew safety, plan, run report, web chat core; plan eval before/after run.
 Next Recommended Story: Nadav reviews the draft PR; measure the proposed race-taper rule and the chat / run-report eval once credits exist.
 Blockers: Draft only; eval key (Resumely) ran out of credits, so the chat and run-report paid eval did not run.
-Last Validation: type-check 0, lint 0 errors, vitest full suite; plan eval sol: 14/15 judge, 0 critical, 0 fallback.
+Last Validation: type-check 0, lint 0 errors, vitest 1525 passed; review fix: barriers quoted, 45 targeted tests pass; plan eval 14/15.
 Last Updated: 2026-11-24
 
 # 2026-11-23: OpenAI model tiers for RunSmart web (draft PR)
