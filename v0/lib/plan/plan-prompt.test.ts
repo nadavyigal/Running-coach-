@@ -51,8 +51,9 @@ describe('buildPlanPrompt', () => {
     expect(p).toContain('No single run is longer than 28 km.')
     expect(p).toContain('At most 2 quality session(s)')
     expect(p).toContain('keep the first two weeks easy and short')
-    expect(p).toContain('Race goals: the last one to two weeks are a taper with less volume.')
-    expect(p).toContain('keep every run shorter than the race distance')
+    expect(p).toContain(
+      'Race goals: the last one to two weeks before the race are a taper. Weekly distance drops about 30-50% from the peak week, and hard sessions stay short. Before race day, no training run reaches the race distance (marathon: longest run at most 32 km; half marathon: at most 18 km). If the plan ends on race day, the last workout is the race. Say so in its note, and make the two days before it rest or short easy runs.'
+    )
     expect(p).toContain('stop and see a qualified professional if pain returns. Do not diagnose.')
   })
 

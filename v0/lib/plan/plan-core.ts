@@ -644,7 +644,7 @@ ${intensityRule}
 - Total weekly distance grows at most 10% over the previous week.
 - No single run is longer than ${policy.maxWorkoutKm} km.
 - Distances in kilometers, durations in minutes; rest days have distance 0.
-- Race goals: the last one to two weeks are a taper with less volume. For half-marathon and marathon goals, keep every run shorter than the race distance; if the final workout is the race itself, say so in its note.
+- Race goals: the last one to two weeks before the race are a taper. Weekly distance drops about 30-50% from the peak week, and hard sessions stay short. Before race day, no training run reaches the race distance (marathon: longest run at most 32 km; half marathon: at most 18 km). If the plan ends on race day, the last workout is the race. Say so in its note, and make the two days before it rest or short easy runs.
 - If anything below mentions pain, injury, illness or a return after time off: keep the first two weeks easy and short, and say in the description to stop and see a qualified professional if pain returns. Do not diagnose.
 
 Workout mix: ${buildWorkoutMixConstraint(challenge)}
