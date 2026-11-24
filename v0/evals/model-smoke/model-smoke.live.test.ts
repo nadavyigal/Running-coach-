@@ -25,6 +25,7 @@ import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 import sharp from 'sharp';
 import { providerOptionsFor, selectModel, type ModelSelection } from '@/lib/ai/models';
+import { WEB_CHAT_SYSTEM_PROMPT } from '@/lib/ai/coach-chat-core';
 import { OnboardingPromptBuilder } from '@/lib/onboardingPromptBuilder';
 import { buildInsightPrompts } from '@/lib/garminInsightBuilder';
 import { CoachingResponseSchema, RecommendationSchema } from '@/lib/adaptiveCoachingEngine';
@@ -161,7 +162,7 @@ describe.runIf(LIVE)('model smoke (WRITER / FAST call sites)', () => {
     const fast = selectModel('FAST');
     console.log(`[smoke] WRITER=${writer.model} (${writer.reasoningEffort ?? '-'}) FAST=${fast.model} (${fast.reasoningEffort ?? '-'})`);
 
-    const chatSystem = routeTemplate('app/api/chat/route.ts', 'SYSTEM_PROMPT');
+    const chatSystem = WEB_CHAT_SYSTEM_PROMPT;
     const chatModel = selectModel('WRITER', { overrideEnv: ['OPENAI_MODEL'] });
     for (const q of QUESTIONS) {
       await record('chat', chatModel, q, async () => {

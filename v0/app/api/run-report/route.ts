@@ -11,6 +11,10 @@ import { withApiSecurity, type ApiRequest } from '@/lib/security.middleware'
 import { captureAIGeneration } from '@/lib/ai-observability'
 import { requireApiUser } from '@/lib/api-auth'
 import { providerOptionsFor, selectModel } from '@/lib/ai/models'
+import { hasInjurySignal } from '@/lib/ai/safety'
+import { resolveAthleteLanguage } from '@/lib/ai/language'
+import { buildRunReportSystemPrompt } from '@/lib/ai/run-report-prompt'
+import { InsightSchema, type RunInsight } from '@/lib/ai/run-report-schema'
 
 const RUN_TYPES = ['easy', 'tempo', 'intervals', 'long', 'time-trial', 'hill', 'other'] as const
 type RunType = (typeof RUN_TYPES)[number]
@@ -175,102 +179,6 @@ const RunReportRequestSchema = z
   })
   .passthrough()
 
-const SafetyFlagSchema = z.object({
-  code: z.enum(['load_spike', 'injury_signal', 'heat_risk', 'missing_data', 'uncertain']),
-  severity: z.enum(['low', 'medium', 'high']),
-  message: z.string().min(1),
-})
-
-const CoachScoreSchema = z.object({
-  overall: z.coerce.number().min(0).max(100),
-  execution: z.coerce.number().min(0).max(100).optional(),
-  effort: z.coerce.number().min(0).max(100).optional(),
-  consistency: z.coerce.number().min(0).max(100).optional(),
-  form: z.coerce.number().min(0).max(100).optional(),
-}).optional()
-
-const BiomechanicsSchema = z.object({
-  cadenceAssessment: z.string().optional(),
-  groundContactAssessment: z.string().optional(),
-  verticalOscillationAssessment: z.string().optional(),
-  strideLengthAssessment: z.string().optional(),
-  overallFormRating: z.enum(['excellent', 'good', 'fair', 'needs-work']).optional(),
-  keyRecommendation: z.string().optional(),
-}).optional()
-
-const DetailedRecoverySchema = z.object({
-  immediate: z.string().min(1),
-  next2h: z.string().min(1),
-  next24h: z.string().min(1),
-  next48h: z.string().optional(),
-  readinessEstimate: z.string().optional(),
-}).optional()
-
-const StructuredWorkoutSchema = z.object({
-  sessionType: z.string().min(1),
-  warmup: z.string().min(1),
-  main: z.string().min(1),
-  cooldown: z.string().min(1),
-  totalDurationMin: z.coerce.number().min(0).optional(),
-  targetEffort: z.string().optional(),
-  coachingCue: z.string().optional(),
-}).optional()
-
-const TrainingContextSchema = z.object({
-  weeklyVolumeKm: z.coerce.number().min(0).optional(),
-  weeklyRunCount: z.coerce.number().min(0).optional(),
-  volumeVsLastWeek: z.string().optional(),
-  acwrZone: z.string().optional(),
-  planPhase: z.string().optional(),
-  planFitSummary: z.string().optional(),
-}).optional()
-
-const ComparisonSchema = z.object({
-  vsSimilarRuns: z.string().optional(),
-  paceImprovement: z.string().optional(),
-  cadenceTrend: z.string().optional(),
-  hrTrend: z.string().optional(),
-}).optional()
-
-const RaceReadinessSchema = z.object({
-  estimatedVdot: z.coerce.number().min(0).optional(),
-  predictions: z.array(z.object({
-    distance: z.string(),
-    time: z.string(),
-  })).optional(),
-  fitnessDirection: z.enum(['improving', 'maintaining', 'declining']).optional(),
-  note: z.string().optional(),
-}).optional()
-
-const InsightSchema = z.object({
-  runId: z.number().int().nonnegative(),
-  summary: z.array(z.string().min(1)).min(1).max(4),
-  effort: z.enum(['easy', 'moderate', 'hard']),
-  metrics: z.object({
-    paceStability: z.string().min(1),
-    cadenceNote: z.string().optional(),
-    hrNote: z.string().optional(),
-  }),
-  pacingAnalysis: z.string().min(1).optional(),
-  paceConsistency: z.enum(['consistent', 'fading', 'negative-split', 'erratic']).optional(),
-  paceVariability: z.coerce.number().min(0).optional(),
-  recovery: z.object({
-    priority: z.array(z.string().min(1)).min(1),
-    optional: z.array(z.string().min(1)).optional(),
-  }),
-  nextSessionNudge: z.string().optional(),
-  safetyFlags: z.array(SafetyFlagSchema).optional(),
-  coachScore: CoachScoreSchema,
-  biomechanics: BiomechanicsSchema,
-  detailedRecovery: DetailedRecoverySchema,
-  structuredNextWorkout: StructuredWorkoutSchema,
-  trainingContext: TrainingContextSchema,
-  comparison: ComparisonSchema,
-  raceReadiness: RaceReadinessSchema,
-})
-
-type RunInsight = z.infer<typeof InsightSchema>
-
 type NormalizedRunReportInput = {
   runId: number
   runType: RunType
@@ -344,14 +252,6 @@ function normalizeDate(value: unknown): string {
     return value.toISOString()
   }
   return new Date().toISOString()
-}
-
-function hasInjurySignal(text?: string): boolean {
-  if (!text) return false
-  const normalized = text.toLowerCase()
-  return ['pain', 'injury', 'dizzy', 'dizziness', 'sharp', 'strain'].some((flag) =>
-    normalized.includes(flag)
-  )
 }
 
 function selectEffort(input: NormalizedRunReportInput): 'easy' | 'moderate' | 'hard' {
@@ -1035,10 +935,17 @@ function normalizeInsight(insight: RunInsight, fallback: RunInsight): RunInsight
       ? insight.nextSessionNudge
       : fallback.nextSessionNudge
 
-  const safetyFlags =
+  const aiSafetyFlags =
     Array.isArray(insight.safetyFlags) && insight.safetyFlags.length > 0
       ? insight.safetyFlags
       : fallback.safetyFlags
+  // The deterministic injury flag (English or Hebrew pain notes) always
+  // survives, even when the model returns its own, different flags.
+  const deterministicInjury = fallback.safetyFlags?.find((flag) => flag.code === 'injury_signal')
+  const safetyFlags =
+    deterministicInjury && !aiSafetyFlags?.some((flag) => flag.code === 'injury_signal')
+      ? [...(aiSafetyFlags ?? []), deterministicInjury]
+      : aiSafetyFlags
 
   // Use AI's enhanced fields when available, fallback otherwise
   const coachScore = insight.coachScore ?? fallback.coachScore
@@ -1125,6 +1032,10 @@ const handler = async (req: ApiRequest) => {
   const paceConsistency = paceStats ? classifyPaceConsistency(paceStats) : undefined
   const skillInput = buildSkillInput(normalized, gpsQuality, paceStats)
   const fallbackInsight = buildFallbackInsight(normalized)
+  // Explicit request field only; default English. Accept-Language is not read.
+  const language = resolveAthleteLanguage(
+    rawBody && typeof rawBody === 'object' ? (rawBody as Record<string, unknown>).language : undefined
+  )
 
   logger.info('ai_skill_invoked', {
     skill_name: 'run-insights-recovery',
@@ -1136,35 +1047,7 @@ const handler = async (req: ApiRequest) => {
     {
       role: 'system' as const,
       content:
-        `You are Run-Smart, an elite evidence-based running coach providing premium post-run analysis. Be supportive, specific, and practical. No medical diagnosis. If pain or dizziness is noted, advise stopping and consulting a professional.
-
-CORE FIELDS (always fill):
-- summary[0]: Headline with key stats (distance, duration, avg pace)
-- summary[1]: What went well — celebrate a specific achievement from this run
-- summary[2]: Training adaptation this run builds (aerobic base, neuromuscular efficiency, endurance, etc.)
-- summary[3]: How this run connects to the training plan and prepares the next session
-- effort: easy/moderate/hard based on RPE, pace, HR, and run type
-- recovery: priority (2-3 concrete steps) + optional extras
-- nextSessionNudge: Specific actionable next workout
-
-ENHANCED FIELDS (fill when context allows):
-- coachScore: Rate the run 0-100. Subcategories: execution (pacing vs target), effort (appropriateness for run type), consistency (pace variability), form (if biomechanics data provided). A well-executed easy run can score 90+.
-- detailedRecovery: Timed recovery phases — immediate (now), next2h, next24h, next48h (hard efforts only). Include readinessEstimate.
-- structuredNextWorkout: Replace generic nudge with phased workout: sessionType, warmup, main, cooldown, totalDurationMin, targetEffort, coachingCue.
-- biomechanics: When runningDynamics data provided, assess cadence (target 170-180spm), groundContactTime (<250ms optimal), verticalOscillation (<8cm optimal), strideLength trends. Give overallFormRating and keyRecommendation.
-- trainingContext: When historicalContext.recentRuns provided, assess weeklyVolume progression, ACWR zone (sweet spot 0.8-1.3), planPhase, volumeVsLastWeek.
-- comparison: When similar past runs available, note pace improvement, cadence trend, HR trend.
-- raceReadiness: When VDOT known, provide race predictions for 5K/10K/HM/M distances with fitnessDirection.
-
-PACING RULES:
-- If strideDetection.detected=true: pacingAnalysis must describe the strides physiologically (neuromuscular activation, economy) and note peak pace vs average.
-- Otherwise: assess pace consistency, fading, negative splits.
-
-SCORING GUIDE:
-- 90-100: Excellent execution, appropriate effort, consistent pacing
-- 75-89: Good run with minor areas for improvement
-- 60-74: Decent but notable issues (erratic pacing, wrong effort level)
-- Below 60: Significant concerns (injury signals, major pacing issues)`,
+        buildRunReportSystemPrompt(language),
     },
     {
       role: 'user' as const,
@@ -1182,7 +1065,7 @@ SCORING GUIDE:
               paceStats.variabilityMinPerKm * 60
             )}s (low = consistent, high = erratic)\n- Provide 1-2 sentence pacing assessment\n- If pacing was poor, suggest a specific improvement\n- Include pacingAnalysis (1-2 sentences), paceConsistency, and paceVariability (seconds per km as number)\n- Current paceConsistency suggestion: ${paceConsistency ?? 'unknown'}`
           : '\nPacing Analysis: Pace data unavailable; omit pacingAnalysis, paceConsistency, paceVariability.'
-      }\nReturn JSON that matches the provided schema.`,
+      }`,
     },
   ]
 

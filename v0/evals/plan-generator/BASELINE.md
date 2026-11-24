@@ -47,3 +47,46 @@ Same 12 cases, prompt and schema unchanged. Generator set with `OPENAI_MODEL_PLA
   sol 5 / 4.75 / 4.33; terra 5 / 4.75 / 4.5. gpt-6-luna judge on sol: 4.92 / 5 / 4.75.
 - terra ran at effort none: the tier's default effort (low) was not in this batch; the 1,414
   reasoning tokens are terra's own.
+
+## 2026-11-24: prompt upgrade, before vs after
+
+Generator `gpt-6.2-sol` (effort low), judge `gpt-6-luna`. Baseline = the prompt on `origin/main` (12 cases).
+Candidate = the rewritten `buildPlanPrompt` (the same 12 plus 3 new cases). One run each.
+
+| Run | Cases | Judge pass | Fallbacks | Critical | p50 / p95 | Cost per plan | Safety / personalization / progression (judge avg) |
+|---|---|---|---|---|---|---|---|
+| Baseline (main) | 12 | 11/12 | 0 | 0 | 15.0 s / 33.5 s | $0.0117 | 4.92 / 4.92 / 4.83 |
+| Candidate, same 12 cases | 12 | 11/12 | 0 | 0 | | | 4.67 / 4.83 / 4.42 |
+| Candidate, all 15 | 15 | 14/15 | 0 | 0 | 15.8 s / 40.7 s | $0.0130 | 4.67 / 4.80 / 4.40 |
+
+- Both runs fail the same case, `advanced-marathon`. Baseline scored it safety 4; the candidate scored safety 1:
+  it put the full 42 km race in the last week with no taper. That one case explains the whole safety-average drop
+  (the other 11 shared cases score safety 5 in both). Progression dropped one point on `high-volume-history`
+  and `low-consistency-return`. One run each, so some of this is run-to-run variance.
+- A race-taper rule was added afterwards; it is measured in the next section.
+- New cases: `hebrew-beginner-5k` passes 5/5/5 with Hebrew title, description and notes (gender-neutral
+  infinitives). `injury-return-intermediate` passes (safety 4); `injury-return-easy-start` passes: no hard
+  sessions in weeks 1-2, week-1 longest run 4.5 km vs a recent max of 5 km, and the description says to stop and
+  see a professional if pain returns. `hebrew-advanced-vdot` passes with Hebrew notes that keep LT-based paces
+  (for example 4:00-4:10 לק״מ, HR 166-172).
+- Gate held: 0 critical failures, judge pass 93% (threshold 85%).
+
+## 2026-11-24 (later): race-taper rule measured, gate passed
+
+Same setup (`gpt-6.2-sol` low, judge `gpt-6-luna`), RunSmart's own OpenAI key, prompt at `7449c996`
+(race-taper rule in Nadav's wording). Gate set by Nadav: 0 critical, judge pass >= 14/15,
+`advanced-marathon` safety >= 4, average safety >= 4.8.
+
+| Run | Cases | Judge pass | Fallbacks | Critical | p50 / p95 | Cost per plan | Safety / personalization / progression |
+|---|---|---|---|---|---|---|---|
+| Before rewrite (main) | 12 | 11/12 | 0 | 0 | 15.0 s / 33.5 s | $0.0117 | 4.92 / 4.92 / 4.83 |
+| Rewrite, no taper rule | 15 | 14/15 | 0 | 0 | 15.8 s / 40.7 s | $0.0130 | 4.67 / 4.80 / 4.40 |
+| Rewrite + taper rule | 15 | **15/15** | 0 | 0 | 16.3 s / 40.2 s | $0.0136 | **4.80** / 4.80 / 4.53 |
+| Rewrite + taper rule, same 12 as main | 12 | 12/12 | 0 | 0 | | | 4.83 / 4.83 / 4.58 |
+
+- `advanced-marathon`: safety 1 → **4**, now passes. Long runs peak at 32 km, the last weeks drop (80 → 75 → 53 →
+  about 47-49 km including the race), the two days before race day are rest, and the race-day note names it.
+  A two-case re-check (`advanced-marathon`, `intermediate-half-marathon`) passed first: both safety 4.
+- Gate: **passed**, average safety exactly at the 4.8 threshold. Safety 4 (not 5) on `intermediate-half-marathon`,
+  `advanced-marathon` and `injury-return-intermediate`; every other case 5.
+- Spend for this measurement: $0.045 (two-case re-check) + $0.208 (full set).

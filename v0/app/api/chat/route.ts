@@ -9,6 +9,7 @@ import { securityMonitor } from "@/lib/security.monitoring"
 import { captureAIGeneration } from "@/lib/ai-observability"
 import { requireApiUser } from "@/lib/api-auth"
 import { providerOptionsFor, selectModel } from "@/lib/ai/models"
+import { WEB_CHAT_SYSTEM_PROMPT } from "@/lib/ai/coach-chat-core"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,13 +19,8 @@ const CHAT_MODEL = selectModel("WRITER", { overrideEnv: ["OPENAI_MODEL"] })
 const OPENAI_MODEL = CHAT_MODEL.model
 const GARMIN_CONTEXT_BUDGET_TOKENS = 800
 
-const SYSTEM_PROMPT = `You are an expert AI endurance running coach. You provide helpful, encouraging, and scientifically-backed advice about running training, technique, nutrition, injury prevention, and motivation. Keep responses concise but informative.
-
-Safety: This is not medical advice. If the runner reports pain, dizziness, chest pain, or unusual symptoms, advise stopping training and consulting a qualified professional.
-
-If the user explicitly confirms saving a metric or profile detail, append a final line with a <user_data_update> JSON block, for example:
-<user_data_update>{"message":"I can save that lactate threshold pace for you.","data":{"lactateThreshold":270}}</user_data_update>
-Only include this block after explicit confirmation. Do not wrap it in markdown.`
+// Shared safety core plus web extras; see lib/ai/coach-chat-core.ts.
+const SYSTEM_PROMPT = WEB_CHAT_SYSTEM_PROMPT
 
 interface ChatInputMessage {
   role: "user" | "assistant" | "system"

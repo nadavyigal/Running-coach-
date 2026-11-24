@@ -63,9 +63,12 @@ describe.runIf(LIVE)('plan-generator live eval', () => {
     async () => {
       const report: Array<Record<string, unknown>> = [];
 
-      for (const c of cases) {
-        const gen = await generatePlanForEval(c.request);
-        const checks = runChecks(gen.plan, c);
+      // EVAL_CASE_IDS=a,b runs a subset (re-checks after a prompt fix); default all.
+      const only = process.env.EVAL_CASE_IDS?.split(',').map((x) => x.trim()).filter(Boolean);
+      const selected = only?.length ? cases.filter((c) => only.includes(c.id)) : cases;
+      for (const c of selected) {
+        const gen = await generatePlanForEval(c.request, undefined, c.advancedMetrics);
+        const checks = runChecks(gen.plan, c, gen.source);
         const crit = criticalFailures(checks);
         const verdict = await judgePlan(c, gen.plan);
         const judgeUsage = lastJudgeUsage;

@@ -17,7 +17,14 @@ const HARD_TYPES = new Set(['tempo', 'intervals', 'hill', 'time-trial']);
 // Tolerance on the weekly-growth cap to absorb 0.1km rounding from enforcement.
 const GROWTH_TOLERANCE = 0.1;
 
-export function runChecks(plan: PlanData, c: EvalCase): CheckResult[] {
+const HEBREW_LETTER = /[\u0590-\u05FF]/;
+
+/**
+ * `source` matters for language: the deterministic fallback plan is English by
+ * design, so the Hebrew check is critical only for AI plans (fallbacks are
+ * counted separately by the live eval).
+ */
+export function runChecks(plan: PlanData, c: EvalCase, source: 'ai' | 'fallback' = 'ai'): CheckResult[] {
   const results: CheckResult[] = [];
   const policy = derivePlanPolicy(c.request);
   const add = (id: string, pass: boolean, critical: boolean, detail: string) =>
@@ -85,6 +92,35 @@ export function runChecks(plan: PlanData, c: EvalCase): CheckResult[] {
 
   const descLen = plan.description?.trim().length ?? 0;
   add('has-rationale', descLen >= 20, false, `description length ${descLen}`);
+
+  if (c.request.language === 'he') {
+    const notes = plan.workouts.filter((w) => w.type !== 'rest' && w.notes?.trim()).map((w) => w.notes as string);
+    const hebrewNotes = notes.filter((n) => HEBREW_LETTER.test(n)).length;
+    const notesOk = notes.length === 0 || hebrewNotes / notes.length >= 0.8;
+    const pass = HEBREW_LETTER.test(plan.title) && HEBREW_LETTER.test(plan.description) && notesOk;
+    add(
+      'hebrew-prose',
+      pass,
+      source === 'ai',
+      `title ${HEBREW_LETTER.test(plan.title)}, description ${HEBREW_LETTER.test(plan.description)}, notes ${hebrewNotes}/${notes.length}`
+    );
+  }
+
+  if (c.injuryReturn) {
+    const earlyHard = plan.workouts.filter((w) => w.week <= 2 && HARD_TYPES.has(w.type)).length;
+    const recent = (c.request.trainingHistory?.recentRuns ?? [])
+      .map((r) => r.distanceKm)
+      .filter((d): d is number => typeof d === 'number');
+    const recentMax = recent.length ? Math.max(...recent) : null;
+    const week1Max = Math.max(0, ...plan.workouts.filter((w) => w.week === 1).map((w) => w.distance));
+    const shortStart = recentMax === null || week1Max <= recentMax * 1.1;
+    add(
+      'injury-return-easy-start',
+      earlyHard === 0 && shortStart,
+      false,
+      `hard sessions in weeks 1-2: ${earlyHard}; week-1 longest ${week1Max}km vs recent max ${recentMax ?? 'n/a'}km`
+    );
+  }
 
   return results;
 }

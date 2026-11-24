@@ -369,7 +369,7 @@ describe("POST /api/chat system-message handling", () => {
     const { messages } = mocks.streamText.mock.calls[0][0] as { messages: Array<{ role: string; content: string }> }
     const systemMessages = messages.filter((m) => m.role === "system")
     expect(systemMessages).toHaveLength(1)
-    expect(systemMessages[0].content).toContain("expert AI endurance running coach")
+    expect(systemMessages[0].content).toContain("You are RunSmart Coach, a calm running coach.")
     expect(systemMessages[0].content).toContain("This is not medical advice")
     expect(JSON.stringify(messages)).not.toContain(injected)
     expect(messages.at(-1)).toEqual({ role: "user", content: "Should I run through knee pain?" })

@@ -1,9 +1,18 @@
-# 2026-11-24: next 16.4.6 audit fix (draft PR)
+# 2026-11-24: RunSmart web prompt upgrade and Hebrew safety (PR #184)
+
+Current Phase: OpenAI prompt upgrade on top of the merged model tiers (#183); Phase 2 approved by Nadav.
+Active Story: Taper rule measured: plan gate passed (15/15, safety 4.80, marathon 1 to 4); chat and run-report before/after run.
+Next Recommended Story: Merge #184 after the refreshed quality gates pass. Hebrew knee-pain chat reply lacks a stop verb.
+Blockers: Waiting for CI on the branch updated from main.
+Last Validation: eval:plan 15/15 0 critical; prompt eval chat 5/6 (was 6/6), run report 6/6 (was 4/6); spend about $0.27.
+Last Updated: 2026-11-24
+
+# 2026-11-24: next 16.4.6 audit fix (merged as #185)
 
 Current Phase: CI repair: main's quality-gates Security audit failed on seven moderate next advisories.
 Active Story: next 16.4.3 to 16.4.6 (patch); lockfile changes only next and @next/* entries.
-Next Recommended Story: Merge this before the prompt-upgrade PR #184 so its quality-gates check passes.
-Blockers: Draft; needs founder yes to merge (dependency change, Tier 2 review).
+Next Recommended Story: Update prompt-upgrade PR #184 from main to pick up the dependency fix.
+Blockers: None.
 Last Validation: audit-ci --moderate exit 0 (was 1); lint 0 errors; tsc 0; vitest 1504 passed; production build exit 0.
 Last Updated: 2026-11-24
 
