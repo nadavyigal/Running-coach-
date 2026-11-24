@@ -13,7 +13,15 @@ import { captureAIGeneration } from '../utils/ai-observability';
  * run at OPENAI_REASONING_EFFORT_VISION (default none).
  */
 const VISION_MODEL = process.env.OPENAI_MODEL_VISION?.trim() || 'gpt-4o';
-const VISION_EFFORT = process.env.OPENAI_REASONING_EFFORT_VISION?.trim() || 'none';
+const VISION_EFFORT = (() => {
+  // Same lowest-accepted-effort rules as normalizeEffort in v0/lib/ai/models.ts.
+  const effort = process.env.OPENAI_REASONING_EFFORT_VISION?.trim() || 'none';
+  const id = VISION_MODEL.toLowerCase();
+  const low = effort === 'none' || effort === 'minimal';
+  if (low && (/^gpt-6\.2-sol/.test(id) || /^o\d/.test(id))) return 'low';
+  if (effort === 'none' && /^gpt-5(-|$)/.test(id)) return 'minimal';
+  return effort;
+})();
 const VISION_PROVIDER_OPTIONS = /^(o\d|gpt-5|gpt-6)/i.test(VISION_MODEL)
   ? { openai: { reasoningEffort: VISION_EFFORT } }
   : undefined;

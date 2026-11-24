@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { CURRENT_MODELS, providerOptionsFor, selectModel, selectionForModel } from "./models"
 
 const KEYS = [
@@ -6,8 +6,18 @@ const KEYS = [
   "OPENAI_REASONING_EFFORT_PLAN", "OPENAI_REASONING_EFFORT_FAST", "OPENAI_MODEL", "RUN_REPORT_MODEL",
 ]
 
+const saved: Record<string, string | undefined> = {}
+beforeEach(() => {
+  for (const key of KEYS) {
+    saved[key] = process.env[key]
+    delete process.env[key]
+  }
+})
 afterEach(() => {
-  for (const key of KEYS) delete process.env[key]
+  for (const key of KEYS) {
+    if (saved[key] === undefined) delete process.env[key]
+    else process.env[key] = saved[key]
+  }
 })
 
 describe("selectModel", () => {
@@ -37,6 +47,13 @@ describe("selectModel", () => {
     process.env.OPENAI_MODEL_FAST = "gpt-6-luna"
     process.env.OPENAI_REASONING_EFFORT_FAST = "turbo"
     expect(selectModel("FAST").reasoningEffort).toBe("none")
+  })
+
+  it("maps none to the lowest effort each family accepts (OPENAI_MODEL=gpt-5 case)", () => {
+    process.env.OPENAI_MODEL = "gpt-5"
+    expect(selectModel("FAST", { overrideEnv: ["OPENAI_MODEL"] })).toEqual({ tier: "FAST", model: "gpt-5", reasoningEffort: "minimal" })
+    expect(selectionForModel("FAST", "o4-mini").reasoningEffort).toBe("low")
+    expect(selectionForModel("FAST", "gpt-5.1").reasoningEffort).toBe("none")
   })
 
   it("selectionForModel resolves effort for an explicit id", () => {
