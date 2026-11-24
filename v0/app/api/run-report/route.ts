@@ -12,6 +12,8 @@ import { captureAIGeneration } from '@/lib/ai-observability'
 import { requireApiUser } from '@/lib/api-auth'
 import { providerOptionsFor, selectModel } from '@/lib/ai/models'
 import { hasInjurySignal } from '@/lib/ai/safety'
+import { resolveAthleteLanguage } from '@/lib/ai/language'
+import { buildRunReportSystemPrompt } from '@/lib/ai/run-report-prompt'
 
 const RUN_TYPES = ['easy', 'tempo', 'intervals', 'long', 'time-trial', 'hill', 'other'] as const
 type RunType = (typeof RUN_TYPES)[number]
@@ -197,7 +199,9 @@ const BiomechanicsSchema = z.object({
   strideLengthAssessment: z.string().optional(),
   overallFormRating: z.enum(['excellent', 'good', 'fair', 'needs-work']).optional(),
   keyRecommendation: z.string().optional(),
-}).optional()
+}).optional().describe(
+  'Only when runningDynamics is provided. Typical reference ranges: cadence about 170-180 spm, ground contact under 250 ms, vertical oscillation under 8 cm. Treat them as references, not targets every runner must hit.'
+)
 
 const DetailedRecoverySchema = z.object({
   immediate: z.string().min(1),
@@ -205,7 +209,7 @@ const DetailedRecoverySchema = z.object({
   next24h: z.string().min(1),
   next48h: z.string().optional(),
   readinessEstimate: z.string().optional(),
-}).optional()
+}).optional().describe('Timed phases: immediate, next2h, next24h, and next48h after hard efforts only.')
 
 const StructuredWorkoutSchema = z.object({
   sessionType: z.string().min(1),
@@ -215,7 +219,7 @@ const StructuredWorkoutSchema = z.object({
   totalDurationMin: z.coerce.number().min(0).optional(),
   targetEffort: z.string().optional(),
   coachingCue: z.string().optional(),
-}).optional()
+}).optional().describe('Phased next workout: warmup, main, cooldown, total minutes, target effort, one coaching cue.')
 
 const TrainingContextSchema = z.object({
   weeklyVolumeKm: z.coerce.number().min(0).optional(),
@@ -224,14 +228,14 @@ const TrainingContextSchema = z.object({
   acwrZone: z.string().optional(),
   planPhase: z.string().optional(),
   planFitSummary: z.string().optional(),
-}).optional()
+}).optional().describe('Only when historicalContext.recentRuns is provided. ACWR 0.8-1.3 is the usual safe range.')
 
 const ComparisonSchema = z.object({
   vsSimilarRuns: z.string().optional(),
   paceImprovement: z.string().optional(),
   cadenceTrend: z.string().optional(),
   hrTrend: z.string().optional(),
-}).optional()
+}).optional().describe('Only when similar past runs are provided: pace, cadence and heart-rate trends.')
 
 const RaceReadinessSchema = z.object({
   estimatedVdot: z.coerce.number().min(0).optional(),
@@ -241,22 +245,34 @@ const RaceReadinessSchema = z.object({
   })).optional(),
   fitnessDirection: z.enum(['improving', 'maintaining', 'declining']).optional(),
   note: z.string().optional(),
-}).optional()
+}).optional().describe('Only when VDOT is known: 5K / 10K / half / marathon predictions and fitness direction.')
 
 const InsightSchema = z.object({
   runId: z.number().int().nonnegative(),
-  summary: z.array(z.string().min(1)).min(1).max(4),
-  effort: z.enum(['easy', 'moderate', 'hard']),
+  summary: z
+    .array(z.string().min(1))
+    .min(1)
+    .max(4)
+    .describe(
+      'Up to 4 short lines: 1) headline with distance, duration and average pace; 2) one specific thing that went well; 3) the adaptation this run builds; 4) how it sets up the next session.'
+    ),
+  effort: z.enum(['easy', 'moderate', 'hard']).describe('From RPE, pace, heart rate and run type.'),
   metrics: z.object({
     paceStability: z.string().min(1),
     cadenceNote: z.string().optional(),
     hrNote: z.string().optional(),
   }),
-  pacingAnalysis: z.string().min(1).optional(),
+  pacingAnalysis: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      '1-2 sentences. If strideDetection.detected is true, describe the strides (neuromuscular activation, running economy) and compare peak pace with average; otherwise assess consistency, fade or negative split.'
+    ),
   paceConsistency: z.enum(['consistent', 'fading', 'negative-split', 'erratic']).optional(),
   paceVariability: z.coerce.number().min(0).optional(),
   recovery: z.object({
-    priority: z.array(z.string().min(1)).min(1),
+    priority: z.array(z.string().min(1)).min(1).describe('2-3 concrete recovery steps.'),
     optional: z.array(z.string().min(1)).optional(),
   }),
   nextSessionNudge: z.string().optional(),
@@ -1118,6 +1134,10 @@ const handler = async (req: ApiRequest) => {
   const paceConsistency = paceStats ? classifyPaceConsistency(paceStats) : undefined
   const skillInput = buildSkillInput(normalized, gpsQuality, paceStats)
   const fallbackInsight = buildFallbackInsight(normalized)
+  // Explicit request field only; default English. Accept-Language is not read.
+  const language = resolveAthleteLanguage(
+    rawBody && typeof rawBody === 'object' ? (rawBody as Record<string, unknown>).language : undefined
+  )
 
   logger.info('ai_skill_invoked', {
     skill_name: 'run-insights-recovery',
@@ -1129,35 +1149,7 @@ const handler = async (req: ApiRequest) => {
     {
       role: 'system' as const,
       content:
-        `You are Run-Smart, an elite evidence-based running coach providing premium post-run analysis. Be supportive, specific, and practical. No medical diagnosis. If pain or dizziness is noted, advise stopping and consulting a professional.
-
-CORE FIELDS (always fill):
-- summary[0]: Headline with key stats (distance, duration, avg pace)
-- summary[1]: What went well — celebrate a specific achievement from this run
-- summary[2]: Training adaptation this run builds (aerobic base, neuromuscular efficiency, endurance, etc.)
-- summary[3]: How this run connects to the training plan and prepares the next session
-- effort: easy/moderate/hard based on RPE, pace, HR, and run type
-- recovery: priority (2-3 concrete steps) + optional extras
-- nextSessionNudge: Specific actionable next workout
-
-ENHANCED FIELDS (fill when context allows):
-- coachScore: Rate the run 0-100. Subcategories: execution (pacing vs target), effort (appropriateness for run type), consistency (pace variability), form (if biomechanics data provided). A well-executed easy run can score 90+.
-- detailedRecovery: Timed recovery phases — immediate (now), next2h, next24h, next48h (hard efforts only). Include readinessEstimate.
-- structuredNextWorkout: Replace generic nudge with phased workout: sessionType, warmup, main, cooldown, totalDurationMin, targetEffort, coachingCue.
-- biomechanics: When runningDynamics data provided, assess cadence (target 170-180spm), groundContactTime (<250ms optimal), verticalOscillation (<8cm optimal), strideLength trends. Give overallFormRating and keyRecommendation.
-- trainingContext: When historicalContext.recentRuns provided, assess weeklyVolume progression, ACWR zone (sweet spot 0.8-1.3), planPhase, volumeVsLastWeek.
-- comparison: When similar past runs available, note pace improvement, cadence trend, HR trend.
-- raceReadiness: When VDOT known, provide race predictions for 5K/10K/HM/M distances with fitnessDirection.
-
-PACING RULES:
-- If strideDetection.detected=true: pacingAnalysis must describe the strides physiologically (neuromuscular activation, economy) and note peak pace vs average.
-- Otherwise: assess pace consistency, fading, negative splits.
-
-SCORING GUIDE:
-- 90-100: Excellent execution, appropriate effort, consistent pacing
-- 75-89: Good run with minor areas for improvement
-- 60-74: Decent but notable issues (erratic pacing, wrong effort level)
-- Below 60: Significant concerns (injury signals, major pacing issues)`,
+        buildRunReportSystemPrompt(language),
     },
     {
       role: 'user' as const,
@@ -1175,7 +1167,7 @@ SCORING GUIDE:
               paceStats.variabilityMinPerKm * 60
             )}s (low = consistent, high = erratic)\n- Provide 1-2 sentence pacing assessment\n- If pacing was poor, suggest a specific improvement\n- Include pacingAnalysis (1-2 sentences), paceConsistency, and paceVariability (seconds per km as number)\n- Current paceConsistency suggestion: ${paceConsistency ?? 'unknown'}`
           : '\nPacing Analysis: Pace data unavailable; omit pacingAnalysis, paceConsistency, paceVariability.'
-      }\nReturn JSON that matches the provided schema.`,
+      }`,
     },
   ]
 
