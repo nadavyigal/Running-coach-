@@ -1,10 +1,10 @@
 # 2026-11-24: RunSmart web prompt upgrade and Hebrew safety (draft PR)
 
 Current Phase: OpenAI prompt upgrade on top of the merged model tiers (#183); Phase 2 approved by Nadav.
-Active Story: Story 5 done: Hebrew pain and injury terms in lib/ai/safety.ts, used by run-report.
-Next Recommended Story: Plan prompt rewrite with explicit language field, evidence lines and new eval cases.
+Active Story: Stories 5-6 done: Hebrew injury terms; plan prompt rewrite with explicit language, evidence lines, 3 new eval cases.
+Next Recommended Story: Run report prompt with .describe() field guidance and language; then web chat shared safety core.
 Blockers: Paid evals need an OpenAI key on this machine; none found for RunSmart.
-Last Validation: vitest lib/ai/safety.test.ts 3 passed; auth-gate test 29 passed; eslint on changed files 0 errors.
+Last Validation: type-check exit 0; vitest lib/plan, plan checks, lib/ai 22 passed; eslint 0 errors on changed files.
 Last Updated: 2026-11-24
 
 # 2026-11-23: OpenAI model tiers for RunSmart web (draft PR)
