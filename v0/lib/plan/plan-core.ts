@@ -617,7 +617,8 @@ INSTRUCTIONS:
 `
     : '';
 
-  const barriers = user.barriers.map((b) => sanitizeForPrompt(b, 80)).filter(Boolean);
+  // Collapse whitespace so one entry cannot start a new, unquoted prompt line.
+  const barriers = user.barriers.map((b) => sanitizeForPrompt(b.replace(/\s+/g, ' '), 80)).filter(Boolean);
   const runnerLines = [
     `- Experience: ${user.experience}`,
     `- Goal: ${user.goal}`,
@@ -625,7 +626,7 @@ INSTRUCTIONS:
     `- Preferred times: ${user.preferredTimes.join(', ')}`,
     typeof user.age === 'number' ? `- Age: ${user.age}` : '',
     user.averageWeeklyKm ? `- Current weekly volume: ${user.averageWeeklyKm} km` : '',
-    barriers.length ? `- Says it gets in the way: ${barriers.join('; ')}` : '',
+    barriers.length ? `- Says it gets in the way: ${barriers.map((x) => `"${x}"`).join('; ')}` : '',
     sanitizedPlanType ? `- Plan type: ${sanitizedPlanType}` : '',
     sanitizedTarget ? `- Target distance: ${sanitizedTarget}` : '',
     sanitizedVolume ? `- Training volume: ${sanitizedVolume}` : '',
