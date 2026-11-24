@@ -21,6 +21,7 @@ import {
 } from '@/lib/plan/plan-core';
 import { captureAIGeneration } from '@/lib/ai-observability';
 import { requireApiUser } from '@/lib/api-auth';
+import { providerOptionsFor, selectModel } from '@/lib/ai/models';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -125,7 +126,8 @@ export async function POST(req: Request) {
       body.goals
     );
 
-    const modelName = 'gpt-4o';
+    const planModel = selectModel('PLAN');
+    const modelName = planModel.model;
     const maxOutputTokens = computeMaxOutputTokens(totalWeeks, user.daysPerWeek);
 
     const result = await withSecureOpenAI(async () => {
@@ -135,6 +137,7 @@ export async function POST(req: Request) {
         prompt,
         temperature: 0.7,
         maxOutputTokens,
+        providerOptions: providerOptionsFor(planModel),
       });
     });
 

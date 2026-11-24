@@ -4,6 +4,8 @@ type AIUsage = {
   totalTokens?: number
   inputTokens?: number
   outputTokens?: number
+  /** AI SDK v5: part of outputTokens; reasoning models bill it as output. */
+  reasoningTokens?: number
 }
 
 export type AIGenerationCaptureArgs = {
@@ -102,6 +104,22 @@ function errorMessage(error: unknown): string {
 }
 
 export async function captureAIGeneration(args: AIGenerationCaptureArgs): Promise<void> {
+  // One token line per model call (incl. reasoning tokens), independent of
+  // PostHog, so cost per call site can be compared across a model switch.
+  if (args.usage) {
+    console.info(
+      JSON.stringify({
+        event: "openai_usage",
+        callSite: args.traceName,
+        model: args.model,
+        latencyMs: args.latencyMs,
+        inputTokens: getInputTokens(args.usage),
+        outputTokens: getOutputTokens(args.usage),
+        reasoningTokens: usageNumber(args.usage.reasoningTokens),
+      })
+    )
+  }
+
   const config = getPostHogConfig()
   if (!config) return
 
@@ -122,6 +140,7 @@ export async function captureAIGeneration(args: AIGenerationCaptureArgs): Promis
     $ai_http_status: getHttpStatus(args.error),
     $ai_input_tokens: getInputTokens(args.usage),
     $ai_output_tokens: getOutputTokens(args.usage),
+    $ai_reasoning_tokens: usageNumber(args.usage?.reasoningTokens),
     $ai_total_tokens: getTotalTokens(args.usage),
     $ai_latency: args.latencyMs,
     $ai_trace_id: traceId,

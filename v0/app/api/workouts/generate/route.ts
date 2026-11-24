@@ -5,6 +5,7 @@ import { sanitizeForPrompt, sanitizeDistance } from '@/lib/security';
 import { withSecureOpenAI } from '@/lib/apiKeyManager';
 import { logger } from '@/lib/logger';
 import { requireApiUser } from '@/lib/api-auth';
+import { providerOptionsFor, selectModel } from '@/lib/ai/models';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -138,9 +139,11 @@ export async function POST(req: Request) {
     const timeoutId = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS);
 
     try {
+      const workoutModel = selectModel('WRITER');
       const result = await withSecureOpenAI(async () => {
         return generateText({
-          model: openai('gpt-4o'),
+          model: openai(workoutModel.model),
+          providerOptions: providerOptionsFor(workoutModel),
           system: SYSTEM_PROMPT,
           prompt,
           maxOutputTokens: 700,

@@ -11,11 +11,14 @@ import {
 } from "@/lib/server/garmin-insights-service"
 import { captureAIGeneration } from "@/lib/ai-observability"
 import { requireApiUser } from "@/lib/api-auth"
+import { providerOptionsFor, selectModel } from "@/lib/ai/models"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const OPENAI_MODEL = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini"
+// OPENAI_MODEL (older shared override) keeps priority over OPENAI_MODEL_FAST.
+const INSIGHT_MODEL = selectModel("FAST", { overrideEnv: ["OPENAI_MODEL"] })
+const OPENAI_MODEL = INSIGHT_MODEL.model
 
 function parseInsightType(value: unknown): GarminInsightType {
   if (value === "weekly" || value === "post_run" || value === "daily") return value
@@ -120,6 +123,7 @@ export async function POST(req: Request): Promise<Response> {
     const prompts = buildInsightPrompts(summary)
     const result = streamText({
       model: openai(OPENAI_MODEL),
+      providerOptions: providerOptionsFor(INSIGHT_MODEL),
       messages: [
         { role: "system", content: prompts.systemPrompt },
         { role: "user", content: prompts.userPrompt },

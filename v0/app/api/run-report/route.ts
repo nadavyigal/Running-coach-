@@ -10,6 +10,7 @@ import { logger } from '@/lib/logger'
 import { withApiSecurity, type ApiRequest } from '@/lib/security.middleware'
 import { captureAIGeneration } from '@/lib/ai-observability'
 import { requireApiUser } from '@/lib/api-auth'
+import { providerOptionsFor, selectModel } from '@/lib/ai/models'
 
 const RUN_TYPES = ['easy', 'tempo', 'intervals', 'long', 'time-trial', 'hill', 'other'] as const
 type RunType = (typeof RUN_TYPES)[number]
@@ -305,7 +306,9 @@ type NormalizedRunReportInput = {
   historicalContext?: z.infer<typeof HistoricalContextSchema>
 }
 
-const RUN_REPORT_MODEL = process.env.RUN_REPORT_MODEL || 'gpt-4o-mini'
+// RUN_REPORT_MODEL keeps priority over OPENAI_MODEL_FAST.
+const RUN_REPORT_SELECTION = selectModel('FAST', { overrideEnv: ['RUN_REPORT_MODEL'] })
+const RUN_REPORT_MODEL = RUN_REPORT_SELECTION.model
 const MIN_DISTANCE_FOR_PACE_KM = 0.05
 const PACE_VARIABILITY_ERRATIC_MIN = 0.5
 const PACE_SPLIT_THRESHOLD_MIN = 0.15
@@ -1186,6 +1189,7 @@ SCORING GUIDE:
   const aiResult = await withSecureOpenAI(async () => {
     const result = await generateObject({
       model: openai(RUN_REPORT_MODEL),
+      providerOptions: providerOptionsFor(RUN_REPORT_SELECTION),
       schema: InsightSchema,
       prompt: promptMessages,
     })

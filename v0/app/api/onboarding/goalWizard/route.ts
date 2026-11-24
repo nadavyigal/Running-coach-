@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger"
 import { rateLimiter, securityConfig } from '@/lib/security.config'
 import { securityMonitor } from '@/lib/security.monitoring'
 import { requireApiUser } from "@/lib/api-auth"
+import { providerOptionsFor, selectModel } from "@/lib/ai/models"
 
 // Get client IP for rate limiting
 function getClientIP(request: NextRequest): string {
@@ -462,8 +463,10 @@ export async function POST(req: NextRequest) {
     const phasePrompt = PHASE_PROMPTS[currentPhase as keyof typeof PHASE_PROMPTS]
     const systemPrompt = phasePrompt.replace('{conversation}', conversation)
 
+    const wizardModel = selectModel("WRITER")
     const result = await streamText({
-      model: openai("gpt-4o"),
+      model: openai(wizardModel.model),
+      providerOptions: providerOptionsFor(wizardModel),
       messages: [
         { role: "system", content: systemPrompt },
         ...messages.slice(-3) // Last 3 messages for context

@@ -8,11 +8,14 @@ import { rateLimiter, securityConfig } from "@/lib/security.config"
 import { securityMonitor } from "@/lib/security.monitoring"
 import { captureAIGeneration } from "@/lib/ai-observability"
 import { requireApiUser } from "@/lib/api-auth"
+import { providerOptionsFor, selectModel } from "@/lib/ai/models"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const OPENAI_MODEL = process.env.OPENAI_MODEL?.trim() || "gpt-4o"
+// OPENAI_MODEL (older shared override) keeps priority over OPENAI_MODEL_WRITER.
+const CHAT_MODEL = selectModel("WRITER", { overrideEnv: ["OPENAI_MODEL"] })
+const OPENAI_MODEL = CHAT_MODEL.model
 const GARMIN_CONTEXT_BUDGET_TOKENS = 800
 
 const SYSTEM_PROMPT = `You are an expert AI endurance running coach. You provide helpful, encouraging, and scientifically-backed advice about running training, technique, nutrition, injury prevention, and motivation. Keep responses concise but informative.
@@ -138,6 +141,7 @@ export async function POST(req: Request): Promise<Response> {
 
     const result = streamText({
       model: openai(OPENAI_MODEL),
+      providerOptions: providerOptionsFor(CHAT_MODEL),
       messages: apiMessages,
       maxOutputTokens: 500,
       temperature: 0.7,

@@ -3,6 +3,7 @@ import type { CoreMessage } from 'ai'
 import { openai } from '@ai-sdk/openai'
 import { dbUtils } from '@/lib/dbUtils'
 import { captureAIGeneration } from '@/lib/ai-observability'
+import { providerOptionsFor, selectModel, selectionForModel, type ModelTier } from '@/lib/ai/models'
 
 // ============================================================================
 // TYPES AND INTERFACES
@@ -25,6 +26,8 @@ export interface ChatRequest {
    */
   maxOutputTokens?: number
   model?: string
+  /** Tier of `model`, for its reasoning effort. Defaults to FAST. */
+  tier?: ModelTier
   traceName?: string
 }
 
@@ -94,7 +97,8 @@ function getChatConfig(): ChatConfig {
   const timeoutDefault = process.env.NODE_ENV === 'test' ? 2000 : 15000
 
   return {
-    defaultModel: process.env.CHAT_DEFAULT_MODEL || 'gpt-4o-mini',
+    // CHAT_DEFAULT_MODEL keeps priority over OPENAI_MODEL_FAST.
+    defaultModel: selectModel('FAST', { overrideEnv: ['CHAT_DEFAULT_MODEL'] }).model,
     maxOutputTokens: parseEnvNumber('CHAT_MAX_TOKENS', 1000),
     timeoutMs: parseEnvNumber('CHAT_TIMEOUT_MS', timeoutDefault),
     maxMessages: parseEnvNumber('CHAT_MAX_MESSAGES', 10),
@@ -369,6 +373,7 @@ export class ChatDriver {
       await withTimeout(
         generateText({
           model: openai(config.defaultModel),
+          providerOptions: providerOptionsFor(selectionForModel('FAST', config.defaultModel)),
           messages: [{ role: 'user', content: 'ping' }],
           maxOutputTokens: 16,
           abortSignal: controller.signal,
@@ -470,6 +475,7 @@ export class ChatDriver {
       const modelName = aiModelName
       const maxOutputTokens = request.maxOutputTokens ?? request.maxTokens ?? config.maxOutputTokens
       const model = openai(modelName)
+      const providerOptions = providerOptionsFor(selectionForModel(request.tier ?? 'FAST', modelName))
 
       const controller = new AbortController()
 
@@ -477,6 +483,7 @@ export class ChatDriver {
         const result = await withTimeout(
           Promise.resolve(streamText({
             model,
+            providerOptions,
             messages,
             maxOutputTokens,
             abortSignal: controller.signal,
@@ -518,6 +525,7 @@ export class ChatDriver {
       const result = await withTimeout(
         generateText({
           model,
+          providerOptions,
           messages,
           maxOutputTokens,
           abortSignal: controller.signal,

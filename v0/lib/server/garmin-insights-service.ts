@@ -17,8 +17,11 @@ import { logger } from "@/lib/logger"
 import { captureAIGeneration } from "@/lib/ai-observability"
 import { getGarminOAuthState } from "@/lib/server/garmin-oauth-store"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { providerOptionsFor, selectModel } from "@/lib/ai/models"
 
-const DEFAULT_MODEL = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini"
+// OPENAI_MODEL (older shared override) keeps priority over OPENAI_MODEL_FAST.
+const INSIGHT_MODEL = selectModel("FAST", { overrideEnv: ["OPENAI_MODEL"] })
+const DEFAULT_MODEL = INSIGHT_MODEL.model
 
 interface DerivedMetricRow {
   date: string
@@ -436,6 +439,7 @@ export async function generateInsightForUser(
   ]
   const result = await generateText({
     model: openai(DEFAULT_MODEL),
+    providerOptions: providerOptionsFor(INSIGHT_MODEL),
     messages,
     temperature: 0.35,
     maxOutputTokens: 280,

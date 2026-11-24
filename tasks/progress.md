@@ -1,3 +1,12 @@
+# 2026-11-23: OpenAI model tiers for RunSmart web (draft PR)
+
+Current Phase: OpenAI model migration before the 2027-01-14 shutdown of gpt-4o and gpt-4o-mini.
+Active Story: every web and worker model id env-driven by tier (v0/lib/ai/models.ts); defaults unchanged, merge is a no-op.
+Next Recommended Story: set OPENAI_MODEL_PLAN/WRITER/FAST/VISION/VISION_OCR on preview, re-run eval:plan, then production.
+Blockers: draft; needs review and founder yes; tts-1 (shuts down 2027-01-06) needs a separate decision.
+Last Validation: 2026-11-23 tsc 0, vitest 1503 passed; plan eval 12/12 all models; smoke 55/55 target vs 53/55 current.
+Last Updated: 2026-11-23
+
 # 2026-11-23: Coach v2 C7.10 push tokens and prefs migration mirrored from iOS
 
 Current Phase: Coach Experience v2, Batch B start. Web twin of the iOS C7.10 PR; mirror only.

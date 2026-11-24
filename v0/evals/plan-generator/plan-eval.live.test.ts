@@ -1,10 +1,10 @@
 /* eslint-disable no-console -- this runner intentionally prints the eval summary */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { cases } from './cases';
 import { generatePlanForEval } from './generate';
-import { judgePlan } from './judge';
+import { judgePlan, lastJudgeUsage, JUDGE_MODEL } from './judge';
 import { runChecks, criticalFailures } from './checks';
 
 // Live eval (paid). Skipped unless RUN_LIVE_EVAL=1 so normal `vitest run` and CI
@@ -17,6 +17,30 @@ import { runChecks, criticalFailures } from './checks';
 
 const LIVE = process.env.RUN_LIVE_EVAL === '1';
 const JUDGE_PASS_THRESHOLD = 0.85;
+// EVAL_REPORT_FILE lets model comparisons write side by side (default report.json).
+const REPORT_FILE = process.env.EVAL_REPORT_FILE?.trim() || 'report.json';
+
+/** USD per 1M tokens, developers.openai.com/api/docs/pricing, checked 2026-11-23. */
+const PRICES_PER_MTOK: Record<string, { input: number; output: number }> = {
+  'gpt-4o': { input: 2.5, output: 10 },
+  'gpt-4o-mini': { input: 0.15, output: 0.6 },
+  'gpt-6.2-sol': { input: 2, output: 10 },
+  'gpt-6.1-terra': { input: 1, output: 5 },
+  'gpt-6-luna': { input: 0.1, output: 0.5 },
+};
+
+function costUsd(model: string, usage: { inputTokens: number; outputTokens: number } | null): number | null {
+  const price = PRICES_PER_MTOK[model];
+  if (!price || !usage) return null;
+  // Reasoning tokens are already inside outputTokens and bill as output.
+  return (usage.inputTokens * price.input + usage.outputTokens * price.output) / 1_000_000;
+}
+
+function percentile(values: number[], p: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)];
+}
 
 describe.runIf(LIVE)('plan-generator live eval', () => {
   // Without this, a missing key surfaces as `AI_APICallError: Incorrect API key
@@ -44,11 +68,19 @@ describe.runIf(LIVE)('plan-generator live eval', () => {
         const checks = runChecks(gen.plan, c);
         const crit = criticalFailures(checks);
         const verdict = await judgePlan(c, gen.plan);
+        const judgeUsage = lastJudgeUsage;
         report.push({
           id: c.id,
           description: c.description,
           source: gen.source,
           genError: gen.error,
+          model: gen.model,
+          latencyMs: gen.latencyMs,
+          usage: gen.usage,
+          costUsd: costUsd(gen.model, gen.usage),
+          judgeModel: JUDGE_MODEL,
+          judgeUsage,
+          judgeCostUsd: costUsd(JUDGE_MODEL, judgeUsage),
           criticalFailures: crit.map((x) => `${x.id}: ${x.detail}`),
           checks,
           verdict,
@@ -65,9 +97,33 @@ describe.runIf(LIVE)('plan-generator live eval', () => {
       const judgePassRate = judgePassCount / report.length;
       const criticalCases = report.filter((r) => (r.criticalFailures as string[]).length > 0);
       const fallbackCases = report.filter((r) => r.source === 'fallback');
+      const latencies = report.map((r) => r.latencyMs as number);
+      const usages = report.map((r) => r.usage as { inputTokens: number; outputTokens: number; reasoningTokens: number } | null);
+      const sum = (f: (u: { inputTokens: number; outputTokens: number; reasoningTokens: number }) => number) =>
+        usages.reduce((n, u) => n + (u ? f(u) : 0), 0);
+      const costs = report.map((r) => r.costUsd as number | null).filter((v): v is number => v !== null);
+      const judgeScores = report.map((r) => r.verdict as Record<string, number>);
+      const avg = (k: string) => judgeScores.reduce((n, v) => n + (v[k] ?? 0), 0) / judgeScores.length;
+      const metrics = {
+        model: report[0]?.model,
+        judgeModel: JUDGE_MODEL,
+        latencyP50Ms: percentile(latencies, 50),
+        latencyP95Ms: percentile(latencies, 95),
+        inputTokens: sum((u) => u.inputTokens),
+        outputTokens: sum((u) => u.outputTokens),
+        reasoningTokens: sum((u) => u.reasoningTokens),
+        costPerPlanUsd: costs.length ? Number((costs.reduce((a, b) => a + b, 0) / costs.length).toFixed(5)) : null,
+        judgeAvg: {
+          safety: Number(avg('safety').toFixed(2)),
+          personalization: Number(avg('personalization').toFixed(2)),
+          progression: Number(avg('progression').toFixed(2)),
+          rationaleClarity: Number(avg('rationaleClarity').toFixed(2)),
+          actionability: Number(avg('actionability').toFixed(2)),
+        },
+      };
 
       writeFileSync(
-        join(dir, 'report.json'),
+        resolve(dir, REPORT_FILE),
         JSON.stringify(
           {
             feature: 'plan-generator',
@@ -76,6 +132,7 @@ describe.runIf(LIVE)('plan-generator live eval', () => {
             judgePassThreshold: JUDGE_PASS_THRESHOLD,
             fallbackCases: fallbackCases.map((r) => r.id),
             criticalFailureCases: criticalCases.map((r) => r.id),
+            metrics,
             cases: report,
           },
           null,
@@ -86,6 +143,7 @@ describe.runIf(LIVE)('plan-generator live eval', () => {
       console.log(
         `[plan-eval] cases=${report.length} judgePassRate=${(judgePassRate * 100).toFixed(0)}% fallbacks=${fallbackCases.length} criticalFailureCases=${criticalCases.length}`
       );
+      console.log(`[plan-eval] metrics ${JSON.stringify(metrics)}`);
       if (fallbackCases.length > 0) {
         console.log(`  FALLBACK (AI generation failed, served deterministic plan): ${fallbackCases.map((r) => r.id).join(', ')}`);
       }
@@ -99,6 +157,7 @@ describe.runIf(LIVE)('plan-generator live eval', () => {
       ).toEqual([]);
       expect(judgePassRate).toBeGreaterThanOrEqual(JUDGE_PASS_THRESHOLD);
     },
-    600_000
+    // 12 sequential plans; reasoning models can take over a minute per long plan.
+    1_800_000
   );
 });
