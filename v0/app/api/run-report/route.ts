@@ -11,6 +11,7 @@ import { withApiSecurity, type ApiRequest } from '@/lib/security.middleware'
 import { captureAIGeneration } from '@/lib/ai-observability'
 import { requireApiUser } from '@/lib/api-auth'
 import { providerOptionsFor, selectModel } from '@/lib/ai/models'
+import { hasInjurySignal } from '@/lib/ai/safety'
 
 const RUN_TYPES = ['easy', 'tempo', 'intervals', 'long', 'time-trial', 'hill', 'other'] as const
 type RunType = (typeof RUN_TYPES)[number]
@@ -344,14 +345,6 @@ function normalizeDate(value: unknown): string {
     return value.toISOString()
   }
   return new Date().toISOString()
-}
-
-function hasInjurySignal(text?: string): boolean {
-  if (!text) return false
-  const normalized = text.toLowerCase()
-  return ['pain', 'injury', 'dizzy', 'dizziness', 'sharp', 'strain'].some((flag) =>
-    normalized.includes(flag)
-  )
 }
 
 function selectEffort(input: NormalizedRunReportInput): 'easy' | 'moderate' | 'hard' {
