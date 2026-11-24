@@ -1,3 +1,12 @@
+# 2026-11-24: next 16.4.6 audit fix (draft PR)
+
+Current Phase: CI repair: main's quality-gates Security audit failed on seven moderate next advisories.
+Active Story: next 16.4.3 to 16.4.6 (patch); lockfile changes only next and @next/* entries.
+Next Recommended Story: Merge this before the prompt-upgrade PR #184 so its quality-gates check passes.
+Blockers: Draft; needs founder yes to merge (dependency change, Tier 2 review).
+Last Validation: audit-ci --moderate exit 0 (was 1); lint 0 errors; tsc 0; vitest 1504 passed; production build exit 0.
+Last Updated: 2026-11-24
+
 # 2026-11-23: OpenAI model tiers for RunSmart web (draft PR)
 
 Current Phase: OpenAI model migration before the 2027-01-14 shutdown of gpt-4o and gpt-4o-mini.
