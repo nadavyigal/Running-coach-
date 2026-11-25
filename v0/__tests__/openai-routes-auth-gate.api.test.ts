@@ -45,6 +45,18 @@ vi.mock("@ai-sdk/openai", () => ({
 
 vi.mock("@/lib/ai-observability", () => ({ captureAIGeneration: async () => undefined }))
 vi.mock("@/lib/server/posthog", () => ({ captureServerEvent: async () => undefined }))
+// Voice cues speak through the Realtime API (WebSocket); no network in this test.
+vi.mock("@/lib/server/realtime-tts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/realtime-tts")>()),
+  synthesizeWithRealtime: async (text: string) => ({
+    wav: new ArrayBuffer(48),
+    transcript: text,
+    audioSeconds: 0.1,
+    latencyMs: 1,
+    audioOutputTokens: 2,
+    textOutputTokens: 2,
+  }),
+}))
 vi.mock("@/lib/enhanced-ai-coach", () => ({
   buildGarminContext: async () => null,
   buildGarminContextSummary: () => "",
