@@ -6,11 +6,12 @@ import type { EvalCase } from './cases';
 import { providerOptionsFor, selectionForModel, type ReasoningEffort } from '@/lib/ai/models';
 
 /**
- * Judge model: EVAL_JUDGE_MODEL, default gpt-4o-mini (OpenAI shuts it down on
- * 2027-01-14; gpt-6-luna is the candidate). Reasoning judges run at
- * EVAL_JUDGE_EFFORT (default none).
+ * Judge model: EVAL_JUDGE_MODEL, default gpt-6-luna since 2026-11-25 (it was
+ * gpt-4o-mini, which OpenAI shuts down on 2027-01-14). Reasoning judges run at
+ * EVAL_JUDGE_EFFORT (default none). Before changing it again, score a finished
+ * report with the candidate: `rejudge.live.test.ts`.
  */
-export const JUDGE_MODEL = process.env.EVAL_JUDGE_MODEL?.trim() || 'gpt-4o-mini';
+export const JUDGE_MODEL = process.env.EVAL_JUDGE_MODEL?.trim() || 'gpt-6-luna';
 const JUDGE_EFFORT = (process.env.EVAL_JUDGE_EFFORT?.trim() || 'none') as ReasoningEffort;
 
 export interface JudgeUsage {
@@ -24,7 +25,7 @@ export interface JudgeUsage {
 export let lastJudgeUsage: JudgeUsage | null = null;
 
 // LM-judge: scores coaching quality the deterministic checks cannot capture.
-// Runs on a cheap model (gpt-4o-mini) per the model-routing principle — the
+// Runs on a cheap model (gpt-6-luna) per the model-routing principle — the
 // judge is a lower-complexity task than generation.
 //
 // The judge is GROUNDED in a pre-computed weekly summary (totals + growth) so it

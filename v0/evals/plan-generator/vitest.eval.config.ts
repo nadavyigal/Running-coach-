@@ -21,7 +21,7 @@ export default defineConfig({
   root,
   test: {
     environment: 'node',
-    include: ['evals/plan-generator/plan-eval.live.test.ts'],
+    include: ['evals/plan-generator/plan-eval.live.test.ts', 'evals/plan-generator/rejudge.live.test.ts'],
     env: evalEnv,
     testTimeout: 1_800_000,
     hookTimeout: 120_000,
