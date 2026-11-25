@@ -13,7 +13,7 @@ missing. Tests verify the code; this verifies the model's output.
 |---|---|---|
 | `cases.ts` | — | Golden set: 12 realistic personas + per-case safety bounds. |
 | `checks.ts` | free | Deterministic, code-checked safety properties (schema, week count, distance sanity, weekly load cap, no hard sessions in recovery/mindful plans). |
-| `judge.ts` | paid | LM-judge (gpt-4o-mini) scoring safety, personalization, progression, rationale clarity, actionability. |
+| `judge.ts` | paid | LM-judge (gpt-6-luna; `EVAL_JUDGE_MODEL`) scoring safety, personalization, progression, rationale clarity, actionability. |
 | `generate.ts` | paid | Generates a plan through the **exact** production prompt + schema (imported from `lib/plan/plan-core.ts`), so there is no prompt drift. |
 | `checks.test.ts` | free, in CI | Runs the deterministic checks against the deterministic fallback plan. Catches regressions in the safety engine with zero API cost. |
 | `plan-eval.live.test.ts` | paid, gated | The real eval: generate → check → judge across the golden set. Skipped unless `RUN_LIVE_EVAL=1`. |

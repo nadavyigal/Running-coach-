@@ -90,3 +90,20 @@ Same setup (`gpt-6.2-sol` low, judge `gpt-6-luna`), RunSmart's own OpenAI key, p
 - Gate: **passed**, average safety exactly at the 4.8 threshold. Safety 4 (not 5) on `intermediate-half-marathon`,
   `advanced-marathon` and `injury-return-intermediate`; every other case 5.
 - Spend for this measurement: $0.045 (two-case re-check) + $0.208 (full set).
+
+## 2026-11-25: judge moved to gpt-6-luna (gpt-4o-mini shuts down 2027-01-14)
+
+`EVAL_JUDGE_MODEL` now defaults to `gpt-6-luna`, and the nightly workflow evaluates the
+production generator (`OPENAI_MODEL_PLAN=gpt-6.2-sol`) instead of the code default `gpt-4o`.
+One run of all 15 cases with the luna judge, then the SAME 15 plans re-judged with
+`rejudge.live.test.ts`:
+
+| Judge | Judge pass | Critical | Safety | Personalization | Progression | Gate agreement with luna |
+|---|---|---|---|---|---|---|
+| **gpt-6-luna** (new default) | 15/15 | 0 | 4.87 | 4.93 | 4.47 | — |
+| gpt-4o-mini (old) | 15/15 | 0 | 5.00 | 4.80 | 4.47 | 15/15 |
+
+- Generator gpt-6.2-sol: p50 12.6 s, p95 36.2 s, $0.0134 per plan, 0 fallbacks.
+- The gate (0 critical, judge pass ≥ 0.85) gives the same answer under both judges.
+  luna scores safety slightly lower (4.87 vs 5.0), so read the 4.8 safety floor from the
+  prompt-upgrade gate against luna numbers from here on.

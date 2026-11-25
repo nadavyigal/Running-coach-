@@ -1,3 +1,12 @@
+# 2026-11-25: Plan-eval judge on gpt-6-luna; nightly evaluates the production generator
+
+Current Phase: OpenAI model migration; gpt-4o-mini (old judge) shuts down 2027-01-14.
+Active Story: EVAL_JUDGE_MODEL default gpt-6-luna; nightly sets OPENAI_MODEL_PLAN=gpt-6.2-sol; rejudge tool added.
+Next Recommended Story: watch the first nightly run on the new judge and generator.
+Blockers: draft PR; needs founder yes to merge.
+Last Validation: 2026-11-25 plan eval 15/15, 0 critical with luna; gpt-4o-mini re-judge agrees 15/15; tsc 0.
+Last Updated: 2026-11-25
+
 # 2026-11-25: Voice cues off tts-1, onto the Realtime API (draft PR)
 
 Current Phase: OpenAI model migration; tts-1 and every /v1/audio/speech model shut down 2027-01-06.

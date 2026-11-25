@@ -36,6 +36,10 @@ jobs:
       - name: Run plan-generator eval (LM-judge)
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Evaluate what production runs (Vercel Production env), not the code
+          # default. Keep in step with the Production OPENAI_MODEL_PLAN.
+          OPENAI_MODEL_PLAN: gpt-6.2-sol
+          EVAL_JUDGE_MODEL: gpt-6-luna
         run: npm run eval:plan
 
       - name: Upload eval report
