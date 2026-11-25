@@ -91,26 +91,14 @@ function normalizeWords(text: string): string[] {
 }
 
 /**
- * True when the transcript says the same words as the cue, in order.
- * Punctuation and case are ignored. Every number in the cue must be spoken.
+ * True when the transcript says exactly the same words as the cue, in order.
+ * Only punctuation, case and Hebrew vowel points are ignored. No partial
+ * match: a pain cue that loses "stop" or "not" must never be played.
  */
-export function transcriptMatches(cue: string, transcript: string, minRatio = 0.9): boolean {
+export function transcriptMatches(cue: string, transcript: string): boolean {
   const a = normalizeWords(cue)
   const b = normalizeWords(transcript)
-  if (a.length === 0 || b.length === 0) return false
-  const numbersInCue = a.filter((w) => /\d/.test(w))
-  if (numbersInCue.some((n) => !b.includes(n))) return false
-  // Longest common subsequence of words, over the longer of the two.
-  const dp: number[] = new Array(b.length + 1).fill(0)
-  for (let i = 1; i <= a.length; i += 1) {
-    let prev = 0
-    for (let j = 1; j <= b.length; j += 1) {
-      const tmp = dp[j]
-      dp[j] = a[i - 1] === b[j - 1] ? prev + 1 : Math.max(dp[j], dp[j - 1])
-      prev = tmp
-    }
-  }
-  return dp[b.length] / Math.max(a.length, b.length) >= minRatio
+  return a.length > 0 && a.length === b.length && a.every((w, i) => w === b[i])
 }
 
 function base64ToBytes(b64: string): Uint8Array {

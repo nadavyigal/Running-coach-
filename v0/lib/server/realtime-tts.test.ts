@@ -67,6 +67,15 @@ describe("transcriptMatches", () => {
     expect(transcriptMatches("Heart rate 176. Ease off now.", "Heart rate high. Ease off now.")).toBe(false)
     expect(transcriptMatches("If it hurts, stop and consult a professional.", "Keep going, you are doing great.")).toBe(false)
   })
+  it("rejects a single dropped or changed word in a safety cue", () => {
+    expect(
+      transcriptMatches(
+        "If you feel pain stop running and consult a professional.",
+        "If you feel pain running and consult a professional."
+      )
+    ).toBe(false)
+    expect(transcriptMatches("Do not run through the pain.", "Do run through the pain.")).toBe(false)
+  })
   it("handles Hebrew", () => {
     expect(transcriptMatches("אם כואב לך, תעצור עכשיו ותתייעץ עם איש מקצוע.", "אם כואב לך תעצור עכשיו ותתייעץ עם איש מקצוע")).toBe(true)
     expect(transcriptMatches("אם כואב לך, תעצור עכשיו.", "תמשיך לרוץ, אתה מעולה.")).toBe(false)
