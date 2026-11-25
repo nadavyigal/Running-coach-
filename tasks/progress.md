@@ -1,3 +1,12 @@
+# 2026-11-25: Voice cues off tts-1, onto the Realtime API (draft PR)
+
+Current Phase: OpenAI model migration; tts-1 and every /v1/audio/speech model shut down 2027-01-06.
+Active Story: voice-cue speaks through gpt-realtime-2.1-mini (WebSocket), returns WAV; transcript must match the cue or no audio.
+Next Recommended Story: check the voice project key can use gpt-realtime-2.1-mini and its $30 cap, merge, listen on iPhone.
+Blockers: draft; needs founder yes to merge (production deploy).
+Last Validation: 2026-11-25 tsc 0, vitest 1537 passed; live smoke 6/6 verbatim (2 Hebrew), p50 2.3 s, ~$0.0021 per cue.
+Last Updated: 2026-11-25
+
 # 2026-11-24: RunSmart web prompt upgrade and Hebrew safety (PR #184)
 
 Current Phase: OpenAI prompt upgrade on top of the merged model tiers (#183); Phase 2 approved by Nadav.

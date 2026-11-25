@@ -5,6 +5,12 @@ import { captureServerEvent } from "@/lib/server/posthog"
 import { checkVoiceCueThrottle } from "@/lib/server/voice-cue-throttle"
 import { requireApiUser } from "@/lib/api-auth"
 import { providerOptionsFor, selectModel } from "@/lib/ai/models"
+import {
+  estimateRealtimeCostUsd,
+  resolveTtsConfig,
+  synthesizeWithRealtime,
+  transcriptMatches,
+} from "@/lib/server/realtime-tts"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -15,8 +21,8 @@ export const dynamic = "force-dynamic"
 const VOICE_OPENAI_KEY = process.env.OPENAI_VOICE_KEY || process.env.OPENAI_API_KEY || ""
 const voiceOpenAI = createOpenAI({ apiKey: VOICE_OPENAI_KEY })
 
-// Rough per-cue cost in USD. TTS (tts-1, ~$15/1M chars) dominates; the
-// gpt-4o-mini text call is ~$0.00005. Logged for spend visibility in PostHog.
+// Rough per-cue cost in USD on the legacy Speech API (tts-1, ~$15/1M chars);
+// the text call is ~$0.00005. Logged for spend visibility in PostHog.
 function estimateCueCostUsd(cueText: string): number {
   const ttsUsd = (cueText.length / 1_000_000) * 15
   const textUsd = 0.00005
@@ -88,7 +94,6 @@ export async function POST(request: Request): Promise<Response> {
 
   let cueText: string
   try {
-    // Text model only. tts-1 below is a separate decision (shuts down 2027-01-06).
     const cueModel = selectModel("FAST")
     const result = await generateText({
       model: voiceOpenAI(cueModel.model),
@@ -107,6 +112,50 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({ error: "OpenAI key not configured" }, { status: 500 })
   }
 
+  const tts = resolveTtsConfig()
+
+  if (tts.realtime) {
+    // Realtime API: the only path after tts-1 shuts down on 2027-01-06.
+    // A cue must be spoken as written; one retry, then fail closed.
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      let result
+      try {
+        result = await synthesizeWithRealtime(cueText, { apiKey, model: tts.model, voice: tts.voice, speed: 0.95, timeoutMs: 10_000 })
+      } catch (error) {
+        await captureServerEvent("voice_cue_tts_failed", {
+          userId: body.userId,
+          model: tts.model,
+          attempt,
+          error: error instanceof Error ? error.message.slice(0, 160) : "unknown",
+        })
+        if (attempt === 2) return NextResponse.json({ error: "TTS generation failed" }, { status: 500 })
+        continue
+      }
+      if (!transcriptMatches(cueText, result.transcript)) {
+        await captureServerEvent("voice_cue_tts_mismatch", { userId: body.userId, model: tts.model, attempt })
+        if (attempt === 2) return NextResponse.json({ error: "TTS output did not match the cue" }, { status: 502 })
+        continue
+      }
+      await captureServerEvent("voice_cue_served", {
+        userId: body.userId,
+        ttsModel: tts.model,
+        estimatedCostUsd: Number((estimateRealtimeCostUsd(result) + 0.00005).toFixed(6)),
+        cueChars: cueText.length,
+        audioSeconds: Number(result.audioSeconds.toFixed(2)),
+        ttsLatencyMs: result.latencyMs,
+      })
+      return new Response(result.wav, {
+        status: 200,
+        headers: {
+          "Content-Type": "audio/wav",
+          "X-Coach-Text": encodeURIComponent(cueText),
+          "Cache-Control": "no-store",
+        },
+      })
+    }
+  }
+
+  // Legacy Speech API (OPENAI_TTS_MODEL=tts-1): rollback only, until 2027-01-06.
   let audioBuffer: ArrayBuffer
   try {
     const ttsResponse = await fetch("https://api.openai.com/v1/audio/speech", {
@@ -116,9 +165,9 @@ export async function POST(request: Request): Promise<Response> {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "tts-1",
+        model: tts.model,
         input: cueText,
-        voice: "nova",
+        voice: tts.voice,
         response_format: "aac",
         speed: 0.95,
       }),
@@ -133,6 +182,7 @@ export async function POST(request: Request): Promise<Response> {
 
   await captureServerEvent("voice_cue_served", {
     userId: body.userId,
+    ttsModel: tts.model,
     estimatedCostUsd: estimateCueCostUsd(cueText),
     cueChars: cueText.length,
   })
