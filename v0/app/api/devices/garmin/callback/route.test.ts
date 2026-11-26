@@ -21,6 +21,9 @@ const resolveGarminOAuthClientCredentialsMock = vi.hoisted(() =>
   }))
 )
 
+// The route is switched off in production; open the guard to test the handler behind it.
+vi.mock('@/lib/server/garmin-route-guard', () => ({ blockGarminRoute: () => null }))
+
 vi.mock('@/lib/security.middleware', () => ({
   withApiSecurity: (handler: unknown) => handler,
 }))

@@ -5,9 +5,13 @@ import { GARMIN_CONNECT_DISABLED_MESSAGE, isGarminConnectEnabled } from '@/lib/s
 import { resolveGarminOAuthClientId } from '@/lib/server/garmin-credentials';
 import { GARMIN_OAUTH_AUTHORIZE_URL } from '@/lib/server/garmin-endpoints';
 import { generateSignedState, generateCodeVerifier, generateCodeChallenge } from '../oauth-state';
+import { blockGarminRoute } from '@/lib/server/garmin-route-guard';
 
 // POST - Initiate Garmin OAuth 2.0 PKCE flow (SECURED)
 async function handleGarminConnect(req: ApiRequest) {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   try {
     if (!isGarminConnectEnabled()) {
       logger.warn('Garmin connect blocked by GARMIN_CONNECT_ENABLED feature flag');

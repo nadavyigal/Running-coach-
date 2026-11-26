@@ -320,6 +320,14 @@ export async function deleteGarminTokens(userId: number): Promise<void> {
   }
 }
 
+/** The account a connection is linked to, for ownership checks. Does not touch tokens. */
+export async function getGarminConnectionOwner(
+  userId: number
+): Promise<{ authUserId: string | null } | null> {
+  const connection = await fetchConnectionRow(userId)
+  return connection ? { authUserId: connection.auth_user_id } : null
+}
+
 export async function getGarminOAuthState(userId: number): Promise<GarminOAuthState | null> {
   const [connection, token] = await Promise.all([
     fetchConnectionRow(userId),

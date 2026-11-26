@@ -45,6 +45,9 @@ const createAdminClientMock = vi.hoisted(() => vi.fn())
 // garmin-rate-limiter has no server-only import — use the real synchronous implementation.
 // Fake timers (vi.useFakeTimers) make new Date() deterministic so rate-limit logic is testable.
 
+// The route is switched off in production; open the guard to test the handler behind it.
+vi.mock('@/lib/server/garmin-route-guard', () => ({ blockGarminRoute: () => null }))
+
 vi.mock('@/lib/server/posthog', () => ({
   captureServerEvent: captureServerEventMock,
 }))

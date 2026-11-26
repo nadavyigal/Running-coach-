@@ -1,3 +1,12 @@
+# 2026-11-26: Garmin web API routes switched off until Garmin goes live (draft PR)
+
+Current Phase: API hardening on RunSmart web.
+Active Story: Garmin client and insight routes answer 503; chat adds no Garmin data; disconnect owner-only; backup ids checked.
+Next Recommended Story: founder review, then merge; with PR #190, the second to land opens the guard in shared tests.
+Blockers: draft; needs founder yes to merge (production deploy).
+Last Validation: 2026-11-26 lint 0 errors; tsc 0; vitest 1584 passed, 5 skipped; build 0; audit-ci passed.
+Last Updated: 2026-11-26
+
 # 2026-11-25: Plan-eval judge on gpt-6-luna; nightly evaluates the production generator
 
 Current Phase: OpenAI model migration; gpt-4o-mini (old judge) shuts down 2027-01-14.

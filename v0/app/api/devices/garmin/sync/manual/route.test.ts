@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 
 const syncGarminUserMock = vi.hoisted(() => vi.fn())
 
+// The route is switched off in production; open the guard to test the handler behind it.
+vi.mock('@/lib/server/garmin-route-guard', () => ({ blockGarminRoute: () => null }))
+
 vi.mock('@/lib/garmin/sync/syncUser', () => ({
   syncGarminUser: syncGarminUserMock,
 }))

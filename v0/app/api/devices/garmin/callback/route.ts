@@ -9,6 +9,7 @@ import {
   upsertGarminConnection,
   upsertGarminTokens,
 } from '@/lib/server/garmin-oauth-store'
+import { blockGarminRoute } from '@/lib/server/garmin-route-guard'
 
 const GARMIN_TOKEN_URL = 'https://diauth.garmin.com/di-oauth2-service/oauth/token'
 const GARMIN_PROFILE_URL = 'https://apis.garmin.com/wellness-api/rest/user/id'
@@ -35,6 +36,9 @@ async function resolveCurrentProfileId(): Promise<string | null> {
 }
 
 async function handleGarminCallback(req: ApiRequest) {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   try {
     const { code, state, error } = await req.json()
 

@@ -7,6 +7,7 @@ import {
   persistGeneratedInsight,
   type GeneratedGarminInsight,
 } from '@/lib/server/garmin-insights-service'
+import { blockGarminRoute } from '@/lib/server/garmin-route-guard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -102,6 +103,9 @@ async function generateFallbackWeeklyInsight(userId: number): Promise<GeneratedG
 }
 
 export async function GET(req: Request) {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   const userId = parseUserId(req)
   if (!userId) {
     return NextResponse.json({ error: 'Valid userId is required' }, { status: 400 })
@@ -139,6 +143,9 @@ async function readBody(req: Request): Promise<Record<string, unknown>> {
 }
 
 export async function POST(req: Request) {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   const body = await readBody(req)
   const userId = parseUserId(req, body)
 

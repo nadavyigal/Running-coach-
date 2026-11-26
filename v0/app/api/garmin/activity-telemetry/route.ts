@@ -3,6 +3,7 @@ import { lookbackStartIso, readGarminExportRows } from '@/lib/server/garmin-expo
 import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { blockGarminRoute } from '@/lib/server/garmin-route-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -342,6 +343,9 @@ function extractActivityIdFromPayload(payload: Record<string, unknown>): string 
 }
 
 export async function GET(request: NextRequest) {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   const { searchParams } = request.nextUrl
   const userId = parseUserId(searchParams.get('userId'))
   const activityId = searchParams.get('activityId')?.trim() ?? ''

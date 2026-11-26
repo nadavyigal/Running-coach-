@@ -78,6 +78,9 @@ vi.mock("@/lib/goalDiscoveryEngine", () => ({
   goalDiscoveryEngine: { discoverGoals: (...args: unknown[]) => mocks.discoverGoals(...args) },
 }))
 
+// ai/garmin-insights is switched off in production; open the guard so its session gate stays covered.
+vi.mock("@/lib/server/garmin-route-guard", () => ({ blockGarminRoute: () => null }))
+
 import * as chat from "@/app/api/chat/route"
 import * as aiActivity from "@/app/api/ai-activity/route"
 import * as garminInsights from "@/app/api/ai/garmin-insights/route"

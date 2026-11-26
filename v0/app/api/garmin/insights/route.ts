@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { blockGarminRoute } from '@/lib/server/garmin-route-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,9 @@ function isDateParamValid(value: string | null): value is string {
 }
 
 export async function GET(request: NextRequest) {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   const { searchParams } = request.nextUrl
   const userId = parseUserId(searchParams.get('userId'))
   const date = searchParams.get('date')
