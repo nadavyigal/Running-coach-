@@ -37,8 +37,9 @@ Exit 0 = clean, 1 = drift. The script is read-only.
 | `20261118160000_get_my_coach.sql` | y | y | y | yes (prod 20261118185809; checked 2026-11-23) |
 | `20261118170000_set_run_route_hidden.sql` | y | y | y | yes (prod 20261118185813; checked 2026-11-23) |
 | `20261118180000_coach_welcome_note.sql` | y | y | y | yes (prod 20261118185847; checked 2026-11-23) |
+| `20261120100000_athlete_display_name_placeholder.sql` (file added 2026-11-26, after it was applied) | y | y | y | yes (prod 20261120094612; SQL equal to the prod row and the live function, checked read-only 2026-11-26) |
 
-17 files in each tree. The newest file on `main` is `20261118180000_coach_welcome_note.sql`.
+17 files in each tree when this section was generated. The newest file on `main` then was `20261118180000_coach_welcome_note.sql`. `20261120100000_athlete_display_name_placeholder.sql` was added on 2026-11-26 with its original timestamp so a fresh database replays in production's order; `scripts/check_migrations.py` lists it in `BACKFILLED_APPLIED` so the "newer than main" rule skips it.
 
 ---
 
@@ -46,9 +47,7 @@ Exit 0 = clean, 1 = drift. The script is read-only.
 
 **Repo trees: none found on 2026-11-23.** Every migration file exists in both trees and is byte-identical (`scripts/check-migration-drift.sh` CLEAN).
 
-**Production only (found 2026-11-23):**
-
-- `20261120094612_athlete_display_name_placeholder` (prod version, no repo file): only in production. It replaces `public.athlete_display_name(uuid)` so the placeholder name "RunSmart Runner" from builds before 1.2.7 reads as no name ("Athlete"). Same signature and grants as `20261117164500_coach_read_rpcs.sql`. No Batch A file replaces this function. Not fixed here: a follow-up PR adds the file to both repos.
+**Production only: none (2026-11-26).** The one entry found on 2026-11-23, prod `20261120094612_athlete_display_name_placeholder`, now has its repo file in both trees (section 1).
 
 When the script finds a mismatch, add one line per file here, in this form, and fix nothing in the same PR:
 
@@ -82,6 +81,12 @@ Batch letters are from the v1.3 file map (section 0.0) and the refined plan (sec
 | C | `20261201110000_coach_plan_locks.sql` | M6b | C8.1b | not written |
 
 M0 and M0b share one file because the refined plan folds C7.12 (kill switch) into C7.0 (S1). The per-coach allowlist table `coach_v2_pilot_coaches` and the RPC `coach_v2_pilot_access()` (decision N1 = B) also go in the M0 file.
+
+### 3.1b Outside the batches
+
+| File | Story | What it is | Status |
+|---|---|---|---|
+| `20261126100000_coach_display_name.sql` | names fix (2026-11-26) | `set_coach_display_name(text)`: the coach sets their own `coach_profiles.display_name`. Function only, no table change. CI suite `coach_display_name`. | written; applied 2026-11-26 (prod 20261126140919) |
 
 ### 3.2 Later M-numbers (no file name reserved)
 
