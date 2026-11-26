@@ -1,3 +1,12 @@
+# 2026-11-26: Garmin jobs fail soft on a rejected Supabase key (draft PR)
+
+Current Phase: Production repair: Supabase rejects the web project's service key ("Unregistered API key").
+Active Story: Garmin worker and nightly cron skip with 200; runs route returns 503; diagnose returns a placeholder webhook URL.
+Next Recommended Story: Founder merges, replaces SUPABASE_SERVICE_ROLE_KEY with a new secret key, redeploys.
+Blockers: draft PR; key replacement and cron pause are founder actions.
+Last Validation: 2026-11-26 vitest 1562 passed, 5 skipped; lint 0 errors; type-check 0; build passed.
+Last Updated: 2026-11-26
+
 # 2026-11-25: Plan-eval judge on gpt-6-luna; nightly evaluates the production generator
 
 Current Phase: OpenAI model migration; gpt-4o-mini (old judge) shuts down 2027-01-14.

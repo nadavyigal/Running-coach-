@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server'
 
 import { processPendingGarminJobs } from '@/lib/integrations/garmin/service'
 import { logger } from '@/lib/logger'
+import {
+  garminJobSkippedResponse,
+  getGarminConfigGap,
+  getRejectedKeyReason,
+} from '@/lib/server/garmin-availability'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -26,6 +31,9 @@ export async function POST(request: Request) {
     return new NextResponse('Unauthorized', { status: 401 })
   }
 
+  const configGap = getGarminConfigGap()
+  if (configGap) return garminJobSkippedResponse(configGap)
+
   try {
     const limit = parseLimit(request)
     const stats = await processPendingGarminJobs({
@@ -39,6 +47,9 @@ export async function POST(request: Request) {
       processedAt: new Date().toISOString(),
     })
   } catch (error) {
+    const rejectedKey = getRejectedKeyReason(error)
+    if (rejectedKey) return garminJobSkippedResponse(rejectedKey)
+
     logger.error('Garmin worker route failed:', error)
     return NextResponse.json(
       {

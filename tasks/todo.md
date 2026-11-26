@@ -1,3 +1,13 @@
+## 2026-11-26 — Garmin fail-soft (founder approved)
+
+Story: stop the Garmin job error flood while Supabase rejects the service key, and stop the diagnose response returning a secret value.
+
+- [x] Skip helper: not configured or rejected key, one log line per instance.
+- [x] Worker and nightly cron return 200 `skipped`; runs route returns 503 `GARMIN_UNAVAILABLE`.
+- [x] Diagnose response returns the placeholder webhook URL.
+- [x] Tests first, then lint, type-check, full vitest, build.
+- [ ] Founder: new Supabase secret key in Vercel, redeploy, verify; pause or resume `garmin-worker-drain`.
+
 ## Current web release gate — 2 November
 
 147/149 merged and deployed.150 implementation and live staged pipeline validated. Fixed Google date coercion, deployed script version2, verified raw string fields with the same fictional identity and cleaned both QA attempts (0 matching rows remain). Source/evidence update ready for push.

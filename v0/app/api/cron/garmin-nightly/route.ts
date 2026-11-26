@@ -3,6 +3,11 @@ import { logger } from '@/lib/logger'
 import { listConnectedGarminUserIds } from '@/lib/server/garmin-oauth-store'
 import { enqueueGarminSyncJob } from '@/lib/server/garmin-sync-queue'
 import {
+  garminJobSkippedResponse,
+  getGarminConfigGap,
+  getRejectedKeyReason,
+} from '@/lib/server/garmin-availability'
+import {
   runGarminSyncForUser,
   buildExecutionOptions,
 } from '@/app/api/devices/garmin/sync/route'
@@ -94,6 +99,9 @@ export async function GET(request: Request) {
     return new NextResponse('Unauthorized', { status: 401 })
   }
 
+  const configGap = getGarminConfigGap()
+  if (configGap) return garminJobSkippedResponse(configGap)
+
   try {
     const stats = await runNightlySyncEnqueue()
     return NextResponse.json({
@@ -102,6 +110,9 @@ export async function GET(request: Request) {
       stats,
     })
   } catch (error) {
+    const rejectedKey = getRejectedKeyReason(error)
+    if (rejectedKey) return garminJobSkippedResponse(rejectedKey)
+
     logger.error('Garmin nightly cron failed:', error)
     return NextResponse.json(
       {
