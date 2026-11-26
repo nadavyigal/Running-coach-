@@ -3,6 +3,7 @@ import {
   runGarminSyncForUser,
   type GarminSyncExecutionOptions,
 } from '@/app/api/devices/garmin/sync/route'
+import { blockGarminRoute } from '@/lib/server/garmin-route-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +32,9 @@ function parseSinceIso(req: Request): string | null {
 }
 
 export async function POST(req: Request) {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   const userId = parseUserId(req)
   if (!userId) {
     return NextResponse.json(

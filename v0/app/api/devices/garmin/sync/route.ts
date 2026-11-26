@@ -22,6 +22,7 @@ import { evaluateGarminSyncRateLimit } from '@/lib/server/garmin-rate-limiter'
 import { enqueueGarminDeriveJob } from '@/lib/server/garmin-sync-queue'
 import { captureServerEvent } from '@/lib/server/posthog'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { blockGarminRoute } from '@/lib/server/garmin-route-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -1855,6 +1856,9 @@ export async function runGarminSyncForUser(params: {
 }
 
 export async function GET(req: Request) {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   const userId = parseUserId(req)
   if (!userId) {
     return NextResponse.json(
@@ -1914,6 +1918,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   const userId = parseUserId(req)
   if (!userId) {
     return NextResponse.json(

@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const getValidGarminAccessTokenMock = vi.hoisted(() => vi.fn(async () => "server-access-token"));
 const markGarminAuthErrorMock = vi.hoisted(() => vi.fn(async () => undefined));
 
+// The route is switched off in production; open the guard to test the handler behind it.
+vi.mock('@/lib/server/garmin-route-guard', () => ({ blockGarminRoute: () => null }))
+
 vi.mock("@/lib/server/garmin-oauth-store", () => ({
   getValidGarminAccessToken: getValidGarminAccessTokenMock,
   markGarminAuthError: markGarminAuthErrorMock,

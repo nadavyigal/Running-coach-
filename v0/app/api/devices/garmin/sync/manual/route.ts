@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { syncGarminUser } from '@/lib/garmin/sync/syncUser'
 import { getGarminConfidenceLabel, getGarminFreshnessLabel } from '@/lib/garmin/ui/freshness'
+import { blockGarminRoute } from '@/lib/server/garmin-route-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,6 +49,9 @@ function parseTriggerFromRequest(req: Request, body: Record<string, unknown>): '
 }
 
 export async function POST(req: Request) {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   const body = await readBodySafely(req)
   const userId = parseUserIdFromRequest(req, body)
 

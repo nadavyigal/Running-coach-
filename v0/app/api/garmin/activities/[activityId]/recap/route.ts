@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { blockGarminRoute } from '@/lib/server/garmin-route-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -135,6 +136,9 @@ function deriveOneThingToImprove(params: {
 }
 
 export async function GET(req: Request, context: { params: { activityId: string } }) {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   const userId = parseUserId(req)
   if (!userId) {
     return NextResponse.json({ error: 'Valid userId is required' }, { status: 400 })

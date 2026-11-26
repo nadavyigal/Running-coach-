@@ -10,6 +10,7 @@ import {
 } from '@/lib/server/garmin-error-utils';
 import { getValidGarminAccessToken, markGarminAuthError } from '@/lib/server/garmin-oauth-store';
 import { GARMIN_HEALTH_API_BASE_URL } from '@/lib/server/garmin-endpoints';
+import { blockGarminRoute } from '@/lib/server/garmin-route-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -180,6 +181,9 @@ function toRunSmartActivity(activity: any) {
 
 // GET - Fetch Garmin activities via officially supported Wellness API endpoints.
 export async function GET(req: Request) {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');

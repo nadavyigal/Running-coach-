@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { syncGarminUser } from '@/lib/garmin/sync/syncUser'
 import { logger } from '@/lib/logger'
 import { enqueueGarminSyncJob } from '@/lib/server/garmin-sync-queue'
+import { blockGarminRoute } from '@/lib/server/garmin-route-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +25,9 @@ function parseUserId(req: Request): number | null {
 }
 
 export async function POST(req: Request) {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   const userId = parseUserId(req)
   if (!userId) {
     return NextResponse.json(

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
 import { getReadinessPayloadForUser } from '@/lib/garmin/metrics/readiness'
 import { createClient } from '@/lib/supabase/server'
+import { blockGarminRoute } from '@/lib/server/garmin-route-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +21,9 @@ function parseUserId(req: Request): number | null {
 }
 
 export async function GET(req: Request) {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   const userId = parseUserId(req)
   if (!userId) {
     return NextResponse.json({ error: 'Valid userId is required' }, { status: 400 })

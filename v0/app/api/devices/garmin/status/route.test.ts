@@ -5,6 +5,9 @@ const getGarminSyncStateMock = vi.hoisted(() => vi.fn())
 const readGarminExportRowsMock = vi.hoisted(() => vi.fn())
 const fetchPermissionsMock = vi.hoisted(() => vi.fn())
 
+// The route is switched off in production; open the guard to test the handler behind it.
+vi.mock('@/lib/server/garmin-route-guard', () => ({ blockGarminRoute: () => null }))
+
 vi.mock('@/lib/server/garmin-oauth-store', () => ({
   getGarminOAuthState: getGarminOAuthStateMock,
 }))

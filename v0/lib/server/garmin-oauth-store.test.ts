@@ -141,3 +141,32 @@ describe('getGarminConnectionByProviderUserId', () => {
     expect(state?.profileId).toBe('aaaa-profile')
   })
 })
+
+describe('getGarminConnectionOwner', () => {
+  beforeEach(() => {
+    createAdminClientMock.mockReset()
+    decryptTokenMock.mockClear()
+  })
+
+  function mockConnectionRow(row: Record<string, unknown> | null) {
+    const eq = vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: row, error: null })) }))
+    createAdminClientMock.mockReturnValue({ from: vi.fn(() => ({ select: vi.fn(() => ({ eq })) })) })
+    return eq
+  }
+
+  it('returns the linked account without reading or decrypting tokens', async () => {
+    const eq = mockConnectionRow({ user_id: 42, auth_user_id: 'auth-owner' })
+    const { getGarminConnectionOwner } = await import('./garmin-oauth-store')
+
+    await expect(getGarminConnectionOwner(42)).resolves.toEqual({ authUserId: 'auth-owner' })
+    expect(eq).toHaveBeenCalledWith('user_id', 42)
+    expect(decryptTokenMock).not.toHaveBeenCalled()
+  })
+
+  it('returns null when there is no connection', async () => {
+    mockConnectionRow(null)
+    const { getGarminConnectionOwner } = await import('./garmin-oauth-store')
+
+    await expect(getGarminConnectionOwner(42)).resolves.toBeNull()
+  })
+})

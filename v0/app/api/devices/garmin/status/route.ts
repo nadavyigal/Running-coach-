@@ -11,6 +11,7 @@ import {
 } from '@/lib/server/garmin-api-response'
 import { groupRowsByDataset, lookbackStartIso, readGarminExportRows } from '@/lib/server/garmin-export-store'
 import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
+import { blockGarminRoute } from '@/lib/server/garmin-route-guard'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -58,6 +59,9 @@ async function getEffectivePermissions(userId: number, storedScopes: string[] | 
 }
 
 export async function GET(req: Request) {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   const userId = parseUserId(req)
   if (!userId) {
     const response = createEmptyGarminCanonicalStatusResponse()

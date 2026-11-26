@@ -26,6 +26,9 @@ const generateInsightForUserMock = vi.hoisted(() =>
 
 const persistGeneratedInsightMock = vi.hoisted(() => vi.fn(async () => undefined))
 
+// The route is switched off in production; open the guard to test the handler behind it.
+vi.mock('@/lib/server/garmin-route-guard', () => ({ blockGarminRoute: () => null }))
+
 vi.mock('@/lib/server/garmin-insights-service', () => ({
   fetchLatestInsight: fetchLatestInsightMock,
   generateInsightForUser: generateInsightForUserMock,
