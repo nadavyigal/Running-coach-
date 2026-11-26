@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server'
 
+import {
+  type GarminUnavailableReason,
+  getGarminConfigGap,
+  getRejectedKeyReason,
+  logGarminUnavailableOnce,
+} from '@/lib/server/garmin-availability'
 import { getGarminOAuthState } from '@/lib/server/garmin-oauth-store'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -27,13 +33,32 @@ function parseLimit(req: Request): number {
   return Math.min(parsed, 100)
 }
 
+function unavailableResponse(reason: GarminUnavailableReason) {
+  logGarminUnavailableOnce(reason)
+  return NextResponse.json(
+    { success: false, error: 'Garmin sync is temporarily unavailable', code: 'GARMIN_UNAVAILABLE' },
+    { status: 503 }
+  )
+}
+
 export async function GET(req: Request) {
   const userId = parseUserId(req)
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Valid userId is required' }, { status: 400 })
   }
 
-  const connection = await getGarminOAuthState(userId)
+  const configGap = getGarminConfigGap()
+  if (configGap) return unavailableResponse(configGap)
+
+  let connection: Awaited<ReturnType<typeof getGarminOAuthState>>
+  try {
+    connection = await getGarminOAuthState(userId)
+  } catch (error) {
+    const rejectedKey = getRejectedKeyReason(error)
+    if (rejectedKey) return unavailableResponse(rejectedKey)
+    throw error
+  }
+
   if (!connection || connection.status !== 'connected') {
     return NextResponse.json(
       {
@@ -85,6 +110,8 @@ export async function GET(req: Request) {
     .limit(parseLimit(req))
 
   if (error) {
+    const rejectedKey = getRejectedKeyReason(error)
+    if (rejectedKey) return unavailableResponse(rejectedKey)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 

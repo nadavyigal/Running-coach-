@@ -4,6 +4,11 @@ Reusable lessons for Claude Code, Codex, Cursor, and other agents.
 
 ## Active Lessons
 
+### Lesson: Read The Key Prefix Before Blaming A Legacy Supabase Key
+- Trigger: Server routes fail with "Unregistered API key".
+- Problem: The env var's old date suggested a revoked legacy key. Supabase edge logs showed a new-format secret key the project did not recognise. Only the routes on a timer were loud; every route using the same variable was failing.
+- Future Rule: Check `request.sb.apikey.apikey.prefix` in Supabase `edge_logs` first, then list every consumer of the variable. Scheduled jobs must skip, not error, on a rejected key.
+
 ### Lesson: An Ignored Path Can Still Be Tracked
 - Trigger: `.gitignore` lists a path (here `/node_modules/`) that was committed before the rule existed.
 - Problem: 3,757 dependency files rode along in every clone for 16 months, and Node resolution from `v0/` walks up into them, so a missing `v0` dependency could pass locally and in CI.

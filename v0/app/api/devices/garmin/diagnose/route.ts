@@ -310,9 +310,8 @@ export async function GET(req: Request) {
   const start = new Date(now.getTime() - GARMIN_HISTORY_DAYS * 24 * 60 * 60 * 1000)
   const origin = new URL(req.url).origin
   const { value: configuredSecret, source: configuredSecretSource } = getGarminWebhookSecret()
-  const webhookUrl = configuredSecret
-    ? `${origin}/api/devices/garmin/webhook/${encodeURIComponent(configuredSecret)}`
-    : `${origin}/api/devices/garmin/webhook/<GARMIN_WEBHOOK_SECRET>`
+  // Always the placeholder: secret values never belong in an API response.
+  const webhookUrl = `${origin}/api/devices/garmin/webhook/<GARMIN_WEBHOOK_SECRET>`
   const latestReceivedAt = exportRowsResult.rows.reduce<string | null>((latest, row) => {
     if (!row.receivedAt) return latest
     if (!latest) return row.receivedAt
