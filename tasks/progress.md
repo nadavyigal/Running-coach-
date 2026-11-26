@@ -2,7 +2,7 @@
 
 Current Phase: API hardening on RunSmart web.
 Active Story: Garmin client routes answer 503; disconnect needs the signed-in owner; backup route accepts only app device ids.
-Next Recommended Story: founder review, then merge; rebase against PR #190 for the two shared Garmin routes.
+Next Recommended Story: founder review, then merge; with PR #190, the second to land opens the guard in shared tests.
 Blockers: draft; needs founder yes to merge (production deploy).
 Last Validation: 2026-11-26 lint 0 errors; tsc 0; vitest 1582 passed, 5 skipped; build 0; audit-ci passed.
 Last Updated: 2026-11-26
