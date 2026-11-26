@@ -85,7 +85,7 @@ M0 and M0b share one file because the refined plan folds C7.12 (kill switch) int
 
 | File | Story | What it is | Status |
 |---|---|---|---|
-| `20261126100000_coach_display_name.sql` | names fix (2026-11-26) | `set_coach_display_name(text)`: the coach sets their own `coach_profiles.display_name`. Function only, no table change. CI suite `coach_display_name`. | written (draft PR); not applied |
+| `20261126100000_coach_display_name.sql` | names fix (2026-11-26) | `set_coach_display_name(text)`: the coach sets their own `coach_profiles.display_name`. Function only, no table change. CI suite `coach_display_name`. | written; applied 2026-11-26 (prod 20261126140919) |
 
 ### 3.2 Later M-numbers (no file name reserved)
 
