@@ -23,6 +23,9 @@ vi.mock("@/lib/server/garmin-insights-service", () => ({
   fetchLatestInsight: (...args: unknown[]) => fetchLatestInsightMock(...args),
 }))
 
+// The route is switched off in production; open the guard to test the handler behind it.
+vi.mock("@/lib/server/garmin-route-guard", () => ({ blockGarminRoute: () => null }))
+
 import { GET, POST } from "./route"
 
 describe("/api/ai/garmin-insights", () => {

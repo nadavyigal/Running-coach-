@@ -18,6 +18,7 @@ type Handler = (req: NextRequest, context: { params: Record<string, string> }) =
 type RouteModule = Partial<Record<'GET' | 'POST', unknown>>
 
 const BLOCKED_ROUTES: Array<{ route: string; methods: Array<'GET' | 'POST'>; load: () => Promise<RouteModule> }> = [
+  { route: 'ai/garmin-insights', methods: ['GET', 'POST'], load: () => import('@/app/api/ai/garmin-insights/route') },
   { route: 'devices/garmin/activities', methods: ['GET'], load: () => import('@/app/api/devices/garmin/activities/route') },
   { route: 'devices/garmin/backfill', methods: ['POST'], load: () => import('@/app/api/devices/garmin/backfill/route') },
   { route: 'devices/garmin/callback', methods: ['POST'], load: () => import('@/app/api/devices/garmin/callback/route') },
@@ -109,7 +110,7 @@ describe('switched-off Garmin routes', () => {
 
   it('classifies every route in the Garmin API folders as switched off or protected', () => {
     const apiDir = path.resolve(__dirname, '../../app/api')
-    const found = ['garmin', 'devices/garmin'].flatMap((root) =>
+    const found = ['ai/garmin-insights', 'garmin', 'devices/garmin'].flatMap((root) =>
       (readdirSync(path.join(apiDir, root), { recursive: true }) as string[])
         .filter((file) => path.basename(file) === 'route.ts')
         .map((file) => path.posix.join(root, path.dirname(file).split(path.sep).join('/')))

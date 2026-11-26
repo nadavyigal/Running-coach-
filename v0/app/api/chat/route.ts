@@ -2,7 +2,6 @@ import { streamText } from "ai"
 import { openai } from "@ai-sdk/openai"
 import { NextResponse } from "next/server"
 
-import { buildGarminContext, buildGarminContextSummary } from "@/lib/enhanced-ai-coach"
 import { logger } from "@/lib/logger"
 import { rateLimiter, securityConfig } from "@/lib/security.config"
 import { securityMonitor } from "@/lib/security.monitoring"
@@ -17,7 +16,6 @@ export const dynamic = "force-dynamic"
 // OPENAI_MODEL (older shared override) keeps priority over OPENAI_MODEL_WRITER.
 const CHAT_MODEL = selectModel("WRITER", { overrideEnv: ["OPENAI_MODEL"] })
 const OPENAI_MODEL = CHAT_MODEL.model
-const GARMIN_CONTEXT_BUDGET_TOKENS = 800
 
 // Shared safety core plus web extras; see lib/ai/coach-chat-core.ts.
 const SYSTEM_PROMPT = WEB_CHAT_SYSTEM_PROMPT
@@ -107,22 +105,12 @@ export async function POST(req: Request): Promise<Response> {
 
     const messages = rawMessages.map((message) => toChatMessage(message))
     const userContext = typeof body.userContext === "string" ? body.userContext.trim() : ""
+    // Client-sent, so it only labels analytics. Never load stored data with it.
     const parsedUserId = parseUserId(body.userId)
-
-    let garminContextSummary = ""
-    if (parsedUserId) {
-      const garminContext = await buildGarminContext(parsedUserId)
-      garminContextSummary = buildGarminContextSummary(garminContext, GARMIN_CONTEXT_BUDGET_TOKENS)
-    }
 
     const systemSections = [SYSTEM_PROMPT]
     if (userContext) {
       systemSections.push(`CONTEXT FROM USER APP:\n${userContext}`)
-    }
-    if (garminContextSummary) {
-      systemSections.push(
-        `GARMIN STRUCTURED SUMMARY (no raw JSON; capped to ${GARMIN_CONTEXT_BUDGET_TOKENS} tokens):\n${garminContextSummary}`
-      )
     }
 
     const apiMessages = [
@@ -167,7 +155,6 @@ export async function POST(req: Request): Promise<Response> {
             properties: {
               request_id: requestId,
               streaming: true,
-              has_garmin_context: Boolean(garminContextSummary),
             },
           })
           controller.close()
@@ -184,7 +171,6 @@ export async function POST(req: Request): Promise<Response> {
             properties: {
               request_id: requestId,
               streaming: true,
-              has_garmin_context: Boolean(garminContextSummary),
             },
           })
           const errorChunk = `0:${JSON.stringify({ textDelta: "\n\n[Error: Failed to complete response.]" })}\n`

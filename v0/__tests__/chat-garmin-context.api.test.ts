@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const streamTextMock = vi.hoisted(() => vi.fn())
 const buildGarminContextMock = vi.hoisted(() => vi.fn())
 const buildGarminContextSummaryMock = vi.hoisted(() => vi.fn())
+const createAdminClientMock = vi.hoisted(() => vi.fn())
+
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: createAdminClientMock }))
 
 // Signed-in: these tests cover the route behind the session gate. The gate itself is
 // covered by lib/api-auth.test.ts and __tests__/openai-routes-auth-gate.api.test.ts.
@@ -25,7 +28,7 @@ vi.mock("@/lib/enhanced-ai-coach", () => ({
 
 import { POST } from "@/app/api/chat/route"
 
-describe("chat route Garmin context injection", () => {
+describe("chat route Garmin context", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     process.env.OPENAI_API_KEY = "test-key"
@@ -47,7 +50,7 @@ describe("chat route Garmin context injection", () => {
     })
   })
 
-  it("injects structured Garmin context into the system message", async () => {
+  it("does not load Garmin data for a client-sent userId", async () => {
     const request = new Request("http://localhost:3000/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -63,15 +66,16 @@ describe("chat route Garmin context injection", () => {
 
     expect(response.status).toBe(200)
     expect(body).toContain("You are trending well this week.")
-    expect(buildGarminContextMock).toHaveBeenCalledWith(42)
-    expect(buildGarminContextSummaryMock).toHaveBeenCalledWith(expect.any(Object), 800)
+    expect(buildGarminContextMock).not.toHaveBeenCalled()
+    expect(createAdminClientMock).not.toHaveBeenCalled()
 
     const streamCall = streamTextMock.mock.calls[0]?.[0] as {
       messages: Array<{ role: string; content: string }>
     }
     expect(streamCall.messages[0]?.role).toBe("system")
-    expect(streamCall.messages[0]?.content).toContain("GARMIN STRUCTURED SUMMARY")
-    expect(streamCall.messages[0]?.content).toContain("Readiness: 84")
+    expect(streamCall.messages[0]?.content).toContain("General profile context")
+    expect(streamCall.messages[0]?.content).not.toContain("GARMIN STRUCTURED SUMMARY")
+    expect(streamCall.messages[0]?.content).not.toContain("Readiness: 84")
   })
 })
 

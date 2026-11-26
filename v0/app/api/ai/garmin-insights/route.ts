@@ -12,6 +12,7 @@ import {
 import { captureAIGeneration } from "@/lib/ai-observability"
 import { requireApiUser } from "@/lib/api-auth"
 import { providerOptionsFor, selectModel } from "@/lib/ai/models"
+import { blockGarminRoute } from "@/lib/server/garmin-route-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -41,6 +42,9 @@ function parseOptionalString(value: unknown): string | null {
 }
 
 export async function GET(req: Request): Promise<Response> {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   const { searchParams } = new URL(req.url)
   const userId = parseUserId(searchParams.get("userId"))
   if (!userId) {
@@ -83,6 +87,9 @@ export async function GET(req: Request): Promise<Response> {
 }
 
 export async function POST(req: Request): Promise<Response> {
+  const blocked = blockGarminRoute()
+  if (blocked) return blocked
+
   const auth = await requireApiUser(req)
   if (auth.response) return auth.response
   const requestId = `garmin_insight_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
