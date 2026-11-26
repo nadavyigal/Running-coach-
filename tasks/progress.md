@@ -1,3 +1,12 @@
+# 2026-11-26: Names fix migrations mirrored from iOS (draft PR)
+
+Current Phase: Coach Experience v2 TF-1a; names fix across athlete, coach and Today greeting.
+Active Story: Mirror 20261120100000 placeholder (already applied) and new 20261126100000 coach_display_name; ledger synced with iOS.
+Next Recommended Story: Founder applies 20261126100000_coach_display_name.sql before shipping the iOS build that edits coach names.
+Blockers: Draft; needs founder yes to merge. Migration not applied; agents never apply.
+Last Validation: 2026-11-26 check-migration-drift CLEAN 29 files; local Postgres coach_display_name test passed.
+Last Updated: 2026-11-26
+
 # 2026-11-25: Plan-eval judge on gpt-6-luna; nightly evaluates the production generator
 
 Current Phase: OpenAI model migration; gpt-4o-mini (old judge) shuts down 2027-01-14.
