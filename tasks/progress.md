@@ -1,3 +1,12 @@
+# 2026-11-27: C8.1a M6a re-mirrored after Codex review fixes (iOS 23e1c29)
+
+Current Phase: Coach Experience v2 R3; M6a mirror PR open as draft, migration not applied.
+Active Story: C8.1a web mirror of 20261127100000_coach_workout_locks.sql, byte-identical to iOS 23e1c29.
+Next Recommended Story: C8.1b (M6b) mirror once the iOS PR for it opens.
+Blockers: None. Applies in Batch C on Nadav's yes.
+Last Validation: iOS drift check CLEAN against this branch; check_migrations.py 0 errors.
+Last Updated: 2026-11-27
+
 # 2026-11-27: C8.1a M6a coach workout locks mirrored from iOS
 
 Current Phase: Coach Experience v2 R3 (coach builds workouts); M6a written, not applied.

@@ -160,13 +160,28 @@ begin
 end;
 $$;
 
--- Every coach write RPC runs this first. Raises in the documented order:
--- no link at all -> p_missing_error, link not active -> link_inactive,
--- link_is_v2 false (kill switch included) -> v2_unavailable.
+-- LOCK ORDER for every coach write, and for any function that ends a link or
+-- releases coach locks (M6b end_coach_link must follow it too):
+--   1. the coach_athlete_links row (FOR SHARE, here in the gate)
+--   2. the plans row (FOR SHARE)
+--   3. the workouts row (FOR UPDATE, coach_workout_for_write)
+--   4. advisory locks (key 62: one p_id; key 61: one plan-day)
+-- Taking them in this order everywhere means two writers can wait on each other
+-- but never deadlock.
+--
+-- Every coach write RPC runs this first, before any other lock. Raises in the
+-- documented order: no link at all -> p_missing_error, link not active ->
+-- link_inactive, link_is_v2 false (kill switch included) -> v2_unavailable.
+--
+-- The active link row is locked FOR SHARE until the coach write commits. A
+-- concurrent revoke (UPDATE of status) then waits for the write, and link-end
+-- cleanup sees the new row. If the revoke committed first, the locking read
+-- finds no active row and the write raises link_inactive. Volatile on purpose:
+-- FOR SHARE is not allowed in a stable function.
 create or replace function public.coach_workout_gate(p_athlete uuid, p_missing_error text)
 returns void
 language plpgsql
-stable
+volatile
 security definer
 set search_path = ''
 as $$
@@ -185,7 +200,11 @@ begin
     end if;
     raise exception 'workout_not_found' using errcode = 'P0002';
   end if;
-  if not public.is_active_coach_of(p_athlete) then
+  -- Same predicate as is_active_coach_of, plus the row lock.
+  perform 1 from public.coach_athlete_links l
+  where l.coach_id = v_uid and l.athlete_id = p_athlete and l.status = 'active'
+  for share of l;
+  if not found then
     raise exception 'link_inactive' using errcode = 'P0001';
   end if;
   if not public.link_is_v2(v_uid, p_athlete) then
@@ -304,9 +323,31 @@ begin
 end;
 $$;
 
--- Loads a workout for a coach write: the row (locked FOR UPDATE), its athlete
--- and the plan's time zone. Only workouts on an active plan owned by that
--- athlete. Raises workout_not_found before revealing anything else.
+-- The athlete of a workout on an active plan, read without a lock. Update, move
+-- and delete need it to run the gate (lock 1) before they lock the plan and the
+-- workout. Null when the workout is missing or not on the owner's active plan.
+create or replace function public.coach_workout_owner(p_id uuid)
+returns uuid
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce(w.auth_user_id, p.auth_user_id, p.profile_id)
+  from public.workouts w
+  join public.plans p on p.id = w.plan_id
+  where w.id = p_id
+    and p.is_active
+    and coalesce(w.auth_user_id, p.auth_user_id, p.profile_id)
+        = coalesce(p.auth_user_id, p.profile_id);
+$$;
+
+-- Loads a workout for a coach write, after the gate: the plan row FOR SHARE
+-- (lock 2), then the workout FOR UPDATE (lock 3), its athlete and the plan's
+-- time zone. A concurrent plan deactivation waits for the coach write; if it
+-- committed first, is_active is re-checked under the lock and no row comes back.
+-- Only workouts on an active plan owned by that athlete; no row means the caller
+-- raises workout_not_found.
 create or replace function public.coach_workout_for_write(p_id uuid)
 returns table (athlete_id uuid, plan_id uuid, plan_start date, plan_tz text,
                scheduled_date date, completed boolean, coach_revision integer, source text)
@@ -315,7 +356,18 @@ security definer
 set search_path = ''
 as $$
 #variable_conflict use_column
+declare
+  v_plan uuid;
 begin
+  select w.plan_id into v_plan from public.workouts w where w.id = p_id;
+  if v_plan is null then
+    return;
+  end if;
+  perform 1 from public.plans p where p.id = v_plan and p.is_active for share of p;
+  if not found then
+    return;
+  end if;
+
   return query
   select coalesce(w.auth_user_id, p.auth_user_id, p.profile_id),
          w.plan_id, p.start_date, p.created_in_timezone,
@@ -323,6 +375,7 @@ begin
   from public.workouts w
   join public.plans p on p.id = w.plan_id
   where w.id = p_id
+    and w.plan_id = v_plan
     and p.is_active
     and coalesce(w.auth_user_id, p.auth_user_id, p.profile_id)
         = coalesce(p.auth_user_id, p.profile_id)
@@ -360,13 +413,31 @@ declare
   v_today date;
   v_existing record;
 begin
+  -- Lock 1: the link (see the lock order above coach_workout_gate).
   perform public.coach_workout_gate(p_athlete, 'not_coach');
   if p_id is null then
     raise exception 'bad_workout_id' using errcode = '22023';
   end if;
 
-  -- Serialize calls with the same id, so a retry that overlaps the original
-  -- request waits for it and then takes the retry path below (no raw 23505).
+  -- Lock 2: the athlete's active plan, FOR SHARE, so a concurrent deactivation
+  -- waits for this write. FOR SHARE re-reads a row changed by a transaction that
+  -- committed while we waited, so a just-deactivated plan is skipped. No plan is
+  -- raised after the retry check, so a retry still returns its revision.
+  select p.id, p.start_date, p.created_in_timezone into v_plan, v_start, v_tz
+  from public.plans p
+  where p.is_active
+    and (p.auth_user_id = p_athlete or (p.auth_user_id is null and p.profile_id = p_athlete))
+  order by p.start_date desc
+  limit 1
+  for share of p;
+  if v_plan is not null and not exists (
+    select 1 from public.plans p where p.id = v_plan and p.is_active
+  ) then
+    v_plan := null;
+  end if;
+
+  -- Lock 4 (key 62): serialize calls with the same id, so a retry that overlaps
+  -- the original request waits for it and then takes the retry path below.
   perform pg_advisory_xact_lock(hashtextextended(p_id::text, 62));
 
   -- Outbox retry: the same id already written by this coach for this athlete.
@@ -382,13 +453,7 @@ begin
   perform public.coach_workout_fields_check(
     p_type, p_distance, p_duration, p_pace, p_notes, p_workout_structure, p_intensity);
 
-  select p.id, p.start_date, p.created_in_timezone into v_plan, v_start, v_tz
-  from public.plans p
-  where p.is_active
-    and (p.auth_user_id = p_athlete or (p.auth_user_id is null and p.profile_id = p_athlete))
-  order by p.start_date desc
-  limit 1;
-  if not found then
+  if v_plan is null then
     raise exception 'no_active_plan' using errcode = 'P0002';
   end if;
 
@@ -400,7 +465,7 @@ begin
     raise exception 'invalid_workout' using errcode = '22023', detail = 'date';
   end if;
 
-  -- One workout per day (spec B.6): serialize writers of this plan-day.
+  -- Lock 4 (key 61). One workout per day (spec B.6): serialize writers of this plan-day.
   perform pg_advisory_xact_lock(hashtextextended(v_plan::text || p_date::text, 61));
   if exists (select 1 from public.workouts w where w.plan_id = v_plan and w.scheduled_date = p_date) then
     raise exception 'date_taken' using errcode = 'P0001';
@@ -445,17 +510,23 @@ set search_path = ''
 as $$
 declare
   v_uid uuid := auth.uid();
+  v_athlete uuid;
   v_w record;
   v_revision integer;
 begin
   if v_uid is null then
     raise exception 'not authenticated' using errcode = '42501';
   end if;
-  select * into v_w from public.coach_workout_for_write(p_id);
-  if not found then
+  -- Lock order (see coach_workout_gate): link, then plan and workout.
+  v_athlete := public.coach_workout_owner(p_id);
+  if v_athlete is null then
     raise exception 'workout_not_found' using errcode = 'P0002';
   end if;
-  perform public.coach_workout_gate(v_w.athlete_id, 'workout_not_found');
+  perform public.coach_workout_gate(v_athlete, 'workout_not_found');
+  select * into v_w from public.coach_workout_for_write(p_id);
+  if not found or v_w.athlete_id is distinct from v_athlete then
+    raise exception 'workout_not_found' using errcode = 'P0002';
+  end if;
 
   if v_w.completed or v_w.scheduled_date < public.coach_athlete_today(v_w.athlete_id, v_w.plan_tz) then
     raise exception 'workout_not_editable' using errcode = 'P0001';
@@ -503,6 +574,7 @@ set search_path = ''
 as $$
 declare
   v_uid uuid := auth.uid();
+  v_athlete uuid;
   v_w record;
   v_today date;
   v_revision integer;
@@ -510,11 +582,16 @@ begin
   if v_uid is null then
     raise exception 'not authenticated' using errcode = '42501';
   end if;
-  select * into v_w from public.coach_workout_for_write(p_id);
-  if not found then
+  -- Lock order (see coach_workout_gate): link, then plan and workout.
+  v_athlete := public.coach_workout_owner(p_id);
+  if v_athlete is null then
     raise exception 'workout_not_found' using errcode = 'P0002';
   end if;
-  perform public.coach_workout_gate(v_w.athlete_id, 'workout_not_found');
+  perform public.coach_workout_gate(v_athlete, 'workout_not_found');
+  select * into v_w from public.coach_workout_for_write(p_id);
+  if not found or v_w.athlete_id is distinct from v_athlete then
+    raise exception 'workout_not_found' using errcode = 'P0002';
+  end if;
 
   v_today := public.coach_athlete_today(v_w.athlete_id, v_w.plan_tz);
   if v_w.completed or v_w.scheduled_date < v_today then
@@ -572,17 +649,23 @@ set search_path = ''
 as $$
 declare
   v_uid uuid := auth.uid();
+  v_athlete uuid;
   v_w record;
   v_revision integer;
 begin
   if v_uid is null then
     raise exception 'not authenticated' using errcode = '42501';
   end if;
-  select * into v_w from public.coach_workout_for_write(p_id);
-  if not found then
+  -- Lock order (see coach_workout_gate): link, then plan and workout.
+  v_athlete := public.coach_workout_owner(p_id);
+  if v_athlete is null then
     raise exception 'workout_not_found' using errcode = 'P0002';
   end if;
-  perform public.coach_workout_gate(v_w.athlete_id, 'workout_not_found');
+  perform public.coach_workout_gate(v_athlete, 'workout_not_found');
+  select * into v_w from public.coach_workout_for_write(p_id);
+  if not found or v_w.athlete_id is distinct from v_athlete then
+    raise exception 'workout_not_found' using errcode = 'P0002';
+  end if;
 
   if v_w.completed or v_w.scheduled_date < public.coach_athlete_today(v_w.athlete_id, v_w.plan_tz) then
     raise exception 'workout_not_editable' using errcode = 'P0001';
@@ -690,6 +773,7 @@ begin
 
   -- Locked row. Planned fields are kept for every non-coach writer. It does not
   -- raise, so 1.2.6 clients and the web sync never fail mid-batch.
+  new.id := old.id;
   new.plan_id := old.plan_id;
   new.auth_user_id := old.auth_user_id;
   new.local_id := old.local_id;
@@ -751,6 +835,7 @@ revoke all on function public.coach_workout_gate(uuid, text) from public, anon, 
 revoke all on function public.coach_workout_structure_ok(jsonb) from public, anon, authenticated;
 revoke all on function public.coach_workout_fields_check(text, numeric, integer, integer, text, jsonb, text) from public, anon, authenticated;
 revoke all on function public.coach_queue_plan_update(uuid, uuid, uuid, text, date) from public, anon, authenticated;
+revoke all on function public.coach_workout_owner(uuid) from public, anon, authenticated;
 revoke all on function public.coach_workout_for_write(uuid) from public, anon, authenticated;
 revoke all on function public.workouts_protect_coach_rows() from public, anon, authenticated;
 
