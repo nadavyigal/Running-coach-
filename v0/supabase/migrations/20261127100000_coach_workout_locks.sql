@@ -162,14 +162,21 @@ $$;
 
 -- LOCK ORDER for every coach write, and for any function that ends a link or
 -- releases coach locks (M6b end_coach_link must follow it too):
+--   0. the athlete's and the coach's auth.users rows (FOR KEY SHARE, in the gate)
 --   1. the coach_athlete_links row (FOR SHARE, here in the gate)
 --   2. the plans row (FOR SHARE)
 --   3. the workouts row (FOR UPDATE, coach_workout_for_write)
 --   4. advisory locks (key 62: one p_id; key 61: one plan-day)
+-- Lock 0 exists because the workout insert and the athlete_plan_update_queue
+-- upsert check foreign keys to auth.users, which takes KEY SHARE on those rows.
+-- Taken late, that would deadlock with an account delete, which holds the
+-- auth.users row and cascades into links, plans and workouts. Taken first, the
+-- delete simply waits for the coach write (or the write waits for the delete and
+-- then finds no link).
 -- Taking them in this order everywhere means two writers can wait on each other
 -- but never deadlock.
 --
--- Every coach write RPC runs this first, before any other lock. Raises in the
+-- Every coach write RPC runs this first, before any other lock (locks 0 and 1). Raises in the
 -- documented order: no link at all -> p_missing_error, link not active ->
 -- link_inactive, link_is_v2 false (kill switch included) -> v2_unavailable.
 --
@@ -191,6 +198,12 @@ begin
   if v_uid is null then
     raise exception 'not authenticated' using errcode = '42501';
   end if;
+  -- Lock 0. KEY SHARE does not block other coach writes or ordinary updates of
+  -- auth.users, only deletes (and key changes) of these two rows.
+  perform 1 from auth.users u
+  where u.id in (v_uid, p_athlete)
+  order by u.id
+  for key share of u;
   if p_athlete is null or not exists (
     select 1 from public.coach_athlete_links l
     where l.coach_id = v_uid and l.athlete_id = p_athlete
@@ -413,7 +426,7 @@ declare
   v_today date;
   v_existing record;
 begin
-  -- Lock 1: the link (see the lock order above coach_workout_gate).
+  -- Locks 0 and 1: auth users, then the link (see the lock order above coach_workout_gate).
   perform public.coach_workout_gate(p_athlete, 'not_coach');
   if p_id is null then
     raise exception 'bad_workout_id' using errcode = '22023';
@@ -517,7 +530,7 @@ begin
   if v_uid is null then
     raise exception 'not authenticated' using errcode = '42501';
   end if;
-  -- Lock order (see coach_workout_gate): link, then plan and workout.
+  -- Lock order (see coach_workout_gate): auth users and link, then plan and workout.
   v_athlete := public.coach_workout_owner(p_id);
   if v_athlete is null then
     raise exception 'workout_not_found' using errcode = 'P0002';
@@ -582,7 +595,7 @@ begin
   if v_uid is null then
     raise exception 'not authenticated' using errcode = '42501';
   end if;
-  -- Lock order (see coach_workout_gate): link, then plan and workout.
+  -- Lock order (see coach_workout_gate): auth users and link, then plan and workout.
   v_athlete := public.coach_workout_owner(p_id);
   if v_athlete is null then
     raise exception 'workout_not_found' using errcode = 'P0002';
@@ -656,7 +669,7 @@ begin
   if v_uid is null then
     raise exception 'not authenticated' using errcode = '42501';
   end if;
-  -- Lock order (see coach_workout_gate): link, then plan and workout.
+  -- Lock order (see coach_workout_gate): auth users and link, then plan and workout.
   v_athlete := public.coach_workout_owner(p_id);
   if v_athlete is null then
     raise exception 'workout_not_found' using errcode = 'P0002';
