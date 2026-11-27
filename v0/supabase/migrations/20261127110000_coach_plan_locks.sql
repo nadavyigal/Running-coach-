@@ -585,9 +585,13 @@ $$;
 -- purge_coach_data_for_deleted_account (called by delete_account) deletes the
 -- links of a deleted user directly, and deleting a coach's auth user cascades
 -- through coach_profiles to the links. Neither runs end_coach_link. When an
--- active link row goes and its athlete still exists (a coach account being
--- deleted), release the athlete's locks. When the athlete is the one being
--- deleted, their rows go anyway, so nothing is touched.
+-- active link row goes and its athlete still exists, release the athlete's locks.
+-- That covers a coach account being deleted. For an athlete deleting their own
+-- account, delete_account calls the purge while their auth row still exists, so
+-- the release runs too: it unlocks whatever rows are left (delete_account has
+-- usually wiped them already), and the auth delete then cascades through them.
+-- When the auth delete itself cascades to the link, the athlete row is already
+-- gone and nothing is touched.
 create or replace function public.coach_links_release_locks_on_delete()
 returns trigger
 language plpgsql
