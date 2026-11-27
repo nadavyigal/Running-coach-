@@ -441,7 +441,7 @@ $$;
 -- Returns 'changed', or 'duplicate' when p_request_id was already used (a no-op,
 -- checked first so an outbox retry after the link ended still succeeds).
 -- A move to a day that has any workout raises date_taken (spec B.6, one workout
--- per day, as M6a's coach move) [ASSUMPTION: stricter than "a coach workout"].
+-- per day, as M6a's coach move), AI or coach (founder decision 2026-11-27).
 create or replace function public.athlete_change_coach_workout(
   p_id uuid,
   p_action text,
