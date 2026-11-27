@@ -54,6 +54,9 @@
 --                                 (purge_coach_data_for_deleted_account, or an FK
 --                                 cascade) deletes links without end_coach_link;
 --                                 this releases the locks on that path too.
+--   leave_coach, coach_remove_athlete   create or replace, same signatures and
+--                                 M5b bodies, plus FOR KEY SHARE on both auth.users
+--                                 rows before the link lock (lock order 0, 1).
 --   replace_group_training_plan    create or replace, same signature, security
 --                                 invoker as before. Same behavior, plus a clear
 --                                 error before it touches anything when the active
@@ -107,14 +110,16 @@ alter table public.plans
 
 -- Internal helpers ----------------------------------------------------------------
 
--- Locked workouts dated on or after the plan owner's today. Security definer so
+-- Locked workouts dated on or after the plan owner's today. Volatile, so every
+-- call reads with a fresh snapshot (a deactivation that waited on a coach write
+-- counts the row that write committed; race case 5). Security definer so
 -- the trigger (which runs as the client) can use coach_athlete_today. A signed-in
 -- caller learns the count only for a plan they own (the plans RLS predicate);
 -- every other plan reads 0. With no auth.uid() (service role, owner SQL) it counts.
 create or replace function public.coach_plan_locked_future_count(p_plan uuid)
 returns integer
 language plpgsql
-stable
+volatile
 security definer
 set search_path = ''
 as $$
@@ -235,7 +240,11 @@ begin
     if old.coach_published then
       raise exception 'plan_locked_by_coach' using errcode = 'P0001';
     end if;
-    if not v_goal_change and public.coach_plan_locked_future_count(old.id) > 0 then
+    -- An inactive plan (for example one replaced by athlete_replace_training_plan)
+    -- can be cleaned up even with locked rows: the coach's live workouts are on
+    -- the active plan. A published plan stays protected either way.
+    if old.is_active and not v_goal_change
+       and public.coach_plan_locked_future_count(old.id) > 0 then
       raise exception 'coach_workouts_present' using errcode = 'P0001';
     end if;
     return old;
@@ -501,9 +510,11 @@ begin
     raise exception 'link_inactive' using errcode = 'P0001';
   end if;
 
+  -- Only workouts on the athlete's active plan: rows left on a plan replaced by
+  -- athlete_replace_training_plan cannot be skipped or moved.
   perform 1 from public.plans p
   join public.workouts w on w.plan_id = p.id
-  where w.id = p_id and (p.auth_user_id = v_uid or p.profile_id = v_uid)
+  where w.id = p_id and p.is_active and (p.auth_user_id = v_uid or p.profile_id = v_uid)
   for share of p;
 
   select w.id, w.plan_id, w.scheduled_date, w.completed, w.locked,
@@ -512,6 +523,7 @@ begin
   from public.workouts w
   join public.plans p on p.id = w.plan_id
   where w.id = p_id
+    and p.is_active
     and (p.auth_user_id = v_uid or p.profile_id = v_uid)
   for update of w;
   if not found then
@@ -631,6 +643,116 @@ begin
   -- drafts for v_coach.
 
   return true;
+end;
+$$;
+
+-- leave_coach and coach_remove_athlete (M5b behavior + lock 0 first) -----------------------
+
+-- Same signatures, return shapes, errors and bodies as M5b (20261121160000; the
+-- live production bodies match it, read 2026-11-27). The only change: each takes
+-- FOR KEY SHARE on the athlete's and the coach's auth.users rows before it locks
+-- the link (M6a lock order 0 then 1). leave_coach keeps its 1.2.6 signature.
+create or replace function public.leave_coach(expected_link_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_link uuid;
+  v_coach uuid;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+
+  -- M6b (C8.1b): lock 0 before lock 1. end_coach_link's event insert checks
+  -- foreign keys to both auth.users rows; taking them first means a concurrent
+  -- coach account delete (which holds the coach's row and cascades into the
+  -- link) waits for this call, or this call waits and then finds no link.
+  select l.coach_id
+    into v_coach
+  from public.coach_athlete_links l
+  where l.athlete_id = v_uid
+    and l.id = expected_link_id
+    and l.status = 'active';
+  perform 1 from auth.users u where u.id in (v_uid, v_coach) for key share of u;
+
+  select l.id
+    into v_link
+  from public.coach_athlete_links l
+  where l.athlete_id = v_uid
+    and l.id = expected_link_id
+    and l.status = 'active'
+  for update;
+
+  -- Two steps on purpose: SQL does not promise to short-circuit "or", and
+  -- end_coach_link(null, ..) would raise a different error.
+  if not found then
+    raise exception 'not_linked' using errcode = 'P0001';
+  end if;
+  if not public.end_coach_link(v_link, 'athlete') then
+    raise exception 'not_linked' using errcode = 'P0001';
+  end if;
+end;
+$$;
+
+create or replace function public.coach_remove_athlete(p_athlete uuid)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_link uuid;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  if p_athlete is null then
+    raise exception 'missing athlete' using errcode = '22023';
+  end if;
+
+  -- M6b (C8.1b): lock 0 (both auth.users rows, KEY SHARE) before lock 1 (the
+  -- link), as in leave_coach above.
+  perform 1 from auth.users u where u.id in (v_uid, p_athlete) for key share of u;
+
+  if public.is_active_coach_of(p_athlete) then
+    select l.id
+      into v_link
+    from public.coach_athlete_links l
+    where l.coach_id = v_uid
+      and l.athlete_id = p_athlete
+      and l.status = 'active'
+    for update;
+
+    if found then
+      if public.end_coach_link(v_link, 'coach') then
+        return 'removed';
+      end if;
+    end if;
+  end if;
+
+  -- Idempotent repeat: this coach's newest link with the athlete has ended.
+  if exists (
+    select 1
+    from public.coach_athlete_links l
+    where l.coach_id = v_uid
+      and l.athlete_id = p_athlete
+      and l.status = 'revoked'
+      and l.created_at = (
+        select max(l2.created_at)
+        from public.coach_athlete_links l2
+        where l2.coach_id = v_uid
+          and l2.athlete_id = p_athlete
+      )
+  ) then
+    return 'already_ended';
+  end if;
+
+  raise exception 'not_linked' using errcode = 'P0001';
 end;
 $$;
 
@@ -759,6 +881,12 @@ grant execute on function public.athlete_change_coach_workout(uuid, text, date, 
 
 revoke all on function public.replace_group_training_plan(uuid, jsonb, jsonb) from public, anon;
 grant execute on function public.replace_group_training_plan(uuid, jsonb, jsonb) to authenticated;
+
+revoke all on function public.leave_coach(uuid) from public, anon;
+grant execute on function public.leave_coach(uuid) to authenticated;
+
+revoke all on function public.coach_remove_athlete(uuid) from public, anon;
+grant execute on function public.coach_remove_athlete(uuid) to authenticated;
 
 -- The plans trigger runs as the client and calls this one, so authenticated keeps
 -- it (it answers only for the caller's own plans). The service role keeps it for
