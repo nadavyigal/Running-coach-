@@ -660,12 +660,23 @@ begin
     return old;
   end if;
 
-  -- UPDATE. Lock columns always come from OLD for a non-coach writer.
+  -- UPDATE. Lock columns always come from OLD for a non-coach writer, with one
+  -- exception: a referential action. workouts.coach_id is ON DELETE SET NULL, so
+  -- deleting a coach's auth user runs an UPDATE here one trigger level down.
+  -- Restoring the old coach_id would fail that delete on the foreign key, and the
+  -- coach could never delete their account. So at depth > 1 a change of coach_id
+  -- (or published_version_id, once M7 adds its FK) to null is kept. The row stays
+  -- locked with coach_id null; M6b's lock release at link end unlocks it. A client
+  -- statement always runs at depth 1, so it can never take this path.
+  if not (pg_trigger_depth() > 1 and new.coach_id is null) then
+    new.coach_id := old.coach_id;
+  end if;
+  if not (pg_trigger_depth() > 1 and new.published_version_id is null) then
+    new.published_version_id := old.published_version_id;
+  end if;
   new.source := old.source;
   new.locked := old.locked;
-  new.coach_id := old.coach_id;
   new.coach_revision := old.coach_revision;
-  new.published_version_id := old.published_version_id;
   new.coach_edited := old.coach_edited;
 
   if not old.locked then
