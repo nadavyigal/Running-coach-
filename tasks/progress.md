@@ -1,3 +1,12 @@
+# 2026-11-27: C8.1a M6a coach workout locks mirrored from iOS
+
+Current Phase: Coach Experience v2 R3 (coach builds workouts); M6a written, not applied.
+Active Story: Mirror 20261127100000_coach_workout_locks.sql (M6a) from iOS; ledger synced with iOS.
+Next Recommended Story: C8.1b (M6b); Batch C applies M6a and M6b together on founder yes.
+Blockers: Needs founder yes to merge. Migration not applied; agents never apply.
+Last Validation: 2026-11-27 check-migration-drift CLEAN 31 files; iOS local Postgres coach_workout_locks and kill_switch PASS.
+Last Updated: 2026-11-27
+
 # 2026-11-26: Names fix migrations mirrored from iOS (draft PR)
 
 Current Phase: Coach Experience v2 TF-1a; names fix across athlete, coach and Today greeting.
