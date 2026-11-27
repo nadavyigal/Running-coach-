@@ -41,6 +41,8 @@
 --   athlete_replace_training_plan  athlete write (D2). Replaces the active plan
 --                                 when the athlete acknowledged how many coach
 --                                 workouts it removes; logs goal_change.
+--   athlete_request_seen(p_athlete, p_request_id)   internal. The idempotency
+--                                 lookup on coach_athlete_events.
 --   athlete_change_coach_workout   athlete write (D1). Skip or move one coach
 --                                 workout; the row stays locked; logs
 --                                 athlete_skip / athlete_move; a repeated
@@ -313,6 +315,24 @@ begin
     raise exception 'invalid_ack_count' using errcode = '22023';
   end if;
 
+  -- Lock order (as athlete_change_coach_workout): 0 the auth.users rows of the
+  -- athlete and the active coach, FOR KEY SHARE (the plan, workout and goal_change
+  -- inserts need them for their foreign keys, and a coach account delete holds
+  -- the coach's row while its cascade locks this athlete's plans), 1 the active
+  -- link FOR SHARE, then the replace lock and the plans.
+  select l.coach_id into v_coach
+  from public.coach_athlete_links l
+  where l.athlete_id = v_uid and l.status = 'active';
+  perform 1 from auth.users u where u.id in (v_uid, v_coach) for key share of u;
+  if v_coach is not null then
+    select l.coach_id into v_coach
+    from public.coach_athlete_links l
+    where l.athlete_id = v_uid and l.status = 'active' and l.coach_id = v_coach
+    for share of l;
+    -- Not found: the link ended while this call waited. Replace as a solo
+    -- athlete; no goal_change event (v_coach is null).
+  end if;
+
   -- Same key as replace_group_training_plan: the two replace paths serialize.
   perform pg_advisory_xact_lock(hashtextextended(v_uid::text, 18));
 
@@ -377,10 +397,8 @@ begin
     false, w.scheduled_date, w.notes, w.workout_structure, w.intensity, w.training_phase
   from jsonb_populate_recordset(null::public.workouts, new_workouts) w;
 
-  select l.coach_id into v_coach
-  from public.coach_athlete_links l
-  where l.athlete_id = v_uid and l.status = 'active';
-  if found then
+  -- v_coach is the link locked above (null when there is none).
+  if v_coach is not null then
     insert into public.coach_athlete_events (coach_id, athlete_id, kind, ref_id)
     values (v_coach, v_uid, 'goal_change', v_new_plan);
   end if;
@@ -390,6 +408,22 @@ end;
 $$;
 
 -- athlete_change_coach_workout (D1) ---------------------------------------------------------
+
+-- True when this athlete already logged an event with this client id. Each call
+-- is its own statement, so under READ COMMITTED it sees events committed by a
+-- concurrent request while the caller waited on a lock.
+create or replace function public.athlete_request_seen(p_athlete uuid, p_request_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.coach_athlete_events e
+    where e.athlete_id = p_athlete and e.client_id = p_request_id
+  );
+$$;
 
 -- The athlete skips or moves one coach workout. Only scheduled_date (with its
 -- derived day and week), original_date (first move only), athlete_change and
@@ -431,20 +465,32 @@ begin
 
   -- Idempotency fast path, before any lock or check: an outbox retry of a
   -- request that already landed returns 'duplicate', even after the link ended.
-  if exists (
-    select 1 from public.coach_athlete_events e
-    where e.athlete_id = v_uid and e.client_id = p_request_id
-  ) then
+  if public.athlete_request_seen(v_uid, p_request_id) then
     return 'duplicate';
   end if;
 
-  -- M6a lock order: 1 the active link (FOR SHARE, so a concurrent link end waits
-  -- and then releases this row), 2 the plan, 3 the workout, 4 advisory locks.
+  -- Lock order (M6a, extended): 0 the auth.users rows of the athlete and the
+  -- coach (FOR KEY SHARE: the event insert below needs them for its foreign keys,
+  -- and a coach account delete holds the coach's row while its cascade locks
+  -- plans; taking them first means the two wait instead of deadlocking), 1 the
+  -- active link (FOR SHARE, so a concurrent link end waits and then releases this
+  -- row), 2 the plan, 3 the workout, 4 advisory locks.
+  select l.coach_id into v_coach
+  from public.coach_athlete_links l
+  where l.athlete_id = v_uid and l.status = 'active';
+  perform 1 from auth.users u where u.id in (v_uid, v_coach) for key share of u;
+
   select l.coach_id into v_coach
   from public.coach_athlete_links l
   where l.athlete_id = v_uid and l.status = 'active'
+    and l.coach_id = v_coach
   for share of l;
   if not found then
+    -- A retry of a request that landed while this call waited (the original
+    -- committed, then the link ended) is still a no-op, not an error.
+    if public.athlete_request_seen(v_uid, p_request_id) then
+      return 'duplicate';
+    end if;
     raise exception 'link_inactive' using errcode = 'P0001';
   end if;
 
@@ -462,15 +508,15 @@ begin
     and (p.auth_user_id = v_uid or p.profile_id = v_uid)
   for update of w;
   if not found then
+    if public.athlete_request_seen(v_uid, p_request_id) then
+      return 'duplicate';
+    end if;
     raise exception 'workout_not_found' using errcode = 'P0002';
   end if;
 
   -- Two requests with the same id: the second waits here, then sees the event.
   perform pg_advisory_xact_lock(hashtextextended(v_uid::text || p_request_id::text, 63));
-  if exists (
-    select 1 from public.coach_athlete_events e
-    where e.athlete_id = v_uid and e.client_id = p_request_id
-  ) then
+  if public.athlete_request_seen(v_uid, p_request_id) then
     return 'duplicate';
   end if;
 
@@ -722,6 +768,7 @@ end $$;
 -- Internal only. Security-definer callers (owned by the migration role) keep them.
 revoke all on function public.end_coach_link(uuid, text) from public, anon, authenticated;
 revoke all on function public.coach_release_athlete_locks(uuid) from public, anon, authenticated;
+revoke all on function public.athlete_request_seen(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.plans_protect_coach_plans() from public, anon, authenticated;
 revoke all on function public.coach_links_release_locks_on_delete() from public, anon, authenticated;
 
