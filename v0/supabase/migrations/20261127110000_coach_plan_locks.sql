@@ -166,8 +166,10 @@ begin
     return 0;
   end if;
 
-  -- M6a lock order: the caller holds the link (end_coach_link updated it, or the
-  -- link delete trigger runs on its delete). Then the plans, then the workouts.
+  -- M6a LOCK ORDER (0 auth users, 1 link, 2 plan, 3 workout, 4 advisory): the
+  -- caller already holds lock 1 (end_coach_link updated the link; the link delete
+  -- trigger runs on its delete). Lock 2: the athlete's plans FOR UPDATE. Lock 3:
+  -- the workouts, by the UPDATE below. No advisory lock.
   perform 1 from public.plans p
   where p.auth_user_id = p_athlete or p.profile_id = p_athlete
   for update of p;
@@ -315,11 +317,16 @@ begin
     raise exception 'invalid_ack_count' using errcode = '22023';
   end if;
 
-  -- Lock order (as athlete_change_coach_workout): 0 the auth.users rows of the
-  -- athlete and the active coach, FOR KEY SHARE (the plan, workout and goal_change
-  -- inserts need them for their foreign keys, and a coach account delete holds
-  -- the coach's row while its cascade locks this athlete's plans), 1 the active
-  -- link FOR SHARE, then the replace lock and the plans.
+  -- M6a LOCK ORDER (0 auth users, 1 link, 2 plan, 3 workout, 4 advisory):
+  -- 0 the auth.users rows of the athlete and the active coach, FOR KEY SHARE (the
+  -- plan, workout and goal_change inserts check foreign keys to them, and a coach
+  -- account delete holds the coach's row while its cascade locks this athlete's
+  -- plans), 1 the active link FOR SHARE, 2 the active plans FOR UPDATE. No
+  -- existing workout is locked (3): only new rows are inserted.
+  -- One exception, kept from Story 1.8: the replace advisory lock (key 18) comes
+  -- between 1 and 2, as in replace_group_training_plan. Only the two replace
+  -- functions take key 18, and both take it before any plan lock, so it cannot
+  -- form a cycle.
   select l.coach_id into v_coach
   from public.coach_athlete_links l
   where l.athlete_id = v_uid and l.status = 'active';
@@ -336,7 +343,7 @@ begin
   -- Same key as replace_group_training_plan: the two replace paths serialize.
   perform pg_advisory_xact_lock(hashtextextended(v_uid::text, 18));
 
-  -- Lock the active plans before counting. A coach write holds its plan FOR
+  -- Lock 2: the active plans, before counting. A coach write holds its plan FOR
   -- SHARE (M6a lock order), so it either commits first and is counted, or waits,
   -- re-checks is_active and finds the plan gone. The count cannot go stale.
   perform 1 from public.plans p
@@ -469,7 +476,7 @@ begin
     return 'duplicate';
   end if;
 
-  -- Lock order (M6a, extended): 0 the auth.users rows of the athlete and the
+  -- M6a LOCK ORDER: 0 the auth.users rows of the athlete and the
   -- coach (FOR KEY SHARE: the event insert below needs them for its foreign keys,
   -- and a coach account delete holds the coach's row while its cascade locks
   -- plans; taking them first means the two wait instead of deadlocking), 1 the
@@ -615,7 +622,8 @@ begin
   values (v_coach, v_athlete, case p_ended_by when 'athlete' then 'left' else 'removed' end);
 
   -- M6b (C8.1b): unlock this athlete's future workouts and clear coach_published,
-  -- in the same transaction. The workouts stay (G17). This also covers rows whose
+  -- in the same transaction, after the link UPDATE above (lock 1, then the
+  -- release takes 2 plans and 3 workouts). The workouts stay (G17). This also covers rows whose
   -- coach_id became null when a coach account was deleted (M6a).
   perform public.coach_release_athlete_locks(v_athlete);
 
