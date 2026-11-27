@@ -78,7 +78,7 @@ Batch letters are from the v1.3 file map (section 0.0) and the refined plan (sec
 | B | `20261122120000_workout_adherence_state.sql` (not reserved: the plan said "Mig: none", but AC6's shared `workout_adherence_state` is a SQL function) | (C7.6) | C7.6 | merged (iOS #251, web #181); applied 2026-11-23 (prod 20261123193048) |
 | B | `20261126110000_coach_notify_triggers.sql` (ops: replaces the four Dashboard webhooks; config in Vault) | (C7.5 ops) | C7.5 | written (this PR); applied 2026-11-26 (prod: see `schema_migrations` name `coach_notify_triggers`) |
 | C | `20261127100000_coach_workout_locks.sql` (renamed from the reserved `20261201100000`, unapplied: `scripts/check_migrations.py` rejects a timestamp more than 24h in the future) | M6a | C8.1a | written; not applied |
-| C | `20261201110000_coach_plan_locks.sql` (needs a timestamp no more than 24h ahead when written, sorting after M6a) | M6b | C8.1b | not written |
+| C | `20261127110000_coach_plan_locks.sql` (renamed from the reserved `20261201110000`, unapplied: `scripts/check_migrations.py` rejects a timestamp more than 24h in the future; sorts right after M6a) | M6b | C8.1b | written; not applied |
 
 M0 and M0b share one file because the refined plan folds C7.12 (kill switch) into C7.0 (S1). The per-coach allowlist table `coach_v2_pilot_coaches` and the RPC `coach_v2_pilot_access()` (decision N1 = B) also go in the M0 file.
 
