@@ -114,6 +114,16 @@ create table if not exists public.athlete_plan_update_queue (
   sent_at timestamptz
 );
 
+-- Deleting any auth user runs the coach_id ON DELETE SET NULL actions on
+-- workouts and on this queue. These partial indexes keep that from scanning
+-- either table. The rollback keeps them, since it keeps the columns and FKs.
+create index if not exists idx_workouts_coach_id
+  on public.workouts (coach_id)
+  where coach_id is not null;
+create index if not exists idx_athlete_plan_update_queue_coach_id
+  on public.athlete_plan_update_queue (coach_id)
+  where coach_id is not null;
+
 -- The digest (C8.16) looks for rows that are unsent and quiet for 10 minutes.
 create index if not exists idx_athlete_plan_update_queue_pending
   on public.athlete_plan_update_queue (last_change_at)
@@ -505,15 +515,18 @@ $$;
 -- Replaces every planned field of a future, not-completed workout. An AI workout
 -- becomes a coach workout tagged coach_edited ("Edited by {Coach}"). Returns the
 -- new coach_revision.
+-- Every planned field is required except p_intensity: an update replaces them
+-- all, so a client that leaves out p_workout_structure (or duration, pace, notes)
+-- must not silently wipe it. Pass null explicitly for "none".
 create or replace function public.coach_update_workout(
   p_id uuid,
   p_revision integer,
   p_type text,
   p_distance numeric,
-  p_duration integer default null,
-  p_pace integer default null,
-  p_notes text default null,
-  p_workout_structure jsonb default null,
+  p_duration integer,
+  p_pace integer,
+  p_notes text,
+  p_workout_structure jsonb,
   p_intensity text default null
 )
 returns integer
@@ -750,6 +763,11 @@ begin
     -- FK cascades (a plan or an auth user being deleted) arrive one trigger level
     -- down and pass. So does the service role: delete_account wipes workouts
     -- directly and must never be blocked. Plan-level protection is M6b's.
+    -- The service-role exemption is only for account deletion. Today the only
+    -- service-role writer that deletes workouts is
+    -- supabase/functions/delete_account/index.ts (its per-table delete loop); the
+    -- web repo has none. Do not add other service-role workout deletes: they
+    -- would bypass coach locks without any check.
     if old.locked and pg_trigger_depth() < 2 and current_user <> 'service_role' then
       raise exception 'workout_locked' using errcode = 'P0001';
     end if;
@@ -764,6 +782,10 @@ begin
   -- (or published_version_id, once M7 adds its FK) to null is kept. The row stays
   -- locked with coach_id null; M6b's lock release at link end unlocks it. A client
   -- statement always runs at depth 1, so it can never take this path.
+  -- WARNING for M6b, M7 and later: any UPDATE of workouts run from inside another
+  -- trigger also arrives at depth > 1. Such trigger-level updates must never set
+  -- coach_id or published_version_id to null, or this exemption would let them
+  -- strip a row's coach. Only a FK ON DELETE SET NULL may do that.
   if not (pg_trigger_depth() > 1 and new.coach_id is null) then
     new.coach_id := old.coach_id;
   end if;
