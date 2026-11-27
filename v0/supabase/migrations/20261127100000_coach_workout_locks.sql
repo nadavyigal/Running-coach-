@@ -6,7 +6,7 @@
 -- than 24h in the future. It still sorts after every applied file.
 --
 -- Do not apply this to production from the app PR. Nadav applies Batch C
--- (this file and M6b, 20261201110000_coach_plan_locks.sql) together, at a quiet
+-- (this file and M6b, 20261127110000_coach_plan_locks.sql) together, at a quiet
 -- time, after a read-only audit, with the rollback file ready. Mirror it to the
 -- web repo Running-coach- at v0/supabase/migrations/. Do not apply an older copy.
 --
